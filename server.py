@@ -879,7 +879,8 @@ def make_ninja_description(payload: str | dict, user: dict) -> dict:
 
 
 def _desc_with_user_info(text: str, user: dict) -> dict:
-    """Kleiner Helper: Baut NinjaOne-Description (Plain + HTML) und hängt User-Info an.
+    """
+    Kleiner Helper: Baut NinjaOne-Description (Plain + HTML) und hängt User-Info an.
     Warum: Sonderfall EDV-Zugang beantragen nutzt bisher nur einen Hinweistext.
     """
     body = f"{text}\n\n" + format_user_info_plain(user)

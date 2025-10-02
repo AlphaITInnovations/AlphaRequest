@@ -17,10 +17,70 @@
   .nice-scrollbar::-webkit-scrollbar{height:8px;width:8px}
   .nice-scrollbar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.25);border-radius:8px}
   .nice-scrollbar::-webkit-scrollbar-track{background:transparent}
+
+
+    /* Pop-up Styles */
+  #dev-popup-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  #dev-popup-overlay.show {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  #dev-popup {
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    max-width: 400px;
+    text-align: center;
+    font-family: sans-serif;
+  }
+
+  #dev-popup button {
+    margin-top: 1rem;
+    padding: 0.5rem 1.25rem;
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+  }
+
+  #dev-popup button:hover {
+    background-color: #1d4ed8;
+  }
 </style>
 
 <script>
   window._ORDERS = {{ orders | default([]) | tojson | safe }};
+
+    function showDevPopupOncePerDay() {
+    const today = new Date().toISOString().split('T')[0];
+    const lastShown = localStorage.getItem('devPopupLastShown');
+
+    if (lastShown !== today) {
+      document.getElementById('dev-popup-overlay')?.classList.add('show');
+      localStorage.setItem('devPopupLastShown', today);
+    }
+  }
+
+  function closeDevPopup() {
+    document.getElementById('dev-popup-overlay')?.classList.remove('show');
+  }
+
+  window.addEventListener('DOMContentLoaded', showDevPopupOncePerDay);
 </script>
 
 <script>
@@ -103,6 +163,18 @@ badgeClasses(status) {
 
 {% block content %}
 <div x-data="dashboardManager()" x-init="init()" class="min-h-[80vh]">
+
+<div id="dev-popup-overlay">
+  <div id="dev-popup">
+    <h2 class="text-xl font-semibold mb-2">Hinweis</h2>
+    <p>
+      Dieses Tool befindet sich aktuell noch in der Entwicklung.<br />
+      Bei Problemen oder Fragen bitte an:<br />
+      <a href="mailto:it@alphaconsult.org" class="text-blue-600 font-medium">it@alphaconsult.org</a> wenden.
+    </p>
+    <button onclick="closeDevPopup()">Verstanden</button>
+  </div>
+</div>
   <!-- Toast -->
   <div
     x-show="toastVisible"
