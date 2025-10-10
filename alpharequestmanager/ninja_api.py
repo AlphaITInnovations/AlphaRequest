@@ -2,18 +2,15 @@ import http.server
 import socketserver
 import webbrowser
 from typing import Optional
-
 import requests
 import urllib.parse
 import threading
-import time
 import json
-from alpharequestmanager.config import cfg as config
+from alpharequestmanager.config import config
 import time
 from datetime import datetime
-
 from alpharequestmanager.logger import logger
-
+import alpharequestmanager.database as db
 
 
 # =========================
@@ -69,7 +66,7 @@ def get_auth_code():
 # =========================
 def save_token(token_info):
     token_info["expires_at"] = int(time.time()) + int(token_info.get("expires_in", 0))
-    config.update(NINJA_TOKEN=token_info)
+    db.set_ninja_token(token_info)
 
 def load_token():
     return config.NINJA_TOKEN
@@ -148,6 +145,7 @@ def test_connection():
     """
     try:
         access_token = get_access_token()
+
         orgs = _api_request("GET", "/api/v2/organizations", access_token)
         logger.info("✅ API-Verbindung erfolgreich")
         return True
@@ -483,7 +481,9 @@ def get_alpha_request_comment(ticket: dict) -> str | None:
 if __name__ == "__main__":
     #print("client id: ", config.NINJA_CLIENT_ID)
 
-
+    #print(get_access_token())
+    test_connection()
+"""
     ticket = create_ticket_edv_beantragen(
         description="Bitte neuen EDV-Zugang für Mitarbeiter erstellen",
         vorname="Max",  # Vorname
@@ -502,3 +502,4 @@ if __name__ == "__main__":
         kommentar="",
         requester_mail="marco.schneider@alpha-it-innovations.org"
     )
+"""

@@ -22,9 +22,9 @@ from pydantic import BaseModel, Field, AnyUrl, EmailStr, field_validator
 from contextlib import asynccontextmanager
 
 from alpharequestmanager import graph, database, ninja_api, ninja_sync
-from alpharequestmanager.database import update_ticket
+from alpharequestmanager.database import update_ticket, set_companies
 from alpharequestmanager.graph import get_user_profile, send_mail
-from alpharequestmanager.config import cfg as config
+from alpharequestmanager.config import config
 from alpharequestmanager.auth import initiate_auth_flow, acquire_token_by_auth_code
 from alpharequestmanager.dependencies import get_current_user
 from alpharequestmanager.logger import logger
@@ -134,7 +134,6 @@ app.add_middleware(
     same_site="lax",  # was "none"; Lax avoids some browser drops
     https_only=True,   # keep True on HTTPS; set via env if you need HTTP for local dev
     max_age=config.SESSION_TIMEOUT,
-    # domain=config.COOKIE_DOMAIN if you add it to cfg
     path="/",
 )
 
@@ -676,7 +675,8 @@ async def api_set_companies(payload: CompaniesPayload, user: dict = Depends(get_
     if not items:
         raise HTTPException(status_code=422, detail="companies must contain at least one non-empty string")
     try:
-        config.update(COMPANIES=items)
+        set_companies(items)
+
     except Exception as e:
         logger.exception("Failed to update COMPANIES: %s", e)
         raise HTTPException(status_code=500, detail="failed to persist companies") from e

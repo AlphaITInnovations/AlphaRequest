@@ -3,7 +3,7 @@
 from typing import Dict
 import time
 from fastapi import Request, HTTPException, status
-from alpharequestmanager.config import cfg as config
+from alpharequestmanager.config import config
 from alpharequestmanager.logger import logger
 
 # Min-interval to reduce Set-Cookie churn

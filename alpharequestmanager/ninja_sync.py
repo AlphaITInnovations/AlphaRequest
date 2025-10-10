@@ -5,7 +5,7 @@ from alpharequestmanager.database import update_ticket
 from alpharequestmanager.ninja_api import get_ticket
 from alpharequestmanager.logger import logger
 from alpharequestmanager.models import RequestStatus
-from alpharequestmanager.config import cfg as config
+from alpharequestmanager.config import config
 
 def poll_ninja_changes():
     """

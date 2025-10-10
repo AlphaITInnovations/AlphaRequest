@@ -2,7 +2,7 @@
 
 from msal import ConfidentialClientApplication
 from fastapi import Request
-from alpharequestmanager.config import cfg as config
+from alpharequestmanager.config import config
 
 AUTHORITY = f"https://login.microsoftonline.com/{config.TENANT_ID}"
 SCOPES = config.SCOPE

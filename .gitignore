@@ -5,3 +5,4 @@ tickets.db
 .idea
 alpharequestmanager/tickets.db
 .venv
+.env

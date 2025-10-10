@@ -1,6 +1,6 @@
 import httpx
 from typing import List
-from alpharequestmanager.config import cfg as config
+from alpharequestmanager.config import config
 
 GRAPH_API_ME = "https://graph.microsoft.com/v1.0/me"
 GRAPH_API_GROUPS = "https://graph.microsoft.com/v1.0/me/memberOf"

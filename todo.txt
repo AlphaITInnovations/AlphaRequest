@@ -1,5 +1,5 @@
 
-
+Theoretisch wenn ninja token abgelaufen ist bekommt ein user die ninja anmelde page aufgerufen, das soll so nicht sein nunr für admin
 
 Wenn mehr konzentration:
 Im frontend für Anzeigen im Tickettyp unterscheiden & bearbeitung hinzufügen
