@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
+    print(config.as_dict())
     uvicorn.run(
         app,
         host="0.0.0.0",
