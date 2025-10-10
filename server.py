@@ -132,7 +132,7 @@ app.add_middleware(
     secret_key=config.SECRET_KEY,
     session_cookie="app_session",
     same_site="lax",  # was "none"; Lax avoids some browser drops
-    #https_only=True,   # keep True on HTTPS; set via env if you need HTTP for local dev
+    https_only=True,   # keep True on HTTPS; set via env if you need HTTP for local dev
     max_age=config.SESSION_TIMEOUT,
     path="/",
 )

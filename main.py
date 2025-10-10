@@ -17,5 +17,7 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000,
         reload=False,
+        ssl_keyfile="data/cert/key.pem",
+        ssl_certfile="data/cert/cert.pem"
     )
 
