@@ -1,8 +1,9 @@
 /logs
-/cert
+/data/cert
 __pycache__
 tickets.db
 .idea
 alpharequestmanager/tickets.db
 .venv
 .env
+data
