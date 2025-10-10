@@ -3,6 +3,9 @@ import os
 from dotenv import load_dotenv
 import alpharequestmanager.database as db
 
+def str_to_bool(s):
+    return s.lower() in ("true", "1", "yes", "on")
+
 # .env optional laden – macht nichts, wenn nicht vorhanden
 load_dotenv(dotenv_path=".env", override=False)
 
@@ -25,6 +28,9 @@ class Config:
     NINJA_CLIENT_SECRET = os.getenv("NINJA_CLIENT_SECRET", "")
     NINJA_REDIRECT_URI = os.getenv("NINJA_REDIRECT_URI", "")
 
+    PORT = int(os.getenv("PORT", 6969))
+    HTTPS = str_to_bool(os.getenv("HTTPS", False).lower())
+
     #Persistente Werte
     @property
     def COMPANIES(self):
@@ -39,3 +45,4 @@ class Config:
         return {k: v for k, v in cls.__dict__.items() if not k.startswith("__") and not callable(v)}
 
 config = Config()
+
