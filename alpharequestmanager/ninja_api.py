@@ -23,6 +23,10 @@ AUTH_URL = f"https://eu.ninjarmm.com/ws/oauth/authorize?response_type=code&clien
 TOKEN_URL = "https://eu.ninjarmm.com/ws/oauth/token"
 
 
+class NinjaAuthFlowRequired(Exception):
+    """Wird geworfen, wenn kein gültiges Token vorhanden ist und ein neuer Auth-Flow
+    notwendig wäre – aber der aktuelle Benutzer kein Admin ist (oder unbekannt)."""
+    pass
 
 # =========================
 # Funktion: Auth Code holen
@@ -100,28 +104,37 @@ def refresh_token(refresh_token_value):
     print("Access Token refresh erfolgreich")
     return token_info
 
-def get_valid_token():
+# get_valid_token anpassen: steuert, ob ein neuer Flow überhaupt gestartet werden darf
+def get_valid_token(allow_new_flow: bool = False):
     token_info = load_token()
     if token_info:
-        # Falls Access Token noch gültig
+        # Gültig?
         if "expires_at" in token_info and time.time() < token_info["expires_at"]:
             return token_info
-        # Versuche Refresh Token
+        # Refresh versuchen
         if "refresh_token" in token_info:
             try:
                 print("Access Token abgelaufen – versuche Refresh...")
                 return refresh_token(token_info["refresh_token"])
             except Exception as e:
                 print("Refresh fehlgeschlagen:", e)
-    # Neuer Flow
-    print("Kein gültiges Token – starte neuen Auth Flow...")
-    return get_new_token()
 
-def get_access_token():
-    token_info = get_valid_token()
+    if allow_new_flow:
+        print("Kein gültiges Token – starte neuen Auth Flow (erlaubt)...")
+        return get_new_token()
+    # Kein neuer Flow erlaubt -> signalisiere dem Aufrufer
+    raise NinjaAuthFlowRequired("NinjaOne OAuth erfordert einen neuen Auth-Flow (nur Admin erlaubt)")
+
+
+
+def get_access_token(is_admin: bool = False):
+    """
+    Liefert gültiges Access-Token.
+    - is_admin=True  → darf neuen Flow starten
+    - is_admin=False → wirft NinjaAuthFlowRequired, wenn kein Refresh möglich
+    """
+    token_info = get_valid_token(allow_new_flow=is_admin)
     return token_info["access_token"]
-
-
 
 #API Request
 def _api_request(method: str, endpoint: str, access_token: str = None, **kwargs):
@@ -139,12 +152,12 @@ def _api_request(method: str, endpoint: str, access_token: str = None, **kwargs)
 
 
 
-def test_connection():
+def test_connection(is_admin: bool = False):
     """
     Testet die Verbindung zur NinjaOne API über den Organizations-Endpoint.
     """
     try:
-        access_token = get_access_token()
+        access_token = get_access_token(is_admin=is_admin)
 
         orgs = _api_request("GET", "/api/v2/organizations", access_token)
         logger.info("✅ API-Verbindung erfolgreich")
@@ -172,8 +185,8 @@ def __create_ticket(access_token, ticket_data):
         resp.raise_for_status()
     return resp.json()
 
-def get_ticket(ticket_id):
-    access_token = get_access_token()
+def get_ticket(ticket_id, is_admin: bool = False):
+    access_token = get_access_token(is_admin=is_admin)
     """
     Holt ein einzelnes Ticket aus NinjaOne per Ticket-ID.
     """
@@ -248,8 +261,9 @@ def create_ticket(
     requester_mail: Optional[str] = None,
     attributes: Optional[list[dict[str, object]]] = None,
     status: int = 1000,
+    is_admin: bool = False,
 ):
-    access_token = get_access_token()
+    access_token = get_access_token(is_admin=is_admin)
     requester_uid = None
     if requester_mail:
         requester_uid = find_requester_uid_by_email(access_token, requester_mail)
@@ -300,6 +314,7 @@ def create_ticket_edv_beantragen(
     kommentar="",
     checkbox_datev_user=False,
     checkbox_elo_user=False,
+    is_admin: bool = False,
 ):
     # --- Pflichtfeld-Prüfung ---
     if not requester_mail:
@@ -355,62 +370,67 @@ def create_ticket_edv_beantragen(
     logger.info("🎟️ Ticket-Payload an NinjaOne:\n%s", json.dumps(payload, indent=2, ensure_ascii=False))
 
     # --- Ticket erstellen ---
-    return create_ticket(**payload)
+    return create_ticket(**payload, is_admin=is_admin)
 
 
 
 
-def create_ticket_hardware(client_id=2, description="", requester_mail=None):
+def create_ticket_hardware(client_id=2, description="", requester_mail=None, is_admin: bool = False):
     return create_ticket(
         client_id=client_id,
         form_id=10,
         subject="Neue Hardwarebestellung",
         description=description,
         requester_mail=requester_mail,
+        is_admin=is_admin,
     )
 
 
 
-def create_ticket_edv_sperren(client_id=2, description="", requester_mail=None):
+def create_ticket_edv_sperren(client_id=2, description="", requester_mail=None, is_admin: bool = False):
     return create_ticket(
         client_id=client_id,
         form_id=8,
         subject="EDV Zugang sperren",
         description=description,
         requester_mail=requester_mail,
+        is_admin=is_admin,
     )
 
 
 
-def create_ticket_niederlassung_anmelden(client_id=2, description="", requester_mail=None):
+def create_ticket_niederlassung_anmelden(client_id=2, description="", requester_mail=None, is_admin: bool = False):
     return create_ticket(
         client_id=client_id,
         form_id=11,
         subject="Niederlassung anmelden",
         description=description,
         requester_mail=requester_mail,
+        is_admin=is_admin,
     )
 
 
 
-def create_ticket_niederlassung_umziehen(client_id=2, description="", requester_mail=None):
+def create_ticket_niederlassung_umziehen(client_id=2, description="", requester_mail=None, is_admin: bool = False):
     return create_ticket(
         client_id=client_id,
         form_id=12,
         subject="Niederlassung umziehen",
         description=description,
         requester_mail=requester_mail,
+        is_admin=is_admin,
     )
 
 
 
-def create_ticket_niederlassung_schließen(client_id=2, description="", requester_mail=None):
+def create_ticket_niederlassung_schließen(client_id=2, description="", requester_mail=None, is_admin: bool = False):
     return create_ticket(
         client_id=client_id,
         form_id=13,
         subject="Niederlassung schließen",
         description=description,
         requester_mail=requester_mail,
+        is_admin=is_admin,
     )
 
 
@@ -478,28 +498,3 @@ def get_alpha_request_comment(ticket: dict) -> str | None:
 
 
 
-if __name__ == "__main__":
-    #print("client id: ", config.NINJA_CLIENT_ID)
-
-    #print(get_access_token())
-    test_connection()
-"""
-    ticket = create_ticket_edv_beantragen(
-        description="Bitte neuen EDV-Zugang für Mitarbeiter erstellen",
-        vorname="Max",  # Vorname
-        nachname="Schneider",  # Nachname
-        firma="AlphaConsult KG",  # Firma (Dropdown-Wert aus NinjaOne)
-        arbeitsbeginn=1760090400,  # Arbeitsbeginn als Unix-Timestamp (10.10.2025)
-        titel="Herr",
-        strasse="Musterstraße 12",
-        ort="Musterstadt",
-        plz="12345",
-        handy="017612345678",
-        telefon="0301234567",
-        fax="0307654321",
-        niederlassung="Berlin",
-        kostenstelle="KST-4711",
-        kommentar="",
-        requester_mail="marco.schneider@alpha-it-innovations.org"
-    )
-"""

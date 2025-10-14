@@ -4,7 +4,6 @@ import os
 import sqlite3
 from datetime import datetime
 from typing import List, Optional
-
 from .models import Ticket, RequestStatus
 from .logger import logger
 
@@ -13,6 +12,7 @@ def get_connection():
     conn = sqlite3.connect("data/tickets.db")
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     logger.info("initializing database")

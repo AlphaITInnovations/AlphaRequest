@@ -190,7 +190,7 @@
       {% set is_dash  = request.url.path=='/dashboard' %}
       {% set is_tix   = request.url.path=='/pruefung' %}
       {% set is_ana   = request.url.path=='/analytics' %}
-      {% set is_set   = request.url.path.startswith('/admin/settings') %}
+      {% set is_set   = request.url.path.startswith('/settings') %}
 
       <!-- Dashboard -->
       <a href="/dashboard"
@@ -220,7 +220,7 @@
       </a>
 
       <!-- Admin · Settings -->
-      <a href="/admin/settings"
+      <a href="/settings"
          aria-current="{{ 'page' if is_set else 'false' }}"
          class="group relative flex items-center gap-3 px-3 py-2 rounded-xl transition
                 hover:bg-white/10 {{ 'bg-white/15' if is_set else '' }}">
@@ -255,7 +255,7 @@
           <i data-lucide="ticket" class="w-5 h-5"></i>
           <span class="text-sm font-medium">Tickets</span>
         </a>
-        <a href="/admin/settings" class="group flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10">
+        <a href="/settings" class="group flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10">
           <i data-lucide="settings" class="w-5 h-5"></i>
           <span class="text-sm font-medium">Admin · Settings</span>
         </a>

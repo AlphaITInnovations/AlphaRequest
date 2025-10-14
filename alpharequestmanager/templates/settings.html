@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+{% block title %}Admin · Settings{% endblock %}
+
+{% block content %}
+<div x-data="{ open: true, active: 'general' }" class="flex h-full gap-4">
+
+  <!-- Sidebar -->
+  <aside
+    :class="open ? 'w-64' : 'w-16'"
+    class="flex-shrink-0 transition-all duration-300 ease-in-out
+           bg-white dark:bg-cardDark border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden"
+    aria-label="Lokale Einstellungen Navigation"
+  >
+    <div class="flex items-center justify-between px-2 py-2 border-b border-gray-200 dark:border-gray-700">
+      <button type="button" @click="open = !open"
+              class="p-2 rounded-md hover:bg-primary/10 dark:hover:bg-primaryHover/20 transition"
+              :aria-expanded="open.toString()" aria-controls="settings-local-nav"
+              title="Navigation ein-/ausklappen">
+        <i data-lucide="panel-left-open" class="w-5 h-5 text-primary"></i>
+      </button>
+      <span x-show="open" x-cloak class="text-sm font-semibold text-gray-700 dark:text-gray-100 pr-2">Einstellungen</span>
+    </div>
+
+    <nav id="settings-local-nav" class="p-2 space-y-1">
+      <button type="button" @click="active = 'general'"
+        :class="active==='general' ? 'bg-primary text-white'
+          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="settings" class="w-5 h-5"></i>
+        <span x-show="open" x-cloak class="text-sm font-medium">Allgemein</span>
+      </button>
+
+      <button type="button" @click="active = 'microsoft'"
+        :class="active==='microsoft' ? 'bg-primary text-white'
+          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="shield-check" class="w-5 h-5"></i>
+        <span x-show="open" x-cloak class="text-sm font-medium">Microsoft Auth</span>
+      </button>
+
+      <button type="button" @click="active = 'ninja'"
+        :class="active==='ninja' ? 'bg-primary text-white'
+          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="zap" class="w-5 h-5"></i>
+        <span x-show="open" x-cloak class="text-sm font-medium">Ninja Auth</span>
+      </button>
+
+      <button type="button" @click="active = 'session'"
+        :class="active==='session' ? 'bg-primary text-white'
+          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="timer" class="w-5 h-5"></i>
+        <span x-show="open" x-cloak class="text-sm font-medium">Session</span>
+      </button>
+
+      <button type="button" @click="active = 'companies'"
+        :class="active==='companies' ? 'bg-primary text-white'
+          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="building-2" class="w-5 h-5"></i>
+        <span x-show="open" x-cloak class="text-sm font-medium">Firmen</span>
+      </button>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="flex-1 min-w-0">
+    <header class="mb-4">
+      <h1 class="text-3xl font-bold">Admin · Settings</h1>
+      <p class="text-sm text-gray-600 dark:text-gray-300">
+        Hinweis: Alle Einstellungen (außer <b>Firmen</b>) werden ausschließlich über Umgebungsvariablen verwaltet.
+      </p>
+    </header>
+
+    <div id="toast" class="hidden fixed top-6 right-6 z-[60] rounded-lg border px-4 py-3 text-sm shadow-lg"
+         role="status" aria-live="polite"></div>
+
+    <div class="space-y-8">
+
+      <!-- Allgemein -->
+      <section x-show="active==='general'" x-cloak
+               class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark">
+        <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center gap-2">
+          <i data-lucide="settings" class="w-5 h-5 text-primary"></i>
+          <h2 class="text-lg font-semibold">Allgemein</h2>
+        </div>
+        <div class="p-5 space-y-4">
+          <!-- Einheitliche ENV-Warnung -->
+          <div class="rounded-md border border-blue-300/60 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 px-4 py-3 text-sm">
+            Diese Einstellungen werden über <b>Umgebungsvariablen</b> (.env / Secret-Manager) verwaltet.
+            Werte können hier eingesehen, aber nicht geändert werden.
+          </div>
+
+          <div class="overflow-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 dark:bg-gray-800/60">
+                <tr>
+                  <th class="text-left px-4 py-2">Variable</th>
+                  <th class="text-left px-4 py-2">Beschreibung</th>
+                  <th class="text-left px-4 py-2">Aktuell</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tr>
+                  <td class="px-4 py-2 font-mono">APP_ENV</td>
+                  <td class="px-4 py-2">Laufzeitumgebung (z. B. development/production)</td>
+                  <td class="px-4 py-2">{{ env.general.APP_ENV.value }}</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">PORT</td>
+                  <td class="px-4 py-2">HTTP-Port, auf dem die App lauscht</td>
+                  <td class="px-4 py-2">{{ env.general.PORT.value }}</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">HTTPS</td>
+                  <td class="px-4 py-2">Aktiviert HTTPS-Weiterleitungen / absolute HTTPS-Links</td>
+                  <td class="px-4 py-2">{{ env.general.HTTPS.value }}</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">TICKET_MAIL</td>
+                  <td class="px-4 py-2">Fallback-Mailbox für Ticket-Benachrichtigungen</td>
+                  <td class="px-4 py-2">{{ env.general.TICKET_MAIL.value }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Microsoft Auth -->
+      <section x-show="active==='microsoft'" x-cloak
+               class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark">
+        <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-5 h-5 text-primary"></i>
+          <h2 class="text-lg font-semibold">Microsoft / Auth</h2>
+        </div>
+        <div class="p-5 space-y-4">
+          <!-- Einheitliche ENV-Warnung -->
+          <div class="rounded-md border border-blue-300/60 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 px-4 py-3 text-sm">
+            Diese Einstellungen werden über <b>Umgebungsvariablen</b> (.env / Secret-Manager) verwaltet.
+            Werte können hier eingesehen, aber nicht geändert werden.
+          </div>
+
+          <div class="overflow-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 dark:bg-gray-800/60">
+                <tr>
+                  <th class="text-left px-4 py-2">Variable</th>
+                  <th class="text-left px-4 py-2">Beschreibung</th>
+                  <th class="text-left px-4 py-2">Aktuell</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tr>
+                  <td class="px-4 py-2 font-mono">CLIENT_ID</td>
+                  <td class="px-4 py-2">App-Registrierung (öffentliche ID)</td>
+                  <td class="px-4 py-2">
+                    {% if env.microsoft.CLIENT_ID.is_set %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100">gesetzt</span>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">CLIENT_SECRET</td>
+                  <td class="px-4 py-2">App-Geheimnis (niemals anzeigen)</td>
+                  <td class="px-4 py-2">
+                    {% if env.microsoft.CLIENT_SECRET.is_set %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100">gesetzt</span>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">TENANT_ID</td>
+                  <td class="px-4 py-2">Azure AD-Tenant</td>
+                  <td class="px-4 py-2">
+                    {% if env.microsoft.TENANT_ID.is_set %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100">gesetzt</span>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">REDIRECT_URI</td>
+                  <td class="px-4 py-2">OAuth-Redirect für Microsoft-Login</td>
+                  <td class="px-4 py-2">{{ env.microsoft.REDIRECT_URI.value }}</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">SCOPE</td>
+                  <td class="px-4 py-2">Gewünschte Microsoft-Scopes (CSV)</td>
+                  <td class="px-4 py-2">{{ env.microsoft.SCOPE.value }}</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">ADMIN_GROUP_ID</td>
+                  <td class="px-4 py-2">Azure-Gruppe, die Admin-Zugriff in der App erhält</td>
+                  <td class="px-4 py-2">
+                    {% if env.microsoft.ADMIN_GROUP_ID.is_set %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100">gesetzt</span>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Ninja Auth -->
+      <section x-show="active==='ninja'" x-cloak
+         class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark"
+         x-data="NinjaAdmin()">
+  <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center gap-2 justify-between">
+    <div class="flex items-center gap-2">
+      <i data-lucide="zap" class="w-5 h-5 text-primary"></i>
+      <h2 class="text-lg font-semibold">Ninja Auth</h2>
+    </div>
+    <span class="text-xs text-gray-500 dark:text-gray-400" x-text="statusText"></span>
+  </div>
+
+  <div class="p-5 space-y-5">
+    <!-- Einheitliche ENV-Warnung -->
+    <div class="rounded-md border border-blue-300/60 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 px-4 py-3 text-sm">
+      Diese Einstellungen werden über <b>Umgebungsvariablen</b> (.env / Secret-Manager) verwaltet.
+      Werte können hier eingesehen, aber nicht geändert werden.
+    </div>
+
+    <!-- Aktionen -->
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <button type="button" @click="testConnection"
+              class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition disabled:opacity-60"
+              :disabled="loading">
+        <i data-lucide="activity" class="w-4 h-4"></i>
+        Test Connection
+      </button>
+
+      <button type="button" @click="refreshToken"
+              class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition disabled:opacity-60"
+              :disabled="loading">
+        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        Refresh Token
+      </button>
+
+      <button type="button" @click="startAuth"
+              class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition disabled:opacity-60"
+              :disabled="loading">
+        <i data-lucide="key-round" class="w-4 h-4"></i>
+        Neuer Auth-Flow
+      </button>
+    </div>
+
+    <!-- Ergebnis-Status (grün/rot) -->
+    <template x-if="resultState !== 'idle'">
+      <div
+        class="rounded-md px-4 py-3 text-sm border"
+        :class="resultState === 'ok'
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300/60 text-emerald-900 dark:text-emerald-100'
+          : 'bg-red-50 dark:bg-red-900/20 border-red-300/60 text-red-900 dark:text-red-100'">
+        <div class="flex items-start gap-2">
+          <span x-show="resultState === 'ok'">✅</span>
+          <span x-show="resultState === 'error'">❌</span>
+          <div>
+            <div class="font-medium" x-text="resultState === 'ok' ? 'Verbindung erfolgreich' : 'Verbindung fehlgeschlagen'"></div>
+            <div class="mt-1" x-text="resultMessage"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Roh-JSON -->
+    <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-fieldDark">
+      <div class="text-sm font-medium mb-1">Antwort (raw)</div>
+      <pre class="text-xs whitespace-pre-wrap break-words nice-scrollbar max-h-56"
+           x-text="lastResult || '—'"></pre>
+    </div>
+
+    <!-- ENV-Tabelle (wie zuvor) -->
+    <div class="overflow-auto rounded-lg border border-gray-200 dark:border-gray-700">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 dark:bg-gray-800/60">
+          <tr>
+            <th class="text-left px-4 py-2">Variable</th>
+            <th class="text-left px-4 py-2">Beschreibung</th>
+            <th class="text-left px-4 py-2">Aktuell</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+          <tr>
+            <td class="px-4 py-2 font-mono">NINJA_CLIENT_ID</td>
+            <td class="px-4 py-2">NinjaOne OAuth Client ID</td>
+            <td class="px-4 py-2">
+              {% if env.ninja.NINJA_CLIENT_ID.is_set %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100">gesetzt</span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td class="px-4 py-2 font-mono">NINJA_CLIENT_SECRET</td>
+            <td class="px-4 py-2">NinjaOne OAuth Client Secret (geheim)</td>
+            <td class="px-4 py-2">
+              {% if env.ninja.NINJA_CLIENT_SECRET.is_set %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100">gesetzt</span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td class="px-4 py-2 font-mono">NINJA_REDIRECT_URI</td>
+            <td class="px-4 py-2">OAuth-Redirect für Ninja-Login</td>
+            <td class="px-4 py-2">{{ env.ninja.NINJA_REDIRECT_URI.value }}</td>
+          </tr>
+          <tr>
+            <td class="px-4 py-2 font-mono">NINJA_POLL_INTERVAL</td>
+            <td class="px-4 py-2">Abrufintervall (Sek.) für Ticket-Status</td>
+            <td class="px-4 py-2">{{ env.ninja.NINJA_POLL_INTERVAL.value }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+      <!-- Session -->
+      <section x-show="active==='session'" x-cloak
+               class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark">
+        <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center gap-2">
+          <i data-lucide="timer" class="w-5 h-5 text-primary"></i>
+          <h2 class="text-lg font-semibold">App / Session</h2>
+        </div>
+        <div class="p-5 space-y-4">
+          <!-- Einheitliche ENV-Warnung -->
+          <div class="rounded-md border border-blue-300/60 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 px-4 py-3 text-sm">
+            Diese Einstellungen werden über <b>Umgebungsvariablen</b> (.env / Secret-Manager) verwaltet.
+            Werte können hier eingesehen, aber nicht geändert werden.
+          </div>
+
+          <div class="overflow-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 dark:bg-gray-800/60">
+                <tr>
+                  <th class="text-left px-4 py-2">Variable</th>
+                  <th class="text-left px-4 py-2">Beschreibung</th>
+                  <th class="text-left px-4 py-2">Aktuell</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tr>
+                  <td class="px-4 py-2 font-mono">SESSION_TIMEOUT</td>
+                  <td class="px-4 py-2">Inaktivitäts-Timeout der Sitzung (Sek.)</td>
+                  <td class="px-4 py-2">{{ env.session.SESSION_TIMEOUT.value }}</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 font-mono">SECRET_KEY</td>
+                  <td class="px-4 py-2">Signierschlüssel für Session/Cookies (geheim)</td>
+                  <td class="px-4 py-2">
+                    {% if env.session.SECRET_KEY.is_set %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100">gesetzt</span>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Firmen (unverändert, funktionsfähig) -->
+      <section x-show="active==='companies'" x-cloak
+               class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark"
+               x-data="CompaniesEditor()">
+        <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="building-2" class="w-5 h-5 text-primary"></i>
+            <h2 class="text-lg font-semibold">Firmen</h2>
+          </div>
+          <span id="companies-count" class="text-xs text-gray-500 dark:text-gray-400">0 Einträge</span>
+        </div>
+
+        <div class="p-5 space-y-5">
+          <div class="flex flex-col md:flex-row gap-3">
+            <input x-model="inputValue" @keydown.enter.prevent="add()"
+                   type="text" placeholder="Neue Firma hinzufügen …"
+                   class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-fieldDark px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+            <button type="button" @click="add()"
+                    class="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition">
+              <i data-lucide="plus" class="w-4 h-4"></i> Hinzufügen
+            </button>
+          </div>
+
+          <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-fieldDark">
+            <template x-if="companies.length === 0">
+              <p class="text-sm text-gray-500 dark:text-gray-400">Keine Firmen vorhanden. Füge oben Einträge hinzu.</p>
+            </template>
+
+            <ul class="space-y-2" role="list">
+              <template x-for="(c, idx) in companies" :key="c + '-' + idx">
+                <li class="flex items-center gap-2">
+                  <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-sm font-medium">
+                    <i data-lucide="building-2" class="w-4 h-4"></i>
+                    <span x-text="c"></span>
+                  </span>
+                  <button type="button" class="ml-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30"
+                          @click="remove(idx)" title="Löschen">
+                    <i data-lucide="x" class="w-4 h-4 text-danger"></i>
+                  </button>
+                </li>
+              </template>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  function toast(msg, ok) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = "fixed top-6 right-6 z-[60] rounded-lg border px-4 py-3 text-sm shadow-lg " +
+      (ok
+        ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300/60 text-emerald-900 dark:text-emerald-100"
+        : "bg-red-50 dark:bg-red-900/20 border-red-300/60 text-red-900 dark:text-red-100");
+    t.classList.remove('hidden');
+    setTimeout(() => t.classList.add('hidden'), 3000);
+  }
+
+  function CompaniesEditor() {
+    const state = {
+      companies: [],
+      inputValue: "",
+      saving: false,
+
+      refreshIcons() {
+        if (typeof this.$nextTick === "function") {
+          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+        } else {
+          setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 0);
+        }
+      },
+
+      async init() {
+        try {
+          const res = await fetch("/api/companies", { credentials: "same-origin" });
+          const json = await res.json();
+          if (res.ok && Array.isArray(json.companies)) this.setCompanies(json.companies);
+          else this.setCompanies([]);
+        } catch { this.setCompanies([]); }
+      },
+
+      setCompanies(arr) {
+        this.companies = (arr || []).map(s => String(s).trim()).filter(Boolean);
+        updateCount(this.companies.length);
+        this.refreshIcons();
+      },
+
+      async saveNow() {
+        if (this.saving) return true;
+        const payload = { companies: this.companies.slice() };
+        if (!payload.companies.length) { toast("Mindestens eine Firma erforderlich.", false); return false; }
+        this.saving = true;
+        try {
+          const res = await fetch("/api/companies", {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload), credentials: "same-origin",
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json?.detail || "Fehler beim Speichern der Firmen");
+          if (Array.isArray(json.companies)) this.setCompanies(json.companies);
+          toast("Gespeichert.", true);
+          return true;
+        } catch (e) {
+          toast(e.message || "Fehler beim Speichern der Firmen", false);
+          return false;
+        } finally { this.saving = false; }
+      },
+
+      async add() {
+        const v = (this.inputValue || "").trim();
+        if (!v) return;
+        if (this.companies.includes(v)) { this.inputValue = ""; toast("Firma existiert bereits.", false); return; }
+        const snapshot = this.companies.slice();
+        this.companies.push(v);
+        this.inputValue = "";
+        updateCount(this.companies.length);
+        this.refreshIcons();
+        const ok = await this.saveNow();
+        if (!ok) this.setCompanies(snapshot);
+      },
+
+      async remove(idx) {
+        const name = this.companies[idx];
+        if (!confirm(`„${name}“ wirklich löschen?`)) return;
+        const snapshot = this.companies.slice();
+        this.companies.splice(idx, 1);
+        updateCount(this.companies.length);
+        this.refreshIcons();
+
+        if (this.companies.length === 0) {
+          const okEmpty = await this.saveNow();
+          if (!okEmpty) this.setCompanies(snapshot);
+          return;
+        }
+        const ok = await this.saveNow();
+        if (!ok) this.setCompanies(snapshot);
+      },
+    };
+
+    function updateCount(n) {
+      const el = document.getElementById('companies-count');
+      if (el) el.textContent = `${n} Einträge`;
+    }
+    return state;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { if (window.lucide) lucide.createIcons(); });
+</script>
+
+<script>
+  function NinjaAdmin() {
+    return {
+      loading: false,
+      lastResult: '',
+      statusText: 'bereit',
+
+      // neu:
+      resultState: 'idle', // 'idle' | 'ok' | 'error'
+      resultMessage: '',
+
+      handleResultJson(json) {
+        // Erwartet: { ok: true } ODER { error: "..." }
+        if (json && json.ok === true) {
+          this.resultState = 'ok';
+          this.resultMessage = 'Die Verbindung zu NinjaOne ist aktiv.';
+          toast('Ninja: Verbindung OK', true);
+          this.statusText = 'Verbindung OK';
+        } else {
+          const msg = (json && (json.error || json.detail)) || 'Unbekannter Fehler';
+          this.resultState = 'error';
+          this.resultMessage = `Verbindung fehlgeschlagen: ${msg}`;
+          toast(this.resultMessage, false);
+          this.statusText = 'Fehler';
+        }
+        this.lastResult = JSON.stringify(json ?? {}, null, 2);
+      },
+
+      handleError(e) {
+        const msg = String(e?.message || e || 'Unbekannter Fehler');
+        this.resultState = 'error';
+        this.resultMessage = `Verbindung fehlgeschlagen: ${msg}`;
+        this.lastResult = msg;
+        toast(this.resultMessage, false);
+        this.statusText = 'Fehler';
+      },
+
+      async testConnection() {
+        this.loading = true; this.statusText = 'teste …'; this.lastResult = ''; this.resultState = 'idle';
+        try {
+          const res = await fetch('/api/admin/ninja/test', { credentials: 'same-origin' });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json?.detail || 'Verbindung fehlgeschlagen');
+          this.handleResultJson(json);
+        } catch (e) { this.handleError(e); }
+        finally { this.loading = false; if (window.lucide) lucide.createIcons(); }
+      },
+
+      async refreshToken() {
+        this.loading = true; this.statusText = 'refresh …'; this.lastResult = ''; this.resultState = 'idle';
+        try {
+          const res = await fetch('/api/admin/ninja/refresh', { method: 'POST', credentials: 'same-origin' });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json?.detail || json?.error || 'Refresh fehlgeschlagen');
+          this.handleResultJson(json);
+        } catch (e) { this.handleError(e); }
+        finally { this.loading = false; if (window.lucide) lucide.createIcons(); }
+      },
+
+      async startAuth() {
+        this.loading = true; this.statusText = 'erstelle Link …'; this.lastResult = ''; this.resultState = 'idle';
+        try {
+          const res = await fetch('/api/admin/ninja/start-auth', { method: 'POST', credentials: 'same-origin' });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json?.detail || json?.error || 'Konnte Auth-Flow nicht starten');
+          // Öffne ggf. Link
+          if (json?.auth_url) window.open(json.auth_url, '_blank', 'noopener,noreferrer');
+          // Und trotzdem das Ergebnis logisch auswerten (ok/error)
+          this.handleResultJson(json);
+        } catch (e) { this.handleError(e); }
+        finally { this.loading = false; if (window.lucide) lucide.createIcons(); }
+      }
+    }
+  }
+</script>
+
+
+{% endblock %}

@@ -1,5 +1,8 @@
+allgemein:
+- hinweis meldung dark mode kacke
+- DB zu postgres oder mariadb migrieren?
 
-Theoretisch wenn ninja token abgelaufen ist bekommt ein user die ninja anmelde page aufgerufen, das soll so nicht sein nunr für admin
+
 
 Wenn mehr konzentration:
 Im frontend für Anzeigen im Tickettyp unterscheiden & bearbeitung hinzufügen
@@ -9,23 +12,16 @@ Ticket werte updaten, wenn diese in ninja geändert werden?
 
 
 
-Admin Settings Panel:
-settings validierung (auch bei startup)
-Firmen hinzufügen für benutzeranlage
-
-
 Produktion:
+ninja api key user
 alle keys tauschen
 secret ändern
 zertifikate ändern
 debug routen löschen
 
 
-To Do:
-Statistiken (wie viele Tickets, wer wie viele tickets etc)
-Hardware Kosten
-Menge bestellung
-
 
 analytics:
 graphen nach firmen sortierten etc
+Hardware Kosten
+Menge bestellung

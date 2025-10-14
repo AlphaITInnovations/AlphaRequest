@@ -6,13 +6,11 @@ from server import app
 from alpharequestmanager.config import config
 from dotenv import load_dotenv
 import alpharequestmanager.database as db
+from alpharequestmanager.ninja_api import test_connection
 
-
-if __name__ == "__main__":
-
+def main():
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    print(config.HTTPS)
     if config.HTTPS:
         uvicorn.run(
             app,
@@ -31,3 +29,6 @@ if __name__ == "__main__":
         )
 
 
+if __name__ == "__main__":
+
+    main()

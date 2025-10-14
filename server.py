@@ -40,6 +40,8 @@ from fastapi import Query
 from datetime import datetime
 import json as _json
 
+from alpharequestmanager.ninja_api import NinjaAuthFlowRequired
+
 RUNTIME_SESSION_TIMEOUT = config.SESSION_TIMEOUT
 
 # -------------------------------
@@ -272,76 +274,98 @@ async def create_ticket(
     data = desc_obj.get("data", {})
     ticket_type = desc_obj.get("ticketType")
     user_mail = user["email"]
-    """
-    description_plain = description + format_user_info_plain(user)
-    description_html = f"<p>{description}</p>" + format_user_info_html(user)
-    description_obj = {
-        "public": True,
-        "body": description_plain,
-        "htmlBody": description_html
-    }
-    """
 
     description_obj = make_ninja_description(desc_obj, user)
 
-    ticket = None
-    if ticket_type == "Hardwarebestellung":
-        ticket = ninja_api.create_ticket_hardware(description=description_obj, requester_mail=user_mail)
-    elif ticket_type == "EDV-Zugang sperren":
-        ticket = ninja_api.create_ticket_edv_sperren(description=description_obj, requester_mail=user_mail)
-    elif ticket_type == "EDV-Zugang beantragen":
-        arbeitsbeginn_ts = None
-        if "arbeitsbeginn" in data and data["arbeitsbeginn"]:
-            dt = datetime.fromisoformat(data["arbeitsbeginn"])
-            arbeitsbeginn_ts = int(dt.timestamp())
+    try:
+        ticket = None
 
-        info_text = "Bitte die Daten links im Ticket prüfen und anschließend freigeben"
-        edv_desc = _desc_with_user_info(info_text, user)
+        if ticket_type == "Hardwarebestellung":
+            ticket = ninja_api.create_ticket_hardware(
+                description=description_obj,
+                requester_mail=user_mail,
+                is_admin=user.get("is_admin", False),   # <-- required flag
+            )
 
-        datev_user = data.get("datev")
-        if datev_user:
-            datev_user=True
-        else:
-            datev_user=False
+        elif ticket_type == "EDV-Zugang sperren":
+            ticket = ninja_api.create_ticket_edv_sperren(
+                description=description_obj,
+                requester_mail=user_mail,
+                is_admin=user.get("is_admin", False),   # <-- required flag
+            )
 
-        elo_user = data.get("elo")
-        if elo_user:
-            elo_user=True
-        else:
-            elo_user=False
+        elif ticket_type == "EDV-Zugang beantragen":
+            arbeitsbeginn_ts = None
+            if "arbeitsbeginn" in data and data["arbeitsbeginn"]:
+                dt = datetime.fromisoformat(data["arbeitsbeginn"])
+                arbeitsbeginn_ts = int(dt.timestamp())
 
-        ticket = ninja_api.create_ticket_edv_beantragen(
-            description=edv_desc,
-            vorname=data.get("vorname", ""),
-            nachname=data.get("nachname", ""),
-            firma=data.get("firma", ""),
-            arbeitsbeginn=arbeitsbeginn_ts,
-            titel=data.get("titel", ""),
-            strasse=data.get("strasse", ""),
-            ort=data.get("ort", ""),
-            plz=data.get("plz", ""),
-            handy=data.get("handy", ""),
-            telefon=data.get("telefon", ""),
-            fax=data.get("fax", ""),
-            niederlassung=data.get("niederlassung", ""),
-            kostenstelle=data.get("kostenstelle", ""),
-            kommentar=data.get("kommentar", ""),
-            requester_mail=user_mail,
-            checkbox_datev_user=datev_user,
-            checkbox_elo_user=elo_user,
-        )
-    elif ticket_type == "Niederlassung anmelden":
-        ticket = ninja_api.create_ticket_niederlassung_anmelden(description=description_obj, requester_mail=user_mail)
-    elif ticket_type == "Niederlassung umziehen":
-        ticket = ninja_api.create_ticket_niederlassung_umziehen(description=description_obj, requester_mail=user_mail)
-    elif ticket_type == "Niederlassung schließen":
-        ticket = ninja_api.create_ticket_niederlassung_schließen(description=description_obj, requester_mail=user_mail)
+            info_text = "Bitte die Daten links im Ticket prüfen und anschließend freigeben"
+            edv_desc = _desc_with_user_info(info_text, user)
 
-    if not ticket or "id" not in ticket:
-        raise HTTPException(status_code=500, detail="Ticket konnte in Ninja nicht erstellt werden")
+            datev_user = data.get("datev")
+            if datev_user:
+                datev_user = True
+            else:
+                datev_user = False
 
+            elo_user = data.get("elo")
+            if elo_user:
+                elo_user = True
+            else:
+                elo_user = False
+            ticket = ninja_api.create_ticket_edv_beantragen(
+                description=_desc_with_user_info("Bitte die Daten links im Ticket prüfen und anschließend freigeben", user),
+                vorname=data.get("vorname",""),
+                nachname=data.get("nachname",""),
+                firma=data.get("firma",""),
+                arbeitsbeginn=arbeitsbeginn_ts,
+                titel=data.get("titel",""),
+                strasse=data.get("strasse",""),
+                ort=data.get("ort",""),
+                plz=data.get("plz",""),
+                handy=data.get("handy",""),
+                telefon=data.get("telefon",""),
+                fax=data.get("fax",""),
+                niederlassung=data.get("niederlassung",""),
+                kostenstelle=data.get("kostenstelle",""),
+                kommentar=data.get("kommentar",""),
+                requester_mail=user_mail,
+                checkbox_datev_user=bool(data.get("datev")),
+                checkbox_elo_user=bool(data.get("elo")),
+                is_admin=user.get("is_admin", False),   # <-- required flag
+            )
+
+        elif ticket_type == "Niederlassung anmelden":
+            ticket = ninja_api.create_ticket_niederlassung_anmelden(
+                description=description_obj,
+                requester_mail=user_mail,
+                is_admin=user.get("is_admin", False),
+            )
+
+        elif ticket_type == "Niederlassung umziehen":
+            ticket = ninja_api.create_ticket_niederlassung_umziehen(
+                description=description_obj,
+                requester_mail=user_mail,
+                is_admin=user.get("is_admin", False),
+            )
+
+        elif ticket_type == "Niederlassung schließen":
+            ticket = ninja_api.create_ticket_niederlassung_schließen(
+                description=description_obj,
+                requester_mail=user_mail,
+                is_admin=user.get("is_admin", False),
+            )
+
+        if not ticket or "id" not in ticket:
+            raise HTTPException(status_code=500, detail="Ticket konnte in Ninja nicht erstellt werden")
+
+    except NinjaAuthFlowRequired:
+        # Kein neuer OAuth-Flow für Nicht-Admins -> User-freundliche Meldung auf dem Dashboard
+        return RedirectResponse(url="/dashboard?ninja_auth=needed", status_code=HTTP_302_FOUND)
+
+    # ab hier wie gehabt: lokal speichern & weiterleiten
     ninja_id = ticket["id"]
-
     ticket_id = manager.submit_ticket(
         title=title,
         description=description,
@@ -350,7 +374,6 @@ async def create_ticket(
         owner_info=json.dumps(user, ensure_ascii=False)
     )
     manager.set_ninja_metadata(ticket_id, ninja_id)
-
     logger.info("✅ Ticket erstellt: Lokale ID %s / Ninja ID %s für %s", ticket_id, ninja_id, user_mail)
     return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
 
@@ -512,108 +535,12 @@ def debug_session(request: Request):
 async def root():
     return RedirectResponse(url="/login")
 
-"""
-@app.post("/send-mail")
-async def send_mail_endpoint(
-    request: Request,
-    subject: str = Body(...),
-    content: str = Body(...),
-    user: dict = Depends(get_current_user),
-):
-    access_token = get_access_token_from_store(request)
-    if not access_token:
-        raise HTTPException(status_code=401, detail="Access token missing")
 
-    try:
-        await send_mail(access_token, subject, content)
-    except HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text)
-    return {"status": "sent"}
-"""
-
-# -----------------
-# Admin Settings Panel
-# --------------------
-
-# ✨ Neu: Helfer für Admin-Only
 
 def require_admin(user: dict):
     if not user.get("is_admin", False):
         raise HTTPException(status_code=403, detail="Admin privileges required")
 
-
-class SettingsUpdate(BaseModel):
-    SECRET_KEY: Optional[str] = Field(None, min_length=8)
-    CLIENT_ID: Optional[str] = Field(None, min_length=1)
-    CLIENT_SECRET: Optional[str] = Field(None, min_length=1)
-    TENANT_ID: Optional[str] = Field(None, min_length=1)
-    AUTHORITY: Optional[AnyUrl] = None
-    REDIRECT_URI: Optional[AnyUrl] = None
-    SCOPE: Optional[list[str]] = None
-    ADMIN_GROUP_ID: Optional[str] = None
-    TICKET_MAIL: Optional[EmailStr] = None
-    SESSION_TIMEOUT: Optional[int] = Field(None, ge=60, le=24*60*60)
-
-    @field_validator("SCOPE", mode="before")
-    @classmethod
-    def coerce_scope(cls, v):
-        if v is None:
-            return v
-        if isinstance(v, list):
-            return [str(x) for x in v]
-        if isinstance(v, str):
-            parts = [p.strip() for p in v.split(",") if p.strip()]
-            return parts
-        raise ValueError("SCOPE must be list[str] or CSV string")
-
-
-@app.get("/admin/settings", response_class=HTMLResponse)
-async def admin_settings_page(request: Request, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    safe = config.as_safe_dict()
-    return templates.TemplateResponse(
-        "admin_settings.html",
-        {"request": request, "user": user, "settings": safe, "is_admin": user.get("is_admin")}
-    )
-
-
-@app.get("/api/admin/settings")
-async def api_get_settings(user: dict = Depends(get_current_user)):
-    require_admin(user)
-    safe = config.as_safe_dict()
-    safe["runtime_session_timeout"] = RUNTIME_SESSION_TIMEOUT
-    return safe
-
-
-@app.put("/api/admin/settings")
-async def api_update_settings(payload: SettingsUpdate, user: dict = Depends(get_current_user)):
-    require_admin(user)
-
-    changes = json.loads(payload.model_dump_json(exclude_unset=True))
-
-    if not changes:
-        return {"ok": True, "settings": config.as_safe_dict()}
-
-    try:
-        config.update(**changes)
-    except Exception as e:
-        logger.exception("Settings update failed")
-        raise HTTPException(status_code=400, detail=str(e))
-
-    templates.env.globals['SESSION_TIMEOUT'] = config.SESSION_TIMEOUT
-
-    restart_required = (
-        "SESSION_TIMEOUT" in changes
-        and int(changes["SESSION_TIMEOUT"]) != int(RUNTIME_SESSION_TIMEOUT)
-    ) if 'RUNTIME_SESSION_TIMEOUT' in globals() else False
-
-    return {
-        "ok": True,
-        "settings": config.as_safe_dict(),
-        "runtime_session_timeout": globals().get("RUNTIME_SESSION_TIMEOUT"),
-        "restart_required": restart_required,
-        "note": "Änderungen an SESSION_TIMEOUT werden erst nach Neustart wirksam." if restart_required else None,
-    }
 
 
 @app.get("/api/orders", response_class=JSONResponse)
@@ -1033,3 +960,71 @@ async def api_analytics_hardware_top(
                 counts["Monitor"] += max(qty, 1)
 
     return [{"item": k, "quantity": v} for k, v in counts.most_common(limit)]
+
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin", False):
+        return RedirectResponse("/dashboard", status_code=HTTP_302_FOUND)
+
+    # Nur unverfängliche Werte + "is_set" Flags für Secrets
+    env_view = {
+        "general": {
+            "TICKET_MAIL": {"value": config.TICKET_MAIL or "—", "is_set": bool(config.TICKET_MAIL), "sensitive": False},
+            "APP_ENV": {"value": config.APP_ENV, "is_set": True, "sensitive": False},
+            "PORT": {"value": config.PORT, "is_set": True, "sensitive": False},
+            "HTTPS": {"value": bool(config.HTTPS), "is_set": True, "sensitive": False},
+        },
+        "microsoft": {
+            "CLIENT_ID": {"is_set": bool(config.CLIENT_ID), "sensitive": True},
+            "CLIENT_SECRET": {"is_set": bool(config.CLIENT_SECRET), "sensitive": True},
+            "TENANT_ID": {"is_set": bool(config.TENANT_ID), "sensitive": True},
+            "REDIRECT_URI": {"value": config.REDIRECT_URI or "—", "is_set": bool(config.REDIRECT_URI), "sensitive": False},
+            "SCOPE": {"value": ", ".join(config.SCOPE) if getattr(config, "SCOPE", None) else "—", "is_set": bool(getattr(config, "SCOPE", None)), "sensitive": False},
+            "ADMIN_GROUP_ID": {"is_set": bool(config.ADMIN_GROUP_ID), "sensitive": True},
+        },
+        "ninja": {
+            "NINJA_CLIENT_ID": {"is_set": bool(config.NINJA_CLIENT_ID), "sensitive": True},
+            "NINJA_CLIENT_SECRET": {"is_set": bool(config.NINJA_CLIENT_SECRET), "sensitive": True},
+            "NINJA_REDIRECT_URI": {"value": config.NINJA_REDIRECT_URI or "—", "is_set": bool(config.NINJA_REDIRECT_URI), "sensitive": False},
+            "NINJA_POLL_INTERVAL": {"value": getattr(config, "NINJA_POLL_INTERVAL", None), "is_set": getattr(config, "NINJA_POLL_INTERVAL", None) is not None, "sensitive": False},
+        },
+        "session": {
+            "SESSION_TIMEOUT": {"value": config.SESSION_TIMEOUT, "is_set": True, "sensitive": False},
+            "SECRET_KEY": {"is_set": bool(config.SECRET_KEY), "sensitive": True},
+        },
+    }
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "user": user,
+            "is_admin": True,
+            "env": env_view,   # <- nur Safe-Infos
+        },
+    )
+
+@app.get("/api/admin/ninja/test")
+async def api_ninja_test(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    try:
+        ok = ninja_api.test_connection(is_admin=user.get("is_admin", False))
+        return {"ok": bool(ok)}
+    except Exception as e:
+        logger.exception("Ninja test_connection failed")
+        raise HTTPException(status_code=500, detail=f"Verbindung fehlgeschlagen: {e}")
+
+@app.post("/api/admin/ninja/refresh")
+async def api_ninja_refresh(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    logger.warning("Ninja refresh token not implemented yet")
+    return {"error": "Ninja refresh token not implemented yet"}
+
+
+@app.post("/api/admin/ninja/start-auth")
+async def api_ninja_start_auth(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    logger.warning("Ninja start auth not implemented yet")
+    return {"error": "Ninja start auth not implemented yet"}
