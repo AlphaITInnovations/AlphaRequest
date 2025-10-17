@@ -1,44 +1,90 @@
 # File: alpharequestmanager/database.py
 import json
-import sqlite3
 from datetime import datetime
-from typing import List, Optional
 from .models import Ticket, RequestStatus
 from .logger import logger
+import pymysql
+from pymysql.cursors import DictCursor
+from typing import List, Optional, Any, Tuple
+import os
+
+
+def _now_iso() -> str:
+    return datetime.utcnow().isoformat()
+
 
 
 def get_connection():
-    conn = sqlite3.connect("data/tickets.db")
-    conn.row_factory = sqlite3.Row
+    conn = pymysql.connect(
+        host=os.getenv("MARIADB_HOST", "127.0.0.1"),
+        port=int(os.getenv("MARIADB_PORT", "3306")),
+        user=os.getenv("MARIADB_USER", "root"),
+        password=os.getenv("MARIADB_PASSWORD", ""),
+        database=os.getenv("MARIADB_DATABASE", "alpharequestmanager"),
+        cursorclass=DictCursor,
+        autocommit=False,
+        charset="utf8mb4",
+    )
     return conn
 
 
-def init_db():
-    logger.info("initializing database")
-    conn = get_connection()
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS tickets (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        title        TEXT    NOT NULL,
-        description  TEXT    NOT NULL,
-        owner_id     TEXT    NOT NULL,
-        owner_name   TEXT    NOT NULL,
-        owner_info   TEXT    NOT NULL,
-        comment      TEXT    NOT NULL,
-        status       TEXT    NOT NULL,
-        created_at   TEXT    NOT NULL,
-        ninja_metadata TEXT  DEFAULT NULL
-    );
-    """)
 
-    conn.execute("""
+# --- kleine Helper ------------------------------------------------------------
+def _exec(conn, sql: str, params: Tuple[Any, ...] = ()):
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    return cur
+
+
+
+def _fetchall(conn, sql: str, params: Tuple[Any, ...] = ()):
+    cur = _exec(conn, sql, params)
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+
+
+def _fetchone(conn, sql: str, params: Tuple[Any, ...] = ()):
+    cur = _exec(conn, sql, params)
+    row = cur.fetchone()
+    cur.close()
+    return row
+
+
+
+def init_db():
+    logger.info("initializing database (MariaDB)")
+
+    ddl_tickets = """
+    CREATE TABLE IF NOT EXISTS tickets (
+        id              INT AUTO_INCREMENT PRIMARY KEY,
+        title           TEXT         NOT NULL,
+        description     TEXT         NOT NULL,
+        owner_id        VARCHAR(255) NOT NULL,
+        owner_name      VARCHAR(255) NOT NULL,
+        owner_info      TEXT         NOT NULL,
+        comment         TEXT         NOT NULL,
+        status          VARCHAR(64)  NOT NULL,
+        created_at      VARCHAR(64)  NOT NULL,
+        ninja_metadata  LONGTEXT     DEFAULT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+
+    ddl_settings = """
     CREATE TABLE IF NOT EXISTS settings (
-        key         TEXT PRIMARY KEY,
-        value  TEXT NOT NULL
-    );
-    """)
-    conn.commit()
-    conn.close()
+        `key`   VARCHAR(255) PRIMARY KEY,
+        `value` LONGTEXT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+
+    conn = get_connection()
+    try:
+        _exec(conn, ddl_tickets)
+        _exec(conn, ddl_settings)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def insert_ticket(title: str,
@@ -49,101 +95,92 @@ def insert_ticket(title: str,
                   ninja_metadata: str | None = None) -> int:
     comment = ""
     conn = get_connection()
-    c = conn.cursor()
-    now = datetime.utcnow().isoformat()
+    try:
+        now = _now_iso()
+        cur = _exec(conn, """
+            INSERT INTO tickets
+                (title, description, owner_id, owner_name, comment, status, created_at, owner_info, ninja_metadata)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            title,
+            description,
+            owner_id,
+            owner_name,
+            comment,
+            RequestStatus.pending.value,
+            now,
+            owner_info,
+            ninja_metadata
+        ))
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
 
-    c.execute("""
-        INSERT INTO tickets
-            (title, description, owner_id, owner_name, comment, status, created_at, owner_info, ninja_metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        title,
-        description,
-        owner_id,
-        owner_name,
-        comment,
-        RequestStatus.pending.value,
-        now,
-        owner_info,
-        ninja_metadata
-    ))
-    conn.commit()
-    ticket_id = c.lastrowid
-    conn.close()
-    return ticket_id
 
 
 def list_all_tickets() -> list[Ticket]:
     conn = get_connection()
-    rows = conn.execute("""
-                        SELECT id,
-                               title,
-                               description,
-                               owner_id,
-                               owner_name,
-                               comment,
-                               status,
-                               created_at,
-                               owner_info,
-                               ninja_metadata
-                        FROM tickets
-                        ORDER BY created_at DESC
-                        """).fetchall()
-    conn.close()
-    return [Ticket.from_row(r) for r in rows]
+    try:
+        rows = _fetchall(conn, """
+            SELECT id, title, description, owner_id, owner_name, comment, status, created_at, owner_info, ninja_metadata
+            FROM tickets
+            ORDER BY created_at DESC
+        """)
+        return [Ticket.from_row(r) for r in rows]
+    finally:
+        conn.close()
+
+
 
 def list_pending_tickets() -> list[Ticket]:
     conn = get_connection()
-    rows = conn.execute("""
-        SELECT id, title, description, owner_id, owner_name, comment, status, created_at, owner_info, ninja_metadata
-        FROM tickets
-        WHERE status = ?
-    """, (RequestStatus.pending.value,)).fetchall()
-    conn.close()
-    return [Ticket.from_row(r) for r in rows]
+    try:
+        rows = _fetchall(conn, """
+            SELECT id, title, description, owner_id, owner_name, comment, status, created_at, owner_info, ninja_metadata
+            FROM tickets
+            WHERE status = %s
+        """, (RequestStatus.pending.value,))
+        return [Ticket.from_row(r) for r in rows]
+    finally:
+        conn.close()
+
+
 
 def list_tickets_by_owner(owner_id: str) -> list[Ticket]:
     conn = get_connection()
-    rows = conn.execute("""
-        SELECT id, title, description, owner_id, owner_name, comment, status, created_at, owner_info
-        FROM tickets
-        WHERE owner_id = ?
-        ORDER BY created_at DESC
-    """, (owner_id,)).fetchall()
-    conn.close()
-    return [Ticket.from_row(r) for r in rows]
+    try:
+        rows = _fetchall(conn, """
+            SELECT id, title, description, owner_id, owner_name, comment, status, created_at, owner_info
+            FROM tickets
+            WHERE owner_id = %s
+            ORDER BY created_at DESC
+        """, (owner_id,))
+        return [Ticket.from_row(r) for r in rows]
+    finally:
+        conn.close()
+
+
 
 def update_ticket(ticket_id: int, **fields) -> None:
     """
     Aktualisiert einen oder mehrere Spalten des Tickets mit id=ticket_id.
-    Beispiel:
-        update_ticket(5, status="approved")
-        update_ticket(7, status="rejected", owner_name="Max Mustermann")
     """
-    # Erlaubte Spalten
-    allowed = {"title","description","owner_id","owner_name", "comment","status","created_at"}
-    # Filter ungültiger keys
+    allowed = {"title","description","owner_id","owner_name","comment","status","created_at"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
 
-    # Dynamisch SET-Klausel bauen
-    set_clause = ", ".join(f"{col}=?" for col in updates)
-    params = list(updates.values()) + [ticket_id]
+    set_clause = ", ".join(f"{col} = %s" for col in updates)
+    params: Tuple[Any, ...] = tuple(updates.values()) + (ticket_id,)
+
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(f"""
-        UPDATE tickets
-        SET {set_clause}
-        WHERE id = ?
-    """, params)
-    conn.commit()
-    conn.close()
+    try:
+        _exec(conn, f"UPDATE tickets SET {set_clause} WHERE id = %s", params)
+        conn.commit()
+    finally:
+        conn.close()
 
-
-
-def _now_iso():
-    return datetime.utcnow().isoformat()
 
 
 def update_ticket_metadata(ticket_id: int, ninja_ticket_id: int | None = None, synced_at: str | None = None) -> None:
@@ -152,71 +189,54 @@ def update_ticket_metadata(ticket_id: int, ninja_ticket_id: int | None = None, s
     Speichert JSON wie {"ninja_ticket_id": 1234, "synced_at": "..."} in ninja_metadata.
     """
     conn = get_connection()
-    cur = conn.cursor()
+    try:
+        row = _fetchone(conn, "SELECT ninja_metadata FROM tickets WHERE id = %s", (ticket_id,))
+        metadata = {}
+        raw = row["ninja_metadata"] if row else None
+        if raw:
+            try:
+                metadata = json.loads(raw)
+            except json.JSONDecodeError:
+                metadata = {}
 
-    # Existierende Metadaten laden
-    row = cur.execute("SELECT ninja_metadata FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
-    metadata = {}
-    if row and row["ninja_metadata"]:
-        try:
-            metadata = json.loads(row["ninja_metadata"])
-        except json.JSONDecodeError:
-            metadata = {}
+        if ninja_ticket_id is not None:
+            metadata["ninja_ticket_id"] = ninja_ticket_id
+        metadata["synced_at"] = synced_at if synced_at is not None else _now_iso()
 
-    if ninja_ticket_id is not None:
-        metadata["ninja_ticket_id"] = ninja_ticket_id
-    if synced_at is not None:
-        metadata["synced_at"] = synced_at
-    else:
-        metadata["synced_at"] = _now_iso()
+        _exec(conn, "UPDATE tickets SET ninja_metadata = %s WHERE id = %s", (json.dumps(metadata), ticket_id))
+        conn.commit()
+    finally:
+        conn.close()
 
-    cur.execute("UPDATE tickets SET ninja_metadata = ? WHERE id = ?", (json.dumps(metadata), ticket_id))
-    conn.commit()
-    conn.close()
 
 
 def get_ticket_metadata(ticket_id: int) -> dict | None:
-    """
-    Liest die NinjaOne-Metadaten eines Tickets.
-    """
     conn = get_connection()
-    row = conn.execute("SELECT ninja_metadata FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
-    conn.close()
-    if row and row["ninja_metadata"]:
-        try:
-            return json.loads(row["ninja_metadata"])
-        except json.JSONDecodeError:
+    try:
+        row = _fetchone(conn, "SELECT ninja_metadata FROM tickets WHERE id = %s", (ticket_id,))
+        if not row:
             return None
-    return None
-
-
+        raw = row["ninja_metadata"]
+        if raw:
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                return None
+        return None
+    finally:
+        conn.close()
 
 
 
 def delete_ticket(ticket_id: int) -> bool:
     """
     Löscht das Ticket mit der angegebenen ID.
-
-
-    Returns
-    -------
-    bool
-    True, wenn ein Datensatz gelöscht wurde; sonst False.
-
-
-    Hinweise
-    --------
-    - Hebt kein Exception an, wenn das Ticket nicht existiert (gibt False zurück).
-    - Loggt Erfolg bzw. Nichtexistenz für spätere Nachverfolgung.
     """
     conn = get_connection()
     try:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
-        affected = cur.rowcount # -1 vor Ausführung, danach >= 0
+        cur = _exec(conn, "DELETE FROM tickets WHERE id = %s", (ticket_id,))
+        affected = cur.rowcount
         conn.commit()
-
-
         if affected and affected > 0:
             logger.info("deleted ticket id=%s", ticket_id)
             return True
@@ -227,40 +247,59 @@ def delete_ticket(ticket_id: int) -> bool:
         conn.close()
 
 
-### Settings DB
 def settings_get(key: str, default: object | None = None) -> object:
     """
     Holt JSON-kodierten Wert. Gibt default zurück, wenn nicht vorhanden.
     """
-    with get_connection() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key = ?;", (key,)).fetchone()
-    if not row:
-        return default
+    conn = get_connection()
     try:
-        return json.loads(row["value"])
-    except Exception:
-        # defensiv: falls alter Plaintext drinsteht
-        return row["value"]
+        row = _fetchone(conn, "SELECT `value` FROM settings WHERE `key` = %s;", (key,))
+        if not row:
+            return default
+        value = row["value"]
+        try:
+            return json.loads(value)
+        except Exception:
+            return value
+    finally:
+        conn.close()
+
+
 
 def settings_set(key: str, value: object) -> None:
     """
-    Speichert value JSON-kodiert unter key.
-    Beispiel: set_setting("COMPANIES", [{"id":1,"name":"Acme"}])
+    Speichert value JSON-kodiert unter key (Upsert per ON DUPLICATE KEY UPDATE).
     """
     payload = json.dumps(value, ensure_ascii=False)
-    with get_connection() as conn:
-        conn.execute(
-            "INSERT INTO settings(key, value) VALUES(?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value;",
-            (key, payload),
-        )
+    conn = get_connection()
+    try:
+        _exec(conn,
+              "INSERT INTO settings(`key`, `value`) VALUES(%s, %s) "
+              "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);",
+              (key, payload))
         conn.commit()
+    finally:
+        conn.close()
+
+
 
 def settings_all() -> dict[str, object]:
     conn = get_connection()
-    rows = conn.execute("SELECT key, value_json FROM settings").fetchall()
-    conn.close()
-    return {r["key"]: json.loads(r["value_json"]) for r in rows}
+    try:
+        rows = _fetchall(conn, "SELECT `key`, `value` FROM settings")
+        out: dict[str, object] = {}
+        for r in rows:
+            k = r["key"]
+            v_raw = r["value"]
+            try:
+                out[k] = json.loads(v_raw)
+            except Exception:
+                out[k] = v_raw
+        return out
+    finally:
+        conn.close()
+
+
 
 def get_companies() -> List[str]:
     """
@@ -277,9 +316,12 @@ def get_companies() -> List[str]:
         return [v.strip() for v in value.split(",") if v.strip()]
     return []
 
+
+
 def set_companies(companies: List[str]) -> None:
     """Speichert eine Companies-Liste."""
     settings_set("COMPANIES", companies)
+
 
 
 def get_ninja_token() -> Optional[dict]:
@@ -292,13 +334,13 @@ def get_ninja_token() -> Optional[dict]:
     if isinstance(value, dict):
         return value
     if isinstance(value, str):
-        # Falls in der DB ein String liegt, versuchen zu parsen
         try:
             parsed = json.loads(value)
             return parsed if isinstance(parsed, dict) else None
         except json.JSONDecodeError:
             return None
     return None
+
 
 
 def set_ninja_token(token: Optional[dict]) -> None:

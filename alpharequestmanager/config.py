@@ -30,8 +30,9 @@ class Config:
 
     PORT = int(os.getenv("PORT", 6969))
     HTTPS = str_to_bool(os.getenv("HTTPS", False).lower())
-
     DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", False).lower())
+
+
 
     #Persistente Werte
     @property
