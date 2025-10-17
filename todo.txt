@@ -1,7 +1,3 @@
-allgemein:
-- DB zu postgres oder mariadb migrieren?
-- alle 7 tage test request zu ninja für token erneuerung?
-
 Wenn mehr konzentration:
 Im frontend für Anzeigen im Tickettyp unterscheiden & bearbeitung hinzufügen
 Im Backend für formatieren im tickettyp unterscheiden, dadurch dann feste felder für ticketfelder
@@ -12,10 +8,7 @@ Ticket werte updaten, wenn diese in ninja geändert werden?
 
 Produktion:
 ninja api key user
-alle keys tauschen
-secret ändern
-zertifikate ändern
-debug routen löschen
+alle keys/secrets tauschen
 
 
 
