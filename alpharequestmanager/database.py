@@ -7,6 +7,8 @@ import pymysql
 from pymysql.cursors import DictCursor
 from typing import List, Optional, Any, Tuple
 import os
+from sqlalchemy.engine import make_url
+
 
 
 def _now_iso() -> str:
@@ -15,15 +17,18 @@ def _now_iso() -> str:
 
 
 def get_connection():
+    dsn = os.getenv("MARIADB_DSN")
+    url = make_url(dsn)
+
     conn = pymysql.connect(
-        host=os.getenv("MARIADB_HOST", "127.0.0.1"),
-        port=int(os.getenv("MARIADB_PORT", "3306")),
-        user=os.getenv("MARIADB_USER", "root"),
-        password=os.getenv("MARIADB_PASSWORD", ""),
-        database=os.getenv("MARIADB_DATABASE", "alpharequestmanager"),
+        host=url.host,
+        port=url.port or 3306,
+        user=url.username,
+        password=url.password,
+        database=url.database,
         cursorclass=DictCursor,
         autocommit=False,
-        charset="utf8mb4",
+        charset=url.query.get("charset", ["utf8mb4"])[0],
     )
     return conn
 
