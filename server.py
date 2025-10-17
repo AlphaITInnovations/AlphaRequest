@@ -1,4 +1,5 @@
 import json
+import secrets
 import threading
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -1000,15 +1001,44 @@ async def api_ninja_test(user: dict = Depends(get_current_user)):
         logger.exception("Ninja test_connection failed")
         raise HTTPException(status_code=500, detail=f"Verbindung fehlgeschlagen: {e}")
 
-@app.post("/api/admin/ninja/refresh")
-async def api_ninja_refresh(user: dict = Depends(get_current_user)):
-    require_admin(user)
-    logger.warning("Ninja refresh token not implemented yet")
-    return {"error": "Ninja refresh token not implemented yet"}
 
 
 @app.post("/api/admin/ninja/start-auth")
-async def api_ninja_start_auth(user: dict = Depends(get_current_user)):
+async def api_ninja_start_auth(request: Request, user: dict = Depends(get_current_user)):
     require_admin(user)
-    logger.warning("Ninja start auth not implemented yet")
-    return {"error": "Ninja start auth not implemented yet"}
+    state = secrets.token_urlsafe(24)
+    request.session["ninja_oauth_state"] = state
+    auth_url = ninja_api.build_auth_url(state)
+    return {"ok": True, "auth_url": auth_url}
+
+
+
+@app.get("/ninja/oauth/callback", response_class=HTMLResponse)
+async def ninja_oauth_callback(request: Request, code: str = Query(...), state: str = Query(...)):
+    expect = request.session.get("ninja_oauth_state")
+    if not expect or state != expect:
+        raise HTTPException(status_code=400, detail="Ungültiger OAuth-State")
+
+    try:
+        token_info = ninja_api.exchange_code_for_token(code)
+        # Aufräumen & Feedback
+        request.session.pop("ninja_oauth_state", None)
+        # Optional: kleine Erfolgsmeldung anzeigen
+        # Redirect zurück zur Settings-Seite (Ninja-Tab)
+        return RedirectResponse(url="/settings?tab=ninja&auth=ok", status_code=HTTP_302_FOUND)
+    except Exception as e:
+        request.session.pop("ninja_oauth_state", None)
+        raise HTTPException(status_code=500, detail=f"Token-Austausch fehlgeschlagen: {e}")
+
+
+@app.post("/api/admin/ninja/refresh")
+async def api_ninja_refresh(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    tok = ninja_api.load_token()
+    if not tok or not tok.get("refresh_token"):
+        raise HTTPException(status_code=400, detail="Kein Refresh-Token vorhanden. Bitte neuen Auth-Flow starten.")
+    try:
+        new_tok = ninja_api.refresh_token(tok["refresh_token"])
+        return {"ok": True, "expires_at": new_tok.get("expires_at")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Refresh fehlgeschlagen: {e}")

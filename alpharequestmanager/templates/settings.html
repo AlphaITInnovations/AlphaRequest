@@ -520,13 +520,10 @@
       loading: false,
       lastResult: '',
       statusText: 'bereit',
-
-      // neu:
-      resultState: 'idle', // 'idle' | 'ok' | 'error'
+      resultState: 'idle',
       resultMessage: '',
 
       handleResultJson(json) {
-        // Erwartet: { ok: true } ODER { error: "..." }
         if (json && json.ok === true) {
           this.resultState = 'ok';
           this.resultMessage = 'Die Verbindung zu NinjaOne ist aktiv.';
