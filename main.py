@@ -4,9 +4,7 @@ import uvicorn
 import asyncio
 from server import app
 from alpharequestmanager.config import config
-from dotenv import load_dotenv
-import alpharequestmanager.database as db
-from alpharequestmanager.ninja_api import test_connection
+
 
 def main():
     if sys.platform.startswith("win"):

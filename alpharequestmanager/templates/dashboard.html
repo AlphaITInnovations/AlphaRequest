@@ -18,55 +18,59 @@
   .nice-scrollbar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.25);border-radius:8px}
   .nice-scrollbar::-webkit-scrollbar-track{background:transparent}
 
+/* Pop-up Styles */
+#dev-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+#dev-popup-overlay.show {
+  visibility: visible;
+  opacity: 1;
+}
 
-    /* Pop-up Styles */
-  #dev-popup-overlay {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    visibility: hidden;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
+/* ⬇️ ersetzt das bisherige #dev-popup { background: white; ... } */
+#dev-popup {
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  text-align: center;
+  font-family: sans-serif;
+}
 
-  #dev-popup-overlay.show {
-    visibility: visible;
-    opacity: 1;
-  }
-
-  #dev-popup {
-    background: white;
-    padding: 2rem;
-    border-radius: 1rem;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    max-width: 400px;
-    text-align: center;
-    font-family: sans-serif;
-  }
-
-  #dev-popup button {
-    margin-top: 1rem;
-    padding: 0.5rem 1.25rem;
-    background-color: #2563eb;
-    color: white;
-    border: none;
-    border-radius: 0.5rem;
-    cursor: pointer;
-  }
-
-  #dev-popup button:hover {
-    background-color: #1d4ed8;
-  }
+#dev-popup button {
+  margin-top: 1rem;
+  padding: 0.5rem 1.25rem;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+#dev-popup button:hover { background-color: #1d4ed8; }
 </style>
+<script>
+  // Serverseitiges Flag als JS-Boolean
+  window.SHOW_DEV_POPUP = {{ (devpopup | default(false)) | tojson }};
+</script>
 
 <script>
   window._ORDERS = {{ orders | default([]) | tojson | safe }};
 
-    function showDevPopupOncePerDay() {
+  function showDevPopupOncePerDay() {
+    if (!window.SHOW_DEV_POPUP) return; // ← Guard
+
     const today = new Date().toISOString().split('T')[0];
     const lastShown = localStorage.getItem('devPopupLastShown');
 
@@ -80,7 +84,10 @@
     document.getElementById('dev-popup-overlay')?.classList.remove('show');
   }
 
-  window.addEventListener('DOMContentLoaded', showDevPopupOncePerDay);
+  // ← Listener NUR registrieren, wenn Feature aktiv ist
+  if (window.SHOW_DEV_POPUP) {
+    window.addEventListener('DOMContentLoaded', showDevPopupOncePerDay);
+  }
 </script>
 
 <script>
@@ -186,6 +193,7 @@ badgeClasses(status) {
 {% block content %}
 <div x-data="dashboardManager()" x-init="init()" class="min-h-[80vh]">
 
+{% if devpopup %}
 <div id="dev-popup-overlay">
   <div id="dev-popup">
     <h2 class="text-xl font-semibold mb-2">Hinweis</h2>
@@ -197,6 +205,7 @@ badgeClasses(status) {
     <button onclick="closeDevPopup()">Verstanden</button>
   </div>
 </div>
+{% endif %}
   <!-- Toast -->
   <div
     x-show="toastVisible"

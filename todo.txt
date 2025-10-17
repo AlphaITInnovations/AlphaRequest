@@ -1,8 +1,6 @@
 allgemein:
-- hinweis meldung dark mode kacke
 - DB zu postgres oder mariadb migrieren?
-
-
+- alle 7 tage test request zu ninja für token erneuerung?
 
 Wenn mehr konzentration:
 Im frontend für Anzeigen im Tickettyp unterscheiden & bearbeitung hinzufügen

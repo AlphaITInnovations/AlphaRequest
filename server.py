@@ -1,26 +1,18 @@
-# server.py — session/token robust fix for MS OAuth redirect-loop
-# Goal: avoid redirect loops by keeping the session cookie tiny and stable,
-# move tokens server-side, and use safe cookie attributes.
-
 import json
 import threading
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import time
 import uuid
-
 from fastapi import Body, Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from httpx import HTTPStatusError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from starlette.status import HTTP_302_FOUND
 from fastapi.staticfiles import StaticFiles
-
 from pydantic import BaseModel, Field, AnyUrl, EmailStr, field_validator
 from contextlib import asynccontextmanager
-
 from alpharequestmanager import graph, database, ninja_api, ninja_sync
 from alpharequestmanager.database import update_ticket, set_companies
 from alpharequestmanager.graph import get_user_profile, send_mail
@@ -30,23 +22,19 @@ from alpharequestmanager.dependencies import get_current_user
 from alpharequestmanager.logger import logger
 from alpharequestmanager.manager import RequestManager
 from alpharequestmanager.models import RequestStatus, TicketType
-
-from html import escape  # add near other imports
-from typing import Any
-
+from html import escape
 from collections import Counter, defaultdict
 from typing import Optional
 from fastapi import Query
 from datetime import datetime
 import json as _json
-
 from alpharequestmanager.ninja_api import NinjaAuthFlowRequired
+
+
 
 RUNTIME_SESSION_TIMEOUT = config.SESSION_TIMEOUT
 
-# -------------------------------
-# Lightweight server-side token store (in-memory)
-# -------------------------------
+
 
 class TokenStore:
     """Server-side token storage to keep cookies small.
@@ -115,10 +103,8 @@ def get_access_token_from_store(request: Request) -> Optional[str]:
     return rec.get("access_token")
 
 
-# -------------------------------
-# App
-# -------------------------------
 
+# FastAPI WebServer
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     thread = threading.Thread(target=ninja_sync.start_polling, daemon=True)
@@ -126,7 +112,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
+
 app = FastAPI(lifespan=lifespan)
+
+
+
 
 # IMPORTANT: Keep cookie first‑party and small; Lax fits OAuth top-level redirects
 app.add_middleware(
@@ -138,19 +128,12 @@ app.add_middleware(
     max_age=config.SESSION_TIMEOUT,
     path="/",
 )
-
-
 templates = Jinja2Templates(directory="alpharequestmanager/templates")
 templates.env.globals['SESSION_TIMEOUT'] = RUNTIME_SESSION_TIMEOUT
-
 manager = RequestManager()
-
 app.mount("/static", StaticFiles(directory="alpharequestmanager/static"), name="static")
 
 
-# -------------------------------
-# LOGIN & AUTH
-# -------------------------------
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -159,12 +142,14 @@ async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 
+
 @app.get("/start-auth")
 async def start_auth(request: Request):
     if request.session.get("user"):
         return RedirectResponse("/dashboard", status_code=HTTP_302_FOUND)
     auth_url = initiate_auth_flow(request)
     return RedirectResponse(auth_url)
+
 
 
 @app.get("/auth/callback")
@@ -232,9 +217,6 @@ async def auth_callback(request: Request):
         return templates.TemplateResponse("login.html", {"request": request, "error": str(e)})
 
 
-# -------------------------------
-# DASHBOARD & TICKETS
-# -------------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, user: dict = Depends(get_current_user)):
@@ -258,9 +240,11 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
             "user": user,
             "orders": orders,
             "is_admin": is_admin,
-            "companies_json": companies
+            "companies_json": companies,
+            "devpopup": config.DEVPOPUP,
         }
     )
+
 
 
 @app.post("/tickets")
@@ -378,6 +362,7 @@ async def create_ticket(
     return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
 
 
+
 @app.get("/logout")
 async def logout(request: Request):
     user_email = request.session.get("user", {}).get("email")
@@ -389,9 +374,6 @@ async def logout(request: Request):
     return RedirectResponse("/login", status_code=HTTP_302_FOUND)
 
 
-# -------------------------------
-# ADMIN-PRÜFUNG
-# -------------------------------
 
 @app.get("/pruefung", response_class=HTMLResponse)
 async def pruefung(request: Request, user: dict = Depends(get_current_user)):
@@ -426,6 +408,7 @@ async def pruefung(request: Request, user: dict = Depends(get_current_user)):
     )
 
 
+
 @app.post("/pruefung/approve")
 async def approve_ticket(
     request: Request,
@@ -452,6 +435,7 @@ async def approve_ticket(
     # ticketType handling omitted for brevity as in original code
 
     return RedirectResponse("/pruefung", status_code=HTTP_302_FOUND)
+
 
 
 @app.post("/pruefung/reject")
