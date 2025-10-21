@@ -1,0 +1,209 @@
+<!-- modals/detail-zugang-beantragen.html -->
+<div x-cloak x-show="$store.modal.is('detail:zugang-beantragen')" class="fixed inset-0 z-50">
+  <!-- Overlay -->
+  <div class="fixed inset-0 bg-black/40 backdrop-blur-sm"
+       @click="$store.modal.close()" aria-hidden="true"></div>
+
+  <!-- Panel -->
+  <div class="relative min-h-screen flex items-center justify-center px-4 py-10">
+    <div
+      class="modal-panel w-full max-w-5xl relative overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="accReqDetailTitle"
+      x-trap="$store.modal.is('detail:zugang-beantragen')"
+      @keydown.escape.window="$store.modal.close()"
+      x-data="{
+        // --- Parse & Helpers ---
+        parseDesc() {
+          const o = $store.modal.data || {};
+          const d = o.description;
+          if (!d) return { ticketType: o.type || 'EDV-Zugang beantragen', data: {} };
+          try { if (typeof d === 'string') return JSON.parse(d); if (typeof d === 'object') return d; } catch(_) {}
+          return { ticketType: o.type || 'EDV-Zugang beantragen', data: {} };
+        },
+        d(){ return $store.modal.data || {}; },
+        payload(){ return this.parseDesc(); },
+        z(){ return this.payload().data || {}; },
+
+        fmt(v){ return (v===null||v===undefined||v==='') ? '–' : v; },
+        fmtDate(iso){
+          if(!iso) return '–';
+          const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+        },
+        chip(on){ return on
+          ? 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
+          : 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-200 text-gray-700 dark:bg-gray-700/50 dark:text-gray-200';
+        },
+        statusLabel(s){ return ({approved:'Genehmigt', pending:'Ausstehend', rejected:'Abgelehnt'}[s]) || s; },
+        statusClass(s){
+          const base='inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full align-middle';
+          const m={approved:'bg-green-200/80 text-green-900 dark:bg-green-500/70 dark:text-black',
+                   pending:'bg-yellow-200/80 text-yellow-900 dark:bg-yellow-500/70 dark:text-black',
+                   rejected:'bg-red-200/80 text-red-900 dark:bg-red-600/70 dark:text-white'};
+          return `${base} ${m[s] || 'bg-gray-200/80 text-gray-900 dark:bg-gray-600/70 dark:text-white'}`;
+        },
+        meta(){
+          const o = this.d();
+          return { id: o.id ?? '–', date: o.date ?? '–', creator: o.creator ?? null, status: o.status ?? 'pending' };
+        },
+
+        // --- Felder exakt nach deinem JSON ---
+        vorname(){ return this.z().vorname; },
+        nachname(){ return this.z().nachname; },
+        firma(){ return this.z().firma; },
+        niederlassung(){ return this.z().niederlassung; },
+        arbeitsbeginn(){ return this.z().arbeitsbeginn; },
+        kostenstelle(){ return this.z().kostenstelle; },
+        titel(){ return this.z().titel; },
+
+        strasse(){ return this.z().strasse; },
+        ort(){ return this.z().ort; },
+        plz(){ return this.z().plz; },
+
+        handy(){ return this.z().handy; },
+        telefon(){ return this.z().telefon; },
+        fax(){ return this.z().fax; },
+
+        datev(){ return this.z().datev === true; },
+        elo(){ return this.z().elo === true; },
+
+        nameVoll(){ return [this.vorname(), this.nachname()].filter(Boolean).join(' '); },
+        adresse(){
+          const s = this.strasse(), p = this.plz(), o = this.ort();
+          return this.fmt([s, [p, o].filter(Boolean).join(' ')].filter(Boolean).join(', '));
+        }
+      }"
+    >
+
+      <!-- Header -->
+      <div class="relative p-5 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+        <div class="absolute inset-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pointer-events-none"></div>
+        <div class="relative flex items-start justify-between gap-4">
+          <div>
+            <h3 id="accReqDetailTitle" class="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+              <span class="text-3xl">🔑</span>
+              <span>EDV-Zugang beantragen</span>
+            </h3>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span :class="statusClass(meta().status)" x-text="statusLabel(meta().status)"></span>
+              <span class="text-muted">•</span>
+              <span class="text-muted">ID: <span class="font-medium text-text" x-text="meta().id"></span></span>
+              <span class="text-muted">•</span>
+              <span class="text-muted">Datum: <span class="font-medium text-text" x-text="meta().date"></span></span>
+              <template x-if="meta().creator">
+                <span class="text-muted">• Ersteller: <span class="font-medium text-text" x-text="meta().creator"></span></span>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTENT -->
+      <div class="p-5 sm:p-6 space-y-5">
+
+        <!-- Stammdaten -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">🧾 Stammdaten</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+            <div>
+              <div class="text-muted">Name</div>
+              <div class="font-medium" x-text="fmt(nameVoll())"></div>
+            </div>
+            <div>
+              <div class="text-muted">Firma</div>
+              <div class="font-medium" x-text="fmt(firma())"></div>
+            </div>
+            <div>
+              <div class="text-muted">Niederlassung</div>
+              <div class="font-medium" x-text="fmt(niederlassung())"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Einsatz & Kosten -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">🗓️ Einsatz & Kosten</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div>
+              <div class="text-muted">Arbeitsbeginn</div>
+              <div class="font-medium" x-text="fmtDate(arbeitsbeginn())"></div>
+            </div>
+            <div>
+              <div class="text-muted">Kostenstelle</div>
+              <div class="font-medium" x-text="fmt(kostenstelle())"></div>
+            </div>
+            <div>
+              <div class="text-muted">Titel / Rolle</div>
+              <div class="font-medium" x-text="fmt(titel())"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Adresse -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">🏢 Adresse</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div class="sm:col-span-2">
+              <div class="text-muted">Straße</div>
+              <div class="font-medium break-words" x-text="fmt(strasse())"></div>
+            </div>
+            <div>
+              <div class="text-muted">Ort</div>
+              <div class="font-medium" x-text="fmt(ort())"></div>
+            </div>
+            <div>
+              <div class="text-muted">PLZ</div>
+              <div class="font-medium" x-text="fmt(plz())"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Kontakt -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">☎️ Kontakt</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div>
+              <div class="text-muted">Mobilnummer</div>
+              <div class="font-medium" x-text="fmt(handy())"></div>
+            </div>
+            <div>
+              <div class="text-muted">Telefonnummer</div>
+              <div class="font-medium" x-text="fmt(telefon())"></div>
+            </div>
+            <div>
+              <div class="text-muted">Fax</div>
+              <div class="font-medium" x-text="fmt(fax())"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Optionen -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">⚙️ Optionen</h4>
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <div :class="chip(datev())">DATEV-Benutzer <span x-text="datev() ? '✓' : '—'"></span></div>
+            <div :class="chip(elo())">ELO-Benutzer (Leitung/Prüfer) <span x-text="elo() ? '✓' : '—'"></span></div>
+          </div>
+        </section>
+
+        <!-- Abschlusskommentar -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-2">💬 Abschlusskommentar</h4>
+          <p class="text-sm" x-text="d().comment || '– kein Kommentar –'"></p>
+        </section>
+
+        <!-- Footer -->
+        <div class="pt-4 flex justify-end border-t border-border mt-6">
+          <button type="button"
+                  class="px-5 py-2 bg-primary hover:bg-primaryHover text-white rounded-md"
+                  @click="$store.modal.close()">
+            Schließen
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

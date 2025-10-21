@@ -1,0 +1,186 @@
+<!-- modals/detail-hardware.html -->
+<div x-cloak x-show="$store.modal.is('detail:hardware')" class="fixed inset-0 z-50">
+  <!-- Overlay -->
+  <div class="fixed inset-0 bg-black/40 backdrop-blur-sm"
+       @click="$store.modal.close()" aria-hidden="true"></div>
+
+  <!-- Panel -->
+  <div class="relative min-h-screen flex items-center justify-center px-4 py-10">
+    <div
+      class="modal-panel w-full max-w-5xl relative overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hwDetailTitle"
+      x-trap="$store.modal.is('detail:hardware')"
+      @keydown.escape.window="$store.modal.close()"
+      x-data="{
+        parseDesc() {
+          const o = $store.modal.data || {};
+          const d = o.description;
+          if (!d) return { ticketType: o.type || 'Hardwarebestellung', data: {} };
+          try {
+            if (typeof d === 'string') return JSON.parse(d);
+            if (typeof d === 'object')  return d;
+          } catch(_) {}
+          return { ticketType: o.type || 'Hardwarebestellung', data: {} };
+        },
+        d(){ return $store.modal.data || {}; },
+        meta(){
+          const o = this.d();
+          return { id: o.id ?? '–', date: o.date ?? '–', creator: o.creator ?? null, status: o.status ?? 'pending' };
+        },
+        statusLabel(s){ return ({approved:'Genehmigt', pending:'Ausstehend', rejected:'Abgelehnt'}[s]) || s; },
+        statusClass(s){
+          const base='inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full align-middle';
+          const m={approved:'bg-green-200/80 text-green-900 dark:bg-green-500/70 dark:text-black',
+                   pending:'bg-yellow-200/80 text-yellow-900 dark:bg-yellow-500/70 dark:text-black',
+                   rejected:'bg-red-200/80 text-red-900 dark:bg-red-600/70 dark:text-white'};
+          return `${base} ${m[s] || 'bg-gray-200/80 text-gray-900 dark:bg-gray-600/70 dark:text-white'}`;
+        },
+        fmt(v){ return (v===null||v===undefined||v==='') ? '–' : v; },
+        fmtDate(iso){
+          if(!iso) return '–';
+          const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+        },
+        chip(on){ return on
+          ? 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
+          : 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-200 text-gray-700 dark:bg-gray-700/50 dark:text-gray-200';
+        },
+        payload(){ return this.parseDesc(); },
+        hw(){ return this.payload().data || {}; },
+        artikel(){
+          const a = this.hw().Artikel || {};
+          const items = [
+            { label:'Notebook',        on: a.Notebook === true },
+            { label:'Mini-PC',         on: a.MiniPC === true },
+            { label:'Dockingstation',  on: a.Dockingstation === true },
+            { label:'Maus & Tastatur', on: a.MausUndTastatur === true },
+            { label:'Headset',         on: a.Headset === true },
+            { label:'Webcam',          on: a.Webcam === true },
+            { label:'Handy & SIM',     on: a.HandyUndSim === true },
+          ];
+          const mon = this.hw().Monitor || {};
+          if (mon.benoetigt === true) {
+            items.unshift({ label:'Monitor', on: true, count: (mon.Anzahl ?? 1) });
+          }
+          return items;
+        }
+      }"
+    >
+
+      <!-- Header -->
+      <div class="relative p-5 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+        <div class="absolute inset-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pointer-events-none"></div>
+        <div class="relative flex items-start justify-between gap-4">
+          <div>
+            <h3 id="hwDetailTitle" class="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+              <span class="text-3xl">📦</span>
+              <span>Hardwarebestellung</span>
+            </h3>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span :class="statusClass(meta().status)" x-text="statusLabel(meta().status)"></span>
+              <span class="text-muted">•</span>
+              <span class="text-muted">ID: <span class="font-medium text-text" x-text="meta().id"></span></span>
+              <span class="text-muted">•</span>
+              <span class="text-muted">Datum: <span class="font-medium text-text" x-text="meta().date"></span></span>
+              <template x-if="meta().creator">
+                <span class="text-muted">• Ersteller: <span class="font-medium text-text" x-text="meta().creator"></span></span>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTENT -->
+      <div class="p-5 sm:p-6 space-y-5">
+
+        <!-- Stammdaten -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">🧾 Stammdaten</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+            <div>
+              <div class="text-muted">Mitarbeiter-Typ</div>
+              <div class="font-medium" x-text="fmt(hw().MitarbeiterTyp)"></div>
+            </div>
+            <div>
+              <div class="text-muted">Name</div>
+              <div class="font-medium" x-text="fmt(hw().Name)"></div>
+            </div>
+            <div>
+              <div class="text-muted">Kostenstelle</div>
+              <div class="font-medium" x-text="fmt(hw().Kostenstelle)"></div>
+            </div>
+            <div>
+              <div class="text-muted">Firma</div>
+              <div class="font-medium" x-text="fmt(hw().Firma)"></div>
+            </div>
+            <div class="sm:col-span-2 xl:col-span-1">
+              <div class="text-muted">Lieferadresse</div>
+              <div class="font-medium break-words" x-text="fmt(hw().Lieferadresse)"></div>
+            </div>
+            <div>
+              <div class="text-muted">Lieferung bis</div>
+              <div class="font-medium" x-text="fmtDate(hw().Lieferung_bis)"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Artikel (inkl. Monitor × Anzahl) -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">🧩 Artikel</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <template x-for="(it, i) in artikel()" :key="i">
+              <div :class="chip(it.on)" class="flex items-center gap-2">
+                <span x-text="it.label"></span>
+                <template x-if="it.count !== undefined">
+                  <span class="text-xs font-semibold opacity-80">× <span x-text="it.count"></span></span>
+                </template>
+                <template x-if="it.count === undefined">
+                  <span x-text="it.on ? '✓' : '—'"></span>
+                </template>
+              </div>
+            </template>
+
+            <!-- Dockingstation vorhanden (nur wenn true) -->
+            <template x-if="hw().Dockingstation_vorhanden === true">
+              <div :class="chip(true)">
+                Dockingstation vorhanden ✓
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <!-- Grund der Neubestellung -->
+        <template x-if="fmt(hw().GrundNeubestellung) !== '–'">
+          <section class="card card--pad">
+            <h4 class="font-semibold mb-2">📝 Grund der Neubestellung</h4>
+            <p class="text-sm" x-text="hw().GrundNeubestellung"></p>
+          </section>
+        </template>
+
+        <!-- Bemerkung -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-2">💬 Bemerkung</h4>
+          <p class="text-sm" x-text="fmt(hw().Bemerkung)"></p>
+        </section>
+
+        <!-- Abschlusskommentar -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-2">💬 Abschlusskommentar</h4>
+          <p class="text-sm" x-text="d().comment || '– kein Kommentar –'"></p>
+        </section>
+
+        <!-- Footer -->
+        <div class="pt-4 flex justify-end border-t border-border mt-6">
+          <button type="button"
+                  class="px-5 py-2 bg-primary hover:bg-primaryHover text-white rounded-md"
+                  @click="$store.modal.close()">
+            Schließen
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

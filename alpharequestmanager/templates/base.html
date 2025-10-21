@@ -26,6 +26,8 @@
 
   <!-- Tailwind & Alpine.js -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/@alpinejs/focus@3.x.x/dist/cdn.min.js"></script>
+
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
   <!-- Icons: Lucide -->
@@ -64,44 +66,69 @@
   </script>
 
   <!-- Alpine Stores: Theme & Modal -->
-  <script>
-    document.addEventListener('alpine:init', () => {
-      const media = window.matchMedia('(prefers-color-scheme: dark)');
-      Alpine.store('theme', {
-        mode: 'system',
-        darkMode: false,
-        _lastManual: localStorage.getItem('theme_manual') || 'light',
-        init() {
-          const saved = localStorage.getItem('theme');
-          this.mode = saved || 'system';
-          const handler = (e) => { if (this.mode === 'system') this.apply(e.matches); };
-          media.addEventListener ? media.addEventListener('change', handler) : media.addListener(handler);
-          this.apply(media.matches);
-        },
-        apply(prefersDarkNow) {
-          const prefers = typeof prefersDarkNow === 'boolean' ? prefersDarkNow : media.matches;
-          this.darkMode = this.mode === 'system' ? prefers : this.mode === 'dark';
-        },
-        toggleSystem() {
-          if (this.mode === 'system') {
-            this.setMode(this._lastManual);
-          } else {
-            this._lastManual = this.mode;
-            localStorage.setItem('theme_manual', this._lastManual);
-            this.setMode('system');
-          }
-        },
-        setMode(mode) {
-          this.mode = mode;
-          localStorage.setItem('theme', mode);
-          this.apply();
-        },
-        enable()  { this._lastManual = 'dark';  localStorage.setItem('theme_manual','dark');  this.setMode('dark'); },
-        disable() { this._lastManual = 'light'; localStorage.setItem('theme_manual','light'); this.setMode('light'); }
-      });
-      Alpine.store('modal', { active: false });
+<!-- Alpine Stores: Theme & Modal -->
+<script>
+  document.addEventListener('alpine:init', () => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+
+    // ▸ THEME-STORE: unverändert zu deinem Original (damit Toggle & Farben wieder sauber laufen)
+    Alpine.store('theme', {
+      mode: 'system',
+      darkMode: false,
+      _lastManual: localStorage.getItem('theme_manual') || 'light',
+      init() {
+        const saved = localStorage.getItem('theme');
+        this.mode = saved || 'system';
+        const handler = (e) => { if (this.mode === 'system') this.apply(e.matches); };
+        media.addEventListener ? media.addEventListener('change', handler) : media.addListener(handler);
+        this.apply(media.matches);
+      },
+      apply(prefersDarkNow) {
+        const prefers = typeof prefersDarkNow === 'boolean' ? prefersDarkNow : media.matches;
+        this.darkMode = this.mode === 'system' ? prefers : this.mode === 'dark';
+      },
+      toggleSystem() {
+        if (this.mode === 'system') {
+          this.setMode(this._lastManual);
+        } else {
+          this._lastManual = this.mode;
+          localStorage.setItem('theme_manual', this._lastManual);
+          this.setMode('system');
+        }
+      },
+      setMode(mode) {
+        this.mode = mode;
+        localStorage.setItem('theme', mode);
+        this.apply();
+      },
+      enable()  { this._lastManual = 'dark';  localStorage.setItem('theme_manual','dark');  this.setMode('dark'); },
+      disable() { this._lastManual = 'light'; localStorage.setItem('theme_manual','light'); this.setMode('light'); }
     });
-  </script>
+
+    // ▸ MODAL-STORE: erweitert, damit detail-*.html & dashboard openDetail() funktionieren
+    Alpine.store('modal', {
+      active: false,
+      id: null,
+      data: null,
+      open(id, data = null) {
+        this.id = id;
+        this.data = data;
+        this.active = true;
+        document.documentElement.classList.add('overflow-hidden');
+      },
+      close() {
+        this.active = false;
+        this.id = null;
+        this.data = null;
+        document.documentElement.classList.remove('overflow-hidden');
+      },
+      is(id) {
+        return this.active && this.id === id;
+      }
+    });
+  });
+</script>
+
 
   <!-- Globale Styles -->
   <style>

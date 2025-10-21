@@ -1,8 +1,7 @@
-Wenn mehr konzentration:
-Im frontend für Anzeigen im Tickettyp unterscheiden & bearbeitung hinzufügen
-Im Backend für formatieren im tickettyp unterscheiden, dadurch dann feste felder für ticketfelder
-Sendeverfolgung
-Ticket werte updaten, wenn diese in ninja geändert werden?
+To do:
+- Evtl neuer ticket zustand erledigt? -> grau wenn abgeschlossen
+- Hardwarebestellung sendeverfolgung
+- Ticket werte updaten, wenn diese in ninja geändert werden?
 
 
 
