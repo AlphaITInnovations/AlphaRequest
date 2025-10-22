@@ -26,7 +26,11 @@
                hardwareWeitergabeName:'',
 
                // Begründung (falls nötig)
-               hardwareBegruendung:''
+               hardwareBegruendung:'',
+
+               // 🧾 NEU: ELO-Sperre
+               eloSperren:false,
+               eloPosition:''
              },
              validate() {
                if (!this.sperren.benutzer.trim()) return { ok:false, msg:'Bitte Benutzername angeben.' };
@@ -45,6 +49,9 @@
                }
                if (this.sperren.hardwareOption === 'weitergabe' && !this.sperren.hardwareWeitergabeName.trim()) {
                  return { ok:false, msg:'Bitte Namen des Mitarbeiters für die Hardware-Weitergabe angeben.' };
+               }
+               if (this.sperren.eloSperren && !this.sperren.eloPosition.trim()) {
+                 return { ok:false, msg:'Bitte die Position für die ELO-Sperre angeben (z. B. Niederlassungsleiter).' };
                }
                return { ok:true };
              },
@@ -101,6 +108,20 @@
                 class="field"
                 x-model="sperren.sperrdatum"
               >
+            </div>
+          </section>
+
+          <!-- NEU: ELO-Sperre -->
+          <section class="card card--pad bg-card-bg border-border">
+            <div class="flex items-center gap-2 mb-2">
+              <input type="checkbox" x-model="sperren.eloSperren" id="eloSperren" class="field">
+              <label for="eloSperren" class="text-text cursor-pointer">ELO-Benutzer ebenfalls sperren?</label>
+            </div>
+            <div x-show="sperren.eloSperren" class="mt-2">
+              <label class="text-text text-sm block mb-1">Position des zu sperrenden Benutzers</label>
+              <input type="text" class="field w-full"
+                     placeholder="z. B. Niederlassungsleiter, Regionalleiter, ..."
+                     x-model="sperren.eloPosition">
             </div>
           </section>
 

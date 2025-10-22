@@ -170,10 +170,12 @@ def _render_generic(desc: Dict[str, Any]) -> str:
 
 def _render_edv_beantragen(desc: Dict[str, Any]) -> str:
     """
-    Spezial-Template für EDV-Zugang (form_id=9).
-    Erwartete Keys (optional): vorname, nachname, firma, arbeitsbeginn, titel,
-    strasse, ort, plz, handy, telefon, fax, niederlassung, kostenstelle,
-    kommentar, checkbox_datev_user, checkbox_elo_user
+    Spezial-Template für form_id=9 (EDV-Zugang beantragen).
+    Erwartete Keys (optional):
+      vorname, nachname, firma, arbeitsbeginn, titel,
+      strasse, ort, plz, handy, telefon, fax, niederlassung, kostenstelle,
+      kommentar, checkbox_datev_user, checkbox_elo_user,
+      eloVorgesetzter
     """
     # Kopfblock (Name, Firma, Arbeitsbeginn)
     name = " ".join([str(desc.get("vorname") or ""), str(desc.get("nachname") or "")]).strip()
@@ -187,7 +189,6 @@ def _render_edv_beantragen(desc: Dict[str, Any]) -> str:
         kopf_pairs.append(("Firma", _esc(firma)))
     if arbeitsbeginn:
         kopf_pairs.append(("Arbeitsbeginn", _esc(arbeitsbeginn)))
-
     kopf_html = _two_col_table(kopf_pairs)
 
     # Kontaktdaten
@@ -204,10 +205,17 @@ def _render_edv_beantragen(desc: Dict[str, Any]) -> str:
     kontakt_html = _two_col_table(kontakt_pairs)
 
     # Optionen
+    elo_checked = bool(desc.get("checkbox_elo_user"))
+    elo_vorgesetzter = desc.get("eloVorgesetzter") or ""
     optionen_pairs = [
         ("DATEV-Zugang", _esc(_fmt_bool(desc.get("checkbox_datev_user")))),
-        ("ELO-Zugang", _esc(_fmt_bool(desc.get("checkbox_elo_user")))),
+        ("ELO-Zugang", _esc(_fmt_bool(elo_checked))),
     ]
+
+    # Zeige "ELO-Vorgesetzter", wenn ELO angehakt ist ODER ein Wert vorhanden ist
+    if elo_checked or elo_vorgesetzter:
+        optionen_pairs.append(("ELO-Vorgesetzter", _esc(elo_vorgesetzter)))
+
     optionen_html = _two_col_table(optionen_pairs)
 
     # Kommentar
@@ -336,22 +344,19 @@ def _pretty_daten_aktion(v: str) -> str:
 
 def _render_edv_sperren(desc: dict) -> str:
     """
-    Erwartet Wrapper:
-      {"ticketType":"EDV-Zugang sperren","data":{...}}
-    oder direkt das data-Dict mit Keys:
-      benutzer, grund,
-      sperrmodus ('sofort' | 'datum'), sperrdatum ('YYYY-MM-DD' optional),
-      mailsWeiterleiten (bool), weiterleitenAn,
-      postfachVollzugriff (bool), vollzugriffFuer,
+    Erwartet Wrapper oder data-Dict mit Keys:
+      benutzer, grund, sperrmodus ('sofort'|'datum'), sperrdatum ('YYYY-MM-DD'),
+      mailsWeiterleiten (bool), weiterleitenAn, postfachVollzugriff (bool), vollzugriffFuer,
       abwesenheitAktiv (bool), abwesenheitText,
       datenAktion ('sichern'|'löschen'|'übertragen'), datenBenutzer,
-      hardwareOption ('toIT'|'bleibt'|'entsorgen'|'weitergabe'), hardwareWeitergabeName, hardwareBegruendung
+      hardwareOption ('toIT'|'bleibt'|'entsorgen'|'weitergabe'), hardwareWeitergabeName, hardwareBegruendung,
+      eloSperren (bool), eloPosition (string)
     """
     d = desc.get("data") if "data" in desc else desc
     d = d or {}
 
-    # --- 1) Überblick: Benutzer / Grund / Sperrzeitpunkt ---
-    sperrmodus = (d.get("sperrmodus") or "").strip().lower()  # 'sofort' | 'datum'
+    # --- 1) Überblick ---
+    sperrmodus = (d.get("sperrmodus") or "").strip().lower()
     sperrdatum = d.get("sperrdatum") or ""
     sperrzeit_txt = "Sofort" if sperrmodus == "sofort" else (_fmt_date_only(sperrdatum) if sperrdatum else "Zum angegebenen Datum")
 
@@ -394,13 +399,23 @@ def _render_edv_sperren(desc: dict) -> str:
     ]
     daten_html = _two_col_table(daten_pairs)
 
-    # --- 5) Hardware ---
-    hw_opt = _pretty_hw_option(d.get("hardwareOption"))
+    # --- 5) ELO ---
+    elo_sperren = d.get("eloSperren")
+    elo_pos = d.get("eloPosition") or ""
+    elo_pairs = [
+        ("ELO-Zugang sperren", _esc(_fmt_bool(elo_sperren)) if elo_sperren is not None else ""),
+        ("ELO-Position", _esc(elo_pos) if elo_sperren else ""),
+    ]
+    elo_html = _two_col_table(elo_pairs)
+
+    # --- 6) Hardware ---
+    hw_opt_raw = d.get("hardwareOption")
+    hw_opt = _pretty_hw_option(hw_opt_raw)
     hw_name = d.get("hardwareWeitergabeName") or ""
     hw_begr = d.get("hardwareBegruendung") or ""
     hw_pairs = [
         ("Hardware-Option", _esc(hw_opt)),
-        ("Weitergabe an", _esc(hw_name) if str(d.get("hardwareOption") or "").strip().lower() in ("weitergabe", "uebergabe", "übergabe") else ""),
+        ("Weitergabe an", _esc(hw_name) if str(hw_opt_raw or "").strip().lower() in ("weitergabe", "uebergabe", "übergabe") else ""),
         ("Begründung (Hardware)", _linkify(hw_begr)),
     ]
     hw_html = _two_col_table(hw_pairs)
@@ -410,6 +425,7 @@ def _render_edv_sperren(desc: dict) -> str:
         _section("E-Mail & Postfach", mail_html),
         _section("Abwesenheit", abw_html),
         _section("Daten", daten_html),
+        _section("ELO", elo_html),
         _section("Hardware", hw_html),
     ])
 

@@ -312,6 +312,7 @@ def create_ticket_edv_beantragen(
     kommentar="",
     checkbox_datev_user=False,
     checkbox_elo_user=False,
+    elo_vorgesetzter="",
     is_admin: bool = False,
 ):
     if not requester_mail:
@@ -350,6 +351,7 @@ def create_ticket_edv_beantragen(
     add_attr(202, kommentar)
     add_attr(217, checkbox_datev_user)
     add_attr(225, checkbox_elo_user)
+    add_attr(226, elo_vorgesetzter)
 
     payload = {
         "client_id": client_id,

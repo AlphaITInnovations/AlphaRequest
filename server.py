@@ -318,7 +318,8 @@ async def create_ticket(
                 requester_mail=user_mail,
                 checkbox_datev_user=bool(data.get("datev")),
                 checkbox_elo_user=bool(data.get("elo")),
-                is_admin=user.get("is_admin", False),   # <-- required flag
+                elo_vorgesetzter=data.get("eloVorgesetzter", ""),
+                is_admin=user.get("is_admin", False),
             )
 
         elif ticket_type == "Niederlassung anmelden":

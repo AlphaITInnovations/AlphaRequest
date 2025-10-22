@@ -7,7 +7,8 @@
          arbeitsbeginn: '', kostenstelle: '', titel: '',
          strasse: '', ort: '', plz: '',
          handy: '', telefon: '', fax: '',
-         datev: false, elo: false
+         datev: false, elo: false,
+         eloVorgesetzter: ''   // <- NEU: wird immer mitgesendet
        },
        errorMessage: '',
        init() {
@@ -23,9 +24,17 @@
          }
        },
        submitZugangForm() {
+         // Feld wird immer mitgesendet, auch wenn leer:
+         if (!this.zugang.elo) {
+           // UI-blendet es aus, aber Key bleibt im Objekt bestehen
+           this.zugang.eloVorgesetzter = (this.zugang.eloVorgesetzter || '').trim();
+         } else {
+           this.zugang.eloVorgesetzter = (this.zugang.eloVorgesetzter || '').trim();
+         }
+
          const payload = {
            ticketType: 'EDV-Zugang beantragen',
-           data: { ...this.zugang }
+           data: { ...this.zugang } // enthält eloVorgesetzter IMMER
          };
          this.$refs.descField.value = JSON.stringify(payload);
          this.$refs.form.submit();
@@ -46,11 +55,11 @@
                 class="absolute top-4 right-4 text-text hover:text-danger text-2xl focus-ring">×</button>
 
         <!-- Title -->
-        <h3 class="text-2xl font-bold mb-6 text-text">🔑 EDV‑Zugang beantragen</h3>
+        <h3 class="text-2xl font-bold mb-6 text-text">🔑 EDV-Zugang beantragen</h3>
 
         <!-- Form -->
         <form x-ref="form" method="post" action="/tickets" class="space-y-6" @submit.prevent="submitZugangForm">
-          <input type="hidden" name="title" value="EDV‑Zugang beantragen">
+          <input type="hidden" name="title" value="EDV-Zugang beantragen">
           <textarea x-ref="descField" name="description" class="hidden"></textarea>
 
           <!-- Person & Firma -->
@@ -68,7 +77,7 @@
               <div>
                 <label class="text-text text-sm block mb-1">Firma</label>
                 <select x-model="zugang.firma" class="field w-full" required>
-                  <option value="">– wählen –</option>
+                  <option value="">– wählen –</option>
                   <template x-for="c in companies" :key="c">
                     <option :value="c" x-text="c"></option>
                   </template>
@@ -95,6 +104,19 @@
                   <span class="text-text">📁 ELO-Benutzer (Leitung / Prüfer) benötigt?</span>
                 </label>
               </div>
+
+              <!-- NEU: Vorgesetzter ELO Nutzer (wird immer gesendet; Anzeige nur bei elo=true) -->
+              <div class="sm:col-span-2" x-show="zugang.elo" x-cloak>
+                <label class="text-text text-sm block mb-1">Vorgesetzter ELO Nutzer</label>
+                <input type="text"
+                       x-model="zugang.eloVorgesetzter"
+                       class="field w-full"
+                       placeholder="z. B. Max Mustermann"
+                       :required="zugang.elo">
+                <p class="text-xs text-muted mt-1">
+                  Bitte den bestehenden ELO-Vorgesetzten / Prüfer angeben.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -109,7 +131,7 @@
               <div>
                 <label class="text-text text-sm block mb-1">Kostenstelle</label>
                 <input type="text" x-model="zugang.kostenstelle" class="field w-full"
-                       placeholder="z. B. 123456" inputmode="numeric" required
+                       placeholder="z. B. 123456" inputmode="numeric" required
                        oninput="this.value = this.value.replace(/[^0-9]/g, '')">
               </div>
               <div>

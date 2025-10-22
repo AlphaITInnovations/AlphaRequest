@@ -72,10 +72,14 @@
         datenAktion(){ return this.z().datenAktion; },     // 'sichern' | 'löschen'
         datenBenutzer(){ return this.z().datenBenutzer; },
 
-        // Hardware (neu: hardwareOption + optional Name)
+        // 💻 Hardware (neu: hardwareOption + optional Name)
         hardwareOption(){ return this.z().hardwareOption; }, // 'anIT' | 'bleibt' | 'weitergabe'
         hardwareWeitergabeName(){ return this.z().hardwareWeitergabeName; },
         hardwareBegruendung(){ return this.z().hardwareBegruendung; },
+
+        // 🧾 ELO (neu)
+        eloSperren(){ return this.z().eloSperren === true; },
+        eloPosition(){ return this.z().eloPosition; },
 
         // Helper für Anzeige
         hwBadgeText(){
@@ -168,6 +172,25 @@
           <p class="mt-3 text-xs text-yellow-800 dark:text-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 rounded-md px-3 py-2">
             Hinweis: Weiterleitungen und Vollzugriffe bleiben nur 30 Tage aktiv. Danach erfolgt automatische Sicherung und Löschung.
           </p>
+        </section>
+
+        <!-- 🧾 ELO -->
+        <section class="card card--pad">
+          <h4 class="font-semibold mb-3">📁 ELO</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div>
+              <div class="text-muted">ELO-Benutzer sperren</div>
+              <div>
+                <span :class="chip(eloSperren())" x-text="eloSperren() ? 'Ja' : 'Nein'"></span>
+              </div>
+            </div>
+            <template x-if="eloSperren() && fmt(eloPosition()) !== '–'">
+              <div>
+                <div class="text-muted">Position</div>
+                <div class="font-medium break-words" x-text="eloPosition()"></div>
+              </div>
+            </template>
+          </div>
         </section>
 
         <!-- Datenaktion -->
