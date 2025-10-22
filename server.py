@@ -260,21 +260,21 @@ async def create_ticket(
     ticket_type = desc_obj.get("ticketType")
     user_mail = user["email"]
 
-    description_obj = make_ninja_description(desc_obj, user)
+    #description_obj = make_ninja_description(desc_obj, user)
 
     try:
         ticket = None
 
         if ticket_type == "Hardwarebestellung":
             ticket = ninja_api.create_ticket_hardware(
-                description=description_obj,
+                description=desc_obj,
                 requester_mail=user_mail,
                 is_admin=user.get("is_admin", False),   # <-- required flag
             )
 
         elif ticket_type == "EDV-Zugang sperren":
             ticket = ninja_api.create_ticket_edv_sperren(
-                description=description_obj,
+                description=desc_obj,
                 requester_mail=user_mail,
                 is_admin=user.get("is_admin", False),   # <-- required flag
             )
@@ -300,7 +300,7 @@ async def create_ticket(
             else:
                 elo_user = False
             ticket = ninja_api.create_ticket_edv_beantragen(
-                description=_desc_with_user_info("Bitte die Daten links im Ticket prüfen und anschließend freigeben", user),
+                description=desc_obj,
                 vorname=data.get("vorname",""),
                 nachname=data.get("nachname",""),
                 firma=data.get("firma",""),
@@ -323,21 +323,21 @@ async def create_ticket(
 
         elif ticket_type == "Niederlassung anmelden":
             ticket = ninja_api.create_ticket_niederlassung_anmelden(
-                description=description_obj,
+                description=desc_obj,
                 requester_mail=user_mail,
                 is_admin=user.get("is_admin", False),
             )
 
         elif ticket_type == "Niederlassung umziehen":
             ticket = ninja_api.create_ticket_niederlassung_umziehen(
-                description=description_obj,
+                description=desc_obj,
                 requester_mail=user_mail,
                 is_admin=user.get("is_admin", False),
             )
 
         elif ticket_type == "Niederlassung schließen":
             ticket = ninja_api.create_ticket_niederlassung_schließen(
-                description=description_obj,
+                description=desc_obj,
                 requester_mail=user_mail,
                 is_admin=user.get("is_admin", False),
             )

@@ -8,14 +8,49 @@
       <div class="modal-panel w-full max-w-4xl p-6 relative"
            x-data="{
              sperren: {
-               benutzer:'', grund:'', sofort:false,
+               benutzer:'', grund:'',
+               // 🔐 Sperrmodus
+               sperrmodus:'sofort', // 'sofort' | 'datum'
+               sperrdatum:'',
+
+               // 📧 Mail-Optionen
                mailsWeiterleiten:false, weiterleitenAn:'',
                postfachVollzugriff:false, vollzugriffFuer:'',
                abwesenheitAktiv:false, abwesenheitText:'Mitarbeiter ist nicht mehr im Haus',
+
+               // 🗃️ Daten
                datenAktion:'', datenBenutzer:'',
-               hardware: { anIT:false, bleibt:false }, hardwareBegruendung:''
+
+               // 💻 Hardware (exklusiv)
+               hardwareOption:'anIT', // 'anIT' | 'bleibt' | 'weitergabe'
+               hardwareWeitergabeName:'',
+
+               // Begründung (falls nötig)
+               hardwareBegruendung:''
+             },
+             validate() {
+               if (!this.sperren.benutzer.trim()) return { ok:false, msg:'Bitte Benutzername angeben.' };
+               if (!this.sperren.grund.trim()) return { ok:false, msg:'Bitte Grund angeben.' };
+               if (this.sperren.sperrmodus === 'datum' && !this.sperren.sperrdatum) {
+                 return { ok:false, msg:'Bitte ein Sperrdatum wählen.' };
+               }
+               if (this.sperren.mailsWeiterleiten && !this.sperren.weiterleitenAn.trim()) {
+                 return { ok:false, msg:'Bitte E-Mail für Weiterleitung angeben.' };
+               }
+               if (this.sperren.postfachVollzugriff && !this.sperren.vollzugriffFuer.trim()) {
+                 return { ok:false, msg:'Bitte E-Mail für Vollzugriff angeben.' };
+               }
+               if (!this.sperren.datenAktion) {
+                 return { ok:false, msg:'Bitte wählen, was mit den Daten passieren soll.' };
+               }
+               if (this.sperren.hardwareOption === 'weitergabe' && !this.sperren.hardwareWeitergabeName.trim()) {
+                 return { ok:false, msg:'Bitte Namen des Mitarbeiters für die Hardware-Weitergabe angeben.' };
+               }
+               return { ok:true };
              },
              submitSperrenForm() {
+               const v = this.validate();
+               if (!v.ok) { alert(v.msg); return; }
                const payload = { ticketType:'EDV-Zugang sperren', data:this.sperren };
                this.$refs.descField.value = JSON.stringify(payload);
                this.$refs.form.submit();
@@ -48,10 +83,25 @@
             <textarea x-model="sperren.grund" rows="3" class="field w-full" placeholder="z. B. Austritt, Datenschutz" required></textarea>
           </section>
 
-          <!-- Sofort sperren -->
-          <section class="card card--pad bg-card-bg border-border flex items-center gap-2">
-            <input type="checkbox" x-model="sperren.sofort" id="sofort" class="field">
-            <label for="sofort" class="text-text cursor-pointer">⏱️ Sofort sperren</label>
+          <!-- Sperrmodus -->
+          <section class="card card--pad bg-card-bg border-border">
+            <p class="text-text text-sm font-medium mb-2">⏱️ Wann sperren?</p>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+              <label class="inline-flex items-center gap-2">
+                <input type="radio" class="field" name="sperrmodus" value="sofort" x-model="sperren.sperrmodus">
+                <span>Sofort sperren</span>
+              </label>
+              <label class="inline-flex items-center gap-2">
+                <input type="radio" class="field" name="sperrmodus" value="datum" x-model="sperren.sperrmodus">
+                <span>Ab Datum sperren</span>
+              </label>
+              <input
+                x-show="sperren.sperrmodus === 'datum'"
+                type="date"
+                class="field"
+                x-model="sperren.sperrdatum"
+              >
+            </div>
           </section>
 
           <!-- Weiterleitung -->
@@ -101,15 +151,37 @@
           </section>
 
           <!-- Hardware -->
-          <section class="card card--pad bg-card-bg border-border space-y-2">
+          <section class="card card--pad bg-card-bg border-border space-y-3">
             <label class="text-text text-sm block">💻 Was passiert mit der Hardware?</label>
+
             <div class="flex flex-col gap-2">
               <label class="inline-flex items-center gap-2">
-                <input type="checkbox" x-model="sperren.hardware.anIT" class="field"> Wird an IT gesendet
+                <input type="radio" class="field" name="hardwareOption" value="anIT" x-model="sperren.hardwareOption">
+                <span>Wird an IT gesendet</span>
               </label>
+
               <label class="inline-flex items-center gap-2">
-                <input type="checkbox" x-model="sperren.hardware.bleibt" class="field"> Bleibt in der Niederlassung
+                <input type="radio" class="field" name="hardwareOption" value="bleibt" x-model="sperren.hardwareOption">
+                <span>Bleibt in der Niederlassung</span>
               </label>
+
+              <div>
+                <label class="inline-flex items-center gap-2">
+                  <input type="radio" class="field" name="hardwareOption" value="weitergabe" x-model="sperren.hardwareOption">
+                  <span>Wird an einen Mitarbeiter weitergegeben</span>
+                </label>
+                <div class="mt-2" x-show="sperren.hardwareOption === 'weitergabe'">
+                  <input type="text" class="field w-full" placeholder="Name des Mitarbeiters"
+                         x-model="sperren.hardwareWeitergabeName">
+                </div>
+              </div>
+            </div>
+
+            <!-- Optionale Begründung -->
+            <div class="pt-2">
+              <label class="text-text text-sm block mb-1">Begründung (optional)</label>
+              <textarea class="field w-full" rows="2" x-model="sperren.hardwareBegruendung"
+                        placeholder="Zusätzliche Hinweise/Begründung..."></textarea>
             </div>
           </section>
 

@@ -12,7 +12,7 @@ import requests
 from alpharequestmanager.config import config
 from alpharequestmanager.logger import logger
 import alpharequestmanager.database as db
-
+from alpharequestmanager.ninja_render import render_ticket_description
 
 # =========================
 # Konfiguration
@@ -25,10 +25,9 @@ AUTH_BASE = "https://eu.ninjarmm.com/ws/oauth/authorize"
 TOKEN_URL = "https://eu.ninjarmm.com/ws/oauth/token"
 API_BASE = "https://eu.ninjarmm.com"
 
-# Angeforderte Scopes (NinjaOne-Doku: mit Leerzeichen getrennt)
 SCOPES = ["monitoring", "management", "control", "offline_access"]
 
-HTTP_TIMEOUT = 30  # Sekunden für alle requests-Aufrufe
+HTTP_TIMEOUT = 30
 
 
 class NinjaAuthFlowRequired(Exception):
@@ -281,11 +280,9 @@ def create_ticket(
         "subject": subject,
         "status": status,
     }
-
-    if isinstance(description, dict):
-        ticket["description"] = description
-    else:
-        ticket["description"] = {"public": True, "body": description, "htmlBody": f"<p>{description}</p>"}
+    print(description)
+    rendered, overflow_html = render_ticket_description(form_id, description)
+    ticket["description"] = rendered
 
     if requester_uid:
         ticket["requesterUid"] = requester_uid
@@ -302,7 +299,7 @@ def create_ticket_edv_beantragen(
     vorname="",
     nachname="",
     firma="AlphaConsult KG",
-    arbeitsbeginn=None,   # datetime oder int (Timestamp)
+    arbeitsbeginn=None,
     titel="",
     strasse="",
     ort="",
