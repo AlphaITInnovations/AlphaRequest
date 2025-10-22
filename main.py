@@ -4,7 +4,7 @@ import uvicorn
 import asyncio
 from server import app
 from alpharequestmanager.config import config
-
+from alpharequestmanager.ninja_api import get_alpha_request_sendeverfolgung, get_ticket
 
 def main():
     if sys.platform.startswith("win"):

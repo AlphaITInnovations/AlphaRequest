@@ -477,3 +477,12 @@ def get_alpha_request_comment(ticket: dict) -> Optional[str]:
         if aid == 202:
             return attr.get("value")
     return None
+
+def get_alpha_request_sendeverfolgung(ticket: dict) -> Optional[str]:
+    """Holt den Wert des Attributs 'AlphaRequest Sendeverfolgung' (id=202) aus einem Ninja-Ticket."""
+    for attr in ticket.get("attributeValues", []) or []:
+        # je nach Darstellung int oder obj
+        aid = attr.get("attributeId")
+        if aid == 200:
+            return attr.get("value")
+    return None

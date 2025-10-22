@@ -346,6 +346,34 @@ def get_ninja_token() -> Optional[dict]:
             return None
     return None
 
+def get_ticket(ticket_id: int) -> Optional[Ticket]:
+    """
+    Holt ein einzelnes Ticket per ID.
+    Gibt eine Ticket-Instanz zurück oder None, wenn kein Datensatz existiert.
+    """
+    conn = get_connection()
+    try:
+        row = _fetchone(conn, """
+            SELECT
+                id,
+                title,
+                description,
+                owner_id,
+                owner_name,
+                comment,
+                status,
+                created_at,
+                owner_info,
+                ninja_metadata
+            FROM tickets
+            WHERE id = %s
+            LIMIT 1
+        """, (ticket_id,))
+        if not row:
+            return None
+        return Ticket.from_row(row)
+    finally:
+        conn.close()
 
 
 def set_ninja_token(token: Optional[dict]) -> None:
@@ -353,3 +381,35 @@ def set_ninja_token(token: Optional[dict]) -> None:
     Speichert das Token-Objekt (Dict) oder None.
     """
     settings_set("NINJA_TOKEN", token)
+
+
+def set_sendeverfolgung(ticketID: int, sendeverfolgung) -> None:
+    """
+    Fügt 'sendeverfolgung' in die description (JSON) des Tickets ein
+    und schreibt die geänderte description zurück in die DB.
+    """
+    ticket = get_ticket(ticketID)
+    if not ticket:
+        logger.warning("Ticket %s nicht gefunden", ticketID)
+        return
+
+    try:
+        # description als JSON interpretieren
+        desc_data = json.loads(ticket.description)
+        if not isinstance(desc_data, dict):
+            # falls description kein dict ist, in eines verpacken
+            desc_data = {"description": ticket.description}
+    except json.JSONDecodeError:
+        # falls description kein JSON ist → fallback
+        desc_data = {"description": ticket.description}
+
+    # sendeverfolgung setzen / updaten
+    desc_data["sendeverfolgung"] = sendeverfolgung
+
+    # wieder zu JSON serialisieren
+    new_desc = json.dumps(desc_data, ensure_ascii=False)
+
+    # neue description in DB speichern
+    update_ticket(ticketID, description=new_desc)
+
+    logger.info("Sendeverfolgung für Ticket %s aktualisiert", ticketID)

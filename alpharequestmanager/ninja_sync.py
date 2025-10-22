@@ -21,6 +21,8 @@ def poll_ninja_changes():
             comment = ninja_api.get_alpha_request_comment(ninja_ticket)
             database.update_ticket(int(t.id), comment=comment)
             status = ninja_api.is_alpha_request_approved(t.ninja_ticket_id)
+            sendeverfolgung = ninja_api.get_alpha_request_sendeverfolgung(ninja_ticket)
+            database.set_sendeverfolgung(int(t.id), sendeverfolgung=sendeverfolgung)
             if status:
                 logger.info("Ticket has been approved: " + str(t.ninja_ticket_id))
                 database.update_ticket(int(t.id), status="approved")
