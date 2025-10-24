@@ -164,7 +164,7 @@ modalIdFor(type) {
 
     // --- helpers ---
     translateStatus(status) {
-      return ({approved:'Genehmigt', pending:'Ausstehend', rejected:'Abgelehnt'}[status]) || status;
+      return ({approved:'Erledigt', pending:'Ausstehend', rejected:'Abgelehnt'}[status]) || status;
     },
     itemClasses(status) {
       const base = 'p-4 rounded-xl cursor-pointer transition border border-transparent hover:border-gray-300 dark:hover:border-gray-600 ring-1 ring-black/5 dark:ring-white/10';
@@ -314,7 +314,7 @@ modalIdFor(type) {
         <div class="flex gap-2 text-sm" role="group" aria-label="Filter">
           <template x-for="option in [
             { value: 'pending', label: 'Ausstehend' },
-            { value: 'approved', label: 'Genehmigt' },
+            { value: 'approved', label: 'Erledigt' },
             { value: 'rejected', label: 'Abgelehnt' },
             { value: 'all', label: 'Alle' }
           ]" :key="option.value">
