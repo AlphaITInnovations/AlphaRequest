@@ -1,6 +1,6 @@
 To do:
+- Ticket !!Detail!! Modles können nicht scrollen
 - Evtl neuer ticket zustand erledigt? -> grau wenn abgeschlossen
-- Hardwarebestellung sendeverfolgung
 - Ticket werte updaten, wenn diese in ninja geändert werden?
 - Ninja Data Sync wenn in ninja was geändert wird dann auch in AlphaRequest (zumindest bei anpassbaren feldern in ninja)
 
