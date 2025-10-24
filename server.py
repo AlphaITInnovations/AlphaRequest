@@ -851,7 +851,11 @@ async def analytics_page(request: Request, user: dict = Depends(get_current_user
 async def api_analytics_overview(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    user: dict = Depends(get_current_user),
+
 ):
+    require_admin(user)
+
     df, dt = _parse_range(date_from, date_to)
 
     by_type: Counter[str] = Counter()
@@ -913,7 +917,10 @@ async def api_analytics_hardware_top(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     limit: int = Query(10, ge=1, le=100),
+    user: dict = Depends(get_current_user),
 ):
+    require_admin(user)
+
     df, dt = _parse_range(date_from, date_to)
     counts: Counter[str] = Counter()
 
