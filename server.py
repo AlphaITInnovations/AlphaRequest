@@ -834,8 +834,30 @@ def _parse_range(date_from: Optional[str], date_to: Optional[str]) -> tuple[Opti
 
     return df, dt
 
+def _parse_json_maybe(obj):
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj
+    if isinstance(obj, str):
+        try:
+            return _json.loads(obj)
+        except Exception:
+            return None
+    return None
 
-# (3) Seite /analytics
+def _owner_from_ticket(t) -> dict:
+
+    raw = getattr(t, "owner_info", None)
+    o = _parse_json_maybe(raw) or {}
+    display = o.get("displayName") or o.get("display") or ""
+    email = (o.get("email") or "").strip()
+    domain = ""
+    if "@" in email:
+        domain = email.split("@", 1)[1].lower()
+    company = o.get("company") or ""
+    return {"display": display, "email": email, "domain": domain, "company": company}
+
 @app.get("/analytics", response_class=HTMLResponse)
 async def analytics_page(request: Request, user: dict = Depends(get_current_user)):
     if not user.get("is_admin"):
@@ -851,8 +873,9 @@ async def analytics_page(request: Request, user: dict = Depends(get_current_user
 async def api_analytics_overview(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    owner_display: Optional[str] = Query(None, description="Filter by owner display name"),
+    owner_domain: Optional[str] = Query(None, description="Filter by email domain (part after @)"),
     user: dict = Depends(get_current_user),
-
 ):
     require_admin(user)
 
@@ -863,12 +886,34 @@ async def api_analytics_overview(
     by_status: Counter[str] = Counter()
     total = 0
 
+    # Für die Dropdown-Füllung
+    facet_displays: set[str] = set()
+    facet_domains: set[str] = set()
+
+    # Normalisieren für Vergleich
+    owner_display = (owner_display or "").strip()
+    owner_domain = (owner_domain or "").strip().lower()
+
     for t in manager.list_all_tickets():
         created: datetime = t.created_at
         if df and created < df:
             continue
         if dt and created > dt:
             continue
+
+        owner = _owner_from_ticket(t)
+        # Facetten immer sammeln (auf Basis des Datumsbereichs)
+        if owner.get("display"):
+            facet_displays.add(owner["display"])
+        if owner.get("domain"):
+            facet_domains.add(owner["domain"])
+
+        # Filter anwenden (wenn gesetzt)
+        if owner_display and owner.get("display") != owner_display:
+            continue
+        if owner_domain and owner.get("domain") != owner_domain:
+            continue
+
         total += 1
 
         # Typ
@@ -889,7 +934,6 @@ async def api_analytics_overview(
         st = getattr(t.status, "value", None) or str(t.status)
         by_status[str(st)] += 1
 
-    # ✅ Datumsliste vollständig ergänzen (auch mit count = 0)
     def _date_range(start: datetime, end: datetime) -> list[str]:
         if not start or not end:
             return sorted(by_date.keys())
@@ -899,7 +943,6 @@ async def api_analytics_overview(
     date_range = _date_range(df, dt)
     by_date_rows = [{"date": d, "count": by_date.get(d, 0)} for d in date_range]
 
-    # Status-Sortierung
     order = ["pending", "approved", "rejected"]
     by_status_rows = sorted(by_status.items(), key=lambda kv: (order.index(kv[0]) if kv[0] in order else 99))
 
@@ -908,7 +951,12 @@ async def api_analytics_overview(
         "by_type": [{"type": k, "count": v} for k, v in by_type.most_common()],
         "by_date": by_date_rows,
         "by_status": [{"status": k, "count": v} for k, v in by_status_rows],
+        "facets": {
+            "owner_displays": sorted(facet_displays),
+            "owner_domains": sorted(facet_domains),
+        },
     }
+
 
 
 
@@ -916,6 +964,8 @@ async def api_analytics_overview(
 async def api_analytics_hardware_top(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    owner_display: Optional[str] = Query(None),
+    owner_domain: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=100),
     user: dict = Depends(get_current_user),
 ):
@@ -924,19 +974,29 @@ async def api_analytics_hardware_top(
     df, dt = _parse_range(date_from, date_to)
     counts: Counter[str] = Counter()
 
+    owner_display = (owner_display or "").strip()
+    owner_domain = (owner_domain or "").strip().lower()
+
     for t in manager.list_all_tickets():
         created: datetime = t.created_at
         if df and created < df:
             continue
         if dt and created > dt:
             continue
-        # nur Hardwarebestellung
+
+        owner = _owner_from_ticket(t)
+        if owner_display and owner.get("display") != owner_display:
+            continue
+        if owner_domain and owner.get("domain") != owner_domain:
+            continue
+
         try:
             o = _json.loads(t.description)
         except Exception:
             continue
         if not isinstance(o, dict) or o.get("ticketType") != "Hardwarebestellung":
             continue
+
         data = o.get("data", {}) if isinstance(o, dict) else {}
         if isinstance(data, dict):
             artikel = data.get("Artikel", {})
@@ -953,6 +1013,7 @@ async def api_analytics_hardware_top(
                 counts["Monitor"] += max(qty, 1)
 
     return [{"item": k, "quantity": v} for k, v in counts.most_common(limit)]
+
 
 
 

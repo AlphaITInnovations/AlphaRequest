@@ -34,6 +34,8 @@
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 px-4 sm:px-6 py-4">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <h1 class="text-xl sm:text-2xl font-bold">Analytics</h1>
+
+        <!-- Filterleiste -->
         <form id="filters" class="flex items-end gap-2 flex-wrap">
           <div>
             <label for="df" class="block text-xs text-gray-500">Von</label>
@@ -43,6 +45,23 @@
             <label for="dt" class="block text-xs text-gray-500">Bis</label>
             <input id="dt" type="date" class="px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 focus:outline-none"/>
           </div>
+
+          <!-- NEU: Anzeigename -->
+          <div>
+            <label for="ownerDisplay" class="block text-xs text-gray-500">Anzeigename</label>
+            <select id="ownerDisplay" class="px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 focus:outline-none">
+              <option value="">Alle</option>
+            </select>
+          </div>
+
+          <!-- NEU: E-Mail-Domain (hinter @) -->
+          <div>
+            <label for="ownerDomain" class="block text-xs text-gray-500">E-Mail-Domain</label>
+            <select id="ownerDomain" class="px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 focus:outline-none">
+              <option value="">Alle</option>
+            </select>
+          </div>
+
           <div class="flex gap-1">
             <button type="button" data-range="7" class="px-2 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md">7T</button>
             <button type="button" data-range="30" class="px-2 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md">30T</button>
@@ -283,16 +302,39 @@
     $('#df').value = from; $('#dt').value = to;
   }
 
+  // NEU: Utility zum Befüllen der Selects (inkl. 'Alle')
+  function setOptions(select, items, keepValue=true){
+    const prev = keepValue ? select.value : "";
+    const opts = ['<option value="">Alle</option>']
+      .concat(items.map(v => `<option value="${String(v)}">${String(v)}</option>`));
+    select.innerHTML = opts.join('');
+    if (keepValue && [...select.options].some(o => o.value === prev)) {
+      select.value = prev;
+    }
+  }
+
   async function load(){
     hide('#ct-total','#sk-total'); hide('#ct-type','#sk-type'); hide('#ct-date','#sk-date'); hide('#ct-hw','#sk-hw');
 
     const df = $('#df').value; const dt = $('#dt').value;
-    const qs = (p)=> Object.entries(p).filter(([,v])=>v).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&');
+    const od = $('#ownerDisplay').value;
+    const om = $('#ownerDomain').value; // mail domain
+
+    const qs = (p)=> Object.entries(p).filter(([,v])=>v !== undefined && v !== null && v !== '')
+                      .map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&');
 
     const [ovr, hw] = await Promise.all([
-      fetch(`/api/analytics/overview?${qs({date_from: df, date_to: dt})}`).then(r=>r.json()),
-      fetch(`/api/analytics/hardware/top?${qs({date_from: df, date_to: dt, limit: 12})}`).then(r=>r.json())
+      fetch(`/api/analytics/overview?${qs({date_from: df, date_to: dt, owner_display: od, owner_domain: om})}`).then(r=>r.json()),
+      fetch(`/api/analytics/hardware/top?${qs({date_from: df, date_to: dt, owner_display: od, owner_domain: om, limit: 12})}`).then(r=>r.json())
     ]);
+
+    // NEU: Facetten -> Dropdowns aktualisieren
+    if (ovr.facets) {
+      const displays = Array.isArray(ovr.facets.owner_displays) ? ovr.facets.owner_displays : [];
+      const domains  = Array.isArray(ovr.facets.owner_domains)  ? ovr.facets.owner_domains  : [];
+      setOptions($('#ownerDisplay'), displays, /*keepValue*/ true);
+      setOptions($('#ownerDomain'),  domains,  /*keepValue*/ true);
+    }
 
     // Gesamt
     $('#total').textContent = String(ovr.total_tickets || 0);
@@ -382,8 +424,11 @@
     }
   }
 
+  // Events
   $('#apply').addEventListener('click', load);
   $$('#filters [data-range]').forEach(btn=> btn.addEventListener('click', ()=>{ setRange(parseInt(btn.dataset.range,10)); load(); }));
+  $('#ownerDisplay').addEventListener('change', load);
+  $('#ownerDomain').addEventListener('change', load);
   document.addEventListener('DOMContentLoaded', ()=>{ setRange(30); load(); });
 </script>
 {% endblock %}

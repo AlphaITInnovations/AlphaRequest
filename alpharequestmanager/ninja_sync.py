@@ -6,7 +6,7 @@ from alpharequestmanager.ninja_api import get_ticket
 from alpharequestmanager.logger import logger
 from alpharequestmanager.models import RequestStatus
 from alpharequestmanager.config import config
-
+from alpharequestmanager.models import Ticket, TicketType
 def poll_ninja_changes():
     """
     Pollt alle Tickets mit 'ninja_ticket_id' und synchronisiert Status-Änderungen zurück ins Self-Service-Portal.
@@ -36,3 +36,8 @@ def start_polling():
     while True:
         poll_ninja_changes()
         time.sleep(config.NINJA_POLL_INTERVAL)
+
+
+
+def poll_ticket_changes(t: Ticket):
+    pass

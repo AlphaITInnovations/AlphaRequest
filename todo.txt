@@ -1,12 +1,11 @@
-To do:
-- Ticket werte updaten, wenn diese in ninja geändert werden?
+TODO:
 - Ninja Data Sync wenn in ninja was geändert wird dann auch in AlphaRequest (zumindest bei anpassbaren feldern in ninja)
 
 
 
 Produktion:
 ninja api key user
-alle keys/secrets tauschen
+
 
 
 
