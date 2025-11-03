@@ -127,43 +127,45 @@
         </div>
       </div>
 
+      <!-- Content -->
       <div id="ct-duo" class="hidden">
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <!-- Donut: Typ -->
-    <div>
-      <h4 class="text-md font-semibold mb-2 text-gray-700 dark:text-gray-200">Tickets nach Typ</h4>
-      <div class="chart-area"><canvas id="chartType"></canvas></div>
-      <div class="mt-3 max-h-40 overflow-auto nice-scrollbar">
-        <table class="min-w-full text-sm">
-          <thead>
-            <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
-              <th class="py-1 pr-2">Typ</th>
-              <th class="py-1 text-right">Anzahl</th>
-            </tr>
-          </thead>
-          <tbody id="tblType"></tbody>
-        </table>
-      </div>
-    </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Donut: Typ -->
+          <div>
+            <h4 class="text-md font-semibold mb-2 text-gray-700 dark:text-gray-200">Tickets nach Typ</h4>
+            <div class="chart-area"><canvas id="chartType"></canvas></div>
+            <div class="mt-3 max-h-40 overflow-auto nice-scrollbar">
+              <table class="min-w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
+                    <th class="py-1 pr-2">Typ</th>
+                    <th class="py-1 text-right">Anzahl</th>
+                  </tr>
+                </thead>
+                <tbody id="tblType"></tbody>
+              </table>
+            </div>
+          </div>
 
-    <!-- Donut: Ersteller -->
-    <div>
-      <h4 class="text-md font-semibold mb-2 text-gray-700 dark:text-gray-200">Tickets nach Ersteller</h4>
-      <div class="chart-area"><canvas id="chartOwner"></canvas></div>
-      <div class="mt-3 max-h-40 overflow-auto nice-scrollbar">
-        <table class="min-w-full text-sm">
-          <thead>
-            <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
-              <th class="py-1 pr-2">Ersteller</th>
-              <th class="py-1 text-right">Anzahl</th>
-            </tr>
-          </thead>
-          <tbody id="tblOwner"></tbody>
-        </table>
+          <!-- Donut: Ersteller -->
+          <div>
+            <h4 class="text-md font-semibold mb-2 text-gray-700 dark:text-gray-200">Tickets nach Ersteller</h4>
+            <div class="chart-area"><canvas id="chartOwner"></canvas></div>
+            <div class="mt-3 max-h-40 overflow-auto nice-scrollbar">
+              <table class="min-w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
+                    <th class="py-1 pr-2">Ersteller</th>
+                    <th class="py-1 text-right">Anzahl</th>
+                  </tr>
+                </thead>
+                <tbody id="tblOwner"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
     <!-- Tickets pro Tag -->
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 p-5">
