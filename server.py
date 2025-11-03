@@ -884,13 +884,12 @@ async def api_analytics_overview(
     by_type: Counter[str] = Counter()
     by_date: Counter[str] = Counter()
     by_status: Counter[str] = Counter()
+    by_owner: Counter[str] = Counter()  # 🆕
     total = 0
 
-    # Für die Dropdown-Füllung
     facet_displays: set[str] = set()
     facet_domains: set[str] = set()
 
-    # Normalisieren für Vergleich
     owner_display = (owner_display or "").strip()
     owner_domain = (owner_domain or "").strip().lower()
 
@@ -902,13 +901,12 @@ async def api_analytics_overview(
             continue
 
         owner = _owner_from_ticket(t)
-        # Facetten immer sammeln (auf Basis des Datumsbereichs)
         if owner.get("display"):
             facet_displays.add(owner["display"])
         if owner.get("domain"):
             facet_domains.add(owner["domain"])
 
-        # Filter anwenden (wenn gesetzt)
+        # Filter
         if owner_display and owner.get("display") != owner_display:
             continue
         if owner_domain and owner.get("domain") != owner_domain:
@@ -934,6 +932,10 @@ async def api_analytics_overview(
         st = getattr(t.status, "value", None) or str(t.status)
         by_status[str(st)] += 1
 
+        # 🆕 Ersteller (Anzeigename)
+        disp = owner.get("display") or "Unbekannt"
+        by_owner[disp] += 1
+
     def _date_range(start: datetime, end: datetime) -> list[str]:
         if not start or not end:
             return sorted(by_date.keys())
@@ -951,12 +953,12 @@ async def api_analytics_overview(
         "by_type": [{"type": k, "count": v} for k, v in by_type.most_common()],
         "by_date": by_date_rows,
         "by_status": [{"status": k, "count": v} for k, v in by_status_rows],
+        "by_owner": [{"owner": k, "count": v} for k, v in by_owner.most_common()],  # 🆕
         "facets": {
             "owner_displays": sorted(facet_displays),
             "owner_domains": sorted(facet_domains),
         },
     }
-
 
 
 

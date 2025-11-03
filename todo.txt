@@ -6,12 +6,3 @@ TODO:
 Produktion:
 ninja api key user
 
-
-
-
-analytics:
-graphen nach firmen sortierten etc
-Hardware Kosten
-Menge bestellung
-
-
