@@ -30,6 +30,13 @@ from fastapi import Query
 from datetime import datetime
 import json as _json
 from alpharequestmanager.ninja_api import NinjaAuthFlowRequired
+from alpharequestmanager.metrics import (
+    init_metrics,
+    record_login_failure,
+    record_login_success,
+    record_logout,
+    tickets_created_total,
+)
 
 
 
@@ -118,14 +125,13 @@ app = FastAPI(lifespan=lifespan)
 
 
 
-
 # IMPORTANT: Keep cookie first‑party and small; Lax fits OAuth top-level redirects
 app.add_middleware(
     SessionMiddleware,
     secret_key=config.SECRET_KEY,
     session_cookie="app_session",
-    same_site="lax",  # was "none"; Lax avoids some browser drops
-    https_only=config.HTTPS,   # keep True on HTTPS; set via env if you need HTTP for local dev
+    same_site="lax",
+    https_only=config.HTTPS,
     max_age=config.SESSION_TIMEOUT,
     path="/",
 )
@@ -133,6 +139,7 @@ templates = Jinja2Templates(directory="alpharequestmanager/templates")
 templates.env.globals['SESSION_TIMEOUT'] = RUNTIME_SESSION_TIMEOUT
 manager = RequestManager()
 app.mount("/static", StaticFiles(directory="alpharequestmanager/static"), name="static")
+init_metrics(app, config.SESSION_TIMEOUT, manager)
 
 
 
@@ -199,6 +206,8 @@ async def auth_callback(request: Request):
             "user": user_payload,
             "last_activity": int(time.time()),
         })
+        record_login_success(request)
+
         request.session.pop("auth_flow", None)
 
         # Guard: if cookie would be too big, shrink it to bare minimum
@@ -215,6 +224,8 @@ async def auth_callback(request: Request):
 
     except Exception as e:
         logger.exception("Login fehlgeschlagen")
+        record_login_failure("auth_callback_failed")
+
         return templates.TemplateResponse("login.html", {"request": request, "error": str(e)})
 
 
@@ -361,6 +372,12 @@ async def create_ticket(
     )
     manager.set_ninja_metadata(ticket_id, ninja_id)
     logger.info("✅ Ticket erstellt: Lokale ID %s / Ninja ID %s für %s", ticket_id, ninja_id, user_mail)
+    tickets_created_total.labels(
+        type=ticket_type,
+        domain=user["email"].split("@")[1],
+        company=user.get("company", ""),
+    ).inc()
+
     return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
 
 
@@ -371,7 +388,10 @@ async def logout(request: Request):
     sid = request.session.get("sid")
     if sid:
         TOKENS.delete(sid)
+
+    record_logout(request)
     request.session.clear()
+
     logger.info("User logged out: %s", user_email)
     return RedirectResponse("/login", status_code=HTTP_302_FOUND)
 

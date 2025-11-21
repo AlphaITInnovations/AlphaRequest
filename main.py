@@ -36,5 +36,5 @@ def main():
 
 if __name__ == "__main__":
 
-    print("starting application...")
+    #print("starting application...")
     main()
