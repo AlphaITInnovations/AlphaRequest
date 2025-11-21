@@ -3,6 +3,7 @@ import os
 import threading
 import time
 from typing import Optional, Dict
+import base64
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -328,12 +329,44 @@ def _collector_thread():
 # ---------------------------------------------------------
 # /metrics ENDPOINT
 # ---------------------------------------------------------
-async def metrics_endpoint():
+def _check_basic_auth(request: Request) -> bool:
+    username = os.getenv("METRICS_USERNAME")
+    password = os.getenv("METRICS_PASSWORD")
+
+    # kein Auth gewünscht
+    if not username or not password:
+        return True
+
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.startswith("Basic "):
+        return False
+
+    encoded = auth.split(" ", 1)[1]
+    decoded = base64.b64decode(encoded).decode("utf-8")
+
+    if ":" not in decoded:
+        return False
+
+    user, pwd = decoded.split(":", 1)
+
+    return user == username and pwd == password
+
+
+
+async def metrics_endpoint(request: Request):
     if not ENABLE_METRICS:
         return Response(status_code=404)
 
+    if not _check_basic_auth(request):
+        return Response(
+            status_code=401,
+            headers={"WWW-Authenticate": "Basic realm=\"Metrics\""},
+            content="Unauthorized",
+        )
+
     data = generate_latest(registry)
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+
 
 
 # ---------------------------------------------------------
