@@ -91,9 +91,19 @@ document.addEventListener('alpine:init', () => {
     toastVisible: false,
     toastMessage: '',
     filter: 'all',
-    sidebarOpen: false, // mobile nav
+    sidebarOpen: false,
     showErrorModal: false,
     errorMessage: 'Ticket konnte nicht erstellt werden. Bitte IT kontaktieren.',
+
+    // Mapping Anzeige-Text → Permission-Key
+    ticketTypeMap: {
+      "Hardwarebestellung": "hardware",
+      "EDV-Zugang beantragen": "zugangBeantragen",
+      "EDV-Zugang sperren": "zugangSperren",
+      "Niederlassung anmelden": "niederlassungAnmeldung",
+      "Niederlassung schließen": "niederlassungAbmeldung",
+      "Niederlassung umzug": "niederlassungUmzug"
+    },
 
     // --- lifecycle ---
     init() {
@@ -121,40 +131,71 @@ document.addEventListener('alpine:init', () => {
       }, 15000);
     },
 
-    // --- actions ---
-    openTicketModal(type) { this.ticketType = type; this.showTicketModal = true; },
+    // --- permission check ---
+    async canCreateTicket(type) {
+      const key = this.ticketTypeMap[type] || null;
 
-    // Detail-Router
+      if (!key) {
+        console.warn("Unbekannter ticket type im Frontend:", type);
+        return false;
+      }
+
+      try {
+        const url = `/api/admin/can-create?ticket_type=${encodeURIComponent(key)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.warn("can-create HTTP-Fehler", res.status);
+          return false;
+        }
+        const json = await res.json();
+        return json.ok === true;
+      } catch (e) {
+        console.error("can-create Request fehlgeschlagen", e);
+        return false;
+      }
+    },
+
+    async openTicketModal(type) {
+      const ok = await this.canCreateTicket(type);
+
+      if (!ok) {
+        this.openErrorModal("Du hast keine Berechtigung, diesen Ticket-Typ zu erstellen.");
+        return;
+      }
+
+      this.ticketType = type;
+      this.showTicketModal = true;
+    },
+
+    // --- Detail-Router / Rest bleibt wie gehabt ---
     openDetail(order) {
       const id = this.modalIdFor(order?.type);
-      this.$store.modal.open(id, order); // wichtig: this.$store
+      this.$store.modal.open(id, order);
     },
-modalIdFor(type) {
-  // Normalisieren: Unicode → kompatibel, alle Sonder-Hyphens zu "-", Whitespace glätten, kleinschreiben
-  const norm = (s) => (s || '')
-    .toString()
-    .normalize('NFKC')
-    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\-]+/g, '-')  // alle Varianten → "-"
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+    modalIdFor(type) {
+      const norm = (s) => (s || '')
+        .toString()
+        .normalize('NFKC')
+        .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\-]+/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
 
-  const key = norm(type);
+      const key = norm(type);
 
-  const map = {
-    'hardwarebestellung': 'detail:hardware',
-    'edv-zugang beantragen': 'detail:zugang-beantragen',
-    'edv-zugang sperren': 'detail:zugang-sperren',
-    'niederlassung anmelden': 'detail:niederlassung-anmelden',
-    'niederlassung umzug': 'detail:umzug-niederlassung',
-    'niederlassung schließen': 'detail:niederlassung-schliessen',
-    'niederlassung schliessen': 'detail:niederlassung-schliessen', // Fallback ohne Umlaut
-  };
+      const map = {
+        'hardwarebestellung': 'detail:hardware',
+        'edv-zugang beantragen': 'detail:zugang-beantragen',
+        'edv-zugang sperren': 'detail:zugang-sperren',
+        'niederlassung anmelden': 'detail:niederlassung-anmelden',
+        'niederlassung umzug': 'detail:umzug-niederlassung',
+        'niederlassung schließen': 'detail:niederlassung-schliessen',
+        'niederlassung schliessen': 'detail:niederlassung-schliessen',
+      };
 
-  return map[key] || 'detail:generic';
-},
+      return map[key] || 'detail:generic';
+    },
 
-    // Fehler-Modal
     openErrorModal(msg) {
       if (msg) this.errorMessage = msg;
       this.showErrorModal = true;
@@ -162,7 +203,6 @@ modalIdFor(type) {
     },
     closeErrorModal() { this.showErrorModal = false; },
 
-    // --- helpers ---
     translateStatus(status) {
       return ({approved:'Erledigt', pending:'Ausstehend', rejected:'Abgelehnt'}[status]) || status;
     },
@@ -174,7 +214,7 @@ modalIdFor(type) {
         rejected: 'bg-red-200/80 hover:bg-red-300/80 dark:bg-red-900/30 dark:hover:bg-red-900/40',
         default:  'bg-gray-100/80 hover:bg-gray-200/80 dark:bg-gray-700/30 dark:hover:bg-gray-700/40'
       };
-      const tone = tones[status] || tones.default;  // Fix: keine Selbstreferenz
+      const tone = tones[status] || tones.default;
       return `${base} ${tone}`;
     },
     badgeClasses(status) {
@@ -196,6 +236,7 @@ modalIdFor(type) {
     }
   }));
 });
+
 </script>
 
 <!-- Globaler ESC-Handler: schließt $store.modal & mobile Sidebar -->

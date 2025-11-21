@@ -297,12 +297,11 @@ async def create_ticket(
     ticket_type = desc_obj.get("ticketType")
     user_mail = user["email"]
 
-    #description_obj = make_ninja_description(desc_obj, user)
+
 
     try:
         ticket = None
-        if not user_can_create(user["id"], ticket_type):
-            raise HTTPException(status_code=403, detail="Keine Berechtigung für diesen Ticket-Typ")
+
 
         if ticket_type == "Hardwarebestellung":
             ticket = ninja_api.create_ticket_hardware(
@@ -1217,3 +1216,19 @@ def user_can_create(user_id: str, ticket_type: str) -> bool:
         return True
 
     return user_id in allowed
+
+
+@app.get("/api/admin/can-create")
+async def api_can_create(ticket_type: str, user: dict = Depends(get_current_user)):
+    from alpharequestmanager.database import load_ticket_permissions
+    user_id = user.get("id") or user.get("mail")
+    perms = load_ticket_permissions()
+    allowed = perms.get(ticket_type)
+
+
+    if not allowed:
+        return {"ok": True}
+
+
+
+    return {"ok": user_id in allowed}
