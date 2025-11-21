@@ -1,4 +1,5 @@
 TODO:
+- Rechte welche Benuzter welche Tickettypen aufmachen dürfen (drop down der 365 user)
 - Ninja Data Sync wenn in ninja was geändert wird dann auch in AlphaRequest (zumindest bei anpassbaren feldern in ninja)
 
 

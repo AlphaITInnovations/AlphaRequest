@@ -31,8 +31,7 @@ class Config:
     PORT = int(os.getenv("PORT", 6969))
     HTTPS = str_to_bool(os.getenv("HTTPS", False).lower())
     DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", False).lower())
-
-
+    USER_SYNC_INTERVAL = int(os.getenv("USER_SYNC_INTERVAL", "30"))
 
     #Persistente Werte
     @property

@@ -413,3 +413,53 @@ def set_sendeverfolgung(ticketID: int, sendeverfolgung) -> None:
     update_ticket(ticketID, description=new_desc)
 
     logger.info("Sendeverfolgung für Ticket %s aktualisiert", ticketID)
+
+
+#ticket permissions
+
+def load_ticket_permissions() -> dict:
+    """
+    Lädt Ticket-Berechtigungen aus settings.TICKET_PERMISSIONS.
+    Gibt stets ein dict zurück, nie None.
+    """
+    data = settings_get("TICKET_PERMISSIONS", default={})
+    if not isinstance(data, dict):
+        return {}
+
+    # nur valid types berücksichtigen, falls jemand Müll speichert
+    valid_keys = {
+        "hardware",
+        "niederlassungAnmeldung",
+        "niederlassungAbmeldung",
+        "niederlassungUmzug",
+        "zugangBeantragen",
+        "zugangSperren"
+    }
+
+    clean = {}
+    for k in valid_keys:
+        v = data.get(k, [])
+        if isinstance(v, list):
+            clean[k] = [str(x) for x in v]
+        else:
+            clean[k] = []
+
+    return clean
+
+def save_ticket_permissions(data: dict) -> None:
+    """
+    Speichert Ticket-Berechtigungen in settings.
+    Erwartet dict: { ticket_type: [user_ids...] }
+    """
+    if not isinstance(data, dict):
+        raise ValueError("permissions must be dict")
+
+    # ensure values are lists of strings
+    clean = {}
+    for k, v in data.items():
+        if isinstance(v, list):
+            clean[k] = [str(x) for x in v]
+        else:
+            clean[k] = []
+
+    settings_set("TICKET_PERMISSIONS", clean)

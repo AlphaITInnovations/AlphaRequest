@@ -32,3 +32,17 @@ def acquire_token_by_auth_code(request: Request):
 
     # Fix: QueryParams → dict
     return app.acquire_token_by_auth_code_flow(flow, dict(request.query_params))
+
+
+def acquire_app_token() -> dict:
+    """
+    Holt ein App-Only Token für Graph (Client Credentials Flow).
+    Benötigt Application Permission 'User.Read.All'.
+    """
+    app = build_msal_app()
+    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+
+    if "access_token" not in result:
+        raise Exception(f"App token acquisition failed: {result.get('error_description')}")
+
+    return result

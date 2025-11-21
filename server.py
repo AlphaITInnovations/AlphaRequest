@@ -1,7 +1,9 @@
+import asyncio
 import json
 import secrets
 import threading
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Optional, Dict, Any
 import time
 import uuid
@@ -37,7 +39,9 @@ from alpharequestmanager.metrics import (
     record_logout,
     tickets_created_total,
 )
-
+from alpharequestmanager.auth import acquire_app_token
+from alpharequestmanager.graph import list_all_users_appcontext
+from alpharequestmanager.database import load_ticket_permissions, save_ticket_permissions
 
 
 RUNTIME_SESSION_TIMEOUT = config.SESSION_TIMEOUT
@@ -112,17 +116,39 @@ def get_access_token_from_store(request: Request) -> Optional[str]:
 
 
 
+
 # FastAPI WebServer
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
     thread = threading.Thread(target=ninja_sync.start_polling, daemon=True)
     thread.start()
+
+    app.state.user_cache = []
+    app.state.user_cache_timestamp = 0
+
+    await sync_users_into_cache(app)
+
+    # 4) Hintergrundtask alle X Minuten
+    interval = int(config.USER_SYNC_INTERVAL) * 60
+
+    async def user_sync_background():
+        while True:
+            try:
+                await sync_users_into_cache(app)
+            except Exception:
+                logger.exception("User cache sync failed")
+            await asyncio.sleep(interval)
+
+    # Hintergrundtask starten
+    asyncio.create_task(user_sync_background())
+
     yield
 
 
 
 app = FastAPI(lifespan=lifespan)
-
+app.state = SimpleNamespace()
 
 
 # IMPORTANT: Keep cookie first‑party and small; Lax fits OAuth top-level redirects
@@ -275,6 +301,8 @@ async def create_ticket(
 
     try:
         ticket = None
+        if not user_can_create(user["id"], ticket_type):
+            raise HTTPException(status_code=403, detail="Keine Berechtigung für diesen Ticket-Typ")
 
         if ticket_type == "Hardwarebestellung":
             ticket = ninja_api.create_ticket_hardware(
@@ -1133,3 +1161,59 @@ async def api_ninja_refresh(user: dict = Depends(get_current_user)):
         return {"ok": True, "expires_at": new_tok.get("expires_at")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Refresh fehlgeschlagen: {e}")
+
+
+
+async def sync_users_into_cache(app):
+    logger.info("🔄 Syncing AD user list…")
+
+    token = acquire_app_token()
+    access = token["access_token"]
+
+    users = await list_all_users_appcontext(access)
+
+    app.state.user_cache = users
+    app.state.user_cache_timestamp = time.time()
+
+    logger.info("✅ Loaded %s users into cache", len(users))
+
+
+@app.get("/api/admin/users")
+async def api_admin_users(request: Request, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    return {
+        "last_update": request.app.state.user_cache_timestamp,
+        "count": len(request.app.state.user_cache),
+        "users": request.app.state.user_cache
+    }
+
+@app.get("/api/admin/ticket-permissions")
+async def api_get_ticket_permissions(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    return load_ticket_permissions()
+
+
+
+@app.put("/api/admin/ticket-permissions")
+async def api_set_ticket_permissions(
+    payload: dict = Body(...),
+    user: dict = Depends(get_current_user)
+):
+    require_admin(user)
+
+    # sanity check: dict mit arrays
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "Payload must be a dict")
+
+    save_ticket_permissions(payload)
+    return {"ok": True}
+
+def user_can_create(user_id: str, ticket_type: str) -> bool:
+    perms = load_ticket_permissions()
+    allowed = perms.get(ticket_type)
+
+    # leer = jeder darf
+    if not allowed:
+        return True
+
+    return user_id in allowed
