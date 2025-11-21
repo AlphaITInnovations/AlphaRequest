@@ -66,6 +66,11 @@ tickets_created_total = Counter(
     ["type", "domain", "company"],
     registry=registry,
 )
+tickets_total = Gauge(
+    "tickets_total",
+    "Total number of tickets in the system",
+    registry=registry,
+)
 
 tickets_status_total = Gauge(
     "tickets_status_total",
@@ -266,54 +271,64 @@ def _collect_business_metrics():
         return
 
     from alpharequestmanager.models import RequestStatus
+    import json
 
-    ticker = TICKET_MANAGER.list_all_tickets()
-    status_count = {}
-    type_count = {}
-    company_count = {}
-    domain_count = {}
-    open_count = {}
+    tickets = TICKET_MANAGER.list_all_tickets()
 
-    for t in ticker:
+    status_count: dict[str, int] = {}
+    type_count: dict[str, int] = {}
+    company_count: dict[str, int] = {}
+    domain_count: dict[str, int] = {}
+    open_count: dict[tuple[str, str], int] = {}
+
+    for t in tickets:
         # Status
-        st = getattr(t.status, "value", None)
+        st = getattr(t.status, "value", None) or "unknown"
         status_count[st] = status_count.get(st, 0) + 1
 
         # Type
-        type_count[t.title] = type_count.get(t.title, 0) + 1
+        ttype = t.title or "Unbekannt"
+        type_count[ttype] = type_count.get(ttype, 0) + 1
 
         # Owner info
-        import json
         info = json.loads(t.owner_info) if t.owner_info else {}
-        domain = ""
-        email = info.get("email", "")
-        if "@" in email:
-            domain = email.split("@", 1)[1]
+        email = (info.get("email") or "").strip()
+        domain = email.split("@", 1)[1] if "@" in email else ""
         company = info.get("company") or ""
 
         company_count[company] = company_count.get(company, 0) + 1
         domain_count[domain] = domain_count.get(domain, 0) + 1
 
-        # Open tickets
+        # Open tickets (pending)
         if st == RequestStatus.pending.value:
-            key = (t.title, company)
+            key = (ttype, company)
             open_count[key] = open_count.get(key, 0) + 1
 
-    # Write Gauges
-    for st, val in status_count.items():
-        tickets_status_total.labels(status=st).set(val)
+    # ---- Gauges setzen ----
 
-    for t, val in type_count.items():
-        tickets_by_type.labels(type=t).set(val)
+    # Tickets total
+    tickets_total.set(sum(status_count.values()))
 
-    for c, val in company_count.items():
-        tickets_by_company.labels(company=c).set(val)
+    # Status explizit setzen (auch 0, damit nichts „hängen bleibt“)
+    for st in ["pending", "approved", "rejected"]:
+        tickets_status_total.labels(status=st).set(status_count.get(st, 0))
 
-    for d, val in domain_count.items():
-        tickets_by_domain.labels(domain=d).set(val)
+    # Typen
+    for ttype, val in type_count.items():
+        tickets_by_type.labels(type=ttype).set(val)
 
-    for (t, comp), val in open_count.items():
-        tickets_open_total.labels(type=t, company=comp).set(val)
+    # Companies
+    for company, val in company_count.items():
+        tickets_by_company.labels(company=company).set(val)
+
+    # Domains
+    for domain, val in domain_count.items():
+        tickets_by_domain.labels(domain=domain).set(val)
+
+    # Open tickets
+    for (ttype, company), val in open_count.items():
+        tickets_open_total.labels(type=ttype, company=company).set(val)
+
 
 
 # ---------------------------------------------------------
@@ -389,7 +404,22 @@ def init_metrics(app, session_timeout: int, ticket_manager):
 
     # Endpoint
     app.add_api_route("/metrics", metrics_endpoint, methods=["GET"])
+    active_users_total.set(0)
 
+    # Initialize statuses
+    for st in ["pending", "approved", "rejected"]:
+        tickets_status_total.labels(status=st).set(0)
+
+    # Initialize counters for "known labels"
+    login_failures_total.labels(reason="auth_callback_exception").inc(0)
+    login_failures_total.labels(reason="invalid_credentials").inc(0)
+    login_failures_total.labels(reason="token_exchange_failed").inc(0)
+
+    # A default domain/company/type can be bootstrapped as empty
+    tickets_by_type.labels(type="none").set(0)
+    tickets_by_company.labels(company="none").set(0)
+    tickets_by_domain.labels(domain="none").set(0)
+    tickets_open_total.labels(type="none", company="none").set(0)
     # Background thread
     thread = threading.Thread(target=_collector_thread, daemon=True)
     thread.start()
