@@ -1,223 +1,279 @@
+<!-- EDV-Zugang sperren Modal -->
 <div x-show="ticketType === 'EDV-Zugang sperren' && showTicketModal" x-cloak>
   <!-- Overlay -->
-  <div class="fixed inset-0 bg-black/50 backdrop-blur-md z-40" @click="showTicketModal = false"></div>
+  <!--<div class="fixed inset-0 bg-black/50 backdrop-blur-md z-40"
+     @click.self="showTicketModal = false"></div>-->
 
-  <!-- Modal -->
-  <div class="fixed inset-0 z-50 overflow-y-auto" @keydown.escape.window="showTicketModal = false">
+
+  <!-- Modal Container -->
+  <div class="fixed inset-0 z-50 overflow-y-auto pointer-events-auto" @keydown.escape.window="showTicketModal = false">
     <div class="min-h-screen flex items-center justify-center px-4 py-10">
-      <div class="modal-panel w-full max-w-4xl p-6 relative"
-           x-data="{
-             sperren: {
-               benutzer:'', grund:'',
-               // 🔐 Sperrmodus
-               sperrmodus:'sofort', // 'sofort' | 'datum'
-               sperrdatum:'',
 
-               // 📧 Mail-Optionen
-               mailsWeiterleiten:false, weiterleitenAn:'',
-               postfachVollzugriff:false, vollzugriffFuer:'',
-               abwesenheitAktiv:false, abwesenheitText:'Mitarbeiter ist nicht mehr im Haus',
+      <!-- PANEL -->
+      <div class="modal-panel w-full max-w-4xl p-6 relative z-[60]"
+           x-data="edvSperrenWizard()"
+           x-init="init()">
 
-               // 🗃️ Daten
-               datenAktion:'', datenBenutzer:'',
-
-               // 💻 Hardware (exklusiv)
-               hardwareOption:'anIT', // 'anIT' | 'bleibt' | 'weitergabe'
-               hardwareWeitergabeName:'',
-
-               // Begründung (falls nötig)
-               hardwareBegruendung:'',
-
-               // 🧾 NEU: ELO-Sperre
-               eloSperren:false,
-               eloPosition:''
-             },
-             validate() {
-               if (!this.sperren.benutzer.trim()) return { ok:false, msg:'Bitte Benutzername angeben.' };
-               if (!this.sperren.grund.trim()) return { ok:false, msg:'Bitte Grund angeben.' };
-               if (this.sperren.sperrmodus === 'datum' && !this.sperren.sperrdatum) {
-                 return { ok:false, msg:'Bitte ein Sperrdatum wählen.' };
-               }
-               if (this.sperren.mailsWeiterleiten && !this.sperren.weiterleitenAn.trim()) {
-                 return { ok:false, msg:'Bitte E-Mail für Weiterleitung angeben.' };
-               }
-               if (this.sperren.postfachVollzugriff && !this.sperren.vollzugriffFuer.trim()) {
-                 return { ok:false, msg:'Bitte E-Mail für Vollzugriff angeben.' };
-               }
-               if (!this.sperren.datenAktion) {
-                 return { ok:false, msg:'Bitte wählen, was mit den Daten passieren soll.' };
-               }
-               if (this.sperren.hardwareOption === 'weitergabe' && !this.sperren.hardwareWeitergabeName.trim()) {
-                 return { ok:false, msg:'Bitte Namen des Mitarbeiters für die Hardware-Weitergabe angeben.' };
-               }
-               if (this.sperren.eloSperren && !this.sperren.eloPosition.trim()) {
-                 return { ok:false, msg:'Bitte die Position für die ELO-Sperre angeben (z. B. Niederlassungsleiter).' };
-               }
-               return { ok:true };
-             },
-             submitSperrenForm() {
-               const v = this.validate();
-               if (!v.ok) { alert(v.msg); return; }
-               const payload = { ticketType:'EDV-Zugang sperren', data:this.sperren };
-               this.$refs.descField.value = JSON.stringify(payload);
-               this.$refs.form.submit();
-             }
-           }"
-      >
-
-        <!-- Close -->
+        <!-- CLOSE BTN -->
         <button @click="showTicketModal = false"
-                class="absolute top-4 right-4 text-text hover:text-danger text-2xl focus-ring"
-                aria-label="Schließen">×</button>
+                class="absolute top-4 right-4 text-text hover:text-danger text-2xl focus-ring">×</button>
 
-        <!-- Title -->
-        <h3 class="text-2xl font-bold mb-6 text-text">🔒 EDV-Zugang sperren</h3>
+        <!-- TITLE -->
+        <h3 class="text-2xl font-bold mb-6 text-text">🔒 EDV‑Zugang sperren</h3>
 
-        <!-- Form -->
-        <form x-ref="form" method="post" action="/tickets" class="space-y-6" @submit.prevent="submitSperrenForm">
-          <input type="hidden" name="title" value="EDV-Zugang sperren">
-          <textarea x-ref="descField" name="description" class="hidden"></textarea>
+        <!-- FORM -->
+        <form x-ref="form" method="post" action="/tickets" @submit.prevent>
+          <input type="hidden" name="title" value="EDV‑Zugang sperren">
+          <input type="hidden" name="ticket_type" value="EDV‑Zugang sperren">
+          <input type="hidden" name="description" x-ref="descField">
+          <input type="hidden" name="assignee_id" :value="assignee_id">
+          <input type="hidden" name="assignee_name" :value="assigneeName">
 
-          <!-- Benutzer -->
-          <section class="card card--pad bg-card-bg border-border">
-            <label class="text-text text-sm block mb-1">👤 Benutzername</label>
-            <input type="text" x-model="sperren.benutzer" class="field w-full" required>
-          </section>
+          <!-- STEP 1: Basisdaten -->
+          <template x-if="step === 1">
+            <div class="space-y-6">
 
-          <!-- Grund -->
-          <section class="card card--pad bg-card-bg border-border">
-            <label class="text-text text-sm block mb-1">📝 Grund</label>
-            <textarea x-model="sperren.grund" rows="3" class="field w-full" placeholder="z. B. Austritt, Datenschutz" required></textarea>
-          </section>
+              <!-- Benutzername (für Dokumentation) -->
+              <section class="card card--pad border-border">
+                <label class="text-text text-sm block mb-1">👤 Benutzername</label>
+                <input type="text" class="field w-full" x-model="form.benutzer" name="benutzer">
+              </section>
 
-          <!-- Sperrmodus -->
-          <section class="card card--pad bg-card-bg border-border">
-            <p class="text-text text-sm font-medium mb-2">⏱️ Wann sperren?</p>
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-              <label class="inline-flex items-center gap-2">
-                <input type="radio" class="field" name="sperrmodus" value="sofort" x-model="sperren.sperrmodus">
-                <span>Sofort sperren</span>
-              </label>
-              <label class="inline-flex items-center gap-2">
-                <input type="radio" class="field" name="sperrmodus" value="datum" x-model="sperren.sperrmodus">
-                <span>Ab Datum sperren</span>
-              </label>
-              <input
-                x-show="sperren.sperrmodus === 'datum'"
-                type="date"
-                class="field"
-                x-model="sperren.sperrdatum"
-              >
-            </div>
-          </section>
+              <!-- Grund -->
+              <section class="card card--pad border-border">
+                <label class="text-text text-sm block mb-1">📝 Grund</label>
+                <textarea rows="3" class="field w-full" x-model="form.grund" name="grund"></textarea>
+              </section>
 
-          <!-- NEU: ELO-Sperre -->
-          <section class="card card--pad bg-card-bg border-border">
-            <div class="flex items-center gap-2 mb-2">
-              <input type="checkbox" x-model="sperren.eloSperren" id="eloSperren" class="field">
-              <label for="eloSperren" class="text-text cursor-pointer">ELO-Benutzer ebenfalls sperren?</label>
-            </div>
-            <div x-show="sperren.eloSperren" class="mt-2">
-              <label class="text-text text-sm block mb-1">Position des zu sperrenden Benutzers</label>
-              <input type="text" class="field w-full"
-                     placeholder="z. B. Niederlassungsleiter, Regionalleiter, ..."
-                     x-model="sperren.eloPosition">
-            </div>
-          </section>
-
-          <!-- Weiterleitung -->
-          <section class="card card--pad bg-card-bg border-border">
-            <div class="flex items-center gap-2 mb-2">
-              <input type="checkbox" x-model="sperren.mailsWeiterleiten" id="mailForward" class="field">
-              <label for="mailForward" class="text-text cursor-pointer">Mails weiterleiten?</label>
-            </div>
-            <input x-show="sperren.mailsWeiterleiten" type="email" x-model="sperren.weiterleitenAn"
-                   placeholder="E-Mail-Adresse, an die weitergeleitet werden soll"
-                   class="field w-full">
-          </section>
-
-          <!-- Postfach-Vollzugriff -->
-          <section class="card card--pad bg-card-bg border-border">
-            <div class="flex items-center gap-2 mb-2">
-              <input type="checkbox" x-model="sperren.postfachVollzugriff" id="fullAccess" class="field">
-              <label for="fullAccess" class="text-text cursor-pointer">Postfach-Vollzugriff?</label>
-            </div>
-            <input x-show="sperren.postfachVollzugriff" type="email" x-model="sperren.vollzugriffFuer"
-                   placeholder="E-Mail-Adresse der Person mit Vollzugriff"
-                   class="field w-full">
-          </section>
-
-          <!-- Abwesenheitsnotiz -->
-          <section class="card card--pad bg-card-bg border-border">
-            <div class="flex items-center gap-2 mb-2">
-              <input type="checkbox" x-model="sperren.abwesenheitAktiv" id="ooo" class="field">
-              <label for="ooo" class="text-text cursor-pointer">Abwesenheitsnotiz hinterlegen?</label>
-            </div>
-            <textarea x-show="sperren.abwesenheitAktiv" x-model="sperren.abwesenheitText" rows="2" class="field w-full"></textarea>
-          </section>
-
-          <!-- Hinweis -->
-          <section class="card card--pad bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 text-yellow-800 dark:text-yellow-200">
-            Weiterleitungen und Vollzugriffe bleiben nur 30 Tage aktiv. Danach erfolgt automatische Sicherung und Löschung.
-          </section>
-
-          <!-- Datenaktion -->
-          <section class="card card--pad bg-card-bg border-border">
-            <label class="text-text text-sm block">🗃️ Was soll mit den Daten passieren? (Home-Laufwerk, Desktop, etc.)</label>
-            <select x-model="sperren.datenAktion" class="field w-full" required>
-              <option value="">– bitte wählen –</option>
-              <option value="sichern">Sichern</option>
-              <option value="löschen">Löschen</option>
-            </select>
-          </section>
-
-          <!-- Hardware -->
-          <section class="card card--pad bg-card-bg border-border space-y-3">
-            <label class="text-text text-sm block">💻 Was passiert mit der Hardware?</label>
-
-            <div class="flex flex-col gap-2">
-              <label class="inline-flex items-center gap-2">
-                <input type="radio" class="field" name="hardwareOption" value="anIT" x-model="sperren.hardwareOption">
-                <span>Wird an IT gesendet</span>
-              </label>
-
-              <label class="inline-flex items-center gap-2">
-                <input type="radio" class="field" name="hardwareOption" value="bleibt" x-model="sperren.hardwareOption">
-                <span>Bleibt in der Niederlassung</span>
-              </label>
-
-              <div>
+              <!-- Sperrmodus -->
+              <section class="card card--pad border-border space-y-3">
+                <p class="text-sm font-medium">⏱️ Wann sperren?</p>
                 <label class="inline-flex items-center gap-2">
-                  <input type="radio" class="field" name="hardwareOption" value="weitergabe" x-model="sperren.hardwareOption">
-                  <span>Wird an einen Mitarbeiter weitergegeben</span>
+                  <input type="radio" value="sofort" x-model="form.sperrmodus" name="sperrmodus"> Sofort
                 </label>
-                <div class="mt-2" x-show="sperren.hardwareOption === 'weitergabe'">
-                  <input type="text" class="field w-full" placeholder="Name des Mitarbeiters"
-                         x-model="sperren.hardwareWeitergabeName">
+                <label class="inline-flex items-center gap-2">
+                  <input type="radio" value="datum" x-model="form.sperrmodus" name="sperrmodus"> Ab Datum
+                </label>
+                <input x-show="form.sperrmodus === 'datum'" type="date" class="field" x-model="form.sperrdatum" name="sperrdatum">
+              </section>
+
+              <!-- ELO sperren -->
+              <section class="card card--pad border-border space-y-3">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" x-model="form.eloSperren" name="eloSperren"> ELO‑Benutzer ebenfalls sperren?
+                </label>
+                <input x-show="form.eloSperren" class="field w-full" placeholder="Position" x-model="form.eloPosition" name="eloPosition">
+              </section>
+
+              <!-- Mails weiterleiten -->
+              <section class="card card--pad border-border space-y-3">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" x-model="form.mailsWeiterleiten" name="mailsWeiterleiten"> Mails weiterleiten?
+                </label>
+                <input x-show="form.mailsWeiterleiten" type="email" class="field w-full" placeholder="Weiterleiten an" x-model="form.weiterleitenAn" name="weiterleitenAn">
+              </section>
+
+              <!-- Postfach Vollzugriff -->
+              <section class="card card--pad border-border space-y-3">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" x-model="form.postfachVollzugriff" name="postfachVollzugriff"> Postfach‑Vollzugriff?
+                </label>
+                <input x-show="form.postfachVollzugriff" type="email" class="field w-full" placeholder="Vollzugriff für" x-model="form.vollzugriffFuer" name="vollzugriffFuer">
+              </section>
+
+              <!-- Abwesenheitsnotiz -->
+              <section class="card card--pad border-border">
+                <label class="inline-flex items-center gap-2 mb-2">
+                  <input type="checkbox" x-model="form.abwesenheitAktiv" name="abwesenheitAktiv"> Abwesenheitsnotiz?
+                </label>
+                <textarea x-show="form.abwesenheitAktiv" class="field w-full" rows="2" x-model="form.abwesenheitText" name="abwesenheitText"></textarea>
+              </section>
+
+              <section class="card card--pad border-yellow-300 bg-yellow-50">
+                Weiterleitungen & Vollzugriffe bleiben nur 30 Tage aktiv.
+              </section>
+
+              <!-- Datenaktion -->
+              <section class="card card--pad border-border">
+                <label class="text-sm block mb-1">🗃️ Datenaktion</label>
+                <select class="field w-full" x-model="form.datenAktion" name="datenAktion">
+                  <option value="">– bitte wählen –</option>
+                  <option value="sichern">Sichern</option>
+                  <option value="löschen">Löschen</option>
+                </select>
+              </section>
+
+              <!-- Hardware‑Handhabung -->
+              <section class="card card--pad border-border space-y-3">
+                <label class="text-sm block mb-1">💻 Hardware</label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="radio" x-model="form.hardwareOption" value="anIT" name="hardwareOption"> Wird an IT gesendet
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="radio" x-model="form.hardwareOption" value="bleibt" name="hardwareOption"> Bleibt in Niederlassung
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="radio" x-model="form.hardwareOption" value="weitergabe" name="hardwareOption"> Weitergabe an Mitarbeiter
+                </label>
+
+                <input x-show="form.hardwareOption === 'weitergabe'" class="field w-full mt-2" placeholder="Name Mitarbeiter" x-model="form.hardwareWeitergabeName" name="hardwareWeitergabeName">
+                <textarea class="field w-full" rows="2" placeholder="Optionale Begründung" x-model="form.hardwareBegruendung" name="hardwareBegruendung"></textarea>
+              </section>
+
+              <!-- STEP 1 Footer -->
+              <div class="flex justify-end gap-3 mt-8">
+                <button type="button" class="px-4 py-2 bg-card-bg rounded-lg" @click="showTicketModal = false">Abbrechen</button>
+                <button type="button" class="px-4 py-2 bg-primary text-white rounded-lg" @click="goStep2()">Weiter →</button>
+              </div>
+            </div>
+          </template>
+
+          <!-- STEP 2: Zuständigkeit -->
+          <template x-if="step === 2">
+            <div class="space-y-8">
+              <h2 class="text-xl font-semibold">Zuständigkeit</h2>
+
+              <!-- Assignee -->
+              <section class="card card--pad border-border">
+                <label class="text-sm font-medium block mb-1">👤 Verantwortlicher Benutzer</label>
+                <select class="field w-full mt-2" x-model="assignee_id" @change="updateAssigneeName($event)" :disabled="group_id" name="assignee_select">
+                  <option value="">– Benutzer auswählen –</option>
+                  <template x-for="u in users" :key="u.id">
+                    <option :value="u.id" :data-name="u.displayName" x-text="u.displayName + ' (' + u.mail + ')'"></option>
+                  </template>
+                </select>
+              </section>
+
+              <!-- Gruppe (falls gewünscht) -->
+              <section class="card card--pad border-border">
+                <label class="text-sm font-medium block mb-1">👥 Verantwortliche Gruppe</label>
+                <select class="field w-full mt-2" x-model="group_id" :disabled="assignee_id" name="group_select">
+                  <option value="">– Gruppe auswählen –</option>
+                  <template x-for="g in groups" :key="g.id">
+                    <option :value="g.id" x-text="g.name"></option>
+                  </template>
+                </select>
+              </section>
+
+              <!-- Footer -->
+              <div class="flex justify-between gap-3 mt-8">
+                <button type="button" class="px-4 py-2 bg-card-bg rounded-lg" @click="step = 1">← Zurück</button>
+                <div class="flex gap-3">
+                  <button type="button"
+                          class="px-4 py-2 bg-primary text-white rounded-lg"
+                          :disabled="!canCreate()"
+                          :class="!canCreate() ? 'opacity-50 cursor-not-allowed' : ''"
+                          @click="submitCreate()">Ticket erstellen</button>
+
+                  <button type="button"
+                          class="px-4 py-2 bg-emerald-600 text-white rounded-lg"
+                          :disabled="!validate().ok"
+                          :class="!validate().ok ? 'opacity-50 cursor-not-allowed' : ''"
+                          @click="submitFinish()">Abschließen ✔</button>
                 </div>
               </div>
             </div>
-
-            <!-- Optionale Begründung -->
-            <div class="pt-2">
-              <label class="text-text text-sm block mb-1">Begründung (optional)</label>
-              <textarea class="field w-full" rows="2" x-model="sperren.hardwareBegruendung"
-                        placeholder="Zusätzliche Hinweise/Begründung..."></textarea>
-            </div>
-          </section>
-
-          <!-- Footer -->
-          <div class="pt-4 flex justify-end gap-3 border-t border-border mt-6">
-            <button type="button" class="px-4 py-2 bg-card-bg text-text rounded-lg focus-ring" @click="showTicketModal = false">
-              Abbrechen
-            </button>
-            <button type="submit" class="px-4 py-2 bg-primary hover:bg-primaryHover text-white rounded-lg focus-ring">
-              Absenden
-            </button>
-          </div>
-
+          </template>
         </form>
+
       </div>
     </div>
   </div>
 </div>
+
+<script>
+function edvSperrenWizard() {
+  return {
+    step: 1,
+    form: {
+      benutzer: "", grund: "", sperrmodus: "sofort", sperrdatum: "",
+      mailsWeiterleiten: false, weiterleitenAn: "",
+      postfachVollzugriff: false, vollzugriffFuer: "",
+      abwesenheitAktiv: false, abwesenheitText: "Mitarbeiter ist nicht mehr im Haus",
+      datenAktion: "", datenBenutzer: "",
+      hardwareOption: "anIT", hardwareWeitergabeName: "", hardwareBegruendung: "",
+      eloSperren: false, eloPosition: ""
+    },
+    users: [],
+    groups: [],
+    assignee_id: "",
+    assigneeName: "",
+    group_id: "",
+
+    init() {
+      this.$watch("showTicketModal", v => {
+        if (v) {
+          this.step = 1;
+          this.assignee_id = "";
+          this.assigneeName = "";
+          this.group_id = "";
+          this.loadUsers();
+          this.loadGroups();
+        }
+      });
+    },
+
+    async loadUsers() {
+      const res = await fetch("/api/admin/users");
+      const json = await res.json();
+      this.users = json.users || [];
+    },
+
+    async loadGroups() {
+      const res = await fetch("/api/groups");
+      const json = await res.json();
+      this.groups = json || [];
+    },
+
+    updateAssigneeName(event) {
+      const selected = event.target.selectedOptions[0];
+      this.assigneeName = selected?.dataset.name || "";
+    },
+
+    goStep2() {
+      this.step = 2;
+    },
+
+    validate() {
+      // Beispiel: nur Grund + benutzerpflichtig — hier anpassen
+      if (!this.form.benutzer.trim()) return { ok:false };
+      if (!this.form.grund.trim()) return { ok:false };
+      return { ok:true };
+    },
+
+    canCreate() {
+      return this.assignee_id || this.group_id;
+    },
+
+    submitCreate() {
+      if (!this.canCreate()) {
+        alert("Bitte einen Benutzer oder eine Gruppe auswählen.");
+        return;
+      }
+      this.submit(false);
+    },
+
+    submitFinish() {
+      const v = this.validate();
+      if (!v.ok) {
+        alert("Bitte alle Pflichtfelder ausfüllen.");
+        return;
+      }
+      this.submit(true);
+    },
+
+    submit(finish) {
+      const payload = {
+        ticketType: "zugangSperren",
+        data: this.form,
+        assignee_id: this.assignee_id || null,
+        assignee_name: this.assigneeName || null,
+        group_id: this.group_id || null,
+        finish: finish
+      };
+      this.$refs.descField.value = JSON.stringify(payload);
+      this.$refs.form.submit();
+    }
+  }
+}
+</script>

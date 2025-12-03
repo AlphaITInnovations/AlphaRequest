@@ -3,9 +3,9 @@
 from typing import Dict
 import time
 from fastapi import Request, HTTPException, status
-from alpharequestmanager.config import config
-from alpharequestmanager.logger import logger
-from alpharequestmanager.metrics import update_last_activity
+from alpharequestmanager.utils.config import config
+from alpharequestmanager.utils.logger import logger
+from alpharequestmanager.services.metrics import update_last_activity
 # Min-interval to reduce Set-Cookie churn
 SAFE_UPDATE_INTERVAL = 60  # seconds
 
@@ -67,4 +67,6 @@ def get_current_user(request: Request) -> Dict:
     if now - last_activity >= SAFE_UPDATE_INTERVAL:
         session["last_activity"] = now
 
+
+    #print(user)
     return user

@@ -1,8 +1,8 @@
-# alpharequestmanager/auth.py
+# alpharequestmanager/microsoft_auth.py
 
 from msal import ConfidentialClientApplication
 from fastapi import Request
-from alpharequestmanager.config import config
+from alpharequestmanager.utils.config import config
 
 AUTHORITY = f"https://login.microsoftonline.com/{config.TENANT_ID}"
 SCOPES = config.SCOPE

@@ -1,12 +1,12 @@
 import time
-from datetime import datetime
-from alpharequestmanager import database, ninja_api
-from alpharequestmanager.database import update_ticket
-from alpharequestmanager.ninja_api import get_ticket
-from alpharequestmanager.logger import logger
-from alpharequestmanager.models import RequestStatus
-from alpharequestmanager.config import config
-from alpharequestmanager.models import Ticket, TicketType
+from alpharequestmanager.database import database
+from alpharequestmanager.services import ninja_api
+from alpharequestmanager.services.ninja_api import get_ticket
+from alpharequestmanager.utils.logger import logger
+from alpharequestmanager.utils.config import config
+from alpharequestmanager.models.models import Ticket
+
+
 def poll_ninja_changes():
     """
     Pollt alle Tickets mit 'ninja_ticket_id' und synchronisiert Status-Änderungen zurück ins Self-Service-Portal.
@@ -32,9 +32,10 @@ def poll_ninja_changes():
 
 
 def start_polling():
-    #logger.info("Starte Ninja-Sync Polling...")
+    logger.info("Starte Ninja-Sync Polling...")
     while True:
         poll_ninja_changes()
+        logger.info("Successfull Ninja-Sync Polling...")
         time.sleep(config.NINJA_POLL_INTERVAL)
 
 

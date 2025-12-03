@@ -9,10 +9,10 @@ from typing import Optional
 
 import requests
 
-from alpharequestmanager.config import config
-from alpharequestmanager.logger import logger
-import alpharequestmanager.database as db
-from alpharequestmanager.ninja_render import render_ticket_description
+from alpharequestmanager.utils.config import config
+from alpharequestmanager.utils.logger import logger
+import alpharequestmanager.database.database as db
+from alpharequestmanager.services.ninja_render import render_ticket_description
 
 # =========================
 # Konfiguration

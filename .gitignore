@@ -7,3 +7,4 @@ alpharequestmanager/tickets.db
 .venv
 .env
 data
+/alpharequestmanager/templates/modals/old/

@@ -1,164 +1,267 @@
+<!-- Niederlassung schließen Modal -->
 <div x-show="ticketType === 'Niederlassung schließen' && showTicketModal" x-cloak>
   <!-- Overlay -->
-  <div class="fixed inset-0 bg-black/50 backdrop-blur-md z-40" @click="showTicketModal = false"></div>
+  <div class="fixed inset-0 bg-black/50 z-40 @click.self" @click.self="showTicketModal = false"></div>
 
-  <!-- Modal -->
-  <div class="fixed inset-0 z-50 overflow-y-auto" @keydown.escape.window="showTicketModal = false">
+  <!-- Modal Container -->
+  <div class="fixed inset-0 z-50 overflow-y-auto pointer-events-auto" @keydown.escape.window="showTicketModal = false">
     <div class="min-h-screen flex items-center justify-center px-4 py-10">
-      <div class="modal-panel w-full max-w-3xl p-6 relative"
-           x-data="{
-             nlCl: {
-               firma:'', niederlassung:'', aktuell:'', schliessung:'', bemerkung:'',
-               dslKuendigung:false, rufnummerKuendigung:false,
-               hardware:'', targetNL:''
-             },
-             companies: [], companiesLoading:false, companiesError:'',
-             error:'',
-             async fetchCompanies() {
-               try {
-                 this.companiesLoading = true;
-                 this.companiesError = '';
-                 const res = await fetch('/api/companies', { headers: {'Accept':'application/json'} });
-                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                 const j = await res.json();
-                 this.companies = Array.isArray(j?.companies) ? j.companies : [];
-               } catch(e) {
-                 this.companiesError = 'Firmen konnten nicht geladen werden.';
-               } finally {
-                 this.companiesLoading = false;
-               }
-             },
-             submitNlSchliessenForm() {
-               this.error = '';
-               if (!this.nlCl.dslKuendigung || !this.nlCl.rufnummerKuendigung) {
-                 this.error = 'Bitte bestätigen Sie DSL‑ und Rufnummerkündigung.';
-                 return;
-               }
-               if (!['toNL','toIT'].includes(this.nlCl.hardware)) {
-                 this.error = 'Bitte wählen Sie eine Hardware‑Option.';
-                 return;
-               }
-               if (this.nlCl.hardware === 'toNL' && !this.nlCl.targetNL.trim()) {
-                 this.error = 'Bitte geben Sie die Ziel‑NL an.';
-                 return;
-               }
-               const payload = { ticketType: 'Niederlassung schließen', data: this.nlCl };
-               this.$refs.descField.value = JSON.stringify(payload);
-               this.$refs.form.submit();
-             }
-           }"
-           x-init="fetchCompanies()"
-      >
 
-        <!-- Close -->
+      <!-- PANEL -->
+      <div class="modal-panel w-full max-w-3xl p-6 relative z-[60]"
+           x-data="nlClWizard()"
+           x-init="init()">
+
+        <!-- CLOSE BTN -->
         <button @click="showTicketModal = false"
-                class="absolute top-4 right-4 text-text hover:text-danger text-2xl focus-ring"
-                aria-label="Schließen">×</button>
+                class="absolute top-4 right-4 text-text hover:text-danger text-2xl focus-ring" aria-label="Schließen">×</button>
 
-        <!-- Title -->
         <h3 class="text-2xl font-bold mb-4 text-text">❌ Niederlassung schließen</h3>
 
-        <!-- Form -->
-        <form x-ref="form" method="post" action="/tickets" class="space-y-6" @submit.prevent="submitNlSchliessenForm">
+        <form x-ref="form" method="post" action="/tickets" @submit.prevent="submitTicket()">
+
+          <!-- HIDDEN FIELDS -->
+          <input type="hidden" name="ticket_type" value="Niederlassung schließen">
           <input type="hidden" name="title" value="Niederlassung schließen">
+          <input type="hidden" name="assignee_id" :value="assignee_id">
+          <input type="hidden" name="assignee_name" :value="assigneeName">
+          <input type="hidden" name="group_id" :value="group_id">
           <textarea x-ref="descField" name="description" class="hidden"></textarea>
 
-          <!-- Error Message -->
-          <template x-if="error">
-            <div class="text-red-600 font-medium border border-red-400 bg-red-50 p-3 rounded">
-              <span x-text="error"></span>
+          <!-- ========== STEP 1: Niederlassung schließen Angaben ========== -->
+          <template x-if="step === 1">
+            <div class="space-y-6">
+
+              <!-- Firma -->
+              <section class="card card--pad bg-card-bg border-border">
+                <label class="text-text text-sm block mb-1">Firma</label>
+
+                <template x-if="companiesLoading">
+                  <div class="field w-full flex items-center justify-between text-muted">
+                    Lade Firmen …
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"></circle>
+                      <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="4"></path>
+                    </svg>
+                  </div>
+                </template>
+
+                <template x-if="!companiesLoading && companiesError">
+                  <div class="space-y-1">
+                    <div class="text-xs text-red-600" x-text="companiesError"></div>
+                    <input class="field w-full" x-model="nlCl.firma" placeholder="Firma manuell eingeben" required>
+                  </div>
+                </template>
+
+                <template x-if="!companiesLoading && !companiesError">
+                  <select class="field w-full" x-model="nlCl.firma" name="firma" required>
+                    <option value="">-- bitte wählen --</option>
+                    <template x-for="c in companies" :key="c">
+                      <option :value="c" x-text="c"></option>
+                    </template>
+                  </select>
+                </template>
+              </section>
+
+              <!-- Adresse / Niederlassung / Datum -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="text-text text-sm block mb-1">Niederlassung</label>
+                  <input type="text" x-model="nlCl.niederlassung" class="field w-full" name="niederlassung" required>
+                </div>
+                <div>
+                  <label class="text-text text-sm block mb-1">Aktuelle Adresse</label>
+                  <input type="text" x-model="nlCl.aktuell" class="field w-full" name="aktuell" required>
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="text-text text-sm block mb-1">Schließungstermin</label>
+                  <input type="date" x-model="nlCl.schliessung" class="field w-full" name="schliessung" required>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-text text-sm block mb-1">Bemerkungen (optional)</label>
+                <textarea x-model="nlCl.bemerkung" rows="3" class="field w-full" name="bemerkung"></textarea>
+              </div>
+
+              <!-- Pflichtfelder -->
+              <section class="card card--pad bg-red-50 dark:bg-red-900/20 border border-red-300 text-red-800 dark:text-red-100 space-y-2">
+                <p class="font-medium mb-2">Bitte bestätigen:</p>
+                <label class="inline-flex items-start gap-2">
+                  <input type="checkbox" x-model="nlCl.dslKuendigung" name="dslKuendigung" class="mt-1">
+                  DSL/Internetleitung wird gekündigt.
+                </label>
+                <label class="inline-flex items-start gap-2">
+                  <input type="checkbox" x-model="nlCl.rufnummerKuendigung" name="rufnummerKuendigung" class="mt-1">
+                  Festnetznummer wird gekündigt.
+                </label>
+              </section>
+
+              <!-- Hardware Entscheidung -->
+              <section class="card card--pad bg-card-bg border-border space-y-3">
+                <label class="text-text text-sm block font-semibold">Hardware vor Ort:</label>
+                <label class="flex items-center gap-2">
+                  <input type="radio" name="hardware" value="toNL" x-model="nlCl.hardware">
+                  Geht in eine andere Niederlassung
+                </label>
+                <template x-if="nlCl.hardware === 'toNL'">
+                  <input type="text" x-model="nlCl.targetNL" placeholder="Ziel‑Niederlassung" class="field w-full" name="targetNL">
+                </template>
+                <label class="flex items-center gap-2">
+                  <input type="radio" name="hardware" value="toIT" x-model="nlCl.hardware">
+                  Wird an IT gesendet
+                </label>
+              </section>
+
+              <!-- Weiter zu STEP 2 -->
+              <div class="flex justify-end gap-3 mt-6">
+                <button type="button" class="px-4 py-2 bg-card-bg text-text rounded-lg focus-ring"
+                        @click="showTicketModal = false">Abbrechen</button>
+                <button type="button" class="px-4 py-2 bg-primary text-white rounded-lg focus-ring"
+                        @click="goStep2()">Weiter →</button>
+              </div>
             </div>
           </template>
 
-          <!-- Dropdown für Firma -->
-          <section class="card card--pad bg-card-bg border-border">
-            <label class="text-text text-sm block mb-1">Firma</label>
-            <template x-if="companiesLoading">
-              <div class="field w-full flex items-center justify-between text-muted">
-                Lade Firmen …
-                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"/>
-                  <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="4"/>
-                </svg>
+          <!-- ========== STEP 2: Zuständigkeit / Assignee oder Gruppe ========== -->
+          <template x-if="step === 2">
+            <div class="space-y-8">
+
+              <h2 class="text-xl font-semibold">Zuständigkeit</h2>
+
+              <section class="card card--pad border-border">
+                <label class="text-sm font-medium block mb-1">👤 Verantwortlicher Benutzer</label>
+                <select class="field w-full mt-2"
+                        x-model="assignee_id"
+                        @change="updateAssigneeName($event)"
+                        :disabled="group_id"
+                        name="assignee_select">
+                  <option value="">– Benutzer auswählen –</option>
+                  <template x-for="u in users" :key="u.id">
+                    <option :value="u.id" :data-name="u.displayName" x-text="u.displayName + ' (' + u.mail + ')'"></option>
+                  </template>
+                </select>
+              </section>
+
+              <section class="card card--pad border-border">
+                <label class="text-sm font-medium block mb-1">👥 Verantwortliche Gruppe</label>
+                <select class="field w-full mt-2"
+                        x-model="group_id"
+                        :disabled="assignee_id"
+                        name="group_select">
+                  <option value="">– Gruppe auswählen –</option>
+                  <template x-for="g in groups" :key="g.id">
+                    <option :value="g.id" x-text="g.name"></option>
+                  </template>
+                </select>
+              </section>
+
+              <div class="flex justify-between gap-3 mt-6">
+                <button type="button" class="px-4 py-2 bg-card-bg text-text rounded-lg focus-ring"
+                        @click="step = 1">← Zurück</button>
+                <button type="button"
+                        class="px-4 py-2 bg-primary text-white rounded-lg focus-ring"
+                        :disabled="!canCreate()"
+                        :class="!canCreate() ? 'opacity-50 cursor-not-allowed' : ''"
+                        @click="submitCreate()">Ticket erstellen</button>
               </div>
-            </template>
-            <template x-if="!companiesLoading && companiesError">
-              <div class="space-y-1">
-                <div class="text-xs text-red-600" x-text="companiesError"></div>
-                <input class="field w-full" x-model="nlCl.firma" placeholder="Firma manuell eingeben" required>
-              </div>
-            </template>
-            <template x-if="!companiesLoading && !companiesError">
-              <select x-model="nlCl.firma" class="field w-full" required>
-                <option value="">-- bitte wählen --</option>
-                <template x-for="c in companies" :key="c">
-                  <option :value="c" x-text="c"></option>
-                </template>
-              </select>
-            </template>
-          </section>
-
-          <!-- Andere Felder -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label class="text-text text-sm block mb-1">Niederlassung</label>
-              <input type="text" x-model="nlCl.niederlassung" class="field w-full" required>
             </div>
-            <div>
-              <label class="text-text text-sm block mb-1">Aktuelle Adresse</label>
-              <input type="text" x-model="nlCl.aktuell" class="field w-full" required>
-            </div>
-            <div class="sm:col-span-2">
-              <label class="text-text text-sm block mb-1">Schließungstermin</label>
-              <input type="date" x-model="nlCl.schliessung" class="field w-full" required>
-            </div>
-          </div>
+          </template>
 
-          <div>
-            <label class="text-text text-sm block mb-1">Bemerkungen (optional)</label>
-            <textarea x-model="nlCl.bemerkung" rows="3" class="field w-full"></textarea>
-          </div>
-
-          <!-- Pflichtfelder -->
-          <section class="card card--pad bg-red-50 dark:bg-red-900/20 border border-red-300 text-red-800 dark:text-red-100 space-y-2">
-            <p class="font-medium mb-2">Bitte bestätigen:</p>
-            <label class="inline-flex items-start gap-2">
-              <input type="checkbox" x-model="nlCl.dslKuendigung" class="mt-1">
-              Die <strong>DSL/Internetleitung</strong> wird gekündigt.
-            </label>
-            <label class="inline-flex items-start gap-2">
-              <input type="checkbox" x-model="nlCl.rufnummerKuendigung" class="mt-1">
-              Die <strong>Festnetzrufnummer</strong> wird gekündigt und ist danach nicht mehr erreichbar!
-            </label>
-          </section>
-
-          <!-- Hardware-Aktion -->
-          <section class="card card--pad bg-card-bg border-border space-y-3">
-            <label class="text-text text-sm block font-semibold">Hardware vor Ort:</label>
-            <label class="flex items-center gap-2">
-              <input type="radio" name="hardware" value="toNL" x-model="nlCl.hardware">
-              Geht in eine andere Niederlassung
-            </label>
-            <template x-if="nlCl.hardware === 'toNL'">
-              <input type="text" x-model="nlCl.targetNL" placeholder="Ziel-Niederlassung" class="field w-full">
-            </template>
-            <label class="flex items-center gap-2">
-              <input type="radio" name="hardware" value="toIT" x-model="nlCl.hardware">
-              Wird an IT gesendet
-            </label>
-          </section>
-
-          <!-- Footer -->
-          <div class="pt-4 flex justify-end gap-3 border-t border-border mt-6">
-            <button type="button" class="px-4 py-2 bg-card-bg text-text rounded-lg focus-ring" @click="showTicketModal = false">
-              Abbrechen
-            </button>
-            <button type="submit" class="px-4 py-2 bg-primary hover:bg-primaryHover text-white rounded-lg focus-ring">
-              Absenden
-            </button>
-          </div>
         </form>
+
       </div>
     </div>
   </div>
 </div>
+
+<script>
+function nlClWizard() {
+  return {
+    step: 1,
+    nlCl: {
+      firma: '', niederlassung: '', aktuell: '', schliessung: '', bemerkung: '',
+      dslKuendigung: false, rufnummerKuendigung: false,
+      hardware: '', targetNL: ''
+    },
+    companies: [],
+    companiesLoading: false,
+    companiesError: '',
+
+    users: [],
+    groups: [],
+    assignee_id: '',
+    assigneeName: '',
+    group_id: '',
+
+    init() {
+      this.fetchCompanies();
+      this.loadUsers();
+      this.loadGroups();
+    },
+
+    async fetchCompanies() {
+      this.companiesLoading = true;
+      try {
+        const res = await fetch('/api/companies', { headers: { 'Accept': 'application/json' } });
+        const j = await res.json();
+        this.companies = Array.isArray(j?.companies) ? j.companies : [];
+      } catch (e) {
+        this.companiesError = 'Firmen konnten nicht geladen werden.';
+      } finally {
+        this.companiesLoading = false;
+      }
+    },
+
+    async loadUsers() {
+      const res = await fetch('/api/admin/users');
+      const json = await res.json();
+      this.users = json.users || [];
+    },
+
+    async loadGroups() {
+      const res = await fetch('/api/groups');
+      const json = await res.json();
+      this.groups = json || [];
+    },
+
+    goStep2() {
+      this.step = 2;
+    },
+
+    canCreate() {
+      return this.assignee_id || this.group_id;
+    },
+
+    updateAssigneeName(event) {
+      const sel = event.target.selectedOptions[0];
+      this.assigneeName = sel?.dataset.name || '';
+    },
+
+    submitCreate() {
+      if (!this.canCreate()) {
+        alert("Bitte einen Benutzer oder eine Gruppe auswählen.");
+        return;
+      }
+      this.submit(true);
+    },
+
+    submitTicket() {
+      // Prevent from direct form submit in step 1
+      // Advancing only via goStep2
+    },
+
+    submit(finish) {
+      const payload = {
+        data: this.nlCl,
+        assignee_id: this.assignee_id || null,
+        assignee_name: this.assigneeName || null,
+        group_id: this.group_id || null,
+        finish: finish
+      };
+      this.$refs.descField.value = JSON.stringify(payload);
+      this.$refs.form.submit();
+    }
+  }
+}
+</script>

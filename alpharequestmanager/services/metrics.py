@@ -2,7 +2,7 @@
 import os
 import threading
 import time
-from typing import Optional, Dict
+from typing import Dict
 import base64
 
 from fastapi import Request, Response
@@ -270,10 +270,10 @@ def _collect_business_metrics():
     if not ENABLE_METRICS or TICKET_MANAGER is None:
         return
 
-    from alpharequestmanager.models import RequestStatus
+    from alpharequestmanager.models.models import RequestStatus
     import json
 
-    tickets = TICKET_MANAGER.list_all_tickets()
+    tickets = TICKET_MANAGER.list_all()
 
     status_count: dict[str, int] = {}
     type_count: dict[str, int] = {}

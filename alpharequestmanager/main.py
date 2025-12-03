@@ -1,0 +1,105 @@
+import asyncio
+import sys
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from alpharequestmanager.core.app_lifespan import lifespan
+from alpharequestmanager.core.session import setup_session
+from alpharequestmanager.api import (
+    auth,
+    dashboard,
+    tickets,
+    admin,
+    analytics,
+    ninja_oauth,
+    users,
+    groups,
+)
+from alpharequestmanager.services.metrics import init_metrics
+from alpharequestmanager.database import database as db
+from alpharequestmanager.services.ticket_service import TicketService
+from alpharequestmanager.utils.config import config
+from starlette.datastructures import State
+from typing import cast
+from alpharequestmanager.services.microsoft_graph import list_all_users_with_e3_license
+from alpharequestmanager.models.models import TicketType
+
+
+
+def get_ticket_type_dict():
+    return {t.name: t.value for t in TicketType}
+
+
+
+def create_app() -> FastAPI:
+
+    app = FastAPI(lifespan=lifespan)
+    #app.state = SimpleNamespace()
+    # global state
+    app.state = cast(State, app.state)
+    app.state.manager = TicketService()
+
+    # Templates & Static
+    app.mount("/static", StaticFiles(directory="./static"), name="static")
+    app.templates = Jinja2Templates(directory="./templates")
+    app.templates.env.globals["SESSION_TIMEOUT"] = config.SESSION_TIMEOUT
+    app.templates.env.globals["TicketTypes"] = get_ticket_type_dict()
+
+
+    # Session Middleware
+    setup_session(app)
+
+    # Router registrieren
+    app.include_router(auth.router)
+    app.include_router(dashboard.router)
+    app.include_router(tickets.router)
+    app.include_router(admin.router)
+    app.include_router(analytics.router)
+    app.include_router(ninja_oauth.router)
+    app.include_router(users.router)
+    app.include_router(groups.router)
+    # Metrics
+    init_metrics(app, config.SESSION_TIMEOUT, app.state.manager)
+
+    return app
+
+
+app = create_app()
+
+def configure_event_loop():
+    """Set Windows-specific asyncio event loop policy if needed."""
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
+def run_server(https: bool = False):
+    """Run the Uvicorn server with or without HTTPS."""
+    ssl_args = {}
+    if https:
+        ssl_args = {
+            "ssl_keyfile": "../data/cert/key.pem",
+            "ssl_certfile": "../data/cert/cert.pem",
+        }
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=config.PORT,
+        reload=False,
+        **ssl_args,
+    )
+
+
+def main():
+    db.init_db()
+    configure_event_loop()
+    run_server(https=config.HTTPS)
+
+
+if __name__ == "__main__":
+
+    #print("starting application...")
+    main()
+

@@ -1,13 +1,13 @@
 # config.py
 import os
 from dotenv import load_dotenv
-import alpharequestmanager.database as db
+import alpharequestmanager.database.database as db
 
 def str_to_bool(s):
     return s.lower() in ("true", "1", "yes", "on")
 
 # .env optional laden – macht nichts, wenn nicht vorhanden
-load_dotenv(dotenv_path=".env", override=False)
+load_dotenv(dotenv_path="..\.env", override=False)
 
 class Config:
     APP_ENV = os.getenv("APP_ENV", "development")
