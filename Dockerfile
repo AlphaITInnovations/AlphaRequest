@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Standardbefehl beim Start des Containers
-CMD ["python", "main.py"]
+CMD ["python", "alpharequestmanager/main.py"]
