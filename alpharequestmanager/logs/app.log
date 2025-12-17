@@ -11748,3 +11748,25 @@
 2025-12-17 14:26:59,146 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=6af0191373c547a49a4e7aec1f5e3c54 last=1765978011 now=1765978019 cookie_len=602
 2025-12-17 14:27:03,442 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=6af0191373c547a49a4e7aec1f5e3c54 last=1765978011 now=1765978023 cookie_len=602
 2025-12-17 14:27:08,865 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=6af0191373c547a49a4e7aec1f5e3c54 last=1765978011 now=1765978028 cookie_len=602
+2025-12-17 14:49:41,225 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 14:51:02,929 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 14:51:02,949 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 14:51:02,966 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:51:04,094 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 14:51:04,094 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:52:04,600 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 14:52:04,625 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 14:52:04,640 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:52:05,687 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 14:52:05,687 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:53:34,256 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 14:53:34,267 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 14:53:34,283 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:53:35,337 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 14:53:35,337 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:56:14,655 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 14:56:14,680 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 14:56:14,697 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:56:15,769 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 14:56:15,770 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 14:56:16,743 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache

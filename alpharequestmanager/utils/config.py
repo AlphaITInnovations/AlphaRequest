@@ -2,12 +2,15 @@
 import os
 from dotenv import load_dotenv
 import alpharequestmanager.database.database as db
+from pathlib import Path
 
 def str_to_bool(s):
     return s.lower() in ("true", "1", "yes", "on")
 
-# .env optional laden – macht nichts, wenn nicht vorhanden
-load_dotenv(dotenv_path="..\.env", override=False)
+BASE_DIR = Path(__file__).resolve().parents[1]
+ENV_PATH = BASE_DIR.parent / ".env"
+
+load_dotenv(ENV_PATH)
 
 class Config:
     APP_ENV = os.getenv("APP_ENV", "development")

@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -41,7 +42,14 @@ def create_app() -> FastAPI:
     app.state = cast(State, app.state)
     app.state.manager = TicketService()
 
-    app.mount("/static", StaticFiles(directory="./static"), name="static")
+    BASE_DIR = Path(__file__).resolve().parent
+
+    app.mount(
+        "/static",
+        StaticFiles(directory=BASE_DIR / "static"),
+        name="static",
+    )
+
     app.templates = Jinja2Templates(directory="./templates")
     app.templates.env.globals["SESSION_TIMEOUT"] = config.SESSION_TIMEOUT
     app.templates.env.globals["TicketTypes"] = get_ticket_type_dict()
