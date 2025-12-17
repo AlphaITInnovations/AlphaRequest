@@ -11,5 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Anwendungscode kopieren
 COPY . .
 
+WORKDIR /app/alpharequest
+
 # Standardbefehl beim Start des Containers
-CMD ["python", "alpharequestmanager/main.py"]
+CMD ["python", "main.py"]
