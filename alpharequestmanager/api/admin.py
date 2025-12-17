@@ -44,10 +44,16 @@ async def pruefung_page(request: Request, user: dict = Depends(get_current_user)
         except Exception as e:
             print(f"Fehler beim Parsen der Ticketbeschreibung (ID {t.id}):", e)
             description_parsed = {}
-
+        assignee_history = []
+        if t.assignee_history:
+            try:
+                assignee_history = json.loads(t.assignee_history)
+                #print(assignee_history)
+            except:
+                pass
         item = {
             "id": t.id,
-            "type": t.title,
+            "type": t.ticket_type,
             "date": t.created_at.strftime("%d.%m.%Y"),
             "creator": t.owner_name,
             "status": t.status.value,
@@ -56,7 +62,7 @@ async def pruefung_page(request: Request, user: dict = Depends(get_current_user)
             "ninja_metadata": json.loads(t.ninja_metadata) if t.ninja_metadata else None,
             "assignee_id": t.assignee_id,
             "assignee_name": t.assignee_name,
-            "assignee_history": t.assignee_history,
+            "assignee_history": assignee_history,
             "assignee_group_id": t.assignee_group_id,
             "assignee_group_name": t.assignee_group_name,
         }

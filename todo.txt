@@ -1,6 +1,7 @@
 TODO:
 - mehrere Fachabteilungen
 - Fachabteilungen konfigurierbar
+- Fachabteilung zu assignee verlauf hinzufügen
 - Update Mail
 - Ticket Permissions
 - Ticket Felder anpasssen

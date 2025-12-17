@@ -232,25 +232,161 @@ document.addEventListener('alpine:init', () => {
 </div>
 
 <!-- ================= MODAL ================= -->
+<!-- ================= MODAL ================= -->
 <div x-show="isOpen" x-cloak class="fixed inset-0 z-50">
-  <div class="absolute inset-0 bg-black/40" @click="close()"></div>
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"
+       @click="close()"></div>
 
   <div class="absolute inset-0 flex items-center justify-center p-6">
-    <div class="bg-white max-w-3xl w-full rounded-xl shadow-xl p-6">
+    <div class="bg-white dark:bg-gray-900
+                w-full max-w-5xl
+                rounded-2xl shadow-2xl
+                border border-gray-200 dark:border-gray-700
+                overflow-hidden">
 
-      <div class="flex justify-between items-start mb-4">
-        <h2 class="text-xl font-semibold">
-          Ticket #<span x-text="pruefungItem.id"></span>
-        </h2>
-        <button @click="close()" class="text-gray-500">✕</button>
+      <!-- ================= HEADER ================= -->
+      <div class="px-6 py-4 border-b flex items-start justify-between">
+        <div>
+          <div class="text-xs uppercase tracking-wide text-gray-500">
+            Ticket #<span x-text="pruefungItem.id"></span>
+          </div>
+          <h2 class="text-xl font-semibold mt-1"
+              x-text="pruefungItem.type"></h2>
+        </div>
+
+        <span
+          class="px-3 py-1 rounded-full text-xs font-semibold"
+          :class="statusBadge(pruefungItem.status)"
+          x-text="pruefungItem.status">
+        </span>
       </div>
 
-      <pre class="bg-gray-100 rounded p-4 text-sm overflow-auto max-h-[50vh]"
-           x-text="JSON.stringify(pruefungItem, null, 2)"></pre>
+      <!-- ================= CONTENT ================= -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-0">
 
-      <div class="mt-6 flex justify-end gap-3">
+        <!-- ================= LEFT ================= -->
+        <aside class="lg:col-span-4
+                      border-r dark:border-gray-700
+                      p-6 space-y-6">
+
+          <!-- META -->
+          <div class="space-y-3">
+            <div class="text-xs uppercase text-gray-500 tracking-wide">
+              Übersicht
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="rounded-lg border p-3">
+                <div class="text-xs text-gray-500">Erstellt am</div>
+                <div class="font-medium" x-text="pruefungItem.date"></div>
+              </div>
+
+              <div class="rounded-lg border p-3">
+                <div class="text-xs text-gray-500">Ersteller</div>
+                <div class="font-medium" x-text="pruefungItem.creator"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- OWNER -->
+          <div>
+            <div class="text-xs uppercase text-gray-500 tracking-wide mb-2">
+              Antragsteller
+            </div>
+
+            <div class="rounded-xl border divide-y">
+              <div class="p-3">
+                <div class="font-medium"
+                     x-text="pruefungItem.owner_info.displayName"></div>
+                <div class="text-sm text-gray-500"
+                     x-text="pruefungItem.owner_info.email"></div>
+              </div>
+
+              <div class="p-3 text-sm">
+                <div x-text="pruefungItem.owner_info.company"></div>
+                <div class="text-gray-500"
+                     x-text="pruefungItem.owner_info.position"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ASSIGNEE HISTORY -->
+            <!-- ASSIGNEE HISTORY -->
+            <!-- ASSIGNEE HISTORY -->
+<!-- ASSIGNEE HISTORY -->
+<div>
+  <div class="text-xs uppercase text-gray-500 tracking-wide mb-3">
+    Zuweisungsverlauf
+  </div>
+
+  <!-- Leer -->
+  <template x-if="!pruefungItem.assignee_history || pruefungItem.assignee_history.length === 0">
+    <div class="text-sm text-gray-500 italic">
+      Kein Verlauf vorhanden
+    </div>
+  </template>
+
+  <!-- Timeline -->
+  <ol
+    x-show="pruefungItem.assignee_history && pruefungItem.assignee_history.length > 0"
+    class="relative border-l border-gray-300 dark:border-gray-600 pl-6 space-y-6">
+
+    <template x-for="(h, i) in pruefungItem.assignee_history" :key="i">
+      <li class="relative">
+
+        <!-- Punkt -->
+        <span
+          class="absolute -left-[11px] top-1
+                 w-5 h-5 rounded-full
+                 bg-primary ring-4 ring-white dark:ring-gray-900">
+        </span>
+
+        <div class="font-medium text-sm"
+             x-text="h.user_name || 'Unbekannt'"></div>
+
+        <div class="text-xs text-gray-500"
+             x-text="new Date(h.timestamp).toLocaleString()"></div>
+
+      </li>
+    </template>
+  </ol>
+</div>
+
+
+
+
+
+        </aside>
+
+        <!-- ================= RIGHT ================= -->
+        <section class="lg:col-span-8 p-6 space-y-4
+                        max-h-[70vh] overflow-y-auto">
+
+          <div class="text-xs uppercase text-gray-500 tracking-wide">
+            Auftragsdetails
+          </div>
+
+          <!-- DESCRIPTION (DYNAMISCH) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <template x-for="(val, key) in pruefungItem.description"
+                      :key="key">
+              <div class="rounded-xl border p-4">
+                <div class="text-xs uppercase text-gray-500 mb-1"
+                     x-text="key"></div>
+                <div class="font-medium whitespace-pre-wrap"
+                     x-text="val || '–'"></div>
+              </div>
+            </template>
+          </div>
+
+        </section>
+      </div>
+
+      <!-- ================= FOOTER ================= -->
+      <div class="px-6 py-4 border-t flex justify-end">
         <button @click="close()"
-                class="px-4 py-2 border rounded-lg">
+                class="px-5 py-2.5 rounded-md
+                       bg-gray-200 hover:bg-gray-300">
           Schließen
         </button>
       </div>
@@ -258,6 +394,7 @@ document.addEventListener('alpine:init', () => {
     </div>
   </div>
 </div>
+
 
 </div>
 {% endblock %}
