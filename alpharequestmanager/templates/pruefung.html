@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Prüfung – AlphaRequestManager{% endblock %}
-{% block page_title %}Prüfung{% endblock %}
+{% block title %}Ticketübersicht – AlphaRequest{% endblock %}
 
 {% block head %}
 <script>
@@ -8,786 +7,154 @@
 </script>
 
 <script>
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('ticketsManager', () => ({
-      items: window._TICKETS,
-      filter: 'all',
-      search: '',
-      statuses: ['all','pending','approved','rejected'],
-      pruefungItem: null,
-      parsedDesc: null,
-      editedDesc: null,
-      isOpen: false,
-      isSubmitting: false,
-      jsonError: '',
-      selectedTickets: [],
-      // Ansicht/Editor
-      viewMode: 'overview', // 'overview' | 'details' | 'raw'
-      editMode: false,      // false => Anzeige, true => Editor
+document.addEventListener('alpine:init', () => {
+  Alpine.data('ticketsManager', () => ({
 
-      // ---------- Utils für Darstellung ----------
-      looksLikeJson(t) {
-        return (typeof t === 'string') &&
-          ((t.trim().startsWith('{') && t.trim().endsWith('}')) ||
-           (t.trim().startsWith('[') && t.trim().endsWith(']')));
-      },
-      smartParse(v) {
-        if (typeof v !== 'string') return v;
-        const t = v.trim();
-        if (t === '') return '';
-        if (t === 'true' || t === 'false') return t === 'true';
-        if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
-        if (this.looksLikeJson(t)) {
-          try { return JSON.parse(t); } catch (e) {}
-        }
-        return v;
-      },
-      deepParse(v, depth = 0) {
-        if (depth > 4) return v;
-        const p = this.smartParse(v);
-        if (Array.isArray(p)) return p.map(x => this.deepParse(x, depth + 1));
-        if (p && typeof p === 'object') {
-          const out = {};
-          for (const [k, val] of Object.entries(p)) {
-            out[k] = this.deepParse(val, depth + 1);
-          }
-          return out;
-        }
-        return p;
-      },
-      deepClone(v) { return JSON.parse(JSON.stringify(v)); },
-      isBool(v) { return typeof v === 'boolean'; },
-      isObj(v) { return v && typeof v === 'object' && !Array.isArray(v); },
-      isArr(v) { return Array.isArray(v); },
-      isNum(v) { return typeof v === 'number' && Number.isFinite(v); },
+    items: window._TICKETS,
+    search: '',
+    statusFilter: 'all',
+    priorityFilter: 'all',
+    selectedTickets: [],
 
-      // Schönere Labels
-      humanizeKey(k) {
-        if (!k) return '';
-        return k
-          .replace(/_/g,' ')
-          .replace(/([a-z0-9])([A-Z])/g,'$1 $2')
-          .replace(/\b\w/g, s => s.toUpperCase());
-      },
-      // Typ-Badge
-      typeBadge(v) {
-        if (v === null || v === undefined) return {text:'Null', cls:'bg-gray-100 text-gray-700'};
-        if (this.isBool(v)) return {text:'Bool', cls:'bg-blue-100 text-blue-800'};
-        if (this.isNum(v)) return {text:'Zahl', cls:'bg-amber-100 text-amber-800'};
-        if (typeof v === 'string') return {text:'Text', cls:'bg-violet-100 text-violet-800'};
-        if (this.isArr(v)) return {text:`Array (${v.length})`, cls:'bg-emerald-100 text-emerald-800'};
-        if (this.isObj(v)) return {text:'Objekt', cls:'bg-teal-100 text-teal-800'};
-        return {text: typeof v, cls:'bg-gray-100 text-gray-700'};
-      },
-      // Wert fürs Anzeigen (gekürzt, multiline-handling)
-      formatValue(v) {
-        if (v === null || v === undefined) return '–';
-        if (typeof v === 'string') return v;
-        if (this.isBool(v)) return v ? 'Ja' : 'Nein';
-        if (this.isNum(v)) return String(v);
-        if (this.isArr(v)) return v.length ? `${v.length} Element(e)` : 'Leeres Array';
-        if (this.isObj(v)) return 'Objekt';
-        try { return JSON.stringify(v); } catch { return String(v); }
-      },
-      // Einfache Tiefenliste der Top-Level Keys mit optionaler Suche
-      groupKeys(obj) {
-        if (!this.isObj(obj)) return [];
-        const keys = Object.keys(obj);
-        return keys.sort((a,b)=>a.localeCompare(b)).map(k => ({
-          key: k,
-          label: this.humanizeKey(k),
-          value: obj[k],
-          type: this.typeBadge(obj[k])
-        }));
-      },
-      // Filter im Modal (nur über description)
-      modalSearch: '',
-      matchesQuery(key, val) {
-        const q = this.modalSearch.trim().toLowerCase();
-        if (!q) return true;
-        const k = (key || '').toLowerCase();
-        const v = (this.formatValue(val) || '').toLowerCase();
-        return k.includes(q) || v.includes(q);
-      },
-      // Copy to clipboard
-      async copy(value) {
-        try {
-          const txt = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-          await navigator.clipboard.writeText(txt);
-          this.toast('Kopiert ✅');
-        } catch {
-          this.toast('Konnte nicht kopieren ❗');
-        }
-      },
-      // kleines Toast
-      toasts: [],
-      toast(msg) {
-        const id = Date.now();
-        this.toasts.push({ id, msg });
-        setTimeout(()=>{ this.toasts = this.toasts.filter(t=>t.id!==id); }, 1600);
-      },
+    statuses: ['all','in_progress','in_request','approved','archived','rejected'],
+    priorities: ['all','low','medium','high','critical'],
 
-      // ----- Editor-Helper (dein bestehendes Editor-Konzept bleibt) -----
-      editor(obj) {
-        const self = this;
-        return {
-          obj,
-          entries() {
-            if (Array.isArray(this.obj)) return this.obj.map((v, i) => [i, v]);
-            return this.obj ? Object.entries(this.obj) : [];
-          },
-          isObj: self.isObj,
-          isArr: self.isArr,
-          isBool: self.isBool,
-          isNum: self.isNum,
-          inputBase: 'w-full px-3 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/60',
-          coerceNumber(e, key) {
-            const raw = e.target.value;
-            if (raw === '') { this.obj[key] = null; return; }
-            const n = Number(raw);
-            this.obj[key] = Number.isFinite(n) ? n : raw;
-          }
-        };
-      },
+    get filtered() {
+      let arr = this.items;
 
-      // ----- Selection / Aktionen (unverändert) -----
-      toggleSelection(id) {
-        if (this.selectedTickets.includes(id)) {
-          this.selectedTickets = this.selectedTickets.filter(x => x !== id);
-        } else {
-          this.selectedTickets = [...this.selectedTickets, id];
-        }
-      },
-      isSelected(id) { return this.selectedTickets.includes(id); },
-      toggleSelectAll(event) {
-        if (event.target.checked) this.selectedTickets = this.filtered.map(t => t.id);
-        else this.selectedTickets = [];
-      },
-      async deleteSelected() {
-        if (this.selectedTickets.length === 0) return;
-        if (!confirm(`Wirklich ${this.selectedTickets.length} Ticket(s) löschen?`)) return;
-        this.isSubmitting = true;
-        await Promise.all(this.selectedTickets.map(id =>
-          fetch(`/tickets/${id}/delete`, { method: 'POST' })
-        ));
-        location.reload();
-      },
-
-      get filtered() {
-        let arr = this.filter === 'all' ? this.items : this.items.filter(t => t.status === this.filter);
-        if (this.search.trim() !== '') {
-          const q = this.search.toLowerCase();
-          arr = arr.filter(t =>
-            (t.type || '').toLowerCase().includes(q) ||
-            String(t.id).includes(this.search) ||
-            (t.creator || '').toLowerCase().includes(q)
-          );
-        }
-        return arr;
-      },
-
-      openPruefung(item) {
-        this.pruefungItem = item;
-        this.jsonError = '';
-        this.modalSearch = '';
-        this.viewMode = 'overview';
-        this.editMode = false;
-
-        let base = null;
-        const d = item?.description;
-        try {
-          if (d && typeof d === 'object') base = this.deepParse(d);
-          else if (typeof d === 'string' && this.looksLikeJson(d)) {
-            base = this.deepParse(JSON.parse(d));
-          }
-        } catch (e) {
-          this.jsonError = 'Beschreibung konnte nicht geparst werden.';
-        }
-        this.parsedDesc = base;
-        this.editedDesc = base ? this.deepClone(base) : null;
-
-        this.isOpen = true;
-        this.$nextTick(() => {
-          document.querySelector('#modal-root [data-autofocus]')?.focus();
-        });
-      },
-      closePruefungModal() {
-        this.isOpen = false;
-        this.pruefungItem = null;
-        this.parsedDesc = null;
-        this.editedDesc = null;
-        this.jsonError = '';
-        this.editMode = false;
-      },
-
-      beforeSubmit(form) {
-        if (this.isSubmitting) return false;
-        if (this.editedDesc) {
-          try {
-            form.querySelector('input[name="description_json"]').value = JSON.stringify(this.editedDesc);
-          } catch (e) {
-            this.jsonError = 'Aktuelle Beschreibung ist kein gültiges JSON.';
-            return false;
-          }
-        }
-        this.isSubmitting = true;
-        return true;
-      },
-
-      statusBg(status) {
-        return {
-          pending: 'bg-yellow-100 text-yellow-800',
-          approved: 'bg-green-100 text-green-800',
-          rejected: 'bg-red-100 text-red-800'
-        }[status] || 'bg-gray-100 text-gray-800';
+      if (this.statusFilter !== 'all') {
+        arr = arr.filter(t => t.status === this.statusFilter);
       }
-    }));
-  });
+
+      if (this.priorityFilter !== 'all') {
+        arr = arr.filter(t => t.priority === this.priorityFilter);
+      }
+
+      if (this.search.trim()) {
+        const q = this.search.toLowerCase();
+        arr = arr.filter(t =>
+          String(t.id).includes(q) ||
+          (t.type || '').toLowerCase().includes(q) ||
+          (t.creator || '').toLowerCase().includes(q)
+        );
+      }
+
+      return arr;
+    },
+
+    toggleSelection(id) {
+      this.selectedTickets.includes(id)
+        ? this.selectedTickets = this.selectedTickets.filter(x => x !== id)
+        : this.selectedTickets.push(id);
+    },
+
+    statusBadge(s) {
+      return {
+        in_progress: 'bg-yellow-100 text-yellow-800',
+        in_request: 'bg-primary/20 text-primary',
+        approved: 'bg-green-100 text-green-800',
+        archived: 'bg-gray-200 text-gray-700',
+        rejected: 'bg-red-100 text-red-800'
+      }[s] || 'bg-gray-200 text-gray-700';
+    },
+
+    priorityBadge(p) {
+      return {
+        low: 'bg-gray-100 text-gray-700',
+        medium: 'bg-blue-100 text-blue-800',
+        high: 'bg-orange-100 text-orange-800',
+        critical: 'bg-red-100 text-red-800'
+      }[p] || 'bg-gray-100 text-gray-700';
+    },
+
+    open(item) {
+      this.$dispatch('open-pruefung', item);
+    }
+
+  }));
+});
 </script>
 {% endblock %}
 
 {% block content %}
-<div x-data="ticketsManager()" class="space-y-6" @keydown.escape.window="isOpen && closePruefungModal()">
+<div x-data="ticketsManager()" class="space-y-6">
 
-  <!-- Filterleiste -->
-  <div class="flex flex-wrap gap-4 items-center">
-    <div class="flex gap-2" role="group" aria-label="Statusfilter">
-      <template x-for="s in statuses" :key="s">
-        <button type="button"
-                @click="filter = s"
-                :aria-pressed="filter===s"
-                :class="filter===s
-                  ? 'bg-primary text-white'
-                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-primary/10'"
-                class="px-4 py-2 rounded transition font-medium capitalize"
-                x-text="s">
-        </button>
+  <!-- HEADER -->
+  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border px-6 py-5">
+    <h1 class="text-2xl font-bold">Ticketübersicht</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Alle Aufträge & Prüfungen im System
+    </p>
+  </div>
+
+  <!-- FILTER -->
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow border p-4 flex flex-wrap gap-4 items-center">
+
+    <input x-model="search"
+           placeholder="🔍 Suche nach ID, Titel, Ersteller"
+           class="px-3 py-2 border rounded-md w-full md:w-72">
+
+    <select x-model="statusFilter" class="px-3 py-2 border rounded-md">
+      <template x-for="s in statuses">
+        <option :value="s" x-text="s === 'all' ? 'Alle Status' : s"></option>
       </template>
-    </div>
-    <div class="ml-auto flex items-center space-x-2">
-      <label for="ticket-search" class="sr-only">Suchen</label>
-      <input id="ticket-search" type="text" placeholder="🔍 Suchen..." x-model="search"
-             class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-      <button type="button" @click="search=''"
-              class="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition">
-        Zurücksetzen
-      </button>
-    </div>
+    </select>
+
+    <select x-model="priorityFilter" class="px-3 py-2 border rounded-md">
+      <template x-for="p in priorities">
+        <option :value="p" x-text="p === 'all' ? 'Alle Prioritäten' : p"></option>
+      </template>
+    </select>
+
   </div>
 
-  <!-- Bulk Actions -->
-  <div class="flex justify-end">
-    <button type="button"
-            @click="deleteSelected"
-            :disabled="selectedTickets.length === 0"
-            class="px-4 py-2 bg-red-600 text-white rounded-lg disabled:opacity-50">
-      🗑️ Ausgewählte löschen (<span x-text="selectedTickets.length"></span>)
-    </button>
-  </div>
+  <!-- LIST -->
+  <div class="space-y-4">
+    <template x-for="t in filtered" :key="t.id">
+      <div @click="open(t)"
+           class="cursor-pointer bg-white dark:bg-gray-800 rounded-xl shadow border p-5
+                  transition hover:-translate-y-[2px] hover:shadow-xl">
 
-  <!-- Tabelle -->
-  <div class="overflow-x-auto bg-white dark:bg-gray-900 shadow-md rounded-lg">
-    <table class="w-full table-auto text-sm text-left">
-      <caption class="sr-only">Tabelle mit Ticketauswahl</caption>
-      <thead class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 uppercase text-xs">
-        <tr>
-          <th class="p-3">
-            <input type="checkbox" @change="toggleSelectAll" class="form-checkbox h-4 w-4">
-          </th>
-          <th class="p-3">ID</th>
-          <th class="p-3">Titel</th>
-          <th class="p-3">Erstellt am</th>
-          <th class="p-3">Ersteller</th>
-          <th class="p-3">Status</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-        <template x-for="t in filtered" :key="t.id">
-          <tr @click="openPruefung(t)" class="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
-            <td class="p-3">
-              <input
-                type="checkbox"
-                :checked="isSelected(t.id)"
-                @click.stop
-                @change="toggleSelection(t.id)"
-                class="form-checkbox h-4 w-4"
-              >
-            </td>
-            <td class="p-3 font-mono text-primary" x-text="t.id"></td>
-            <td class="p-3" x-text="t.type"></td>
-            <td class="p-3 text-gray-500 dark:text-gray-400" x-text="t.date"></td>
-            <td class="p-3" x-text="t.creator"></td>
-            <td class="p-3">
-              <span :class="statusBg(t.status) + ' px-2 py-1 rounded-full text-xs font-semibold capitalize'"
-                    x-text="t.status"></span>
-            </td>
-          </tr>
-        </template>
+        <div class="flex justify-between gap-6">
 
-        <template x-if="filtered.length === 0">
-          <tr>
-            <td colspan="6" class="p-4 text-center text-gray-500 dark:text-gray-400">
-              Keine Tickets gefunden für „<span x-text="filter"></span>“
-              <template x-if="search">
-                und Suche „<span x-text="search"></span>“
-              </template>.
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-  </div>
+          <!-- LEFT -->
+          <div class="min-w-0">
+            <div class="font-semibold truncate">
+              #<span x-text="t.id"></span> · <span x-text="t.type"></span>
+            </div>
+            <div class="text-sm text-gray-500 mt-1">
+              Erstellt am <span x-text="t.date"></span> · <span x-text="t.creator"></span>
+            </div>
+          </div>
 
-  <!-- MODAL -->
-  <div x-show="isOpen" x-cloak x-trap.noscroll="isOpen" class="fixed inset-0 z-50">
-    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" @click="closePruefungModal()"></div>
+          <!-- RIGHT -->
+          <div class="flex flex-col items-end gap-2 shrink-0">
 
-    <div id="modal-root" class="fixed inset-0 flex items-center justify-center p-4">
-      <div class="w-full max-w-5xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-2xl shadow-2xl border border-gray-100/50 dark:border-gray-800/60 overflow-hidden">
+            <span class="px-3 py-1 rounded-md text-xs font-semibold"
+                  :class="statusBadge(t.status)"
+                  x-text="t.status"></span>
 
-        <!-- Sticky Header -->
-        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
-          <div class="flex-1">
-            <div class="text-[12px] uppercase tracking-wide text-gray-500 dark:text-gray-400">Prüfung</div>
-            <h3 class="text-xl font-semibold flex flex-wrap items-center gap-2">
-              <span>Ticket #<span x-text="pruefungItem?.id"></span></span>
-              <span class="text-gray-400">·</span>
-              <span class="inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800">
-                <span class="text-xs text-gray-500">Typ</span>
-                <span class="font-medium" x-text="pruefungItem?.type"></span>
+            <span class="px-3 py-1 rounded-md text-xs font-semibold"
+                  :class="priorityBadge(t.priority)">
+              Priorität: <span x-text="t.priority"></span>
+            </span>
+
+            <template x-if="t.assignee_group">
+              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-primary/10 text-primary">
+                Fachabteilung
               </span>
-            </h3>
-          </div>
-
-          <span class="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full"
-                :class="{
-                  'bg-yellow-100 text-yellow-800': pruefungItem?.status === 'pending',
-                  'bg-green-100 text-green-800': pruefungItem?.status === 'approved',
-                  'bg-red-100 text-red-800': pruefungItem?.status === 'rejected'
-                }">
-            <span class="w-2 h-2 rounded-full"
-                  :class="{
-                    'bg-yellow-500': pruefungItem?.status === 'pending',
-                    'bg-green-500': pruefungItem?.status === 'approved',
-                    'bg-red-500': pruefungItem?.status === 'rejected'
-                  }"></span>
-            <span x-text="pruefungItem?.status"></span>
-          </span>
-
-          <button type="button" class="ml-2 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                  @click="closePruefungModal()" aria-label="Schließen" data-autofocus>✕</button>
-        </div>
-
-        <!-- Body mit 2 Spalten Layout -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-0">
-
-          <!-- Linke Sidebar: kompakte Info-Kacheln -->
-          <aside class="lg:col-span-4 border-r border-gray-100 dark:border-gray-800 p-6 space-y-5">
-            <div class="grid grid-cols-2 gap-3">
-              <div class="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                <div class="text-xs text-gray-500">Erstellt am</div>
-                <div class="font-medium" x-text="pruefungItem?.date || '–'"></div>
-              </div>
-              <div class="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                <div class="text-xs text-gray-500">Ersteller</div>
-                <div class="font-medium break-words" x-text="pruefungItem?.creator || '–'"></div>
-              </div>
-            </div>
-
-            <template x-if="pruefungItem?.owner_info">
-              <div class="space-y-2">
-                <div class="text-[12px] uppercase tracking-wide text-gray-500">👤 Owner</div>
-                <dl class="divide-y divide-gray-100 dark:divide-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-                  <div class="grid grid-cols-3 gap-2 p-3">
-                    <dt class="text-xs text-gray-500 col-span-1">E-Mail</dt>
-                    <dd class="col-span-2 font-medium break-words" x-text="pruefungItem.owner_info.email || '–'"></dd>
-                  </div>
-                  <div class="grid grid-cols-3 gap-2 p-3">
-                    <dt class="text-xs text-gray-500 col-span-1">Telefon</dt>
-                    <dd class="col-span-2 font-medium" x-text="pruefungItem.owner_info.phone || '–'"></dd>
-                  </div>
-                  <div class="grid grid-cols-3 gap-2 p-3">
-                    <dt class="text-xs text-gray-500 col-span-1">Mobil</dt>
-                    <dd class="col-span-2 font-medium" x-text="pruefungItem.owner_info.mobile || '–'"></dd>
-                  </div>
-                  <div class="grid grid-cols-3 gap-2 p-3">
-                    <dt class="text-xs text-gray-500 col-span-1">Firma</dt>
-                    <dd class="col-span-2 font-medium" x-text="pruefungItem.owner_info.company || '–'"></dd>
-                  </div>
-                  <div class="grid grid-cols-3 gap-2 p-3">
-                    <dt class="text-xs text-gray-500 col-span-1">Position</dt>
-                    <dd class="col-span-2 font-medium" x-text="pruefungItem.owner_info.position || '–'"></dd>
-                  </div>
-                  <div class="grid grid-cols-3 gap-2 p-3">
-                    <dt class="text-xs text-gray-500 col-span-1">Adresse</dt>
-                    <dd class="col-span-2 font-medium"
-                        x-text="(pruefungItem.owner_info.address?.street || '-') + ', ' +
-                                (pruefungItem.owner_info.address?.zip || '') + ' ' +
-                                (pruefungItem.owner_info.address?.city || '')"></dd>
-                  </div>
-                </dl>
-              </div>
             </template>
 
-            <template x-if="pruefungItem?.ninja_metadata">
-              <div class="space-y-2">
-                <div class="text-[12px] uppercase tracking-wide text-gray-500">🤖 Ninja</div>
-                <div class="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
-                  <div class="p-3">
-                    <div class="text-xs text-gray-500">Ticket-ID</div>
-                    <div class="font-medium" x-text="pruefungItem.ninja_metadata.ninja_ticket_id || '–'"></div>
-                  </div>
-                  <div class="p-3">
-                    <div class="text-xs text-gray-500">Letzter Sync</div>
-                    <div class="font-medium" x-text="pruefungItem.ninja_metadata.synced_at ? new Date(pruefungItem.ninja_metadata.synced_at).toLocaleString() : '–'"></div>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </aside>
-
-          <!-- Rechte Hauptspalte -->
-          <section class="lg:col-span-8 p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-
-            <!-- Tabs + Suche + Bearbeiten-Schalter -->
-            <div class="flex flex-wrap items-center gap-3">
-              <nav class="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <button @click="viewMode='overview'"
-                        :class="viewMode==='overview' ? 'bg-primary text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'"
-                        class="px-3 py-1.5 text-sm">Übersicht</button>
-                <button @click="viewMode='details'"
-                        :class="viewMode==='details' ? 'bg-primary text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700'"
-                        class="px-3 py-1.5 text-sm">Details</button>
-                <button @click="viewMode='raw'"
-                        :class="viewMode==='raw' ? 'bg-primary text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700'"
-                        class="px-3 py-1.5 text-sm">Rohdaten</button>
-              </nav>
-
-              <div class="ml-auto flex items-center gap-2">
-                <label class="sr-only" for="modal-q">Modal-Suche</label>
-                <input id="modal-q" x-model="modalSearch" placeholder="🔎 Felder durchsuchen..."
-                       class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-primary/60">
-                <button type="button"
-                        @click="editMode = !editMode"
-                        class="px-3 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <span x-show="!editMode">✏️ Bearbeiten</span>
-                  <span x-show="editMode">👁️ Anzeigen</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- ANZEIGE: Übersicht -->
-            <div x-show="!editMode && viewMode==='overview'" class="space-y-4" x-cloak>
-              <template x-if="!parsedDesc">
-                <div class="text-sm text-gray-500">Keine strukturierte Beschreibung vorhanden.</div>
-              </template>
-
-              <template x-if="isObj(parsedDesc)">
-                <div class="space-y-3">
-                  <!-- Top-Level Gruppen als Accordions -->
-                  <template x-for="grp in groupKeys(parsedDesc).filter(g => matchesQuery(g.key, g.value))" :key="grp.key">
-                    <details class="group rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                      <summary class="cursor-pointer select-none flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/60">
-                        <div class="flex items-center gap-2">
-                          <span class="font-medium" x-text="humanizeKey(grp.key)"></span>
-                          <span class="text-xs px-2 py-0.5 rounded-full" :class="grp.type.cls" x-text="grp.type.text"></span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-500 group-open:rotate-90 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 6l8 4-8 4V6z" clip-rule="evenodd"/></svg>
-                      </summary>
-
-                      <!-- Inhalt je nach Typ -->
-                      <div class="p-4 bg-white dark:bg-gray-900">
-                        <!-- Objekt -> Key/Value Grid -->
-                        <div x-show="isObj(grp.value)" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <template x-for="(val, key) in grp.value" :key="key">
-                            <div x-show="matchesQuery(key, val)" class="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
-                              <div class="flex items-start justify-between gap-3">
-                                <div>
-                                  <div class="text-[11px] uppercase tracking-wide text-gray-500" x-text="humanizeKey(key)"></div>
-                                  <div class="mt-0.5 text-sm break-words whitespace-pre-wrap"
-                                       :class="typeof val === 'string' && val.length > 80 ? 'line-clamp-3' : ''"
-                                       x-text="formatValue(val)"></div>
-                                </div>
-                                <div class="flex flex-col items-end gap-1">
-                                  <span class="text-[10px] px-1.5 py-0.5 rounded-full" :class="typeBadge(val).cls" x-text="typeBadge(val).text"></span>
-                                  <button @click="copy(val)" class="text-xs text-primary hover:underline">Kopieren</button>
-                                </div>
-                              </div>
-
-                              <!-- Wenn Array/Objekt tiefer -->
-                              <template x-if="isArr(val)">
-                                <div class="mt-2">
-                                  <details class="group">
-                                    <summary class="cursor-pointer text-xs text-gray-500">Elemente anzeigen</summary>
-                                    <ul class="mt-2 space-y-2 max-h-52 overflow-auto pr-1">
-                                      <template x-for="(item, idx) in val" :key="idx">
-                                        <li class="rounded border border-gray-100 dark:border-gray-800 p-2">
-                                          <div class="flex justify-between items-start gap-2">
-                                            <span class="text-xs text-gray-500">#<span x-text="idx+1"></span></span>
-                                            <button @click="copy(item)" class="text-[11px] text-primary hover:underline">Kopieren</button>
-                                          </div>
-                                          <div class="mt-1 text-sm whitespace-pre-wrap break-words" x-text="formatValue(item)"></div>
-                                        </li>
-                                      </template>
-                                    </ul>
-                                  </details>
-                                </div>
-                              </template>
-
-                              <template x-if="isObj(val)">
-                                <div class="mt-2">
-                                  <details class="group">
-                                    <summary class="cursor-pointer text-xs text-gray-500">Details anzeigen</summary>
-                                    <div class="mt-2 grid grid-cols-1 gap-2">
-                                      <template x-for="(vv, kk) in val" :key="kk">
-                                        <div class="text-sm">
-                                          <span class="text-gray-500" x-text="humanizeKey(kk) + ': '"></span>
-                                          <span x-text="formatValue(vv)"></span>
-                                        </div>
-                                      </template>
-                                    </div>
-                                  </details>
-                                </div>
-                              </template>
-                            </div>
-                          </template>
-                        </div>
-
-                        <!-- Array direkt -->
-                        <div x-show="isArr(grp.value)" class="space-y-2">
-                          <template x-for="(item, idx) in grp.value" :key="idx">
-                            <div x-show="matchesQuery('#'+(idx+1), item)" class="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
-                              <div class="flex items-start justify-between">
-                                <div class="text-sm">
-                                  <div class="text-[11px] uppercase tracking-wide text-gray-500">Element <span x-text="idx+1"></span></div>
-                                  <div class="mt-1 whitespace-pre-wrap break-words" x-text="formatValue(item)"></div>
-                                </div>
-                                <button @click="copy(item)" class="text-xs text-primary hover:underline">Kopieren</button>
-                              </div>
-                            </div>
-                          </template>
-                        </div>
-
-                        <!-- Primitive -->
-                        <div x-show="!isArr(grp.value) && !isObj(grp.value)" class="flex items-start justify-between">
-                          <div>
-                            <div class="text-[11px] uppercase tracking-wide text-gray-500">Wert</div>
-                            <div class="text-sm whitespace-pre-wrap break-words" x-text="formatValue(grp.value)"></div>
-                          </div>
-                          <button @click="copy(grp.value)" class="text-xs text-primary hover:underline">Kopieren</button>
-                        </div>
-                      </div>
-                    </details>
-                  </template>
-                </div>
-              </template>
-            </div>
-
-            <!-- ANZEIGE: Details (flaches KV-Grid) -->
-            <div x-show="!editMode && viewMode==='details'" class="space-y-3" x-cloak>
-              <template x-if="isObj(parsedDesc)">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <template x-for="row in groupKeys(parsedDesc).filter(r => matchesQuery(r.key, r.value))" :key="row.key">
-                    <div class="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                      <div class="flex items-center justify-between">
-                        <div class="text-xs uppercase tracking-wide text-gray-500" x-text="humanizeKey(row.key)"></div>
-                        <span class="text-[10px] px-1.5 py-0.5 rounded-full" :class="row.type.cls" x-text="row.type.text"></span>
-                      </div>
-                      <div class="mt-1 text-sm whitespace-pre-wrap break-words" x-text="formatValue(row.value)"></div>
-                      <div class="mt-2 text-right">
-                        <button @click="copy(row.value)" class="text-xs text-primary hover:underline">Kopieren</button>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </template>
-              <template x-if="!isObj(parsedDesc)">
-                <div class="text-sm text-gray-500">Keine strukturierte Beschreibung vorhanden.</div>
-              </template>
-            </div>
-
-            <!-- ANZEIGE: Rohdaten -->
-            <div x-show="!editMode && viewMode==='raw'" x-cloak>
-              <pre class="bg-gray-50 dark:bg-gray-800 p-3 rounded text-xs overflow-auto max-h-[50vh] whitespace-pre-wrap"
-                   x-text="typeof pruefungItem?.description === 'string'
-                            ? pruefungItem.description
-                            : JSON.stringify(pruefungItem?.description, null, 2)"></pre>
-              <div class="mt-2 text-right">
-                <button @click="copy(pruefungItem?.description)" class="text-xs text-primary hover:underline">Alles kopieren</button>
-              </div>
-            </div>
-
-            <!-- EDITOR (dein ursprünglicher Editor, nur hinter Toggle) -->
-            <div x-show="editMode" class="space-y-4" x-cloak x-data="editor(editedDesc)">
-              <template x-if="!editedDesc">
-                <div class="text-sm text-gray-500">Keine Daten zum Bearbeiten.</div>
-              </template>
-
-              <template x-for="[key, value] in entries()" :key="key">
-                <div class="border border-gray-200 dark:border-gray-700 rounded-xl p-3">
-                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div class="sm:col-span-1">
-                      <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 break-words" x-text="humanizeKey(key)"></div>
-                    </div>
-                    <div class="sm:col-span-2">
-                      <template x-if="!isObj(value) && !isArr(value)">
-                        <div class="space-y-2">
-                          <template x-if="isBool(obj[key])">
-                            <label class="inline-flex items-center gap-2">
-                              <input type="checkbox" class="rounded" x-model="obj[key]">
-                              <span x-text="obj[key] ? 'Ja' : 'Nein'"></span>
-                            </label>
-                          </template>
-                          <template x-if="!isBool(obj[key]) && isNum(obj[key])">
-                            <input type="number" :value="obj[key]" @change="$root.editor(obj).coerceNumber($event, key)"
-                                   class="w-full px-3 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/60">
-                          </template>
-                          <template x-if="!isBool(obj[key]) && !isNum(obj[key])">
-                            <textarea rows="2" x-model="obj[key]"
-                                      class="w-full px-3 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/60"></textarea>
-                          </template>
-                        </div>
-                      </template>
-
-                      <template x-if="isObj(value) || isArr(value)">
-                        <details class="group">
-                          <summary class="cursor-pointer select-none inline-flex items-center gap-2">
-                            <span class="font-medium">Details bearbeiten</span>
-                            <svg class="w-4 h-4 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor">
-                              <path fill-rule="evenodd" d="M6 6l8 4-8 4V6z" clip-rule="evenodd"/>
-                            </svg>
-                          </summary>
-                          <div class="mt-2 space-y-3" x-data="editor(obj[key])">
-                            <template x-for="[k, v] in entries()" :key="k">
-                              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                <div class="sm:col-span-1">
-                                  <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 break-words" x-text="humanizeKey(k)"></div>
-                                </div>
-                                <div class="sm:col-span-2">
-                                  <template x-if="!isObj(v) && !isArr(v)">
-                                    <div class="space-y-2">
-                                      <template x-if="isBool(obj[k])">
-                                        <label class="inline-flex items-center gap-2">
-                                          <input type="checkbox" class="rounded" x-model="obj[k]">
-                                          <span x-text="obj[k] ? 'Ja' : 'Nein'"></span>
-                                        </label>
-                                      </template>
-                                      <template x-if="!isBool(obj[k]) && isNum(obj[k])">
-                                        <input type="number" :value="obj[k]" @change="$root.editor(obj).coerceNumber($event, k)"
-                                               class="w-full px-3 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/60">
-                                      </template>
-                                      <template x-if="!isBool(obj[k]) && !isNum(obj[k])">
-                                        <textarea rows="2" x-model="obj[k]"
-                                                  class="w-full px-3 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/60"></textarea>
-                                      </template>
-                                    </div>
-                                  </template>
-                                  <template x-if="isObj(v) || isArr(v)">
-                                    <details class="group mt-2">
-                                      <summary class="cursor-pointer select-none inline-flex items-center gap-2">
-                                        <span class="font-medium">Weitere Details</span>
-                                        <svg class="w-4 h-4 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor">
-                                          <path fill-rule="evenodd" d="M6 6l8 4-8 4V6z" clip-rule="evenodd"/>
-                                        </svg>
-                                      </summary>
-                                      <div class="mt-2 space-y-2" x-data="editor(obj[k])">
-                                        <template x-for="[kk, vv] in entries()" :key="kk">
-                                          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                            <div class="sm:col-span-1">
-                                              <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 break-words" x-text="humanizeKey(kk)"></div>
-                                            </div>
-                                            <div class="sm:col-span-2">
-                                              <template x-if="!isObj(vv) && !isArr(vv)">
-                                                <div class="space-y-2">
-                                                  <template x-if="isBool(obj[kk])">
-                                                    <label class="inline-flex items-center gap-2">
-                                                      <input type="checkbox" class="rounded" x-model="obj[kk]">
-                                                      <span x-text="obj[kk] ? 'Ja' : 'Nein'"></span>
-                                                    </label>
-                                                  </template>
-                                                  <template x-if="!isBool(obj[kk]) && isNum(obj[kk])">
-                                                    <input type="number" :value="obj[kk]" @change="$root.editor(obj).coerceNumber($event, kk)"
-                                                           class="w-full px-3 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/60">
-                                                  </template>
-                                                  <template x-if="!isBool(obj[kk]) && !isNum(obj[kk])">
-                                                    <textarea rows="2" x-model="obj[kk]"
-                                                              class="w-full px-3 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/60"></textarea>
-                                                  </template>
-                                                </div>
-                                              </template>
-                                              <template x-if="isObj(vv) || isArr(vv)">
-                                                <pre class="bg-gray-50 dark:bg-gray-800 p-2 rounded text-xs overflow-auto max-h-40 whitespace-pre-wrap"
-                                                     x-text="JSON.stringify(vv, null, 2)"></pre>
-                                              </template>
-                                            </div>
-                                          </div>
-                                        </template>
-                                      </div>
-                                    </details>
-                                  </template>
-                                </div>
-                              </div>
-                            </template>
-                          </div>
-                        </details>
-                      </template>
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <p x-show="jsonError" class="text-sm text-red-600" x-text="jsonError"></p>
-            </div>
-
-          </section>
-        </div>
-
-        <!-- Footer -->
-        <form method="post" class="px-6 pb-6 pt-4 border-t border-gray-200 dark:border-gray-800">
-          <input type="hidden" name="ticket_id" :value="pruefungItem?.id">
-          <input type="hidden" name="description_json" value="">
-          <div class="flex flex-col md:flex-row md:items-center gap-3">
-            <label class="flex-1">
-              <span class="block mb-1 text-sm font-medium">Kommentar (optional):</span>
-              <textarea name="comment" rows="2"
-                        class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/60 dark:bg-gray-900 dark:border-gray-700"></textarea>
-            </label>
-
-            <div class="flex items-center gap-2 md:ml-auto">
-              <button type="button"
-                      class="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-                      @click="closePruefungModal()">Abbrechen</button>
-
-              <button type="submit"
-                      formaction="/pruefung/reject" formmethod="post"
-                      :disabled="isSubmitting"
-                      @click.prevent="(beforeSubmit($event.target.form) ? $event.target.form.requestSubmit($event.target) : null)"
-                      class="px-4 py-2 bg-red-600 text-white rounded-lg disabled:opacity-60 disabled:cursor-not-allowed">
-                Ablehnen
-              </button>
-
-              <button type="submit"
-                      formaction="/pruefung/approve" formmethod="post"
-                      :disabled="isSubmitting"
-                      @click.prevent="(beforeSubmit($event.target.form) ? $event.target.form.requestSubmit($event.target) : null)"
-                      class="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-60 disabled:cursor-not-allowed">
-                Genehmigen
-              </button>
-            </div>
           </div>
-        </form>
-
-        <!-- Toasts -->
-        <div class="pointer-events-none fixed bottom-4 right-4 space-y-2">
-          <template x-for="t in toasts" :key="t.id">
-            <div class="pointer-events-auto bg-gray-900 text-white text-sm px-3 py-2 rounded-lg shadow">
-              <span x-text="t.msg"></span>
-            </div>
-          </template>
         </div>
-
       </div>
-    </div>
+    </template>
+
+    <template x-if="filtered.length === 0">
+      <div class="text-center text-gray-500 py-10">
+        Keine Tickets gefunden.
+      </div>
+    </template>
   </div>
 
 </div>

@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
         name="static",
     )
 
-    app.templates = Jinja2Templates(directory="./templates")
+    app.templates = Jinja2Templates(directory=BASE_DIR / "templates")
     app.templates.env.globals["SESSION_TIMEOUT"] = config.SESSION_TIMEOUT
     app.templates.env.globals["TicketTypes"] = get_ticket_type_dict()
 

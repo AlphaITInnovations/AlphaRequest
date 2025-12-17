@@ -11770,3 +11770,23 @@
 2025-12-17 14:56:15,769 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
 2025-12-17 14:56:15,770 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
 2025-12-17 14:56:16,743 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:00:16,671 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 15:00:16,691 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 15:00:16,718 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:00:17,809 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:00:17,809 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:00:18,872 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:00:20,108 - INFO - alpharequestmanager - User logged out: None
+2025-12-17 15:05:00,869 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 15:05:00,893 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 15:05:00,911 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:05:01,943 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:05:01,944 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:05:02,953 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:05:04,536 - INFO - alpharequestmanager - User logged out: None
+2025-12-17 15:05:06,195 - INFO - alpharequestmanager - ➡️ Session vor Token-Abruf: {'auth_flow': {'state': 'YTPViposrIZaxkXf', 'redirect_uri': 'https://AI-MS-01.dom.local:5000/auth/callback', 'scope': ['offline_access', 'openid', 'User.Read', 'Mail.Send', 'profile'], 'auth_uri': 'https://login.microsoftonline.com/9f32fe97-32f1-412e-af1f-77c6c70d54db/oauth2/v2.0/authorize?client_id=d3672286-7126-46eb-89e9-f2d4368076b0&response_type=code&redirect_uri=https%3A%2F%2FAI-MS-01.dom.local%3A5000%2Fauth%2Fcallback&scope=Mail.Send+User.Read+offline_access+openid+profile&state=YTPViposrIZaxkXf&code_challenge=j19Sx7aCwah9oyMZDWLZttFW0NfJe5iZv22oG18sKyY&code_challenge_method=S256&nonce=c0939abc7e35c88ad014e760dad0c66c964e7defccd0c11b398cf7946190ccd4&client_info=1', 'code_verifier': 'laD~6oNUSZgxuFvb49KrzOHcq7L5nXYEihAR-kCT0Q8', 'nonce': 'MlpbGTuvmAZFjYRz', 'claims_challenge': None}}
+2025-12-17 15:05:06,740 - INFO - alpharequestmanager - 🔁 Token Result keys: ['token_type', 'scope', 'expires_in', 'ext_expires_in', 'access_token', 'refresh_token', 'id_token', 'client_info', 'id_token_claims', 'token_source']
+2025-12-17 15:05:06,740 - INFO - alpharequestmanager - 🪪 ID Claims keys: ['aud', 'iss', 'iat', 'nbf', 'exp', 'email', 'groups', 'name', 'nonce', 'oid', 'preferred_username', 'rh', 'sid', 'sub', 'tid', 'uti', 'ver']
+2025-12-17 15:05:07,360 - INFO - alpharequestmanager - ✅ Session nach Schreiben: {'sid': '16aa9ef4f7fd4b30a71a47e57d344653', 'user': {'id': 'a2046db5-4d1d-46aa-8bf6-49a867aabdad', 'displayName': 'Marco Schneider', 'email': 'Marco.Schneider@alpha-it-innovations.org', 'is_admin': True, 'phone': None, 'mobile': None, 'company': 'Alpha IT Innovations GmbH', 'position': 'IT', 'address': {'street': 'Forchheimer Straße 6', 'zip': '90425', 'city': 'Nürnberg'}}, 'last_activity': 1765980307}
+2025-12-17 15:05:07,363 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=16aa9ef4f7fd4b30a71a47e57d344653 last=1765980307 now=1765980307 cookie_len=602
+2025-12-17 15:05:09,082 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=16aa9ef4f7fd4b30a71a47e57d344653 last=1765980307 now=1765980309 cookie_len=602
