@@ -83,7 +83,7 @@ async def approve_ticket(
         except Exception as e:
             print(f"Fehler beim Speichern der Beschreibung (ID {ticket_id}):", e)
 
-    update_ticket(ticket_id, status=RequestStatus.approved)
+    update_ticket(ticket_id, status=RequestStatus.archived)
 
     manager = request.app.state.manager
     manager.set_comment(ticket_id, comment)

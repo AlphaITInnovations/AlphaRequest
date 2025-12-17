@@ -1,0 +1,48 @@
+<div
+    x-data="assigneeSelect()"
+    class="relative mt-4"
+    @click.outside="close()"
+
+    data-initial-id="{{ assignee_id|default('') }}"
+    data-initial-name="{{ assignee_name|default('') }}"
+>
+
+    <label class="font-medium">Zuständiger *</label>
+
+    <!-- INPUT -->
+    <input
+        type="text"
+        x-model="search"
+        @click.stop="toggle()"
+        @input="filter()"
+        placeholder="Mitarbeiter auswählen…"
+        class="w-full mt-1 p-2 rounded border dark:bg-gray-700 cursor-pointer"
+        autocomplete="off"
+    >
+
+    <!-- DROPDOWN -->
+    <div
+        x-show="open"
+        x-transition
+        @click.stop
+        class="absolute z-30 w-full mt-1 max-h-56 overflow-auto
+               bg-white dark:bg-gray-800 border rounded shadow text-sm"
+    >
+        <template x-for="u in filtered" :key="u.id">
+            <div
+                @click.stop="select(u)"
+                class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                x-text="u.display"
+            ></div>
+        </template>
+
+        <div x-show="filtered.length === 0"
+             class="px-3 py-2 text-gray-500">
+            Keine Treffer
+        </div>
+    </div>
+
+    <!-- Hidden Fields -->
+    <input type="hidden" name="assignee_id" :value="selectedId">
+    <input type="hidden" name="assignee_name" :value="selectedText">
+</div>

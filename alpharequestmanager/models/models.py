@@ -6,18 +6,22 @@ from typing import Optional, List, Dict, Any
 
 
 class RequestStatus(str, Enum):
-    pending  = "pending"
-    approved = "approved"
-    rejected = "rejected"
+    in_progress = "in_progress"
+    in_request  = "in_request"
+    archived    = "archived"
+    rejected    = "rejected"
+
 
 
 class TicketType(str, Enum):
-    hardware                = "Hardwarebestellung"
-    niederlassungAnmeldung  = "Niederlassung anmelden"
-    niederlassungAbmeldung  = "Niederlassung schließen"
-    niederlassungUmzug      = "Niederlassung umzug"
-    zugangBeantragen        = "EDV-Zugang beantragen"
-    zugangSperren           = "EDV-Zugang sperren"
+    hardware = "hardware"
+    niederlassung_anmelden = "niederlassung-anmelden"
+    niederlassung_schliessen = "niederlassung-schliessen"
+    niederlassung_umzug = "niederlassung-umzug"
+    zugang_beantragen = "zugang-beantragen"
+    zugang_sperren = "zugang-sperren"
+
+
 
 
 class TicketPriority(str, Enum):
@@ -25,6 +29,7 @@ class TicketPriority(str, Enum):
     medium   = "medium"
     high     = "high"
     critical = "critical"
+
 
 
 @dataclass

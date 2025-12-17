@@ -4,35 +4,30 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from alpharequestmanager.core.dependencies import get_current_user
 from alpharequestmanager.utils.config import config
 
-
 router = APIRouter()
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, user: dict = Depends(get_current_user)):
     """
-    Dashboard-Seite mit Übersicht der Tickets des Users.
+    Dashboard mit Tickets, die dem User zugeordnet sind
     """
     manager = request.app.state.manager
-    raw = manager.list_by_assignee(user_id=user["id"])
+
+    tickets = manager.list_by_assignee(user_id=user["id"])
 
     orders = [
-        {
-            "id": t.id,
-            "type": t.title,
-            "date": t.created_at.strftime("%d.%m.%Y"),
-            "status": t.status.value,
-            "comment": t.comment,
-            "description": t.description,
-            "assignee_id": t.assignee_id,
-            "assignee_name": t.assignee_name,
-            "assignee_history": t.assignee_history,
-        }
-        for t in raw
+        ticket_to_dashboard_item(t)
+        for t in tickets
     ]
 
-    companies = config.COMPANIES
-    is_admin = user.get("is_admin", False)
+    group_requests = manager.list_by_assignee_group_by_user(user["id"])
+
+
+    group_requests = [
+        ticket_to_dashboard_item(t)
+        for t in group_requests
+    ]
 
     return request.app.templates.TemplateResponse(
         "dashboard.html",
@@ -40,31 +35,41 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
             "request": request,
             "user": user,
             "orders": orders,
-            "is_admin": is_admin,
-            "companies_json": companies,
+            "group_requests": group_requests,
+            "is_admin": user.get("is_admin", False),
             "devpopup": config.DEVPOPUP,
         }
     )
 
 
 @router.get("/api/orders", response_class=JSONResponse)
-async def api_orders(user: dict = Depends(get_current_user), request: Request = None):
+async def api_orders(request: Request, user: dict = Depends(get_current_user)):
     """
-    Gibt alle Tickets des Users als JSON aus (für Frontend-Integrationen).
+    JSON-Endpoint für Dashboard-Polling
     """
     manager = request.app.state.manager
-    raw = manager.list_by_assignee(user_id=user["id"])
 
-    orders = [
+    tickets = manager.list_by_assignee(user_id=user["id"])
+
+    return [
         {
             "id": t.id,
             "type": t.title,
+            "type_key": t.ticket_type,
             "date": t.created_at.strftime("%d.%m.%Y"),
             "status": t.status.value,
-            "comment": t.comment,
-            "description": t.description,
+            "priority": t.priority.value,
         }
-        for t in raw
+        for t in tickets
     ]
 
-    return orders
+
+def ticket_to_dashboard_item(ticket):
+    return {
+        "id": ticket.id,
+        "type": ticket.title,
+        "type_key": ticket.ticket_type,
+        "date": ticket.created_at.strftime("%d.%m.%Y"),
+        "status": ticket.status.value,
+        "priority": ticket.priority.value if ticket.priority else "medium",
+    }

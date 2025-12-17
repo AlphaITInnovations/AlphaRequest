@@ -17,6 +17,7 @@ from alpharequestmanager.api import (
     users,
     groups,
 )
+from alpharequestmanager.services.ensure_ticket_groups import ensure_ticket_groups
 from alpharequestmanager.services.metrics import init_metrics
 from alpharequestmanager.database import database as db
 from alpharequestmanager.services.ticket_service import TicketService
@@ -36,22 +37,17 @@ def get_ticket_type_dict():
 def create_app() -> FastAPI:
 
     app = FastAPI(lifespan=lifespan)
-    #app.state = SimpleNamespace()
-    # global state
+
     app.state = cast(State, app.state)
     app.state.manager = TicketService()
 
-    # Templates & Static
     app.mount("/static", StaticFiles(directory="./static"), name="static")
     app.templates = Jinja2Templates(directory="./templates")
     app.templates.env.globals["SESSION_TIMEOUT"] = config.SESSION_TIMEOUT
     app.templates.env.globals["TicketTypes"] = get_ticket_type_dict()
 
-
-    # Session Middleware
     setup_session(app)
 
-    # Router registrieren
     app.include_router(auth.router)
     app.include_router(dashboard.router)
     app.include_router(tickets.router)
@@ -60,7 +56,8 @@ def create_app() -> FastAPI:
     app.include_router(ninja_oauth.router)
     app.include_router(users.router)
     app.include_router(groups.router)
-    # Metrics
+
+
     init_metrics(app, config.SESSION_TIMEOUT, app.state.manager)
 
     return app
@@ -95,11 +92,10 @@ def run_server(https: bool = False):
 def main():
     db.init_db()
     configure_event_loop()
+    ensure_ticket_groups()
     run_server(https=config.HTTPS)
 
 
 if __name__ == "__main__":
-
-    #print("starting application...")
     main()
 

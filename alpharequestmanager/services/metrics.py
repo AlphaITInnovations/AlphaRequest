@@ -300,7 +300,7 @@ def _collect_business_metrics():
         domain_count[domain] = domain_count.get(domain, 0) + 1
 
         # Open tickets (pending)
-        if st == RequestStatus.pending.value:
+        if st == RequestStatus.in_progress.value:
             key = (ttype, company)
             open_count[key] = open_count.get(key, 0) + 1
 

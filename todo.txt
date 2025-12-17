@@ -1,4 +1,23 @@
 TODO:
+- mehrere Fachabteilungen
+- Fachabteilungen konfigurierbar
+- Update Mail
+- Ticket Permissions
+- Ticket Felder anpasssen
+- was wenn 2 leute parallel ein ticket speichern?
+- admins settings gruppen löschen entfernen
+
+
+Admin Panel Neu
+
+
+
+
+
+
+
+
+TODO:
 - Backend Funktionen in create Ticket und finish ticket auftrennen (nur dann soll ninja ticket erstellt werden)
 create ticket kann auch leere felder haben
 finish ticket muss alles ausgefüllt haben

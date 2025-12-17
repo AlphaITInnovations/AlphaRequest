@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import (
     APIRouter,
     Request,
@@ -8,19 +10,15 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 from alpharequestmanager.core.dependencies import get_current_user
+from alpharequestmanager.database.database import get_groupID_from_name
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.database import database
-from alpharequestmanager.services import ninja_api
-from alpharequestmanager.services.metrics import tickets_created_total
-from alpharequestmanager.services.ninja_api import NinjaAuthFlowRequired
 import json
-from datetime import datetime
-from alpharequestmanager.models.models import TicketType
+from alpharequestmanager.models.models import TicketType, RequestStatus, TicketPriority, Ticket
+from alpharequestmanager.utils.ticket_labels import TICKET_LABELS
 
 
 router = APIRouter()
-
-
 
 def _desc_with_user_info(text: str, user: dict) -> dict:
     from alpharequestmanager.api.admin import format_user_info_plain, format_user_info_html
@@ -48,158 +46,97 @@ def _user_can_delete_ticket(user: dict, ticket_id: int) -> bool:
 @router.post("/tickets")
 async def create_ticket(
     request: Request,
-    title: str = Form(...),
     ticket_type: TicketType = Form(...),
     description: str = Form(...),
     assignee_id: str = Form(...),
     assignee_name: str = Form(...),
+    comment: str = Form(""),
+    priority: TicketPriority = Form(TicketPriority.medium),
     user: dict = Depends(get_current_user),
 ):
-
     user_cache = request.app.state.user_cache
 
-    if assignee_id and not validate_assignee(user_cache, assignee_id):
+    # Kommentar trimmen
+    comment = (comment or "").strip()
+
+    # Assignee prüfen
+    if not assignee_id:
+        raise HTTPException(400, "Assignee ist ein Pflichtfeld")
+
+    if not validate_assignee(user_cache, assignee_id):
         raise HTTPException(
-            status_code=400,
-            detail=f"Ungültiger Assignee (User-ID '{assignee_id}') nicht in AD gefunden"
+            400,
+            f"Ungültiger Assignee (User-ID '{assignee_id}')"
         )
+
+    # Beschreibung validieren
+    try:
+        json.loads(description)
+    except Exception:
+        raise HTTPException(400, "Ticketdaten sind kein gültiges JSON")
+
+    # Titel generieren
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    label = TICKET_LABELS.get(ticket_type, ticket_type.value)
+    generated_title = f"{label} – {user['displayName']} – {now_str}"
 
     manager = request.app.state.manager
 
-    # description (data) aus JSON parsen
-    desc_obj = json.loads(description)
-    data = desc_obj.get("data", {})
-
-    user_mail = user["email"]
-
-
-    try:
-        ninja_ticket = None
-
-        match ticket_type:
-            case TicketType.hardware:
-                ninja_ticket = ninja_api.create_ticket_hardware(
-                    description=desc_obj,
-                    requester_mail=user_mail,
-                    is_admin=user.get("is_admin", False),
-                )
-
-            case TicketType.zugangSperren:
-                ninja_ticket = ninja_api.create_ticket_edv_sperren(
-                    description=desc_obj,
-                    requester_mail=user_mail,
-                    is_admin=user.get("is_admin", False),
-                )
-
-            case TicketType.zugangBeantragen:
-                arbeitsbeginn_ts = None
-                if data.get("arbeitsbeginn"):
-                    arbeitsbeginn_ts = int(datetime.fromisoformat(data["arbeitsbeginn"]).timestamp())
-
-                ninja_ticket = ninja_api.create_ticket_edv_beantragen(
-                    description=desc_obj,
-                    vorname=data.get("vorname", ""),
-                    nachname=data.get("nachname", ""),
-                    firma=data.get("firma", ""),
-                    arbeitsbeginn=arbeitsbeginn_ts,
-                    titel=data.get("titel", ""),
-                    strasse=data.get("strasse", ""),
-                    ort=data.get("ort", ""),
-                    plz=data.get("plz", ""),
-                    handy=data.get("handy", ""),
-                    telefon=data.get("telefon", ""),
-                    fax=data.get("fax", ""),
-                    niederlassung=data.get("niederlassung", ""),
-                    kostenstelle=data.get("kostenstelle", ""),
-                    kommentar=data.get("kommentar", ""),
-                    requester_mail=user_mail,
-                    checkbox_datev_user=bool(data.get("datev")),
-                    checkbox_elo_user=bool(data.get("elo")),
-                    elo_vorgesetzter=data.get("eloVorgesetzter", ""),
-                    is_admin=user.get("is_admin", False),
-                )
-
-            case TicketType.niederlassungAnmeldung:
-                ninja_ticket = ninja_api.create_ticket_niederlassung_anmelden(
-                    description=desc_obj,
-                    requester_mail=user_mail,
-                    is_admin=user.get("is_admin", False),
-                )
-
-            case TicketType.niederlassungUmzug:
-                ninja_ticket = ninja_api.create_ticket_niederlassung_umziehen(
-                    description=desc_obj,
-                    requester_mail=user_mail,
-                    is_admin=user.get("is_admin", False),
-                )
-
-            case TicketType.niederlassungAbmeldung:
-                ninja_ticket = ninja_api.create_ticket_niederlassung_schließen(
-                    description=desc_obj,
-                    requester_mail=user_mail,
-                    is_admin=user.get("is_admin", False),
-                )
-
-        if not ninja_ticket or "id" not in ninja_ticket:
-            raise HTTPException(status_code=500, detail="Ticket konnte in Ninja nicht erstellt werden")
-
-    except NinjaAuthFlowRequired:
-        return RedirectResponse("/dashboard?ninja_auth=needed", status_code=HTTP_302_FOUND)
-
-
-    local_id = manager.create_ticket(
-        title=title,
+    ticket_id = manager.create_ticket(
+        title=generated_title,
         ticket_type=ticket_type,
         description=description,
         owner_id=user["id"],
         owner_name=user["displayName"],
         owner_info=json.dumps(user, ensure_ascii=False),
+        comment=comment,
+        status=RequestStatus.in_progress,
+        assignee_id=assignee_id,
+        assignee_name=assignee_name,
+        priority=priority,
     )
 
-    manager.set_assignee(local_id, assignee_id, assignee_name)
-    manager.set_ninja_metadata(local_id, ninja_ticket["id"])
+    logger.info("Ticket erstellt: %s", ticket_id)
+    return RedirectResponse("/dashboard", status_code=302)
 
-    logger.info(
-        "Ticket erstellt: lokal=%s / ninja=%s / user=%s",
-        local_id, ninja_ticket["id"], user_mail
-    )
 
-    # Metrics
-    tickets_created_total.labels(
-        type=ticket_type.value,
-        domain=user["email"].split("@")[1],
-        company=user.get("company", ""),
-    ).inc()
 
-    return RedirectResponse("/dashboard", status_code=HTTP_302_FOUND)
 
 
 
 @router.post("/tickets/update/{ticket_id}")
-async def update_ticket_route(
+async def update_ticket(
     request: Request,
     ticket_id: int,
-    title: str = Form(...),
     description: str = Form(...),
     comment: str = Form(""),
     assignee_id: str = Form(...),
-    assignee_name: str = Form(...)
+    assignee_name: str = Form(...),
+    priority: TicketPriority = Form(...),
+    action: str = Form("save"),
+    user: dict = Depends(get_current_user),
 ):
-    manager = request.app.state.manager
-    if assignee_id:
-        if not validate_assignee(request.app.state.user_cache, assignee_id):
-            raise HTTPException(400, f"Ungültiger Assignee (User-ID {assignee_id})")
-        manager.set_assignee(ticket_id, assignee_id, assignee_name)
+    comment = (comment or "").strip()
+    #print(action)
+    if not validate_assignee(request.app.state.user_cache, assignee_id):
+        raise HTTPException(400, "Ungültiger Assignee")
+
     database.update_ticket(
-        ticket_id,
-        title=title,
+        ticket_id=ticket_id,
         description=description,
         comment=comment,
+        priority=priority,
     )
 
     database.set_assignee(ticket_id, assignee_id, assignee_name)
 
-    return RedirectResponse("/?updated=1", status_code=303)
+    ticket = request.app.state.manager.get_ticket(ticket_id)
+
+    if action == "complete":
+        complete_ticket_internal(ticket, request, user)
+
+    return RedirectResponse("/dashboard", status_code=303)
+
 
 
 
@@ -229,3 +166,135 @@ def validate_group(group_cache, group_id: str) -> bool:
         return False
     return any(g.get("id") == group_id for g in group_cache)
 
+
+@router.get("/tickets/new/{ticket_type}")
+async def create_ticket_page(
+    ticket_type: TicketType,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    template = f"tickets/{ticket_type.value}/create.html"
+
+    return request.app.templates.TemplateResponse(
+        template,
+        {
+            "request": request,
+            "user": user,
+            "ticket_type": ticket_type,
+            "is_admin": user.get("is_admin", False),
+        },
+    )
+
+
+
+
+@router.get("/tickets/edit/{ticket_type}/{ticket_id}")
+async def edit_ticket_page(
+    ticket_type: TicketType,
+    ticket_id: int,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    ticket = request.app.state.manager.get_ticket(ticket_id)
+
+    if not ticket:
+        raise HTTPException(404, "Ticket nicht gefunden")
+
+    if ticket.ticket_type != ticket_type.value:
+        raise HTTPException(400, "Tickettyp passt nicht")
+
+    return request.app.templates.TemplateResponse(
+        f"tickets/{ticket_type.value}/edit.html",
+        {
+            "request": request,
+            "ticket": ticket,
+            "user": user,
+            "assignee_id": ticket.assignee_id,
+            "assignee_name": ticket.assignee_name,
+            "is_admin": user.get("is_admin", False),
+            "priority": ticket.priority.value,
+        },
+    )
+
+
+@router.get("/tickets/group/{ticket_type}/{ticket_id}")
+async def group_ticket_view(
+    request: Request,
+    ticket_type: TicketType,
+    ticket_id: int,
+    user: dict = Depends(get_current_user),
+):
+    manager = request.app.state.manager
+    ticket = manager.get_ticket(ticket_id)
+
+    if not ticket:
+        raise HTTPException(404, "Ticket nicht gefunden")
+
+    try:
+        description_parsed = json.loads(ticket.description or "{}")
+    except Exception:
+        description_parsed = {}
+
+    # Optional: prüfen ob User Mitglied der Gruppe ist
+    #if not user_is_in_group(user["id"], ticket.assignee_group_id):
+    #    raise HTTPException(403, "Kein Zugriff")
+
+    return request.app.templates.TemplateResponse(
+        f"tickets/{ticket_type.value}/group_view.html",
+        {
+            "request": request,
+            "ticket": ticket,
+            "description": description_parsed,
+            "user": user,
+            "priority": ticket.priority.value,
+            "is_admin": user.get("is_admin", False),
+        }
+    )
+
+
+@router.post("/tickets/archive/{ticket_id}")
+async def archive_ticket(
+    ticket_id: int,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    manager = request.app.state.manager
+    ticket = manager.get_ticket(ticket_id)
+
+    if not ticket:
+        raise HTTPException(404, "Ticket nicht gefunden")
+
+    manager.update_ticket(
+        ticket_id=ticket.id,
+        status=RequestStatus.archived
+    )
+
+    logger.info(
+        f"Ticket archiviert | ID={ticket.id} | User={user.get('displayName')}"
+    )
+
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+
+def complete_ticket_internal(ticket, request, user):
+    # Pflichtfelder prüfen
+    if not ticket.priority:
+        raise HTTPException(400, "Priorität fehlt")
+
+    try:
+        json.loads(ticket.description or "{}")
+    except Exception:
+        raise HTTPException(400, "Ticketbeschreibung ungültig")
+
+    group_id = get_groupID_from_name(ticket.ticket_type)
+    if not group_id:
+        raise HTTPException(500, "Keine Fachabteilung konfiguriert")
+
+    request.app.state.manager.update_ticket(
+        ticket_id=ticket.id,
+        status=RequestStatus.in_request,
+        assignee_id="system",
+        assignee_name="System",
+        assignee_group_id=group_id,
+    )

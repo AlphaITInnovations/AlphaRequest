@@ -7,8 +7,7 @@ import pymysql
 from pymysql.cursors import DictCursor
 from sqlalchemy.engine import make_url
 
-
-from alpharequestmanager.models.models import Ticket, RequestStatus, TicketType
+from alpharequestmanager.models.models import Ticket, RequestStatus
 from alpharequestmanager.utils.logger import logger
 
 
@@ -83,8 +82,7 @@ comment, status, priority,
 created_at, updated_at,
 ninja_metadata,
 assignee_id, assignee_name, assignee_history,
-assignee_group_id, assignee_group_name,
-tags
+assignee_group_id, assignee_group_name
 """
 
 
@@ -98,6 +96,7 @@ def init_db():
         title               TEXT NOT NULL,
         description         LONGTEXT NOT NULL,
         ticket_type         VARCHAR(255) NOT NULL,
+
         owner_id            VARCHAR(255) NOT NULL,
         owner_name          VARCHAR(255) NOT NULL,
         owner_info          LONGTEXT NULL,
@@ -116,9 +115,7 @@ def init_db():
         assignee_history    LONGTEXT NULL,
 
         assignee_group_id   VARCHAR(255) NULL,
-        assignee_group_name VARCHAR(255) NULL,
-
-        tags                LONGTEXT NULL
+        assignee_group_name VARCHAR(255) NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
@@ -144,31 +141,30 @@ def init_db():
 
 def insert_ticket(
     title: str,
-    ticket_type: TicketType,
+    ticket_type: str,
     description: str,
     owner_id: str,
     owner_name: str,
     owner_info: str,
+    comment: str,
+    status: str,
     ninja_metadata: Optional[str] = None,
     priority: str = "medium",
-    tags: Optional[List[str]] = None
 ) -> int:
 
     now = _now_iso()
-    tags_json = json.dumps(tags or [], ensure_ascii=False)
 
     conn = get_connection()
     try:
         cur = _exec(conn, f"""
             INSERT INTO {TICKET_TABLE} (
-                title, ticket_type, description, 
+                title, ticket_type, description,
                 owner_id, owner_name, owner_info,
                 comment, status, priority,
                 created_at, updated_at,
                 ninja_metadata,
                 assignee_id, assignee_name, assignee_history,
-                assignee_group_id, assignee_group_name,
-                tags
+                assignee_group_id, assignee_group_name
             )
             VALUES (
                 %s, %s, %s,
@@ -177,16 +173,14 @@ def insert_ticket(
                 %s, NULL,
                 %s,
                 NULL, NULL, NULL,
-                NULL, NULL,
-                %s
+                NULL, NULL
             )
         """, (
-            title, ticket_type.value, description,
+            title, ticket_type, description,
             owner_id, owner_name, owner_info,
-            "", RequestStatus.pending.value, priority,
+            comment, status, priority,
             now,
             ninja_metadata,
-            tags_json
         ))
         conn.commit()
         return int(cur.lastrowid)
@@ -194,26 +188,26 @@ def insert_ticket(
         conn.close()
 
 
-def _select_tickets(where_sql: str = "", params: Tuple = ()) -> List[Ticket]:
+
+def _select_tickets(where_sql: str = "", params: Tuple = (), limit: Optional[int] = None) -> List[Ticket]:
     conn = get_connection()
     try:
+        limit_sql = f"LIMIT {limit}" if limit else ""
         rows = _fetchall(conn, f"""
             SELECT {TICKET_FIELDS}
             FROM {TICKET_TABLE}
             {where_sql}
             ORDER BY created_at DESC
+            {limit_sql}
         """, params)
         return [Ticket.from_row(r) for r in rows]
     finally:
         conn.close()
 
 
+
 def list_all_tickets() -> List[Ticket]:
     return _select_tickets()
-
-
-def list_pending_tickets() -> List[Ticket]:
-    return _select_tickets("WHERE status = %s", (RequestStatus.pending.value,))
 
 
 def list_tickets_by_owner(owner_id: str) -> List[Ticket]:
@@ -224,22 +218,18 @@ def list_tickets_by_assignee(assignee_id: str) -> List[Ticket]:
     return _select_tickets("WHERE assignee_id = %s", (assignee_id,))
 
 
+def list_tickets_by_assignee_group(group_id: str) -> List[Ticket]:
+    return _select_tickets(
+        "WHERE assignee_group_id = %s AND status = %s",
+        (group_id, RequestStatus.in_request.value),
+    )
+
+
 def get_ticket(ticket_id: int) -> Optional[Ticket]:
-    rows = _select_tickets("WHERE id = %s LIMIT 1", (ticket_id,))
+    rows = _select_tickets("WHERE id = %s", (ticket_id,), limit=1)
     return rows[0] if rows else None
 
-def list_tickets_by_assignee_group(group_id: str) -> list[Ticket]:
-    conn = get_connection()
-    try:
-        rows = _fetchall(conn, f"""
-            SELECT {TICKET_FIELDS}
-            FROM tickets
-            WHERE assignee_group_id = %s
-            ORDER BY created_at DESC
-        """, (group_id,))
-        return [Ticket.from_row(r) for r in rows]
-    finally:
-        conn.close()
+
 
 
 # ============================================================
@@ -247,14 +237,13 @@ def list_tickets_by_assignee_group(group_id: str) -> list[Ticket]:
 # ============================================================
 
 def update_ticket(ticket_id: int, **fields) -> None:
-    """Generic update — accepts ANY Ticket model field."""
+    """Generic update — accepts any Ticket model field except removed ones."""
 
     allowed = {
         "title", "description", "owner_id", "owner_name",
         "owner_info", "comment", "status", "priority",
         "ninja_metadata", "assignee_id", "assignee_name",
-        "assignee_history", "assignee_group_id", "assignee_group_name",
-        "tags"
+        "assignee_history", "assignee_group_id", "assignee_group_name"
     }
 
     updates = {k: v for k, v in fields.items() if k in allowed}
@@ -267,8 +256,7 @@ def update_ticket(ticket_id: int, **fields) -> None:
     set_sql = ", ".join(f"{k}=%s" for k in updates.keys())
     params = tuple(
         json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v
-        for v in updates.values()
-    ) + (ticket_id,)
+    for v in updates.values()) + (ticket_id,)
 
     conn = get_connection()
     try:
@@ -280,7 +268,6 @@ def update_ticket(ticket_id: int, **fields) -> None:
 
 def set_assignee(ticket_id: int, user_id: str, user_name: str):
     """Append to history and set assignment."""
-
     ticket = get_ticket(ticket_id)
     history = ticket.assignee_history_parsed if ticket else []
 
@@ -322,6 +309,7 @@ def update_ticket_metadata(
     update_ticket(ticket_id, ninja_metadata=json.dumps(metadata, ensure_ascii=False))
 
 
+
 def delete_ticket(ticket_id: int) -> bool:
     conn = get_connection()
     try:
@@ -331,6 +319,7 @@ def delete_ticket(ticket_id: int) -> bool:
         return affected > 0
     finally:
         conn.close()
+
 
 
 # ============================================================
@@ -389,6 +378,7 @@ def set_companies(companies: List[str]):
     settings_set("COMPANIES", companies)
 
 
+
 # ============================================================
 # Ninja Token
 # ============================================================
@@ -402,8 +392,9 @@ def set_ninja_token(token: Optional[dict]):
     settings_set("NINJA_TOKEN", token)
 
 
+
 # ============================================================
-# Ticket Permissions
+# Ticket Permissions & Groups
 # ============================================================
 
 def load_ticket_permissions() -> dict:
@@ -431,3 +422,64 @@ def save_groups(groups: List[dict]):
     if not isinstance(groups, list):
         raise ValueError("Groups must be list")
     settings_set("TICKET_GROUPS", groups)
+
+
+def get_users_from_group(groupID: str) -> List[str]:
+    """
+    Gibt die User-IDs einer Gruppe zurück.
+    Falls Gruppe nicht existiert → leere Liste.
+    """
+    if not groupID:
+        return []
+
+    groups = get_groups()
+
+    for g in groups:
+        if g.get("id") == groupID:
+            members = g.get("members", [])
+            return members if isinstance(members, list) else []
+
+    return []
+
+
+def get_groupID_from_name(groupName: str) -> Optional[str]:
+    """
+    Gibt die Gruppen-ID anhand des Gruppennamens zurück.
+    Falls nicht gefunden → None.
+    """
+    if not groupName:
+        return None
+
+    groups = get_groups()
+
+    for g in groups:
+        if g.get("name") == groupName:
+            return g.get("id")
+
+    return None
+
+
+def get_group_ids_for_user(user_id: str) -> List[str]:
+    """
+    Gibt alle Gruppen-IDs zurück, in denen der User Mitglied ist.
+    """
+    if not user_id:
+        return []
+
+    groups = get_groups()
+    result = []
+
+    for g in groups:
+        members = g.get("members", [])
+        if isinstance(members, list) and user_id in members:
+            result.append(g.get("id"))
+
+    return result
+
+
+def get_group_name_from_id(group_id: str) -> Optional[str]:
+    groups = get_groups()
+    for g in groups:
+        if g.get("id") == group_id:
+            return g.get("name")
+    return None

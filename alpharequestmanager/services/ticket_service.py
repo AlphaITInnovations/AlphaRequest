@@ -26,29 +26,34 @@ class TicketService:
     # Ticket ERSTELLEN
     # ---------------------------------------------------------
     def create_ticket(
-        self,
-        title: str,
-        ticket_type: models.TicketType,
-        description: str,
-        owner_id: str,
-        owner_name: str,
-        owner_info: str,
-        ninja_metadata: Optional[Dict[str, Any]] = None,
-        priority: TicketPriority = TicketPriority.medium,
-        tags: Optional[List[str]] = None,
+            self,
+            title: str,
+            ticket_type: TicketType,
+            description: str,
+            owner_id: str,
+            owner_name: str,
+            owner_info: str,
+            comment: str,
+            status: RequestStatus,
+            assignee_id: str,
+            assignee_name: str,
+            priority: TicketPriority = TicketPriority.medium,
     ) -> int:
 
         ticket_id = db.insert_ticket(
             title=title,
-            ticket_type=ticket_type,
+            ticket_type=ticket_type.value,
             description=description,
             owner_id=owner_id,
             owner_name=owner_name,
             owner_info=owner_info,
-            ninja_metadata=json.dumps(ninja_metadata) if ninja_metadata else None,
+            comment=comment,
+            status=status.value,
             priority=priority.value,
-            tags=tags or [],
         )
+
+
+        db.set_assignee(ticket_id, assignee_id, assignee_name)
 
         logger.info(f"Created ticket #{ticket_id}")
         return ticket_id
@@ -70,6 +75,29 @@ class TicketService:
 
     def list_by_assignee_group(self, group_id: str) -> List[Ticket]:
         return db.list_tickets_by_assignee_group(group_id)
+
+    def list_by_assignee_group_by_user(self, user_id: str) -> List[Ticket]:
+        """
+        Gibt alle Tickets zurück, die einer Fachabteilung zugewiesen sind,
+        in der der User Mitglied ist.
+        """
+        if not user_id:
+            return []
+
+        # 1) Gruppen ermitteln, in denen User Mitglied ist
+        group_ids = db.get_group_ids_for_user(user_id)
+
+        if not group_ids:
+            return []
+
+        tickets: List[Ticket] = []
+
+        # 2) Tickets pro Gruppe sammeln
+        for group_id in group_ids:
+            group_tickets = db.list_tickets_by_assignee_group(group_id)
+            tickets.extend(group_tickets)
+
+        return tickets
 
     # ---------------------------------------------------------
     # Ticket-LESEN

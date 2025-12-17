@@ -486,3 +486,85 @@ def get_alpha_request_sendeverfolgung(ticket: dict) -> Optional[str]:
         if aid == 200:
             return attr.get("value")
     return None
+
+
+"""
+    try:
+        ninja_ticket = None
+
+        match ticket_type:
+            case TicketType.hardware:
+                ninja_ticket = ninja_api.create_ticket_hardware(
+                    description=desc_obj,
+                    requester_mail=user_mail,
+                    is_admin=user.get("is_admin", False),
+                )
+
+            case TicketType.zugangSperren:
+                ninja_ticket = ninja_api.create_ticket_edv_sperren(
+                    description=desc_obj,
+                    requester_mail=user_mail,
+                    is_admin=user.get("is_admin", False),
+                )
+
+            case TicketType.zugangBeantragen:
+                arbeitsbeginn_ts = None
+                if data.get("arbeitsbeginn"):
+                    arbeitsbeginn_ts = int(datetime.fromisoformat(data["arbeitsbeginn"]).timestamp())
+
+                ninja_ticket = ninja_api.create_ticket_edv_beantragen(
+                    description=desc_obj,
+                    vorname=data.get("vorname", ""),
+                    nachname=data.get("nachname", ""),
+                    firma=data.get("firma", ""),
+                    arbeitsbeginn=arbeitsbeginn_ts,
+                    titel=data.get("titel", ""),
+                    strasse=data.get("strasse", ""),
+                    ort=data.get("ort", ""),
+                    plz=data.get("plz", ""),
+                    handy=data.get("handy", ""),
+                    telefon=data.get("telefon", ""),
+                    fax=data.get("fax", ""),
+                    niederlassung=data.get("niederlassung", ""),
+                    kostenstelle=data.get("kostenstelle", ""),
+                    kommentar=data.get("kommentar", ""),
+                    requester_mail=user_mail,
+                    checkbox_datev_user=bool(data.get("datev")),
+                    checkbox_elo_user=bool(data.get("elo")),
+                    elo_vorgesetzter=data.get("eloVorgesetzter", ""),
+                    is_admin=user.get("is_admin", False),
+                )
+
+            case TicketType.niederlassungAnmeldung:
+                ninja_ticket = ninja_api.create_ticket_niederlassung_anmelden(
+                    description=desc_obj,
+                    requester_mail=user_mail,
+                    is_admin=user.get("is_admin", False),
+                )
+
+            case TicketType.niederlassungUmzug:
+                ninja_ticket = ninja_api.create_ticket_niederlassung_umziehen(
+                    description=desc_obj,
+                    requester_mail=user_mail,
+                    is_admin=user.get("is_admin", False),
+                )
+
+            case TicketType.niederlassungAbmeldung:
+                ninja_ticket = ninja_api.create_ticket_niederlassung_schließen(
+                    description=desc_obj,
+                    requester_mail=user_mail,
+                    is_admin=user.get("is_admin", False),
+                )
+
+        if not ninja_ticket or "id" not in ninja_ticket:
+            raise HTTPException(status_code=500, detail="Ticket konnte in Ninja nicht erstellt werden")
+
+    except NinjaAuthFlowRequired:
+        return RedirectResponse("/dashboard?ninja_auth=needed", status_code=HTTP_302_FOUND)
+            manager.set_ninja_metadata(local_id, ninja_ticket["id"])
+
+    logger.info(
+        "Ticket erstellt: lokal=%s / ninja=%s / user=%s",
+        local_id, ninja_ticket["id"], user_mail
+    )
+"""

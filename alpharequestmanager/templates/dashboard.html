@@ -1,486 +1,252 @@
 {% extends "base.html" %}
-{% block title %}Übersicht – AlphaRequestManager{% endblock %}
+{% block title %}Übersicht – AlphaRequest{% endblock %}
 
 {% block head %}
 <style>
   :root {
-    --primary: #2563eb;        /* Tailwind blue-600 */
-    --primary-hover: #1d4ed8;  /* blue-700 */
-    --ring: 0 0 0 4px rgba(37,99,235,0.25);
+    --primary: #3EAAB8;
+    --primary-hover: #2B7D89;
   }
-  .bg-primary{background-color:var(--primary)}
-  .hover\:bg-primaryHover:hover{background-color:var(--primary-hover)}
-  .text-muted{color:rgb(107 114 128)}
-  .focus-ring:focus{outline:none; box-shadow:var(--ring)}
-  /* dezente Scrollbar */
-  .nice-scrollbar{scrollbar-width:thin; scrollbar-color: rgba(0,0,0,.2) transparent}
-  .nice-scrollbar::-webkit-scrollbar{height:8px;width:8px}
-  .nice-scrollbar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.25);border-radius:8px}
-  .nice-scrollbar::-webkit-scrollbar-track{background:transparent}
 
-  /* Pop-up Styles */
-  #dev-popup-overlay {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    visibility: hidden;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+  .nice-scrollbar::-webkit-scrollbar { width:8px; }
+  .nice-scrollbar::-webkit-scrollbar-thumb {
+      background:rgba(0,0,0,.25);
+      border-radius:8px;
   }
-  #dev-popup-overlay.show { visibility: visible; opacity: 1; }
 
-  #dev-popup {
-    background: var(--card-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 2rem;
-    border-radius: 1rem;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    max-width: 400px;
-    text-align: center;
-    font-family: sans-serif;
+  .ticket-accent {
+      position:absolute;
+      left:0;
+      top:12px;
+      bottom:12px;
+      width:4px;
+      border-radius:4px;
+      opacity:.7;
+      transition:all .25s ease;
   }
-  #dev-popup button {
-    margin-top: 1rem;
-    padding: 0.5rem 1.25rem;
-    background-color: #2563eb;
-    color: white;
-    border: none;
-    border-radius: 0.5rem;
-    cursor: pointer;
+
+  .ticket:hover .ticket-accent {
+      width:6px;
+      opacity:1;
   }
-  #dev-popup button:hover { background-color: #1d4ed8; }
 </style>
 
 <script>
-  // Serverseitiges Flag als JS-Boolean
-  window.SHOW_DEV_POPUP = {{ (devpopup | default(false)) | tojson }};
-</script>
+document.addEventListener("alpine:init", () => {
+  Alpine.data("dashboardManager", () => ({
 
-<script>
-  window._ORDERS = {{ orders | default([]) | tojson | safe }};
+    orders: {{ orders | tojson }},
+    group_requests: {{ group_requests | tojson }},
+    userName: "{{ user.displayName }}",
 
-  function showDevPopupOncePerDay() {
-    if (!window.SHOW_DEV_POPUP) return;
-    const today = new Date().toISOString().split('T')[0];
-    const lastShown = localStorage.getItem('devPopupLastShown');
-    if (lastShown !== today) {
-      document.getElementById('dev-popup-overlay')?.classList.add('show');
-      localStorage.setItem('devPopupLastShown', today);
-    }
-  }
-  function closeDevPopup() {
-    document.getElementById('dev-popup-overlay')?.classList.remove('show');
-  }
-  if (window.SHOW_DEV_POPUP) {
-    window.addEventListener('DOMContentLoaded', showDevPopupOncePerDay);
-  }
-</script>
-
-<script>
-document.addEventListener('alpine:init', () => {
-  Alpine.data('dashboardManager', () => ({
-    // --- state ---
-    orders: window._ORDERS,
-    showTicketModal: false,
-    ticketType: '',
-    toastVisible: false,
-    toastMessage: '',
-    filter: 'all',
-    sidebarOpen: false,
-    showErrorModal: false,
-    errorMessage: 'Ticket konnte nicht erstellt werden. Bitte IT kontaktieren.',
-
-    // Mapping Anzeige-Text → Permission-Key
-    ticketTypeMap: {
+    ticketPages: {
       "Hardwarebestellung": "hardware",
-      "EDV-Zugang beantragen": "zugangBeantragen",
-      "EDV-Zugang sperren": "zugangSperren",
-      "Niederlassung anmelden": "niederlassungAnmeldung",
-      "Niederlassung schließen": "niederlassungAbmeldung",
-      "Niederlassung umzug": "niederlassungUmzug"
+      "EDV-Zugang beantragen": "zugang-beantragen",
+      "EDV-Zugang sperren": "zugang-sperren",
+      "Niederlassung anmelden": "niederlassung-anmelden",
+      "Niederlassung schließen": "niederlassung-schliessen",
+      "Niederlassung umzug": "niederlassung-umzug"
     },
 
-    // --- lifecycle ---
-    init() {
-      const p = new URLSearchParams(location.search);
-      if (p.get('created') === '1') {
-        this.toastMessage = '🎉 Ticket erstellt!';
-        this.toastVisible = true;
-        setTimeout(() => this.toastVisible = false, 3000);
-        history.replaceState(null, '', location.pathname);
-      }
-      if (p.get('ninja_auth') === 'needed') {
-        this.openErrorModal('Ticket konnte nicht erstellt werden. NinjaOne ist nicht verbunden. Bitte IT kontaktieren.');
-      }
-      if (p.has('created') || p.has('ninja_auth')) {
-        p.delete('created'); p.delete('ninja_auth');
-        history.replaceState(null, '', location.pathname + (p.toString() ? '?' + p.toString() : ''));
-      }
-
-      // Polling
-      setInterval(async () => {
-        try {
-          const res = await fetch('/api/orders');
-          if (res.ok) this.orders = await res.json();
-        } catch (e) { console.error("Fehler beim Aktualisieren:", e); }
-      }, 15000);
+    openNew(type) {
+      const page = this.ticketPages[type];
+      if (page) window.location.href = `/tickets/new/${page}`;
     },
 
-    // --- permission check ---
-    async canCreateTicket(type) {
-      const key = this.ticketTypeMap[type] || null;
-
-      if (!key) {
-        console.warn("Unbekannter ticket type im Frontend:", type);
-        return false;
-      }
-
-      try {
-        const url = `/api/admin/can-create?ticket_type=${encodeURIComponent(key)}`;
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.warn("can-create HTTP-Fehler", res.status);
-          return false;
-        }
-        const json = await res.json();
-        return json.ok === true;
-      } catch (e) {
-        console.error("can-create Request fehlgeschlagen", e);
-        return false;
-      }
+    openUserTicket(o) {
+      window.location.href = `/tickets/edit/${o.type_key}/${o.id}`;
     },
 
-    async openTicketModal(type) {
-      const ok = await this.canCreateTicket(type);
-
-      if (!ok) {
-        this.openErrorModal("Du hast keine Berechtigung, diesen Ticket-Typ zu erstellen.");
-        return;
-      }
-
-      this.ticketType = type;
-      this.showTicketModal = true;
+    openGroupTicket(o) {
+      window.location.href = `/tickets/group/${o.type_key}/${o.id}`;
     },
 
-    // --- Detail-Router / Rest bleibt wie gehabt ---
-    openDetail(order) {
-      const id = this.modalIdFor(order?.type);
-      this.$store.modal.open(id, order);
-    },
-    modalIdFor(type) {
-      const norm = (s) => (s || '')
-        .toString()
-        .normalize('NFKC')
-        .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\-]+/g, '-')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-
-      const key = norm(type);
-
-      const map = {
-        'hardwarebestellung': 'detail:hardware',
-        'edv-zugang beantragen': 'detail:zugang-beantragen',
-        'edv-zugang sperren': 'detail:zugang-sperren',
-        'niederlassung anmelden': 'detail:niederlassung-anmelden',
-        'niederlassung umzug': 'detail:umzug-niederlassung',
-        'niederlassung schließen': 'detail:niederlassung-schliessen',
-        'niederlassung schliessen': 'detail:niederlassung-schliessen',
-      };
-
-      return map[key] || 'detail:generic';
+    statusLabel(s) {
+      return {
+        in_progress: "In Bearbeitung",
+        in_request: "Zu bearbeiten",
+        approved: "Erledigt",
+        rejected: "Abgelehnt",
+      }[s] || s;
     },
 
-    openErrorModal(msg) {
-      if (msg) this.errorMessage = msg;
-      this.showErrorModal = true;
-      this.$nextTick(() => document.getElementById('error-modal-close')?.focus());
+    statusBadge(s) {
+      return {
+        in_progress: "bg-yellow-100 text-yellow-800",
+        in_request: "bg-primary/20 text-primary",
+        approved: "bg-green-100 text-green-800",
+        rejected: "bg-red-100 text-red-800",
+      }[s] || "bg-gray-200 text-gray-700";
     },
-    closeErrorModal() { this.showErrorModal = false; },
 
-    translateStatus(status) {
-      return ({approved:'Erledigt', pending:'Ausstehend', rejected:'Abgelehnt'}[status]) || status;
+    priorityLabel(p) {
+      return {
+        low: "Niedrig",
+        medium: "Mittel",
+        high: "Hoch",
+        critical: "Kritisch",
+      }[p] || p;
     },
-    itemClasses(status) {
-      const base = 'p-4 rounded-xl cursor-pointer transition border border-transparent hover:border-gray-300 dark:hover:border-gray-600 ring-1 ring-black/5 dark:ring-white/10';
-      const tones = {
-        approved: 'bg-green-200/80 hover:bg-green-300/80 dark:bg-green-900/30 dark:hover:bg-green-900/40',
-        pending:  'bg-yellow-200/80 hover:bg-yellow-300/80 dark:bg-yellow-800/30 dark:hover:bg-yellow-800/40',
-        rejected: 'bg-red-200/80 hover:bg-red-300/80 dark:bg-red-900/30 dark:hover:bg-red-900/40',
-        default:  'bg-gray-100/80 hover:bg-gray-200/80 dark:bg-gray-700/30 dark:hover:bg-gray-700/40'
-      };
-      const tone = tones[status] || tones.default;
-      return `${base} ${tone}`;
+
+    priorityIcon(p) {
+      return {
+        low: "🟢",
+        medium: "🟡",
+        high: "🟠",
+        critical: "🔴",
+      }[p] || "⚪";
     },
-    badgeClasses(status) {
-      const base = 'inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full';
-      const light = {
-        pending: 'bg-yellow-200/80 text-yellow-900',
-        approved: 'bg-green-200/80 text-green-900',
-        rejected: 'bg-red-200/80 text-red-900'
-      };
-      const dark = {
-        pending: 'dark:bg-yellow-500/70 dark:text-black',
-        approved: 'dark:bg-green-500/70 dark:text-black',
-        rejected: 'dark:bg-red-600/70 dark:text-white'
-      };
-      return `${base} ${light[status] || 'bg-gray-200/80 text-gray-900'} ${dark[status] || 'dark:bg-gray-600/70 dark:text-white'}`;
-    },
-    get filtered() {
-      return this.orders.filter(o => this.filter === 'all' || o.status === this.filter);
+
+    statusAccent(s) {
+      return {
+        in_progress: "bg-yellow-400",
+        in_request: "bg-primary",
+        approved: "bg-green-500",
+        rejected: "bg-red-500",
+      }[s] || "bg-gray-400";
     }
-  }));
-});
 
-</script>
-
-<!-- Globaler ESC-Handler: schließt $store.modal & mobile Sidebar -->
-<script>
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    try {
-      const stores = (window.Alpine && Alpine.store) ? Alpine.store : null;
-      const modal = stores && stores.modal;
-      if (modal && modal.active) {
-        modal.close();
-        e.stopPropagation();
-        return;
-      }
-      // Mobile Sidebar schließen (optional)
-      const scope = document.querySelector('[x-data]');
-      if (scope && scope.__x && scope.__x.$data && scope.__x.$data.mobileOpen) {
-        scope.__x.$data.mobileOpen = false;
-        e.stopPropagation();
-      }
-    } catch (_) {}
-  });
+  }))
+})
 </script>
 {% endblock %}
 
 {% block content %}
-<div x-data="dashboardManager()" x-init="init()" class="min-h-[80vh]">
+<div x-data="dashboardManager()" class="min-h-[80vh]">
 
-{% if devpopup %}
-<div id="dev-popup-overlay">
-  <div id="dev-popup">
-    <h2 class="text-xl font-semibold mb-2">Hinweis</h2>
-    <p>
-      Dieses Tool befindet sich aktuell noch in der Entwicklung.<br />
-      Bei Problemen oder Fragen bitte an:<br />
-      <a href="mailto:it@alphaconsult.org" class="text-blue-600 font-medium">it@alphaconsult.org</a> wenden.
-    </p>
-    <button onclick="closeDevPopup()">Verstanden</button>
+<!-- HEADER -->
+<header class="mb-6">
+  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border px-6 py-5">
+    <h1 class="text-2xl font-bold">
+      Willkommen, <span x-text="userName"></span> 👋
+    </h1>
   </div>
+</header>
+
+<div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
+
+<!-- SIDEBAR -->
+<aside class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-6 lg:sticky lg:top-6 h-fit">
+  <h2 class="text-lg font-semibold mb-5 text-primary">
+    Neuer Auftrag
+  </h2>
+
+  <div class="grid gap-4">
+    <template x-for="a in [
+      {icon:'📦', label:'Hardwarebestellung'},
+      {icon:'🔑', label:'EDV-Zugang beantragen'},
+      {icon:'🔒', label:'EDV-Zugang sperren'},
+      {icon:'🏢', label:'Niederlassung anmelden'},
+      {icon:'🔄', label:'Niederlassung umzug'},
+      {icon:'❌', label:'Niederlassung schließen'}
+    ]">
+      <button
+        @click="openNew(a.label)"
+        class="group flex items-center gap-4 px-6 py-4
+               bg-primary text-white rounded-xl
+               transition-all hover:bg-primary-hover
+               hover:shadow-xl hover:-translate-y-[1px]">
+
+        <span class="text-2xl transition group-hover:scale-110" x-text="a.icon"></span>
+        <span class="font-medium truncate" x-text="a.label"></span>
+      </button>
+    </template>
+  </div>
+</aside>
+
+<!-- CONTENT -->
+<section class="space-y-6">
+
+  <!-- DEINE AUFTRÄGE -->
+  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
+    <h2 class="text-xl font-semibold mb-4 text-primary">
+      Deine Aufträge
+    </h2>
+
+    <ul class="space-y-4 max-h-[480px] overflow-auto nice-scrollbar pr-1">
+      <template x-for="o in orders" :key="o.id">
+        <li @click="openUserTicket(o)"
+            class="ticket relative p-5 rounded-xl border
+                   bg-white dark:bg-gray-700 cursor-pointer
+                   transition hover:-translate-y-[2px] hover:shadow-xl">
+
+          <div class="ticket-accent" :class="statusAccent(o.status)"></div>
+
+          <div class="flex justify-between gap-4 pl-3">
+
+            <div class="min-w-0">
+              <div class="font-semibold truncate" x-text="o.type"></div>
+              <div class="text-sm text-gray-500" x-text="o.date"></div>
+            </div>
+
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="px-3 py-1 rounded-md text-xs font-semibold"
+                    :class="statusBadge(o.status)"
+                    x-text="statusLabel(o.status)">
+              </span>
+
+              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-200 text-gray-800">
+                <span x-text="priorityIcon(o.priority)"></span>
+                <span x-text="priorityLabel(o.priority)"></span>
+              </span>
+            </div>
+
+          </div>
+        </li>
+      </template>
+
+      <template x-if="orders.length === 0">
+        <li class="text-gray-500 text-sm text-center py-8">
+          Keine eigenen Aufträge vorhanden.
+        </li>
+      </template>
+    </ul>
+  </div>
+
+  <!-- FACHABTEILUNG -->
+  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
+    <h2 class="text-xl font-semibold mb-4 text-primary">
+      Fachabteilung · Aufträge
+    </h2>
+
+    <ul class="space-y-4 max-h-[480px] overflow-auto nice-scrollbar pr-1">
+      <template x-for="o in group_requests" :key="o.id">
+        <li @click="openGroupTicket(o)"
+            class="ticket relative p-5 rounded-xl border
+                   bg-white dark:bg-gray-700 cursor-pointer
+                   transition hover:-translate-y-[2px] hover:shadow-xl">
+
+          <div class="ticket-accent bg-primary"></div>
+
+          <div class="flex justify-between gap-4 pl-3">
+
+            <div class="min-w-0">
+              <div class="font-semibold truncate" x-text="o.type"></div>
+              <div class="text-sm text-gray-500" x-text="o.date"></div>
+            </div>
+
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-primary/20 text-primary">
+                Fachabteilung
+              </span>
+              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-emerald-100 text-emerald-800">
+                🛠 Zu bearbeiten
+              </span>
+            </div>
+
+          </div>
+        </li>
+      </template>
+
+      <template x-if="group_requests.length === 0">
+        <li class="text-gray-500 text-sm text-center py-8">
+          Keine Fachabteilungsaufträge.
+        </li>
+      </template>
+    </ul>
+  </div>
+
+</section>
 </div>
-{% endif %}
-
-  <!-- Toast -->
-  <div
-    x-show="toastVisible"
-    x-transition:enter="transition ease-out duration-300"
-    x-transition:enter-start="opacity-0 translate-y-[-10px]"
-    x-transition:enter-end="opacity-100 translate-y-0"
-    x-transition:leave="transition ease-in duration-300"
-    x-transition:leave-start="opacity-100 translate-y-0"
-    x-transition:leave-end="opacity-0 translate-y-[-10px]"
-    x-cloak role="status" aria-live="polite"
-    class="fixed top-6 right-6 bg-green-600 text-white px-5 py-2.5 rounded-full shadow-lg z-[60]"
-  >
-    <span x-text="toastMessage"></span>
-  </div>
-
-  <!-- Header -->
-  <header class="mb-6">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 px-4 sm:px-6 py-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <button @click="sidebarOpen = !sidebarOpen" class="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus-ring" aria-label="Menü umschalten">
-            <!-- burger -->
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-          </button>
-          <h1 class="text-xl sm:text-2xl font-bold">AlphaRequest – Übersicht</h1>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="hidden sm:inline text-muted text-sm">Willkommen 👋</span>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- Layout -->
-  <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
-    <!-- Sidebar / Aktionen -->
-    <aside
-      class="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 p-5 lg:sticky lg:top-6 h-fit"
-      :class="{'hidden': !sidebarOpen, 'block': sidebarOpen, 'lg:block': true}"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold">Aktionen</h2>
-        <button @click="sidebarOpen=false" class="lg:hidden p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 focus-ring" aria-label="Menü schließen">
-          ✕
-        </button>
-      </div>
-      <div class="grid grid-cols-1 gap-3">
-        <template x-for="action in [
-          {icon:'📦',label:'Neue Hardwarebestellung',type:'Hardwarebestellung'},
-          {icon:'🔑',label:'EDV-Zugang beantragen',type:'EDV-Zugang beantragen'},
-          {icon:'🔒',label:'EDV-Zugang sperren',type:'EDV-Zugang sperren'},
-          {icon:'🏢',label:'Niederlassung anmelden',type:'Niederlassung anmelden'},
-          {icon:'🔄',label:'Niederlassung umziehen',type:'Niederlassung umzug'},
-          {icon:'❌',label:'Niederlassung schließen',type:'Niederlassung schließen'}
-        ]" :key="action.type">
-          <button
-            type="button"
-            @click="openTicketModal(action.type)"
-            class="w-full flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-lg hover:bg-primaryHover shadow-sm hover:shadow-md transition focus-ring"
-          >
-            <span class="text-lg" x-text="action.icon" aria-hidden="true"></span>
-            <span class="flex-1 text-left font-medium" x-text="action.label"></span>
-            <svg class="w-4 h-4 opacity-90" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-          </button>
-        </template>
-      </div>
-    </aside>
-
-    <!-- Content / Status -->
-    <section class="space-y-4">
-      <!-- Filter-Bar -->
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 p-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Status bisheriger Aufträge</h2>
-        <div class="flex gap-2 text-sm" role="group" aria-label="Filter">
-          <template x-for="option in [
-            { value: 'pending', label: 'Ausstehend' },
-            { value: 'approved', label: 'Erledigt' },
-            { value: 'rejected', label: 'Abgelehnt' },
-            { value: 'all', label: 'Alle' }
-          ]" :key="option.value">
-            <button
-              type="button"
-              @click="filter = option.value"
-              :aria-pressed="filter === option.value"
-              :class="filter === option.value
-                ? 'bg-primary text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
-              class="px-3 py-1 rounded-md transition font-medium focus-ring"
-              x-text="option.label"
-            ></button>
-          </template>
-        </div>
-      </div>
-
-      <!-- Liste -->
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 p-4">
-        <ul class="space-y-3 max-h-[560px] overflow-auto pr-1 nice-scrollbar" role="list">
-          <template x-for="order in filtered" :key="order.id">
-            <li :class="itemClasses(order.status)" @click="openDetail(order)">
-              <div class="flex justify-between items-start gap-3">
-                <div class="flex-1">
-                  <div class="font-semibold" x-text="order.type"></div>
-                  <div class="mt-1 text-sm text-muted dark:text-gray-300" x-text="order.date"></div>
-                </div>
-                <span :class="badgeClasses(order.status)" x-text="translateStatus(order.status)"></span>
-              </div>
-            </li>
-          </template>
-
-          <template x-if="filtered.length === 0">
-            <li class="p-8 text-center text-muted dark:text-gray-400">
-              <div class="flex flex-col items-center gap-2">
-                <span class="text-2xl">🗂️</span>
-                <p>Keine Tickets im aktuellen Filter.</p>
-              </div>
-            </li>
-          </template>
-        </ul>
-      </div>
-    </section>
-  </div>
-
-  <!-- Create-Ticket Modals -->
-  {% include "modals/hardware.html" %}
-  {% include "modals/zugang-beantragen.html" %}
-  {% include "modals/zugang-sperren.html" %}
-  {% include "modals/niederlassung-anmelden.html" %}
-  {% include "modals/niederlassung-schliessen.html" %}
-  {% include "modals/umzug-niederlassung.html" %}
-
-  <!-- Fehler-Modal -->
-  <div
-    x-show="showErrorModal"
-    x-cloak
-    class="fixed inset-0 z-[70] overflow-y-auto"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="errorModalTitle"
-    @keydown.escape.window="closeErrorModal()"
-  >
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-[1px]" @click="closeErrorModal()" aria-hidden="true"></div>
-
-    <div class="relative min-h-screen flex items-center justify-center px-4 py-10">
-      <div
-        x-show="showErrorModal"
-        x-trap="showErrorModal"
-        class="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-6 sm:p-7 rounded-2xl shadow-2xl w-full max-w-md relative"
-      >
-        <button type="button"
-                @click="closeErrorModal()"
-                class="absolute top-3 right-3 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-                title="Schließen" aria-label="Schließen">×</button>
-
-        <div class="flex items-start gap-3">
-          <div class="shrink-0 mt-1">
-            <svg class="w-6 h-6 text-red-600 dark:text-red-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M11 7h2v6h-2V7zm0 8h2v2h-2v-2z"/><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zM4 12a8 8 0 1 1 16 .001A8 8 0 0 1 4 12z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-          <div>
-            <h3 id="errorModalTitle" class="text-lg font-semibold">Ticket konnte nicht erstellt werden</h3>
-            <p class="mt-2 text-sm" x-text="errorMessage"></p>
-
-            <div class="mt-4 space-y-2 text-sm">
-              <p>Bitte IT kontaktieren:</p>
-              <p>
-                <a href="mailto:it@alphaconsult.org" class="text-blue-600 hover:underline font-medium">
-                  it@alphaconsult.org
-                </a>
-              </p>
-            </div>
-
-            <div class="mt-6 text-right">
-              <button id="error-modal-close" type="button"
-                      @click="closeErrorModal()"
-                      class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition focus-ring">
-                Schließen
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- Detail-Modals pro Tickettyp -->
-  {% include "modals/detail-hardware.html" %}
-  {% include "modals/detail-zugang-beantragen.html" %}
-  {% include "modals/detail-zugang-sperren.html" %}
-  {% include "modals/detail-niederlassung-anmelden.html" %}
-  {% include "modals/detail-umzug-niederlassung.html" %}
-  {% include "modals/detail-niederlassung-schliessen.html" %}
-  {% include "modals/detail-generic.html" %}
-    <div
-      x-data
-      x-cloak
-      x-show="$store.modal.active"
-      @keydown.escape.window="$store.modal.close()"
-      x-effect="$store.modal.active && $nextTick(() => $el.focus())"
-      tabindex="-1"
-      class="sr-only"
-    >
 </div>
 {% endblock %}

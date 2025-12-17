@@ -27,8 +27,8 @@ async def sync_users_into_cache(app):
 @asynccontextmanager
 async def lifespan(app):
 
-    thread = threading.Thread(target=ninja_sync.start_polling, daemon=True)
-    thread.start()
+    #thread = threading.Thread(target=ninja_sync.start_polling, daemon=True)
+    #thread.start()
 
     app.state.user_cache = []
     app.state.user_cache_timestamp = 0
