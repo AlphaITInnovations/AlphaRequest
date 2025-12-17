@@ -25,6 +25,9 @@ import time
 
 router = APIRouter()
 
+@router.get("/")
+async def start_auth(request: Request):
+    return RedirectResponse("/login")
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):

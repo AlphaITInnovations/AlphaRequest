@@ -11790,3 +11790,53 @@
 2025-12-17 15:05:07,360 - INFO - alpharequestmanager - ✅ Session nach Schreiben: {'sid': '16aa9ef4f7fd4b30a71a47e57d344653', 'user': {'id': 'a2046db5-4d1d-46aa-8bf6-49a867aabdad', 'displayName': 'Marco Schneider', 'email': 'Marco.Schneider@alpha-it-innovations.org', 'is_admin': True, 'phone': None, 'mobile': None, 'company': 'Alpha IT Innovations GmbH', 'position': 'IT', 'address': {'street': 'Forchheimer Straße 6', 'zip': '90425', 'city': 'Nürnberg'}}, 'last_activity': 1765980307}
 2025-12-17 15:05:07,363 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=16aa9ef4f7fd4b30a71a47e57d344653 last=1765980307 now=1765980307 cookie_len=602
 2025-12-17 15:05:09,082 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=16aa9ef4f7fd4b30a71a47e57d344653 last=1765980307 now=1765980309 cookie_len=602
+2025-12-17 15:07:29,520 - INFO - alpharequestmanager - User logged out: Marco.Schneider@alpha-it-innovations.org
+2025-12-17 15:12:18,067 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 15:12:18,076 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 15:12:18,096 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:12:19,024 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:12:19,024 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:12:20,062 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:13:27,939 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 15:13:27,966 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 15:13:27,982 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:13:29,035 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:13:29,035 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:13:29,988 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:13:30,279 - INFO - alpharequestmanager - User logged out: None
+2025-12-17 15:13:32,291 - INFO - alpharequestmanager - ➡️ Session vor Token-Abruf: {'auth_flow': {'state': 'cjYlPymfMXTtwREF', 'redirect_uri': 'https://AI-MS-01.dom.local:5000/auth/callback', 'scope': ['openid', 'User.Read', 'offline_access', 'Mail.Send', 'profile'], 'auth_uri': 'https://login.microsoftonline.com/9f32fe97-32f1-412e-af1f-77c6c70d54db/oauth2/v2.0/authorize?client_id=d3672286-7126-46eb-89e9-f2d4368076b0&response_type=code&redirect_uri=https%3A%2F%2FAI-MS-01.dom.local%3A5000%2Fauth%2Fcallback&scope=Mail.Send+User.Read+offline_access+openid+profile&state=cjYlPymfMXTtwREF&code_challenge=BvQS2g-7kfAxCKZZyOJNm26tzTDxbQn6KP9OM9QJjy8&code_challenge_method=S256&nonce=d96c98cd28f4ea3049e38c12aa801f24ed8310adb07eb72c6ab2b7938ae8fdfd&client_info=1', 'code_verifier': 'VgeozBC1bm8F7H2QGRUlw4vat5LxEkIrJYM0WXdfcZn', 'nonce': 'UoQFRkigaBvEdnrb', 'claims_challenge': None}}
+2025-12-17 15:13:32,573 - INFO - alpharequestmanager - 🔁 Token Result keys: ['token_type', 'scope', 'expires_in', 'ext_expires_in', 'access_token', 'refresh_token', 'id_token', 'client_info', 'id_token_claims', 'token_source']
+2025-12-17 15:13:32,573 - INFO - alpharequestmanager - 🪪 ID Claims keys: ['aud', 'iss', 'iat', 'nbf', 'exp', 'email', 'groups', 'name', 'nonce', 'oid', 'preferred_username', 'rh', 'sid', 'sub', 'tid', 'uti', 'ver']
+2025-12-17 15:13:33,420 - INFO - alpharequestmanager - ✅ Session nach Schreiben: {'sid': 'a26745f13605413e9a4579dbf40bbe41', 'user': {'id': 'a2046db5-4d1d-46aa-8bf6-49a867aabdad', 'displayName': 'Marco Schneider', 'email': 'Marco.Schneider@alpha-it-innovations.org', 'is_admin': True, 'phone': None, 'mobile': None, 'company': 'Alpha IT Innovations GmbH', 'position': 'IT', 'address': {'street': 'Forchheimer Straße 6', 'zip': '90425', 'city': 'Nürnberg'}}, 'last_activity': 1765980813}
+2025-12-17 15:13:33,424 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765980813 now=1765980813 cookie_len=602
+2025-12-17 15:13:34,819 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765980813 now=1765980814 cookie_len=602
+2025-12-17 15:17:55,347 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765980813 now=1765981075 cookie_len=602
+2025-12-17 15:18:14,134 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981094 cookie_len=602
+2025-12-17 15:18:14,857 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981094 cookie_len=602
+2025-12-17 15:18:23,605 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981103 cookie_len=602
+2025-12-17 15:18:23,630 - INFO - alpharequestmanager - Ticket gelöscht: id=12 von Marco.Schneider@alpha-it-innovations.org
+2025-12-17 15:18:23,635 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981103 cookie_len=602
+2025-12-17 15:18:23,671 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981103 cookie_len=602
+2025-12-17 15:18:36,285 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981116 cookie_len=602
+2025-12-17 15:18:36,321 - INFO - alpharequestmanager - Ticket gelöscht: id=10 von Marco.Schneider@alpha-it-innovations.org
+2025-12-17 15:18:36,325 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981116 cookie_len=602
+2025-12-17 15:18:36,333 - INFO - alpharequestmanager - Ticket gelöscht: id=9 von Marco.Schneider@alpha-it-innovations.org
+2025-12-17 15:18:36,338 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981116 cookie_len=602
+2025-12-17 15:18:36,355 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981116 cookie_len=602
+2025-12-17 15:18:36,385 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981116 cookie_len=602
+2025-12-17 15:20:34,122 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 15:20:34,148 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 15:20:34,174 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:20:36,467 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:20:36,468 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:20:37,494 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:20:38,950 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981238 cookie_len=602
+2025-12-17 15:21:04,940 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 15:21:04,951 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-17 15:21:04,967 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:21:06,021 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:21:06,021 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-17 15:21:07,056 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=a26745f13605413e9a4579dbf40bbe41 last=1765981075 now=1765981267 cookie_len=602
+2025-12-17 15:21:07,073 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-17 15:22:18,838 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-17 15:22:18,870 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden

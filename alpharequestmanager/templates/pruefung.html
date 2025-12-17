@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Ticketübersicht – AlphaRequest{% endblock %}
+{% block title %}Prüfung – AlphaRequestManager{% endblock %}
+{% block page_title %}Prüfung{% endblock %}
 
 {% block head %}
 <script>
@@ -10,152 +11,253 @@
 document.addEventListener('alpine:init', () => {
   Alpine.data('ticketsManager', () => ({
 
+    /* ================= DATA ================= */
     items: window._TICKETS,
+    filter: 'all',
     search: '',
-    statusFilter: 'all',
-    priorityFilter: 'all',
+    statuses: ['all','in_request','in_progress', 'archived', 'rejected'],
     selectedTickets: [],
 
-    statuses: ['all','in_progress','in_request','approved','archived','rejected'],
-    priorities: ['all','low','medium','high','critical'],
+    /* Modal */
+    isOpen: false,
+    pruefungItem: null,
 
+    /* ================= FILTER ================= */
     get filtered() {
-      let arr = this.items;
-
-      if (this.statusFilter !== 'all') {
-        arr = arr.filter(t => t.status === this.statusFilter);
-      }
-
-      if (this.priorityFilter !== 'all') {
-        arr = arr.filter(t => t.priority === this.priorityFilter);
-      }
+      let arr = this.filter === 'all'
+        ? this.items
+        : this.items.filter(t => t.status === this.filter);
 
       if (this.search.trim()) {
         const q = this.search.toLowerCase();
         arr = arr.filter(t =>
-          String(t.id).includes(q) ||
           (t.type || '').toLowerCase().includes(q) ||
+          String(t.id).includes(q) ||
           (t.creator || '').toLowerCase().includes(q)
         );
       }
-
       return arr;
     },
 
+    /* ================= SELECTION ================= */
     toggleSelection(id) {
-      this.selectedTickets.includes(id)
-        ? this.selectedTickets = this.selectedTickets.filter(x => x !== id)
-        : this.selectedTickets.push(id);
+      if (this.selectedTickets.includes(id)) {
+        this.selectedTickets = this.selectedTickets.filter(x => x !== id);
+      } else {
+        this.selectedTickets.push(id);
+      }
     },
 
+    toggleSelectAll(e) {
+      this.selectedTickets = e.target.checked
+        ? this.filtered.map(t => t.id)
+        : [];
+    },
+
+    isSelected(id) {
+      return this.selectedTickets.includes(id);
+    },
+
+    /* ================= ACTIONS ================= */
+    open(item) {
+      this.pruefungItem = item;
+      this.isOpen = true;
+    },
+
+    close() {
+      this.isOpen = false;
+      this.pruefungItem = null;
+    },
+
+    async deleteOne(id) {
+      if (!confirm(`Ticket #${id} wirklich löschen?`)) return;
+      await fetch(`/tickets/${id}/delete`, { method: 'POST' });
+      location.reload();
+    },
+
+    async deleteSelected() {
+      if (!this.selectedTickets.length) return;
+      if (!confirm(`${this.selectedTickets.length} Ticket(s) wirklich löschen?`)) return;
+
+      await Promise.all(
+        this.selectedTickets.map(id =>
+          fetch(`/tickets/${id}/delete`, { method: 'POST' })
+        )
+      );
+      location.reload();
+    },
+
+    /* ================= UI HELPERS ================= */
     statusBadge(s) {
       return {
-        in_progress: 'bg-yellow-100 text-yellow-800',
-        in_request: 'bg-primary/20 text-primary',
-        approved: 'bg-green-100 text-green-800',
-        archived: 'bg-gray-200 text-gray-700',
-        rejected: 'bg-red-100 text-red-800'
-      }[s] || 'bg-gray-200 text-gray-700';
+        pending: "bg-yellow-100 text-yellow-800",
+        approved: "bg-green-100 text-green-800",
+        rejected: "bg-red-100 text-red-800",
+        in_request: "bg-primary/15 text-primary",
+        archived: "bg-gray-200 text-gray-700"
+      }[s] || "bg-gray-100 text-gray-700";
     },
 
     priorityBadge(p) {
       return {
-        low: 'bg-gray-100 text-gray-700',
-        medium: 'bg-blue-100 text-blue-800',
-        high: 'bg-orange-100 text-orange-800',
-        critical: 'bg-red-100 text-red-800'
-      }[p] || 'bg-gray-100 text-gray-700';
-    },
-
-    open(item) {
-      this.$dispatch('open-pruefung', item);
+        low: "bg-gray-200 text-gray-700",
+        medium: "bg-primary/20 text-primary",
+        high: "bg-orange-200 text-orange-900",
+        critical: "bg-red-200 text-red-900"
+      }[p] || "bg-gray-200 text-gray-700";
     }
 
-  }));
-});
+  }))
+})
 </script>
 {% endblock %}
 
 {% block content %}
 <div x-data="ticketsManager()" class="space-y-6">
 
-  <!-- HEADER -->
-  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border px-6 py-5">
-    <h1 class="text-2xl font-bold">Ticketübersicht</h1>
-    <p class="text-sm text-gray-500 mt-1">
-      Alle Aufträge & Prüfungen im System
-    </p>
-  </div>
+<!-- ================= FILTER BAR ================= -->
+<div class="flex flex-wrap items-center gap-4">
 
-  <!-- FILTER -->
-  <div class="bg-white dark:bg-gray-800 rounded-xl shadow border p-4 flex flex-wrap gap-4 items-center">
-
-    <input x-model="search"
-           placeholder="🔍 Suche nach ID, Titel, Ersteller"
-           class="px-3 py-2 border rounded-md w-full md:w-72">
-
-    <select x-model="statusFilter" class="px-3 py-2 border rounded-md">
-      <template x-for="s in statuses">
-        <option :value="s" x-text="s === 'all' ? 'Alle Status' : s"></option>
-      </template>
-    </select>
-
-    <select x-model="priorityFilter" class="px-3 py-2 border rounded-md">
-      <template x-for="p in priorities">
-        <option :value="p" x-text="p === 'all' ? 'Alle Prioritäten' : p"></option>
-      </template>
-    </select>
-
-  </div>
-
-  <!-- LIST -->
-  <div class="space-y-4">
-    <template x-for="t in filtered" :key="t.id">
-      <div @click="open(t)"
-           class="cursor-pointer bg-white dark:bg-gray-800 rounded-xl shadow border p-5
-                  transition hover:-translate-y-[2px] hover:shadow-xl">
-
-        <div class="flex justify-between gap-6">
-
-          <!-- LEFT -->
-          <div class="min-w-0">
-            <div class="font-semibold truncate">
-              #<span x-text="t.id"></span> · <span x-text="t.type"></span>
-            </div>
-            <div class="text-sm text-gray-500 mt-1">
-              Erstellt am <span x-text="t.date"></span> · <span x-text="t.creator"></span>
-            </div>
-          </div>
-
-          <!-- RIGHT -->
-          <div class="flex flex-col items-end gap-2 shrink-0">
-
-            <span class="px-3 py-1 rounded-md text-xs font-semibold"
-                  :class="statusBadge(t.status)"
-                  x-text="t.status"></span>
-
-            <span class="px-3 py-1 rounded-md text-xs font-semibold"
-                  :class="priorityBadge(t.priority)">
-              Priorität: <span x-text="t.priority"></span>
-            </span>
-
-            <template x-if="t.assignee_group">
-              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-primary/10 text-primary">
-                Fachabteilung
-              </span>
-            </template>
-
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <template x-if="filtered.length === 0">
-      <div class="text-center text-gray-500 py-10">
-        Keine Tickets gefunden.
-      </div>
+  <div class="flex gap-2">
+    <template x-for="s in statuses">
+      <button
+        @click="filter=s"
+        :class="filter===s
+          ? 'bg-primary text-white'
+          : 'bg-white border hover:bg-primary/10'"
+        class="px-4 py-2 rounded-lg font-medium capitalize">
+        <span x-text="s"></span>
+      </button>
     </template>
   </div>
+
+  <div class="ml-auto flex gap-2">
+    <input
+      type="text"
+      placeholder="🔍 Suchen…"
+      x-model="search"
+      class="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
+
+    <button @click="search=''"
+            class="px-3 py-2 bg-gray-200 rounded-lg">
+      Zurücksetzen
+    </button>
+  </div>
+</div>
+
+<!-- ================= BULK ACTIONS ================= -->
+<div class="flex justify-end">
+  <button
+    @click="deleteSelected"
+    :disabled="selectedTickets.length===0"
+    class="px-4 py-2 bg-red-600 text-white rounded-lg
+           disabled:opacity-50 disabled:cursor-not-allowed">
+    🗑️ Ausgewählte löschen (<span x-text="selectedTickets.length"></span>)
+  </button>
+</div>
+
+<!-- ================= TABLE ================= -->
+<div class="bg-white rounded-xl shadow border overflow-x-auto">
+<table class="w-full text-sm">
+<thead class="bg-gray-100">
+<tr>
+  <th class="p-3"><input type="checkbox" @change="toggleSelectAll"></th>
+  <th class="p-3">ID</th>
+  <th class="p-3">Titel</th>
+  <th class="p-3">Ersteller</th>
+  <th class="p-3">Status</th>
+  <th class="p-3">Priorität</th>
+  <th class="p-3 text-right">Aktionen</th>
+</tr>
+</thead>
+
+<tbody class="divide-y">
+<template x-for="t in filtered" :key="t.id">
+<tr class="hover:bg-gray-50">
+
+  <td class="p-3">
+    <input type="checkbox"
+           :checked="isSelected(t.id)"
+           @change="toggleSelection(t.id)">
+  </td>
+
+  <td class="p-3 font-mono text-primary" x-text="t.id"></td>
+
+  <td class="p-3">
+    <div class="font-medium" x-text="t.type"></div>
+    <div class="text-xs text-gray-500" x-text="t.date"></div>
+  </td>
+
+  <td class="p-3" x-text="t.creator"></td>
+
+  <td class="p-3">
+    <span class="px-2 py-1 rounded text-xs font-semibold"
+          :class="statusBadge(t.status)"
+          x-text="t.status"></span>
+  </td>
+
+  <td class="p-3">
+    <span class="px-2 py-1 rounded text-xs font-semibold"
+          :class="priorityBadge(t.priority)"
+          x-text="t.priority"></span>
+  </td>
+
+  <td class="p-3 text-right space-x-2">
+    <button
+      @click="open(t)"
+      class="px-3 py-1.5 rounded bg-primary/10 text-primary hover:bg-primary/20">
+      👁️ Ansehen
+    </button>
+
+    <button
+      @click="deleteOne(t.id)"
+      class="px-3 py-1.5 rounded bg-red-100 text-red-700 hover:bg-red-200">
+      🗑️ Löschen
+    </button>
+  </td>
+
+</tr>
+</template>
+
+<template x-if="filtered.length===0">
+<tr>
+  <td colspan="7" class="p-6 text-center text-gray-500">
+    Keine Tickets gefunden
+  </td>
+</tr>
+</template>
+
+</tbody>
+</table>
+</div>
+
+<!-- ================= MODAL ================= -->
+<div x-show="isOpen" x-cloak class="fixed inset-0 z-50">
+  <div class="absolute inset-0 bg-black/40" @click="close()"></div>
+
+  <div class="absolute inset-0 flex items-center justify-center p-6">
+    <div class="bg-white max-w-3xl w-full rounded-xl shadow-xl p-6">
+
+      <div class="flex justify-between items-start mb-4">
+        <h2 class="text-xl font-semibold">
+          Ticket #<span x-text="pruefungItem.id"></span>
+        </h2>
+        <button @click="close()" class="text-gray-500">✕</button>
+      </div>
+
+      <pre class="bg-gray-100 rounded p-4 text-sm overflow-auto max-h-[50vh]"
+           x-text="JSON.stringify(pruefungItem, null, 2)"></pre>
+
+      <div class="mt-6 flex justify-end gap-3">
+        <button @click="close()"
+                class="px-4 py-2 border rounded-lg">
+          Schließen
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 </div>
 {% endblock %}

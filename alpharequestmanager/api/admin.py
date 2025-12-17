@@ -53,7 +53,12 @@ async def pruefung_page(request: Request, user: dict = Depends(get_current_user)
             "status": t.status.value,
             "description": description_parsed,
             "owner_info": json.loads(t.owner_info) if t.owner_info else None,
-            "ninja_metadata": json.loads(t.ninja_metadata) if t.ninja_metadata else None
+            "ninja_metadata": json.loads(t.ninja_metadata) if t.ninja_metadata else None,
+            "assignee_id": t.assignee_id,
+            "assignee_name": t.assignee_name,
+            "assignee_history": t.assignee_history,
+            "assignee_group_id": t.assignee_group_id,
+            "assignee_group_name": t.assignee_group_name,
         }
         items.append(item)
 
