@@ -18,14 +18,15 @@ from alpharequestmanager.api import (
     users,
     groups,
 )
+
 from alpharequestmanager.services.ensure_ticket_groups import ensure_ticket_groups
 from alpharequestmanager.services.metrics import init_metrics
 from alpharequestmanager.database import database as db
+from alpharequestmanager.services.ticket_permissions import init_ticket_permissions
 from alpharequestmanager.services.ticket_service import TicketService
 from alpharequestmanager.utils.config import config
 from starlette.datastructures import State
 from typing import cast
-from alpharequestmanager.services.microsoft_graph import list_all_users_with_e3_license
 from alpharequestmanager.models.models import TicketType
 
 
@@ -99,6 +100,7 @@ def run_server(https: bool = False):
 
 def main():
     db.init_db()
+    init_ticket_permissions()
     configure_event_loop()
     ensure_ticket_groups()
     run_server(https=config.HTTPS)

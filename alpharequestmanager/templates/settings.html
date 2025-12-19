@@ -428,127 +428,103 @@
 
 
     <!-- Ticket Permissions (DEMO) -->
-<!-- PERMISSIONS -->
-<section x-show="active==='permissions'" x-cloak
-    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark"
-    x-data="PermissionsEditor()">
+<section
+  x-show="active === 'permissions'"
+  x-cloak
+  x-data="PermissionsEditor()"
+  x-init="init()"
+  class="rounded-xl border border-gray-200 dark:border-gray-700
+         bg-white dark:bg-cardDark shadow-sm">
 
-  <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center gap-2">
-    <i data-lucide="shield" class="w-5 h-5 text-primary"></i>
-    <h2 class="text-lg font-semibold">Ticket Permissions</h2>
-  </div>
-
-  <div class="p-5 space-y-6">
-
-    <p class="text-sm text-gray-600 dark:text-gray-300">
-      Wähle für jeden Ticket-Typ aus, welche Benutzer diesen Ticket-Typ erstellen dürfen.
-      Wenn keine Benutzer ausgewählt sind, darf <b>jeder</b> diesen Tickettyp erstellen.
-    </p>
-
-    <template x-if="!users.length">
-      <p class="text-gray-500">Lade Benutzerliste…</p>
-    </template>
-
-    <template x-if="users.length">
-      <table class="min-w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg">
-        <thead class="bg-gray-50 dark:bg-gray-800">
-          <tr>
-            <th class="px-4 py-2 text-left">Ticket-Typ</th>
-            <th class="px-4 py-2 text-left">Erlaubt für</th>
-            <th class="px-4 py-2 text-left">Benutzer hinzufügen</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-
-          <template x-for="item in types" :key="item.key">
-            <tr>
-              <!-- Name -->
-              <td class="px-4 py-3 font-medium" x-text="item.label"></td>
-
-              <!-- Erlaubt für -->
-              <td class="px-4 py-3">
-                <template x-if="selected[item.key].length === 0">
-                  <span class="text-emerald-600 dark:text-emerald-400 font-semibold">Jeder</span>
-                </template>
-
-                <template x-if="selected[item.key].length > 0">
-                  <div class="flex flex-wrap gap-2">
-                    <template x-for="u in selected[item.key]" :key="u.id">
-                      <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-sm">
-                        <span x-text="u.displayName"></span>
-
-                        <!-- Remove -->
-                        <button
-                          type="button"
-                          @click="removeUser(item.key, u.id)"
-                          class="rounded-full hover:bg-primary/20 p-0.5 transition"
-                          title="Entfernen">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
-                               fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                  d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </span>
-                    </template>
-                  </div>
-                </template>
-              </td>
-
-              <!-- Suchfeld -->
-              <td class="px-4 py-3">
-                <div class="relative" @click.away="dropdown[item.key]=false">
-
-                  <input
-                    type="text"
-                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-fieldDark px-3 py-2"
-                    placeholder="Benutzer suchen…"
-                    x-model="search[item.key]"
-                    @focus="dropdown[item.key]=true; filtered[item.key]=users"
-                    @input="filter(item.key)"
-                  />
-
-                  <template x-if="dropdown[item.key]">
-                    <ul class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-fieldDark shadow">
-
-                      <template x-for="u in filtered[item.key]" :key="u.id">
-                        <li @click="toggleUser(item.key, u)"
-                            class="px-3 py-2 cursor-pointer hover:bg-primary/10 dark:hover:bg-primaryHover/20 flex justify-between">
-                          <span x-text="u.mail + ' — ' + u.displayName"></span>
-                          <span x-show="selectedIds(item.key).includes(u.id)" class="text-primary font-semibold">✔</span>
-                        </li>
-                      </template>
-
-                      <template x-if="filtered[item.key].length === 0">
-                        <li class="px-3 py-2 text-gray-500">Keine Treffer</li>
-                      </template>
-
-                    </ul>
-                  </template>
-
-                </div>
-              </td>
-
-            </tr>
-          </template>
-
-        </tbody>
-      </table>
-    </template>
-
-    <!-- Save Button -->
-    <div class="pt-4">
-      <button
-        @click="savePermissions()"
-        class="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition">
-        <i data-lucide="save" class="w-4 h-4"></i>
-        Speichern
-      </button>
+  <!-- HEADER -->
+  <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4
+              flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <i data-lucide="shield-check" class="w-5 h-5 text-primary"></i>
+      <h2 class="text-lg font-semibold">Ticket-Erstellrechte</h2>
     </div>
 
+    <button
+      @click="savePermissions"
+      :disabled="!hasChanges()"
+      class="inline-flex items-center gap-2 px-4 py-2 rounded-lg
+             font-medium transition
+             bg-primary text-white
+             disabled:bg-gray-300 disabled:text-gray-500
+             disabled:cursor-not-allowed
+             hover:bg-primaryHover">
+      <i data-lucide="save" class="w-4 h-4"></i>
+      Speichern
+    </button>
   </div>
 
+  <!-- CONTENT -->
+  <div class="p-6 space-y-10">
+    <template x-for="t in types" :key="t.key">
+
+      <div class="space-y-4">
+
+        <!-- TYPE HEADER -->
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-semibold" x-text="t.label"></h3>
+          <span class="text-xs font-mono text-gray-500" x-text="t.key"></span>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <template x-if="selected[t.key].length === 0">
+          <div class="rounded-lg border border-dashed
+                      border-amber-300 bg-amber-50
+                      text-amber-800 px-4 py-3 text-sm">
+            ⚠️ Niemand darf diesen Tickettyp erstellen
+          </div>
+        </template>
+
+        <!-- SELECTED USERS -->
+        <div class="flex flex-wrap gap-2">
+          <template x-for="u in selected[t.key]" :key="u.id">
+            <span class="inline-flex items-center gap-2 rounded-full
+                         bg-primary/10 text-primary px-3 py-1 text-sm">
+              <span x-text="u.displayName"></span>
+              <button @click="removeUser(t.key, u.id)"
+                      class="rounded-full hover:bg-primary/20 p-0.5">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </span>
+          </template>
+        </div>
+
+        <!-- USER SEARCH -->
+        <div class="relative" @click.away="dropdown[t.key] = false">
+          <input
+            type="text"
+            placeholder="Benutzer hinzufügen…"
+            x-model="search[t.key]"
+            @focus="dropdown[t.key] = true"
+            @input="filter(t.key)"
+            class="w-full rounded-lg border px-3 py-2">
+
+          <template x-if="dropdown[t.key]">
+            <ul class="absolute z-50 mt-1 max-h-56 w-full overflow-auto
+                       rounded-lg border bg-white shadow">
+              <template x-for="u in filtered[t.key]" :key="u.id">
+                <li @click="toggleUser(t.key, u)"
+                    class="px-3 py-2 hover:bg-primary/10 cursor-pointer">
+                  <div class="text-sm font-medium" x-text="u.displayName"></div>
+                  <div class="text-xs text-gray-500" x-text="u.mail"></div>
+                </li>
+              </template>
+            </ul>
+          </template>
+        </div>
+
+        <hr>
+      </div>
+    </template>
+  </div>
 </section>
+
+
+
 
 <!-- Ticket Groups -->
 <!-- Ticket Groups -->
@@ -894,106 +870,72 @@
   }
 </script>
 <script>
-function TicketPermissionsDemo() {
-  return {
-    users: [],
-    filtered: [],
-    selectedIds: [],
-    search: "",
-    open: false,
-
-    get selected() {
-      return this.users.filter(u => this.selectedIds.includes(u.id));
-    },
-
-    async init() {
-      const res = await fetch("/api/admin/users", { credentials: "same-origin" });
-      const data = await res.json();
-      this.users = data.users || [];
-      this.filtered = this.users;
-      if (window.lucide) lucide.createIcons();
-    },
-
-    filter() {
-      const q = this.search.toLowerCase();
-      this.filtered = this.users.filter(u =>
-        u.displayName.toLowerCase().includes(q) ||
-        (u.mail || "").toLowerCase().includes(q)
-      );
-    },
-
-    toggle(u) {
-      if (this.selectedIds.includes(u.id)) {
-        this.selectedIds = this.selectedIds.filter(id => id !== u.id);
-      } else {
-        this.selectedIds.push(u.id);
-      }
-      this.open = false;
-      this.search = "";
-      this.filtered = this.users;
-    },
-
-    remove(id) {
-      this.selectedIds = this.selectedIds.filter(x => x !== id);
-    }
-  }
-}
-</script>
-<script>
 function PermissionsEditor() {
   return {
     users: [],
-    types: [
-      { key: "hardware", label: "Hardwarebestellung" },
-      { key: "niederlassungAnmeldung", label: "Niederlassung anmelden" },
-      { key: "niederlassungAbmeldung", label: "Niederlassung schließen" },
-      { key: "niederlassungUmzug", label: "Niederlassung umzug" },
-      { key: "zugangBeantragen", label: "EDV-Zugang beantragen" },
-      { key: "zugangSperren", label: "EDV-Zugang sperren" }
-    ],
+    types: [],               // kommt aus Backend (/api/admin/ticket-types)
 
-    selected: {},
+    selected: {},            // { ticketType: [userObj, ...] }
+    original: {},            // { ticketType: [userId, ...] }
+
     search: {},
     filtered: {},
     dropdown: {},
 
-    selectedIds(key) {
-      return this.selected[key].map(u => u.id);
-    },
-
+    /* ================= INIT ================= */
     async init() {
-      // Benutzer laden
-      const res = await fetch("/api/admin/users");
-      const data = await res.json();
-      this.users = data.users || [];
+      // Users laden
+      const ures = await fetch("/api/admin/users", { credentials: "same-origin" });
+      const udata = await ures.json();
+      this.users = udata.users || [];
 
-      // Felder per Typ initialisieren
+      // Tickettypen laden
+      const tres = await fetch("/api/admin/ticket-types", { credentials: "same-origin" });
+      this.types = await tres.json(); // [{ key, label }]
+
+      // State initialisieren
       this.types.forEach(t => {
         this.selected[t.key] = [];
+        this.original[t.key] = [];
         this.search[t.key] = "";
         this.filtered[t.key] = this.users;
         this.dropdown[t.key] = false;
       });
 
-      // gespeicherte Berechtigungen laden
       await this.loadSaved();
 
       if (window.lucide) lucide.createIcons();
     },
 
+    /* ================= LOAD ================= */
     async loadSaved() {
-      const res = await fetch("/api/admin/ticket-permissions");
+      const res = await fetch("/api/admin/ticket-permissions", {
+        credentials: "same-origin"
+      });
       const data = await res.json();
 
       for (const t of this.types) {
-        const ids = data[t.key] || [];
+        const ids = Array.isArray(data[t.key]) ? data[t.key] : [];
+
         this.selected[t.key] = this.users.filter(u => ids.includes(u.id));
+        this.original[t.key] = [...ids]; // Originalzustand merken
       }
     },
 
-    async savePermissions() {
-      const payload = {};
+    /* ================= CHANGE DETECTION ================= */
+    hasChanges() {
+      return this.types.some(t => {
+        const orig = (this.original[t.key] || []).slice().sort().join(",");
+        const curr = this.selected[t.key].map(u => u.id).slice().sort().join(",");
+        return orig !== curr;
+      });
+    },
 
+    /* ================= SAVE ================= */
+    async savePermissions() {
+      if (!this.hasChanges()) return;
+
+      const payload = {};
       for (const t of this.types) {
         payload[t.key] = this.selected[t.key].map(u => u.id);
       }
@@ -1001,34 +943,41 @@ function PermissionsEditor() {
       const res = await fetch("/api/admin/ticket-permissions", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        credentials: "same-origin"
+        credentials: "same-origin",
+        body: JSON.stringify(payload)
       });
 
-      if (!res.ok) toast("Fehler beim Speichern!", false);
-      else toast("Permissions gespeichert!", true);
+      if (!res.ok) {
+        toast("Fehler beim Speichern!", false);
+        return;
+      }
+
+      // Originalzustand aktualisieren
+      for (const t of this.types) {
+        this.original[t.key] = payload[t.key].slice();
+      }
+
+      toast("Berechtigungen gespeichert ✅", true);
     },
 
+    /* ================= UI HELPERS ================= */
     filter(key) {
       const q = this.search[key].toLowerCase().trim();
-      if (!q) {
-        this.filtered[key] = this.users;
-      } else {
-        this.filtered[key] = this.users.filter(u =>
-          (u.displayName || "").toLowerCase().includes(q) ||
-          (u.mail || "").toLowerCase().includes(q)
-        );
-      }
+      this.filtered[key] = q
+        ? this.users.filter(u =>
+            (u.displayName || "").toLowerCase().includes(q) ||
+            (u.mail || "").toLowerCase().includes(q)
+          )
+        : this.users;
     },
 
     toggleUser(key, u) {
       const arr = this.selected[key];
       const idx = arr.findIndex(x => x.id === u.id);
-      if (idx >= 0) {
-        arr.splice(idx, 1);
-      } else {
-        arr.push(u);
-      }
+
+      if (idx >= 0) arr.splice(idx, 1);
+      else arr.push(u);
+
       this.search[key] = "";
       this.dropdown[key] = false;
       this.filtered[key] = this.users;
@@ -1040,6 +989,7 @@ function PermissionsEditor() {
   }
 }
 </script>
+
 
 <script>
 function GroupsEditor() {

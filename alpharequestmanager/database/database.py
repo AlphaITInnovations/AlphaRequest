@@ -393,24 +393,8 @@ def set_ninja_token(token: Optional[dict]):
 
 
 
-# ============================================================
-# Ticket Permissions & Groups
-# ============================================================
 
-def load_ticket_permissions() -> dict:
-    data = settings_get("TICKET_PERMISSIONS", {})
-    if not isinstance(data, dict):
-        return {}
-    return {k: v if isinstance(v, list) else [] for k, v in data.items()}
-
-
-def save_ticket_permissions(data: dict):
-    if not isinstance(data, dict):
-        raise ValueError("permissions must be dict")
-    clean = {k: [str(x) for x in v] if isinstance(v, list) else [] for k, v in data.items()}
-    settings_set("TICKET_PERMISSIONS", clean)
-
-
+# Groups
 def get_groups() -> List[dict]:
     groups = settings_get("TICKET_GROUPS", default=[])
     if not isinstance(groups, list):

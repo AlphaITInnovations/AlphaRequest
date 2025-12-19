@@ -31,7 +31,7 @@ class Config:
     NINJA_CLIENT_SECRET = os.getenv("NINJA_CLIENT_SECRET", "")
     NINJA_REDIRECT_URI = os.getenv("NINJA_REDIRECT_URI", "")
 
-    PORT = int(os.getenv("PORT", 6969))
+    PORT = int(os.getenv("PORT", 5000))
     HTTPS = str_to_bool(os.getenv("HTTPS", False).lower())
     DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", False).lower())
     USER_SYNC_INTERVAL = int(os.getenv("USER_SYNC_INTERVAL", "30"))

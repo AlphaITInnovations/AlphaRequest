@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 from alpharequestmanager.core.dependencies import get_current_user
 from alpharequestmanager.database.database import get_groupID_from_name
+from alpharequestmanager.services.ticket_permissions import can_user_create_ticket
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.database import database
 import json
@@ -54,6 +55,9 @@ async def create_ticket(
     priority: TicketPriority = Form(TicketPriority.medium),
     user: dict = Depends(get_current_user),
 ):
+    require_ticket_permission(user, ticket_type)
+
+
     user_cache = request.app.state.user_cache
 
     # Kommentar trimmen
@@ -173,6 +177,8 @@ async def create_ticket_page(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
+    require_ticket_permission(user, ticket_type)
+
     template = f"tickets/{ticket_type.value}/create.html"
 
     return request.app.templates.TemplateResponse(
@@ -298,3 +304,12 @@ def complete_ticket_internal(ticket, request, user):
         assignee_name="System",
         assignee_group_id=group_id,
     )
+
+
+
+def require_ticket_permission(user: dict, ticket_type: TicketType):
+    if not can_user_create_ticket(ticket_type.value, user["id"]):
+        raise HTTPException(
+            status_code=403,
+            detail="Keine Berechtigung diesen Auftrag zu erstellen"
+        )

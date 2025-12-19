@@ -10,13 +10,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.status import HTTP_302_FOUND
 
 from alpharequestmanager.core.dependencies import get_current_user
+from alpharequestmanager.services.ticket_permissions import load_ticket_permissions, get_allowed_ticket_types, \
+    set_ticket_permissions_safe, add_user_ticket_permission, remove_user_ticket_permission
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.models.models import RequestStatus
 from alpharequestmanager.utils.config import config
 from alpharequestmanager.database.database import (
     update_ticket,
-    load_ticket_permissions,
-    save_ticket_permissions,
     set_companies,
 )
 from alpharequestmanager.core.session import get_access_token_from_store
@@ -25,10 +25,6 @@ import json
 
 router = APIRouter()
 
-
-# =====================================================================
-# SECTION: TICKET PRÜFUNG (Admin)
-# =====================================================================
 
 @router.get("/pruefung", response_class=HTMLResponse)
 async def pruefung_page(request: Request, user: dict = Depends(get_current_user)):
@@ -228,23 +224,106 @@ async def api_set_companies(payload: dict = Body(...), user: dict = Depends(get_
 # SECTION: TICKET PERMISSIONS
 # =====================================================================
 
+
+def require_admin(user: dict):
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Adminrechte erforderlich")
+
+
+def validate_ticket_permissions_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "Payload muss ein Objekt sein")
+
+    allowed = get_allowed_ticket_types()
+    cleaned = {}
+
+    for ticket_type, users in payload.items():
+        if ticket_type not in allowed:
+            raise HTTPException(
+                422,
+                f"Ungültiger TicketType: {ticket_type}"
+            )
+
+        if not isinstance(users, list):
+            raise HTTPException(
+                422,
+                f"Users für {ticket_type} müssen Liste sein"
+            )
+
+        cleaned[ticket_type] = [str(u) for u in users]
+
+    return cleaned
+
+
 @router.get("/api/admin/ticket-permissions")
-async def api_get_ticket_permissions(user: dict = Depends(get_current_user)):
-    if not user.get("is_admin"):
-        raise HTTPException(403)
+async def api_get_ticket_permissions(
+    user: dict = Depends(get_current_user)
+):
+    require_admin(user)
     return load_ticket_permissions()
 
 
+
 @router.put("/api/admin/ticket-permissions")
-async def api_set_ticket_permissions(payload: dict = Body(...), user: dict = Depends(get_current_user)):
-    if not user.get("is_admin"):
-        raise HTTPException(403)
+async def api_set_ticket_permissions(
+    payload: dict = Body(...),
+    user: dict = Depends(get_current_user),
+):
+    require_admin(user)
 
-    if not isinstance(payload, dict):
-        raise HTTPException(422)
+    cleaned = validate_ticket_permissions_payload(payload)
 
-    save_ticket_permissions(payload)
+    set_ticket_permissions_safe(cleaned)
+
     return {"ok": True}
+
+
+@router.post("/api/admin/ticket-permissions/{ticket_type}/users/{user_id}")
+async def api_add_user_ticket_permission(
+    ticket_type: str,
+    user_id: str,
+    user: dict = Depends(get_current_user),
+):
+    require_admin(user)
+
+    try:
+        add_user_ticket_permission(ticket_type, user_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"ok": True}
+
+
+@router.delete("/api/admin/ticket-permissions/{ticket_type}/users/{user_id}")
+async def api_remove_user_ticket_permission(
+    ticket_type: str,
+    user_id: str,
+    user: dict = Depends(get_current_user),
+):
+    require_admin(user)
+
+    try:
+        remove_user_ticket_permission(ticket_type, user_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"ok": True}
+
+
+@router.get("/api/admin/ticket-types")
+async def api_get_ticket_types(user: dict = Depends(get_current_user)):
+    require_admin(user)
+
+    from alpharequestmanager.models.models import TicketType
+    from alpharequestmanager.utils.ticket_labels import TICKET_LABELS
+
+    return [
+        {
+            "key": t.value,
+            "label": TICKET_LABELS.get(t, t.value),
+        }
+        for t in TicketType
+    ]
 
 
 
@@ -278,18 +357,3 @@ def format_user_info_html(user: dict) -> str:
         f"<b>Adresse:</b> {address.get('street', '-')}, {address.get('zip', '')} {address.get('city', '')}</p>"
         "<hr>"
     )
-
-@router.get("/api/admin/can-create")
-async def api_can_create(ticket_type: str, user: dict = Depends(get_current_user)):
-    from alpharequestmanager.database.database import load_ticket_permissions
-    user_id = user.get("id") or user.get("mail")
-    perms = load_ticket_permissions()
-    allowed = perms.get(ticket_type)
-
-
-    if not allowed:
-        return {"ok": True}
-
-
-
-    return {"ok": user_id in allowed}

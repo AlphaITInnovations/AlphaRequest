@@ -35,22 +35,31 @@
 document.addEventListener("alpine:init", () => {
   Alpine.data("dashboardManager", () => ({
 
+    /* ================= DATA ================= */
     orders: {{ orders | tojson }},
     group_requests: {{ group_requests | tojson }},
     userName: "{{ user.displayName }}",
 
-    ticketPages: {
-      "Hardwarebestellung": "hardware",
-      "EDV-Zugang beantragen": "zugang-beantragen",
-      "EDV-Zugang sperren": "zugang-sperren",
-      "Niederlassung anmelden": "niederlassung-anmelden",
-      "Niederlassung schließen": "niederlassung-schliessen",
-      "Niederlassung umzug": "niederlassung-umzug"
+    // 🔑 vom Backend
+    allowedTypes: {{ allowed_ticket_types | tojson }},
+
+    ticketTypes: [
+      { key: "hardware", icon: "📦", label: "Hardwarebestellung" },
+      { key: "zugang-beantragen", icon: "🔑", label: "EDV-Zugang beantragen" },
+      { key: "zugang-sperren", icon: "🔒", label: "EDV-Zugang sperren" },
+      { key: "niederlassung-anmelden", icon: "🏢", label: "Niederlassung anmelden" },
+      { key: "niederlassung-umzug", icon: "🔄", label: "Niederlassung Umzug" },
+      { key: "niederlassung-schliessen", icon: "❌", label: "Niederlassung schließen" },
+    ],
+
+    /* ================= HELPERS ================= */
+    canCreate(key) {
+      return this.allowedTypes.includes(key);
     },
 
-    openNew(type) {
-      const page = this.ticketPages[type];
-      if (page) window.location.href = `/tickets/new/${page}`;
+    openNew(key) {
+      if (!this.canCreate(key)) return;
+      window.location.href = `/tickets/new/${key}`;
     },
 
     openUserTicket(o) {
@@ -114,7 +123,7 @@ document.addEventListener("alpine:init", () => {
 {% block content %}
 <div x-data="dashboardManager()" class="min-h-[80vh]">
 
-<!-- HEADER -->
+<!-- ================= HEADER ================= -->
 <header class="mb-6">
   <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border px-6 py-5">
     <h1 class="text-2xl font-bold">
@@ -125,39 +134,46 @@ document.addEventListener("alpine:init", () => {
 
 <div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
 
-<!-- SIDEBAR -->
+<!-- ================= SIDEBAR ================= -->
 <aside class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-6 lg:sticky lg:top-6 h-fit">
   <h2 class="text-lg font-semibold mb-5 text-primary">
     Neuer Auftrag
   </h2>
 
   <div class="grid gap-4">
-    <template x-for="a in [
-      {icon:'📦', label:'Hardwarebestellung'},
-      {icon:'🔑', label:'EDV-Zugang beantragen'},
-      {icon:'🔒', label:'EDV-Zugang sperren'},
-      {icon:'🏢', label:'Niederlassung anmelden'},
-      {icon:'🔄', label:'Niederlassung umzug'},
-      {icon:'❌', label:'Niederlassung schließen'}
-    ]">
-      <button
-        @click="openNew(a.label)"
-        class="group flex items-center gap-4 px-6 py-4
-               bg-primary text-white rounded-xl
-               transition-all hover:bg-primary-hover
-               hover:shadow-xl hover:-translate-y-[1px]">
 
-        <span class="text-2xl transition group-hover:scale-110" x-text="a.icon"></span>
-        <span class="font-medium truncate" x-text="a.label"></span>
-      </button>
+    <template x-for="t in ticketTypes" :key="t.key">
+      <template x-if="canCreate(t.key)">
+        <button
+          @click="openNew(t.key)"
+          class="group flex items-center gap-4 px-6 py-4
+                 bg-primary text-white rounded-xl
+                 transition-all hover:bg-primary-hover
+                 hover:shadow-xl hover:-translate-y-[1px]">
+
+          <span class="text-2xl transition group-hover:scale-110"
+                x-text="t.icon"></span>
+
+          <span class="font-medium truncate"
+                x-text="t.label"></span>
+        </button>
+      </template>
     </template>
+
+    <!-- EMPTY STATE -->
+    <template x-if="ticketTypes.every(t => !canCreate(t.key))">
+      <div class="text-sm text-gray-500 italic text-center py-6">
+        Du hast aktuell keine Berechtigung, neue Tickets zu erstellen.
+      </div>
+    </template>
+
   </div>
 </aside>
 
-<!-- CONTENT -->
+<!-- ================= CONTENT ================= -->
 <section class="space-y-6">
 
-  <!-- DEINE AUFTRÄGE -->
+  <!-- ================= DEINE AUFTRÄGE ================= -->
   <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
     <h2 class="text-xl font-semibold mb-4 text-primary">
       Deine Aufträge
@@ -173,7 +189,6 @@ document.addEventListener("alpine:init", () => {
           <div class="ticket-accent" :class="statusAccent(o.status)"></div>
 
           <div class="flex justify-between gap-4 pl-3">
-
             <div class="min-w-0">
               <div class="font-semibold truncate" x-text="o.type"></div>
               <div class="text-sm text-gray-500" x-text="o.date"></div>
@@ -182,15 +197,13 @@ document.addEventListener("alpine:init", () => {
             <div class="flex flex-col items-end gap-1 shrink-0">
               <span class="px-3 py-1 rounded-md text-xs font-semibold"
                     :class="statusBadge(o.status)"
-                    x-text="statusLabel(o.status)">
-              </span>
+                    x-text="statusLabel(o.status)"></span>
 
               <span class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-200 text-gray-800">
                 <span x-text="priorityIcon(o.priority)"></span>
                 <span x-text="priorityLabel(o.priority)"></span>
               </span>
             </div>
-
           </div>
         </li>
       </template>
@@ -203,7 +216,7 @@ document.addEventListener("alpine:init", () => {
     </ul>
   </div>
 
-  <!-- FACHABTEILUNG -->
+  <!-- ================= FACHABTEILUNG ================= -->
   <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
     <h2 class="text-xl font-semibold mb-4 text-primary">
       Fachabteilung · Aufträge
@@ -219,7 +232,6 @@ document.addEventListener("alpine:init", () => {
           <div class="ticket-accent bg-primary"></div>
 
           <div class="flex justify-between gap-4 pl-3">
-
             <div class="min-w-0">
               <div class="font-semibold truncate" x-text="o.type"></div>
               <div class="text-sm text-gray-500" x-text="o.date"></div>
@@ -233,7 +245,6 @@ document.addEventListener("alpine:init", () => {
                 🛠 Zu bearbeiten
               </span>
             </div>
-
           </div>
         </li>
       </template>
