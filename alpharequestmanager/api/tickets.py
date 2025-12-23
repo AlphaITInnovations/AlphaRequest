@@ -49,8 +49,16 @@ async def create_ticket(
     request: Request,
     ticket_type: TicketType = Form(...),
     description: str = Form(...),
+
     assignee_id: str = Form(...),
     assignee_name: str = Form(...),
+
+    supervisor_id: str = Form(...),
+    supervisor_name: str = Form(...),
+
+    accountable_id: str = Form(...),
+    accountable_name: str = Form(...),
+
     comment: str = Form(""),
     priority: TicketPriority = Form(TicketPriority.medium),
     user: dict = Depends(get_current_user),
@@ -65,6 +73,9 @@ async def create_ticket(
 
     # Assignee prüfen
     if not assignee_id:
+        raise HTTPException(400, "Assignee ist ein Pflichtfeld")
+
+    if not supervisor_id:
         raise HTTPException(400, "Assignee ist ein Pflichtfeld")
 
     if not validate_assignee(user_cache, assignee_id):
@@ -94,9 +105,12 @@ async def create_ticket(
         owner_name=user["displayName"],
         owner_info=json.dumps(user, ensure_ascii=False),
         comment=comment,
-        status=RequestStatus.in_progress,
         assignee_id=assignee_id,
         assignee_name=assignee_name,
+        supervisor_id=supervisor_id,
+        supervisor_name=supervisor_name,
+        accountable_id=accountable_id,
+        accountable_name=accountable_name,
         priority=priority,
     )
 
@@ -116,14 +130,21 @@ async def update_ticket(
     comment: str = Form(""),
     assignee_id: str = Form(...),
     assignee_name: str = Form(...),
+    accountable_id: str = Form(...),
+    accountable_name: str = Form(...),
+    supervisor_id: str = Form(...),
+    supervisor_name: str = Form(...),
     priority: TicketPriority = Form(...),
     action: str = Form("save"),
     user: dict = Depends(get_current_user),
 ):
     comment = (comment or "").strip()
-    #print(action)
+
     if not validate_assignee(request.app.state.user_cache, assignee_id):
         raise HTTPException(400, "Ungültiger Assignee")
+
+    if not validate_assignee(request.app.state.user_cache, supervisor_id):
+        raise HTTPException(400, "Ungültiger Supervisor")
 
     database.update_ticket(
         ticket_id=ticket_id,
@@ -132,9 +153,16 @@ async def update_ticket(
         priority=priority,
     )
 
-    database.set_assignee(ticket_id, assignee_id, assignee_name)
-
     ticket = request.app.state.manager.get_ticket(ticket_id)
+
+    if ticket.assignee_id != assignee_id:
+        database.set_assignee(ticket_id, assignee_id, assignee_name)
+
+    if ticket.accountable_id != accountable_id:
+        database.set_accountable(ticket_id, accountable_id, accountable_name)
+
+    if ticket.supervisor_id != supervisor_id:
+        database.set_supervisor(ticket_id, supervisor_id, supervisor_name)
 
     if action == "complete":
         complete_ticket_internal(ticket, request, user)
@@ -215,8 +243,13 @@ async def edit_ticket_page(
             "request": request,
             "ticket": ticket,
             "user": user,
+
             "assignee_id": ticket.assignee_id,
             "assignee_name": ticket.assignee_name,
+
+            "supervisor_id": ticket.supervisor_id,
+            "supervisor_name": ticket.supervisor_name,
+
             "is_admin": user.get("is_admin", False),
             "priority": ticket.priority.value,
         },
@@ -300,9 +333,18 @@ def complete_ticket_internal(ticket, request, user):
     request.app.state.manager.update_ticket(
         ticket_id=ticket.id,
         status=RequestStatus.in_request,
-        assignee_id="system",
-        assignee_name="System",
-        assignee_group_id=group_id,
+    )
+
+    database.set_assignee(
+        ticket_id=ticket.id,
+        user_id = "system",
+        user_name= "system",
+    )
+
+    database.set_assignee_group(
+        ticket.id,
+        group_id=group_id,
+        group_name=ticket.ticket_type,
     )
 
 

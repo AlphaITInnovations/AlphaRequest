@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Hardware – Ticket bearbeiten{% endblock %}
+{% block title %}Hardware – Auftrag bearbeiten{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto p-8">
@@ -12,26 +12,57 @@
     x-init="init()"
     @keydown.enter.prevent
 >
-    <!-- ACTION (save | complete) -->
+    <!-- action -->
     <input type="hidden" name="action" x-ref="action" value="save">
 
     <!-- ================= LAYOUT ================= -->
     <div class="flex flex-col lg:flex-row gap-8">
 
         <!-- ================= LEFT ================= -->
-        <aside class="w-full lg:w-[340px] flex-shrink-0
-                      bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <aside class="w-full lg:w-[360px] bg-white dark:bg-gray-800 border rounded-xl shadow p-6 space-y-6">
 
-            <h2 class="font-semibold text-lg mb-6">Details</h2>
+            <h2 class="font-semibold text-lg">Details</h2>
 
-            <!-- ASSIGNEE -->
+            <!-- Verantwortlicher -->
+            {% set label = "Verantwortlicher" %}
+            {% set info_text = "Initiator des Auftrags" %}
+            {% set initial_id = ticket.accountable_id %}
+            {% set initial_name = ticket.accountable_name %}
+            {% set field_id = "accountable_id" %}
+            {% set field_name = "accountable_name" %}
             {% include "components/user-dropdown.html" %}
 
+            <!-- Vorgesetzter -->
+            {% set label = "Vorgesetzter" %}
+            {% set info_text = "Direkter Vorgesetzter" %}
+            {% set initial_id = ticket.supervisor_id %}
+            {% set initial_name = ticket.supervisor_name %}
+            {% set field_id = "supervisor_id" %}
+            {% set field_name = "supervisor_name" %}
+            {% include "components/user-dropdown.html" %}
+
+            <!-- ================= WEITERGEBEN BUTTON ================= -->
+            <div class="pt-4 border-t">
+                <button
+                    type="button"
+                    @click="openAssignModal = true"
+                    class="w-full px-4 py-2 rounded-lg border
+                           border-primary text-primary
+                           hover:bg-primary/10 transition font-medium"
+                >
+                    🔁 Auftrag weitergeben
+                </button>
+
+                <div class="text-xs text-gray-500 mt-1">
+                    Aktueller Bearbeiter:
+                    <span class="font-medium" x-text="currentAssigneeName"></span>
+                </div>
+            </div>
+
             <!-- PRIORITY -->
-            <div class="mt-6">
+            <div>
                 <label class="font-medium">Priorität *</label>
-                <select name="priority"
-                        x-model="priority"
+                <select name="priority" x-model="priority"
                         class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
                     {% for p in ["low","medium","high","critical"] %}
                     <option value="{{ p }}">{{ p|capitalize }}</option>
@@ -40,11 +71,10 @@
             </div>
 
             <!-- COMMENT -->
-            <div class="mt-6">
+            <div>
                 <label class="font-medium">Kommentar</label>
                 <textarea name="comment"
-                          class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
-                          placeholder="Optional…">{{ ticket.comment }}</textarea>
+                          class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700">{{ ticket.comment }}</textarea>
             </div>
         </aside>
 
@@ -58,104 +88,165 @@
             {% for i in range(1,6) %}
             <div class="mb-6">
                 <label class="font-medium">Feld {{ i }} *</label>
-                <input
-                    type="text"
-                    name="feld{{ i }}"
-                    x-model="fields.feld{{ i }}"
-                    class="w-full mt-1 p-3 rounded border dark:bg-gray-700">
+                <input type="text"
+                       x-model="fields.feld{{ i }}"
+                       class="w-full mt-1 p-3 rounded border dark:bg-gray-700">
             </div>
             {% endfor %}
 
-            <!-- DESCRIPTION JSON -->
             <input type="hidden" name="description" x-ref="description">
         </section>
     </div>
 
     <!-- ================= ACTIONS ================= -->
-    <div class="flex items-end justify-between gap-6">
+    <div class="flex justify-between items-center">
 
-        <!-- HINWEIS -->
-        <div class="min-h-[3rem] flex items-center">
-            <div
-                class="text-base font-medium text-amber-600 dark:text-amber-400 transition-opacity"
-                :class="canComplete ? 'opacity-0' : 'opacity-100'">
-                Bitte alle Pflichtfelder ausfüllen, um das Ticket abschließen zu können.
-            </div>
+        <div class="text-amber-600 text-sm" x-show="!canComplete">
+            Bitte alle Pflichtfelder ausfüllen, um abzuschließen.
         </div>
 
-        <!-- BUTTONS -->
         <div class="flex gap-4">
-
             <a href="/dashboard"
-               class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
+               class="px-5 py-2.5 bg-gray-300 rounded-md">
                 Abbrechen
             </a>
 
-            <!-- SAVE -->
             <button type="submit"
                     @click="$refs.action.value='save'"
                     class="px-6 py-2.5 bg-primary text-white rounded-md">
                 Speichern
             </button>
 
-            <!-- COMPLETE -->
-
-            <button
-                type="submit"
-                @click="
-                    if (!canComplete) {
-                        $event.preventDefault();
-                        return;
-                    }
-
-                    if (!confirm(
-                      'Wollen Sie dieses Ticket wirklich abschließen?\n\n' +
-                      'Der Auftrag kann danach nicht mehr bearbeitet werden.'
-                    )) {
-                        $event.preventDefault();
-                        return;
-                    }
-
-                    $refs.description.value = JSON.stringify(fields);
-                    $refs.action.value = 'complete';
-                "
-                :disabled="!canComplete"
-                :class="canComplete
-                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                  : 'bg-gray-300 dark:bg-gray-600 cursor-not-allowed'"
-                class="px-6 py-2.5 text-white rounded-md transition">
+            <button type="submit"
+                    @click="
+                        if (!canComplete) { $event.preventDefault(); return; }
+                        if (!confirm('Auftrag wirklich abschließen?')) {
+                            $event.preventDefault(); return;
+                        }
+                        $refs.description.value = JSON.stringify(fields);
+                        $refs.action.value = 'complete';
+                    "
+                    :disabled="!canComplete"
+                    class="px-6 py-2.5 text-white rounded-md"
+                    :class="canComplete ? 'bg-emerald-600' : 'bg-gray-400 cursor-not-allowed'">
                 Abschließen
             </button>
+        </div>
+    </div>
 
+    <!-- ================= HIDDEN ASSIGNEE ================= -->
+    <input type="hidden" name="assignee_id" :value="computedAssigneeId">
+    <input type="hidden" name="assignee_name" :value="computedAssigneeName">
 
+    <!-- ================= MODAL ================= -->
+    <div x-show="openAssignModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md p-6 space-y-4">
+
+            <h3 class="text-lg font-semibold">Auftrag weitergeben an</h3>
+
+            <label class="flex items-center gap-2">
+                <input type="radio" x-model="assigneeMode" value="accountable">
+                Verantwortlicher
+            </label>
+
+            <label class="flex items-center gap-2">
+                <input type="radio" x-model="assigneeMode" value="supervisor">
+                Vorgesetzter
+            </label>
+
+            <label class="flex items-center gap-2">
+                <input type="radio" x-model="assigneeMode" value="custom">
+                Andere Person
+            </label>
+
+            <template x-if="assigneeMode === 'custom'">
+                <div class="mt-2">
+                    {% set label = "Bearbeiter" %}
+                    {% set initial_id = "" %}
+                    {% set initial_name = "" %}
+                    {% set field_id = "custom_assignee_id" %}
+                    {% set field_name = "custom_assignee_name" %}
+                    {% include "components/user-dropdown.html" %}
+                </div>
+            </template>
+
+            <div class="flex justify-end gap-3 pt-4">
+                <button type="button"
+                        @click="openAssignModal = false"
+                        class="px-4 py-2 rounded bg-gray-300">
+                    Abbrechen
+                </button>
+
+                <button type="button"
+                        @click="applyAssignee(); openAssignModal = false"
+                        class="px-4 py-2 rounded bg-primary text-white">
+                    Übernehmen
+                </button>
+            </div>
         </div>
     </div>
 </form>
 </div>
 
-<!-- ================= ALPINE ================= -->
 <script>
 function hardwareEditForm(rawDescription, initialPriority) {
     return {
-        fields: {
-            feld1: "",
-            feld2: "",
-            feld3: "",
-            feld4: "",
-            feld5: ""
+        fields: { feld1:'', feld2:'', feld3:'', feld4:'', feld5:'' },
+        priority: initialPriority,
+
+        openAssignModal: false,
+        assigneeMode: 'accountable',
+
+        accountableId: '{{ ticket.accountable_id }}',
+        accountableName: '{{ ticket.accountable_name }}',
+        supervisorId: '{{ ticket.supervisor_id }}',
+        supervisorName: '{{ ticket.supervisor_name }}',
+
+        customAssigneeId: '',
+        customAssigneeName: '',
+
+        currentAssigneeName: '{{ ticket.assignee_name }}',
+
+        get computedAssigneeId() {
+            if (this.assigneeMode === 'accountable') return this.accountableId;
+            if (this.assigneeMode === 'supervisor') return this.supervisorId;
+            return this.customAssigneeId;
+        },
+        get computedAssigneeName() {
+            if (this.assigneeMode === 'accountable') return this.accountableName;
+            if (this.assigneeMode === 'supervisor') return this.supervisorName;
+            return this.customAssigneeName;
         },
 
-        priority: initialPriority,
+        applyAssignee() {
+            if (this.assigneeMode === 'custom') {
+                const id = document.querySelector('[name="custom_assignee_id"]')?.value;
+                const name = document.querySelector('[name="custom_assignee_name"]')?.value;
+
+                if (!id || !name) {
+                    alert("Bitte eine Person auswählen");
+                    return;
+                }
+
+                this.customAssigneeId = id;
+                this.customAssigneeName = name;
+                this.currentAssigneeName = name;
+                return;
+            }
+
+            if (this.assigneeMode === 'accountable') {
+                this.currentAssigneeName = this.accountableName;
+            }
+
+            if (this.assigneeMode === 'supervisor') {
+                this.currentAssigneeName = this.supervisorName;
+            }
+        },
 
         init() {
             try {
-                const data = JSON.parse(rawDescription);
-                Object.keys(this.fields).forEach(k => {
-                    if (data[k]) this.fields[k] = data[k];
-                });
-            } catch {
-                console.warn("Description ist kein gültiges JSON");
-            }
+                Object.assign(this.fields, JSON.parse(rawDescription));
+            } catch {}
 
             this.$el.addEventListener("submit", () => {
                 this.$refs.description.value = JSON.stringify(this.fields);
@@ -163,11 +254,10 @@ function hardwareEditForm(rawDescription, initialPriority) {
         },
 
         get canComplete() {
-            if (!this.priority) return false;
-            return Object.values(this.fields).every(v => v && v.trim() !== "");
+            return this.priority &&
+                   Object.values(this.fields).every(v => v && v.trim());
         }
     }
 }
 </script>
-
 {% endblock %}

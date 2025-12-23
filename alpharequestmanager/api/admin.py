@@ -41,9 +41,9 @@ async def pruefung_page(request: Request, user: dict = Depends(get_current_user)
             print(f"Fehler beim Parsen der Ticketbeschreibung (ID {t.id}):", e)
             description_parsed = {}
         assignee_history = []
-        if t.assignee_history:
+        if t.assignment_history:
             try:
-                assignee_history = json.loads(t.assignee_history)
+                assignee_history = json.loads(t.assignment_history)
                 #print(assignee_history)
             except:
                 pass

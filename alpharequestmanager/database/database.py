@@ -81,9 +81,13 @@ owner_id, owner_name, owner_info,
 comment, status, priority,
 created_at, updated_at,
 ninja_metadata,
-assignee_id, assignee_name, assignee_history,
-assignee_group_id, assignee_group_name
+assignee_id, assignee_name,
+accountable_id, accountable_name,
+supervisor_id, supervisor_name,
+assignee_group_id, assignee_group_name,
+assignment_history
 """
+
 
 
 def init_db():
@@ -110,12 +114,19 @@ def init_db():
 
         ninja_metadata      LONGTEXT NULL,
 
-        assignee_id         VARCHAR(255) NULL,
-        assignee_name       VARCHAR(255) NULL,
-        assignee_history    LONGTEXT NULL,
-
-        assignee_group_id   VARCHAR(255) NULL,
-        assignee_group_name VARCHAR(255) NULL
+        assignee_id VARCHAR(255) NULL,
+        assignee_name VARCHAR(255) NULL,
+        
+        accountable_id      VARCHAR(255) NULL,
+        accountable_name  VARCHAR(255) NULL,
+    
+        supervisor_id VARCHAR(255) NULL,
+        supervisor_name VARCHAR(255) NULL,
+    
+        assignee_group_id VARCHAR(255) NULL,
+        assignee_group_name VARCHAR(255) NULL,
+    
+        assignment_history LONGTEXT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
@@ -163,8 +174,11 @@ def insert_ticket(
                 comment, status, priority,
                 created_at, updated_at,
                 ninja_metadata,
-                assignee_id, assignee_name, assignee_history,
-                assignee_group_id, assignee_group_name
+                assignee_id, assignee_name,
+                accountable_id, accountable_name,
+                supervisor_id, supervisor_name,
+                assignee_group_id, assignee_group_name,
+                assignment_history
             )
             VALUES (
                 %s, %s, %s,
@@ -172,8 +186,11 @@ def insert_ticket(
                 %s, %s, %s,
                 %s, NULL,
                 %s,
-                NULL, NULL, NULL,
-                NULL, NULL
+                NULL, NULL,
+                NULL, NULL,
+                NULL, NULL,
+                NULL, NULL,
+                %s
             )
         """, (
             title, ticket_type, description,
@@ -181,11 +198,13 @@ def insert_ticket(
             comment, status, priority,
             now,
             ninja_metadata,
+            json.dumps([], ensure_ascii=False),
         ))
         conn.commit()
         return int(cur.lastrowid)
     finally:
         conn.close()
+
 
 
 
@@ -242,8 +261,11 @@ def update_ticket(ticket_id: int, **fields) -> None:
     allowed = {
         "title", "description", "owner_id", "owner_name",
         "owner_info", "comment", "status", "priority",
-        "ninja_metadata", "assignee_id", "assignee_name",
-        "assignee_history", "assignee_group_id", "assignee_group_name"
+        "ninja_metadata",
+        "assignee_id", "assignee_name", "accountable_id", "accountable_name",
+        "supervisor_id", "supervisor_name",
+        "assignee_group_id", "assignee_group_name",
+        "assignment_history",
     }
 
     updates = {k: v for k, v in fields.items() if k in allowed}
@@ -266,31 +288,6 @@ def update_ticket(ticket_id: int, **fields) -> None:
         conn.close()
 
 
-def set_assignee(ticket_id: int, user_id: str, user_name: str):
-    """Append to history and set assignment."""
-    ticket = get_ticket(ticket_id)
-    history = ticket.assignee_history_parsed if ticket else []
-
-    history.append({
-        "user_id": user_id,
-        "user_name": user_name,
-        "timestamp": _now_iso()
-    })
-
-    update_ticket(
-        ticket_id,
-        assignee_id=user_id,
-        assignee_name=user_name,
-        assignee_history=json.dumps(history, ensure_ascii=False)
-    )
-
-
-def set_assignee_group(ticket_id: int, group_id: str, group_name: str):
-    update_ticket(
-        ticket_id,
-        assignee_group_id=group_id,
-        assignee_group_name=group_name
-    )
 
 
 def update_ticket_metadata(
@@ -467,3 +464,85 @@ def get_group_name_from_id(group_id: str) -> Optional[str]:
         if g.get("id") == group_id:
             return g.get("name")
     return None
+
+
+
+def _append_assignment_history(
+    ticket_id: int,
+    *,
+    assignee: Optional[Dict[str, str]] = None,
+    supervisor: Optional[Dict[str, str]] = None,
+    accountable: Optional[Dict[str, str]] = None,
+    group: Optional[Dict[str, str]] = None,
+    action: Optional[str] = None,
+):
+    ticket = get_ticket(ticket_id)
+    history = ticket.assignment_history_parsed if ticket else []
+
+    history.append({
+        "timestamp": _now_iso(),
+        "assignee": assignee,
+        "supervisor": supervisor,
+        "accountable": accountable,
+        "group": group,
+        "action": action,
+    })
+
+    update_ticket(
+        ticket_id,
+        assignment_history=json.dumps(history, ensure_ascii=False)
+    )
+
+def set_assignee(ticket_id: int, user_id: str, user_name: str):
+    _append_assignment_history(
+        ticket_id,
+        assignee={"id": user_id, "name": user_name},
+        action="set_assignee"
+    )
+
+    update_ticket(
+        ticket_id,
+        assignee_id=user_id,
+        assignee_name=user_name,
+    )
+
+
+def set_supervisor(ticket_id: int, user_id: str, user_name: str):
+    _append_assignment_history(
+        ticket_id,
+        supervisor={"id": user_id, "name": user_name},
+        action="set_supervisor"
+    )
+
+    update_ticket(
+        ticket_id,
+        supervisor_id=user_id,
+        supervisor_name=user_name,
+    )
+
+
+def set_accountable(ticket_id: int, user_id: str, user_name: str):
+    _append_assignment_history(
+        ticket_id,
+        supervisor={"id": user_id, "name": user_name},
+        action="set_accountable"
+    )
+
+    update_ticket(
+        ticket_id,
+        accountable_id=user_id,
+        accountable_name=user_name,
+    )
+
+def set_assignee_group(ticket_id: int, group_id: str, group_name: str):
+    _append_assignment_history(
+        ticket_id,
+        group={"id": group_id, "name": group_name},
+        action="set_group"
+    )
+
+    update_ticket(
+        ticket_id,
+        assignee_group_id=group_id,
+        assignee_group_name=group_name,
+    )
