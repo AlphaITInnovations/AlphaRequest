@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Fachabteilung – Auftrag{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto p-8 space-y-8">
+
+  <!-- HEADER -->
+  <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+    <h1 class="text-xl font-semibold">
+      {{ ticket.title }}
+    </h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}
+    </p>
+  </div>
+
+  <!-- DETAILS -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- META -->
+    <aside class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+      <div class="space-y-4 text-sm">
+
+        <div>
+          <div class="font-medium">Status</div>
+          <div>{{ ticket.status.value }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium">Priorität</div>
+          <div>{{ ticket.priority.value|capitalize }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium">Zuständig</div>
+          <div class="text-gray-500">System (Fachabteilung)</div>
+        </div>
+
+        <div>
+          <div class="font-medium">Antragsteller</div>
+          <div>{{ ticket.owner_name }}</div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- CONTENT -->
+    <section class="lg:col-span-2 bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+      <h2 class="font-semibold mb-4">Auftragsdetails</h2>
+
+      {% for key, value in description.items() %}
+        <div class="mb-4">
+          <div class="text-sm text-gray-500">{{ key }}</div>
+          <div class="font-medium">{{ value }}</div>
+        </div>
+      {% endfor %}
+    </section>
+
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="flex justify-end gap-4">
+
+    <a href="/dashboard"
+       class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
+      Abbrechen
+    </a>
+
+    <form
+      method="post"
+      action="/tickets/archive/{{ ticket.id }}"
+      onsubmit="return confirmArchive();"
+    >
+      <button
+        type="submit"
+        class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md">
+        Abschließen
+      </button>
+    </form>
+
+  </div>
+
+</div>
+
+<script>
+function confirmArchive() {
+  return confirm(
+    "Wollen Sie diesen Auftrag wirklich abschließen?\n\n" +
+    "Der Auftrag gilt danach als vollständig bearbeitet und wird archiviert.\n" +
+    "Diese Aktion kann nicht rückgängig gemacht werden."
+  );
+}
+</script>
+{% endblock %}

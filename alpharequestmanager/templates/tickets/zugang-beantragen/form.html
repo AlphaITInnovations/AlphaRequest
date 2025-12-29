@@ -1,23 +1,38 @@
+{% set current_priority = priority if priority is defined else "medium" %}
+
 <form
     method="post"
-    action="{% if ticket %}/tickets/update/{{ ticket.id }}{% else %}/tickets{% endif %}"
+    action="/tickets"
     class="flex flex-col gap-8"
-    @keydown.enter.prevent="
-        if ($event.target.tagName !== 'TEXTAREA') {
-            $event.preventDefault()
-        }
-    "
+    x-data="zugangCreateForm()"
+    @keydown.enter.prevent="if ($event.target.tagName !== 'TEXTAREA') $event.preventDefault()"
 >
 
+<!-- ================= LAYOUT ================= -->
 <div class="flex flex-col lg:flex-row gap-8">
 
     <!-- ================= LEFT: DETAILS ================= -->
-    <aside class="w-full lg:w-[340px] flex-shrink-0
+    <aside class="w-full lg:w-[360px] flex-shrink-0
                   bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
 
         <h2 class="font-semibold text-lg mb-6">Details</h2>
 
-        <!-- USER DROPDOWN -->
+        <!-- ================= Verantwortlicher ================= -->
+        {% set label = "Verantwortlicher" %}
+        {% set info_text = "Initiator der Einstellung" %}
+        {% set field_id = "accountable_id" %}
+        {% set field_name = "accountable_name" %}
+        {% set initial_id = "" %}
+        {% set initial_name = "" %}
+        {% include "components/user-dropdown.html" %}
+
+        <!-- ================= Vorgesetzter ================= -->
+        {% set label = "Vorgesetzter" %}
+        {% set info_text = "Direkter zukünftiger Vorgesetzter" %}
+        {% set field_id = "supervisor_id" %}
+        {% set field_name = "supervisor_name" %}
+        {% set initial_id = "" %}
+        {% set initial_name = "" %}
         {% include "components/user-dropdown.html" %}
 
         <!-- PRIORITY -->
@@ -25,28 +40,21 @@
             <label class="font-medium">Priorität *</label>
             <select name="priority"
                     class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
-
                 {% for p in ["low","medium","high","critical"] %}
                 <option value="{{ p }}"
-                    {% if ticket %}
-                        {% if ticket.priority == p %}selected{% endif %}
-                    {% else %}
-                        {% if p == "medium" %}selected{% endif %}
-                    {% endif %}>
+                        {% if current_priority == p %}selected{% endif %}>
                     {{ p|capitalize }}
                 </option>
                 {% endfor %}
-
             </select>
         </div>
-
 
         <!-- COMMENT -->
         <div class="mt-6">
             <label class="font-medium">Kommentar</label>
             <textarea name="comment"
                       class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
-                      placeholder="Optional…">{{ ticket.comment if ticket }}</textarea>
+                      placeholder="Optional…"></textarea>
         </div>
 
     </aside>
@@ -54,38 +62,159 @@
     <!-- ================= RIGHT: CONTENT ================= -->
     <section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8">
 
-        <input type="hidden" name="ticket_type" value="hardware">
+        <input type="hidden" name="ticket_type" value="zugang-beantragen">
 
-        <h2 class="text-xl font-semibold mb-6">Hardware Details</h2>
+        <!-- ================================================= -->
+        <!-- ABSCHNITT 1 – PERSONALABTEILUNG (PFLICHT) -->
+        <!-- ================================================= -->
+        <div class="border-l-4 border-primary bg-primary/5 p-6 rounded-xl mb-10">
 
-        {% for i in range(1,6) %}
-        <div class="mb-6">
-            <label class="font-medium">Feld {{ i }}</label>
-            <input
-                type="text"
-                name="feld{{ i }}"
-                class="w-full mt-1 p-3 rounded border dark:bg-gray-700"
-                value="{{ ticket.description_parsed['feld' ~ i] if ticket }}"
-            >
+            <h2 class="text-xl font-semibold mb-4 text-primary">
+                Pflicht · Personalabteilung
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <div>
+                    <label class="font-medium">Vorname *</label>
+                    <input type="text" x-model="p.first_name"
+                           class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                </div>
+
+                <div>
+                    <label class="font-medium">Nachname *</label>
+                    <input type="text" x-model="p.last_name"
+                           class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                </div>
+
+                <div>
+                    <label class="font-medium">Zuname</label>
+                    <input type="text" x-model="p.surname"
+                           class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                </div>
+
+                <div>
+                    <label class="font-medium">Eintrittsdatum *</label>
+                    <input type="date" x-model="p.start_date"
+                           class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                </div>
+
+                <div>
+                    <label class="font-medium">Titel *</label>
+                    <input type="text" x-model="p.title"
+                           class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                </div>
+
+                <div>
+                    <label class="font-medium">Niederlassung *</label>
+                    <input type="text" x-model="p.location"
+                           :disabled="p.homeoffice"
+                           class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                    <label class="text-sm mt-1 block">
+                        <input type="checkbox" x-model="p.homeoffice">
+                        100 % Homeoffice
+                    </label>
+                </div>
+
+                <div>
+                    <label class="font-medium">Führungsposition *</label>
+                    <select x-model="p.is_leader"
+                            class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                        <option value="">Bitte wählen</option>
+                        <option value="yes">Ja</option>
+                        <option value="no">Nein</option>
+                    </select>
+                </div>
+
+                <template x-if="p.is_leader === 'yes'">
+                    <div>
+                        <label class="font-medium">Führungsebene *</label>
+                        <select x-model="p.leader_level"
+                                class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                            <option value="">Bitte wählen</option>
+                            <option>Niederlassungsleiter</option>
+                            <option>Regionalleiter</option>
+                            <option>Bereichsleiter</option>
+                            <option>C-Level</option>
+                            <option>Geschäftsführung</option>
+                        </select>
+                    </div>
+                </template>
+
+                <div>
+                    <label class="font-medium">Firmenwagen *</label>
+                    <select x-model="p.company_car"
+                            class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                        <option value="">Bitte wählen</option>
+                        <option value="no">Nein</option>
+                        <option value="yes">Ja</option>
+                    </select>
+                </div>
+
+                <template x-if="p.company_car === 'yes'">
+                    <div>
+                        <label class="font-medium">Fahrzeugstufe *</label>
+                        <select x-model="p.car_level"
+                                class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                            <option>Poolnutzung</option>
+                            <option>A</option>
+                            <option>B</option>
+                            <option>C</option>
+                            <option>D</option>
+                        </select>
+                    </div>
+                </template>
+
+            </div>
         </div>
-        {% endfor %}
 
-        <!-- DESCRIPTION JSON -->
-        <input type="hidden" name="description"
-               x-data
-               x-init="
-                const f = $el.closest('form');
-                f.addEventListener('submit', () => {
-                    const d = {};
-                    for (let i=1;i<=5;i++) {
-                        d['feld'+i] = f.querySelector('[name=feld'+i+']').value;
-                    }
-                    $el.value = JSON.stringify(d);
-                });
-               ">
+        <!-- ================================================= -->
+        <!-- ABSCHNITT 2 – FACHLICHE ERGÄNZUNGEN -->
+        <!-- ================================================= -->
+        <div class="p-6 border rounded-xl">
+
+            <h2 class="text-xl font-semibold mb-4">
+                Fachliche Ergänzungen
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <div>
+                    <label class="font-medium">Foto für Homepage?</label>
+                    <select x-model="f.photo"
+                            class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                        <option value="">–</option>
+                        <option>Ja</option>
+                        <option>Nein</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="font-medium">IT-Hardware benötigt?</label>
+                    <select x-model="f.hardware"
+                            class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                        <option value="">–</option>
+                        <option>Ja</option>
+                        <option>Nein</option>
+                    </select>
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="font-medium">Weitere Anforderungen</label>
+                    <textarea x-model="f.notes"
+                              class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"></textarea>
+                </div>
+
+            </div>
+        </div>
+
+        <input type="hidden" name="description" x-ref="description">
     </section>
-
 </div>
+
+<!-- ================= ASSIGNEE (HIDDEN) ================= -->
+<input type="hidden" name="assignee_id" x-ref="assigneeId">
+<input type="hidden" name="assignee_name" x-ref="assigneeName">
 
 <!-- ================= ACTIONS ================= -->
 <div class="flex justify-end gap-4">
@@ -94,10 +223,91 @@
         Abbrechen
     </a>
 
-    <button type="submit"
-            class="px-6 py-2.5 bg-primary text-white rounded-md">
-        {{ "Speichern" if ticket else "Ticket erstellen" }}
+    <button
+        type="button"
+        @click="openAssigneeModal()"
+        class="px-6 py-2.5 bg-primary text-white rounded-md">
+        Auftrag erstellen
     </button>
 </div>
 
+<!-- ================= MODAL ================= -->
+<div x-show="modalOpen" x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 w-[420px]">
+        <h3 class="text-lg font-semibold mb-4">
+            Wer soll den Auftrag bearbeiten?
+        </h3>
+
+        <div class="space-y-3">
+            <button class="w-full px-4 py-2 rounded bg-primary text-white"
+                    @click="chooseAssignee('accountable')">
+                Verantwortlicher
+            </button>
+            <button class="w-full px-4 py-2 rounded bg-primary text-white"
+                    @click="chooseAssignee('supervisor')">
+                Vorgesetzter
+            </button>
+        </div>
+
+        <button class="mt-4 text-sm text-gray-500"
+                @click="modalOpen = false">
+            Abbrechen
+        </button>
+    </div>
+</div>
+
 </form>
+
+<script>
+function zugangCreateForm() {
+    return {
+        modalOpen: false,
+
+        p: {
+            first_name: "",
+            last_name: "",
+            surname: "",
+            location: "",
+            homeoffice: false,
+            start_date: "",
+            title: "",
+            is_leader: "",
+            leader_level: "",
+            company_car: "",
+            car_level: ""
+        },
+
+        f: {
+            photo: "",
+            hardware: "",
+            notes: ""
+        },
+
+        openAssigneeModal() {
+            if (!this.p.first_name || !this.p.last_name || !this.p.start_date || !this.p.title) {
+                alert("Bitte alle Pflichtfelder der Personalabteilung ausfüllen.");
+                return;
+            }
+            this.modalOpen = true;
+        },
+
+        chooseAssignee(type) {
+            const id = document.querySelector(`[name=${type}_id]`).value;
+            const name = document.querySelector(`[name=${type}_name]`).value;
+
+            this.$refs.assigneeId.value = id;
+            this.$refs.assigneeName.value = name;
+
+            this.$refs.description.value = JSON.stringify({
+                personal: this.p,
+                fachlich: this.f
+            });
+
+            this.modalOpen = false;
+            this.$el.submit();
+        }
+    }
+}
+</script>

@@ -237,6 +237,11 @@ async def edit_ticket_page(
     if ticket.ticket_type != ticket_type.value:
         raise HTTPException(400, "Tickettyp passt nicht")
 
+    try:
+        description_parsed = json.loads(ticket.description or "{}")
+    except Exception:
+        description_parsed = {}
+    print(description_parsed)
     return request.app.templates.TemplateResponse(
         f"tickets/{ticket_type.value}/edit.html",
         {
@@ -249,6 +254,8 @@ async def edit_ticket_page(
 
             "supervisor_id": ticket.supervisor_id,
             "supervisor_name": ticket.supervisor_name,
+
+            "description": description_parsed,
 
             "is_admin": user.get("is_admin", False),
             "priority": ticket.priority.value,
@@ -337,8 +344,20 @@ def complete_ticket_internal(ticket, request, user):
 
     database.set_assignee(
         ticket_id=ticket.id,
-        user_id = "system",
-        user_name= "system",
+        user_id = "fachabteilung",
+        user_name= "fachabteilung",
+    )
+
+    database.set_accountable(
+        ticket_id=ticket.id,
+        user_id="fachabteilung",
+        user_name="fachabteilung",
+    )
+
+    database.set_supervisor(
+        ticket_id=ticket.id,
+        user_id = "fachabteilung",
+        user_name= "fachabteilung",
     )
 
     database.set_assignee_group(

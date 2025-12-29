@@ -1,14 +1,14 @@
+{% set current_priority = priority if priority is defined else "medium" %}
+
 <form
     method="post"
-    action="{% if ticket %}/tickets/update/{{ ticket.id }}{% else %}/tickets{% endif %}"
+    action="/tickets"
     class="flex flex-col gap-8"
-    @keydown.enter.prevent="
-        if ($event.target.tagName !== 'TEXTAREA') {
-            $event.preventDefault()
-        }
-    "
+    x-data="createTicketForm()"
+    @keydown.enter.prevent="if ($event.target.tagName !== 'TEXTAREA') $event.preventDefault()"
 >
 
+<!-- ================= LAYOUT ================= -->
 <div class="flex flex-col lg:flex-row gap-8">
 
     <!-- ================= LEFT: DETAILS ================= -->
@@ -17,7 +17,22 @@
 
         <h2 class="font-semibold text-lg mb-6">Details</h2>
 
-        <!-- USER DROPDOWN -->
+        <!-- ================= Verantwortlicher ================= -->
+        {% set label = "Verantwortlicher" %}
+        {% set info_text = "Initiator des Auftrags" %}
+        {% set field_id = "accountable_id" %}
+        {% set field_name = "accountable_name" %}
+        {% set initial_id = "" %}
+        {% set initial_name = "" %}
+        {% include "components/user-dropdown.html" %}
+
+        <!-- ================= Vorgesetzter ================= -->
+        {% set label = "Vorgesetzter" %}
+        {% set info_text = "Direkter Vorgesetzter" %}
+        {% set field_id = "supervisor_id" %}
+        {% set field_name = "supervisor_name" %}
+        {% set initial_id = "" %}
+        {% set initial_name = "" %}
         {% include "components/user-dropdown.html" %}
 
         <!-- PRIORITY -->
@@ -25,28 +40,21 @@
             <label class="font-medium">Priorität *</label>
             <select name="priority"
                     class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
-
                 {% for p in ["low","medium","high","critical"] %}
                 <option value="{{ p }}"
-                    {% if ticket %}
-                        {% if ticket.priority == p %}selected{% endif %}
-                    {% else %}
-                        {% if p == "medium" %}selected{% endif %}
-                    {% endif %}>
+                        {% if current_priority == p %}selected{% endif %}>
                     {{ p|capitalize }}
                 </option>
                 {% endfor %}
-
             </select>
         </div>
-
 
         <!-- COMMENT -->
         <div class="mt-6">
             <label class="font-medium">Kommentar</label>
             <textarea name="comment"
                       class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
-                      placeholder="Optional…">{{ ticket.comment if ticket }}</textarea>
+                      placeholder="Optional…"></textarea>
         </div>
 
     </aside>
@@ -64,28 +72,18 @@
             <input
                 type="text"
                 name="feld{{ i }}"
-                class="w-full mt-1 p-3 rounded border dark:bg-gray-700"
-                value="{{ ticket.description_parsed['feld' ~ i] if ticket }}"
-            >
+                class="w-full mt-1 p-3 rounded border dark:bg-gray-700">
         </div>
         {% endfor %}
 
         <!-- DESCRIPTION JSON -->
-        <input type="hidden" name="description"
-               x-data
-               x-init="
-                const f = $el.closest('form');
-                f.addEventListener('submit', () => {
-                    const d = {};
-                    for (let i=1;i<=5;i++) {
-                        d['feld'+i] = f.querySelector('[name=feld'+i+']').value;
-                    }
-                    $el.value = JSON.stringify(d);
-                });
-               ">
+        <input type="hidden" name="description" x-ref="description">
     </section>
-
 </div>
+
+<!-- ================= ASSIGNEE (HIDDEN) ================= -->
+<input type="hidden" name="assignee_id" x-ref="assigneeId">
+<input type="hidden" name="assignee_name" x-ref="assigneeName">
 
 <!-- ================= ACTIONS ================= -->
 <div class="flex justify-end gap-4">
@@ -94,10 +92,96 @@
         Abbrechen
     </a>
 
-    <button type="submit"
-            class="px-6 py-2.5 bg-primary text-white rounded-md">
-        {{ "Speichern" if ticket else "Ticket erstellen" }}
+    <button
+        type="button"
+        @click="openAssigneeModal()"
+        class="px-6 py-2.5 bg-primary text-white rounded-md">
+        Auftrag erstellen
     </button>
 </div>
 
+<!-- ================= MODAL ================= -->
+<div
+    x-show="modalOpen"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 w-[420px]">
+
+        <h3 class="text-lg font-semibold mb-4">
+            Wer soll den Auftrag bearbeiten?
+        </h3>
+
+        <div class="space-y-3">
+
+            <button
+                class="w-full px-4 py-2 rounded bg-primary text-white"
+                @click="chooseAssignee('accountable')">
+                Verantwortlicher
+            </button>
+
+            <button
+                class="w-full px-4 py-2 rounded bg-primary text-white"
+                @click="chooseAssignee('supervisor')">
+                Vorgesetzter
+            </button>
+
+        </div>
+
+        <button
+            class="mt-4 text-sm text-gray-500"
+            @click="modalOpen = false">
+            Abbrechen
+        </button>
+    </div>
+</div>
+
 </form>
+
+<!-- ================= ALPINE ================= -->
+<script>
+function createTicketForm() {
+    return {
+        modalOpen: false,
+
+        openAssigneeModal() {
+            const acc = document.querySelector('[name=accountable_id]').value;
+            const sup = document.querySelector('[name=supervisor_id]').value;
+
+            if (!acc || !sup) {
+                alert("Bitte Verantwortlichen und Vorgesetzten auswählen.");
+                return;
+            }
+
+            this.modalOpen = true;
+        },
+
+        chooseAssignee(type) {
+            if (type === "accountable") {
+                this.$refs.assigneeId.value =
+                    document.querySelector('[name=accountable_id]').value;
+                this.$refs.assigneeName.value =
+                    document.querySelector('[name=accountable_name]').value;
+            }
+
+            if (type === "supervisor") {
+                this.$refs.assigneeId.value =
+                    document.querySelector('[name=supervisor_id]').value;
+                this.$refs.assigneeName.value =
+                    document.querySelector('[name=supervisor_name]').value;
+            }
+
+            // Description bauen
+            const d = {};
+            for (let i = 1; i <= 5; i++) {
+                d["feld" + i] =
+                    document.querySelector('[name=feld' + i + ']').value;
+            }
+            this.$refs.description.value = JSON.stringify(d);
+
+            this.modalOpen = false;
+            this.$el.submit();
+        }
+    }
+}
+</script>
