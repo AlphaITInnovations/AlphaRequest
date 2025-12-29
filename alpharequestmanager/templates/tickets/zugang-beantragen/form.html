@@ -88,10 +88,16 @@
                 </div>
 
                 <div>
-                    <label class="font-medium">Zuname</label>
-                    <input type="text" x-model="p.surname"
-                           class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                  <label class="font-medium">Anrede *</label>
+                  <select x-model="p.salutation"
+                          class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+                    <option value="">Bitte wählen</option>
+                    <option value="Herr">Herr</option>
+                    <option value="Frau">Frau</option>
+                    <option value="Divers">Divers</option>
+                  </select>
                 </div>
+
 
                 <div>
                     <label class="font-medium">Eintrittsdatum *</label>
@@ -146,8 +152,8 @@
                     <select x-model="p.company_car"
                             class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
                         <option value="">Bitte wählen</option>
-                        <option value="no">Nein</option>
                         <option value="yes">Ja</option>
+                        <option value="no">Nein</option>
                     </select>
                 </div>
 
@@ -286,7 +292,7 @@ function zugangCreateForm() {
         },
 
         openAssigneeModal() {
-            if (!this.p.first_name || !this.p.last_name || !this.p.start_date || !this.p.title) {
+            if (!this.p.salutation || !this.p.first_name || !this.p.last_name || !this.p.start_date || !this.p.title) {
                 alert("Bitte alle Pflichtfelder der Personalabteilung ausfüllen.");
                 return;
             }

@@ -13246,3 +13246,23 @@
 2025-12-29 10:41:01,836 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
 2025-12-29 10:41:02,685 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
 2025-12-29 10:42:30,946 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=def5cd2776a3470d97ee223625e52280 last=1767001169 now=1767001350 cookie_len=602
+2025-12-29 10:46:58,882 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=def5cd2776a3470d97ee223625e52280 last=1767001350 now=1767001618 cookie_len=602
+2025-12-29 10:55:52,561 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2025-12-29 10:55:52,575 - INFO - alpharequestmanager - ℹ️ Alle Ticket-Gruppen bereits vorhanden
+2025-12-29 10:55:52,605 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-29 10:55:53,505 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-29 10:55:53,506 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2025-12-29 10:55:54,926 - INFO - alpharequestmanager - ✅ Loaded 648 users into cache
+2025-12-29 10:55:57,145 - INFO - alpharequestmanager - User logged out: Marco.Schneider@alpha-it-innovations.org
+2025-12-29 10:55:59,293 - INFO - alpharequestmanager - ➡️ Session vor Token-Abruf: {'auth_flow': {'state': 'FlSEZYKprbGQURBO', 'redirect_uri': 'https://AI-MS-01.dom.local:5000/auth/callback', 'scope': ['openid', 'profile', 'User.Read', 'Mail.Send', 'offline_access'], 'auth_uri': 'https://login.microsoftonline.com/9f32fe97-32f1-412e-af1f-77c6c70d54db/oauth2/v2.0/authorize?client_id=d3672286-7126-46eb-89e9-f2d4368076b0&response_type=code&redirect_uri=https%3A%2F%2FAI-MS-01.dom.local%3A5000%2Fauth%2Fcallback&scope=Mail.Send+User.Read+offline_access+openid+profile&state=FlSEZYKprbGQURBO&code_challenge=oqKE1GctemV-gLtLYZjwxD9KrJ-BZN3_-iSN4eAFG4g&code_challenge_method=S256&nonce=8c4bbbbd76b04689afcb190fb3c4afc4f6310497835bf1536d7a12d865d4aa84&client_info=1', 'code_verifier': 'w768oJCAhnt9qdSEWxrF_4pPKfvgUmNzbDjaeOXHc3G', 'nonce': 'UZSypNfdLCRjJTaI', 'claims_challenge': None}}
+2025-12-29 10:55:59,663 - INFO - alpharequestmanager - 🔁 Token Result keys: ['token_type', 'scope', 'expires_in', 'ext_expires_in', 'access_token', 'refresh_token', 'id_token', 'client_info', 'id_token_claims', 'token_source']
+2025-12-29 10:55:59,663 - INFO - alpharequestmanager - 🪪 ID Claims keys: ['aud', 'iss', 'iat', 'nbf', 'exp', 'email', 'groups', 'name', 'nonce', 'oid', 'preferred_username', 'rh', 'sid', 'sub', 'tid', 'uti', 'ver']
+2025-12-29 10:56:01,095 - INFO - alpharequestmanager - ✅ Session nach Schreiben: {'sid': '8c6a0c10b8c6430492e85691e2ad49b9', 'user': {'id': 'a2046db5-4d1d-46aa-8bf6-49a867aabdad', 'displayName': 'Marco Schneider', 'email': 'Marco.Schneider@alpha-it-innovations.org', 'is_admin': True, 'phone': None, 'mobile': None, 'company': 'Alpha IT Innovations GmbH', 'position': 'IT', 'address': {'street': 'Forchheimer Straße 4', 'zip': '90425', 'city': 'Nürnberg'}}, 'last_activity': 1767002161}
+2025-12-29 10:56:01,101 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002161 cookie_len=602
+2025-12-29 10:56:02,452 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002162 cookie_len=602
+2025-12-29 10:56:02,631 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002162 cookie_len=602
+2025-12-29 10:56:02,672 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002162 cookie_len=602
+2025-12-29 10:56:03,901 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002163 cookie_len=602
+2025-12-29 10:56:08,136 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002168 cookie_len=602
+2025-12-29 10:56:08,307 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002168 cookie_len=602
+2025-12-29 10:56:08,344 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=8c6a0c10b8c6430492e85691e2ad49b9 last=1767002161 now=1767002168 cookie_len=602
