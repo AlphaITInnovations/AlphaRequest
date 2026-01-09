@@ -37,7 +37,7 @@ document.addEventListener("alpine:init", () => {
 
     /* ================= DATA ================= */
     orders: {{ orders | tojson }},
-    group_requests: {{ group_requests | tojson }},
+    departmentRequests: {{ department_requests | tojson }},
     userName: "{{ user.displayName }}",
 
     // 🔑 vom Backend
@@ -66,8 +66,9 @@ document.addEventListener("alpine:init", () => {
       window.location.href = `/tickets/edit/${o.type_key}/${o.id}`;
     },
 
-    openGroupTicket(o) {
-      window.location.href = `/tickets/group/${o.type_key}/${o.id}`;
+    openGroupTicket(o, groupId) {
+      window.location.href =
+        `/tickets/group/${o.type_key}/${o.id}?department=${groupId}`;
     },
 
     statusLabel(s) {
@@ -216,46 +217,79 @@ document.addEventListener("alpine:init", () => {
     </ul>
   </div>
 
-  <!-- ================= FACHABTEILUNG ================= -->
-  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
-    <h2 class="text-xl font-semibold mb-4 text-primary">
-      Fachabteilung · Aufträge
-    </h2>
+<!-- ================= FACHABTEILUNGEN ================= -->
+<div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
+  <h2 class="text-xl font-semibold mb-6 text-primary">
+    Fachabteilungen · Deine Aufgaben
+  </h2>
 
-    <ul class="space-y-4 max-h-[480px] overflow-auto nice-scrollbar pr-1">
-      <template x-for="o in group_requests" :key="o.id">
-        <li @click="openGroupTicket(o)"
+  <!-- Fachabteilung -->
+  <template x-for="dept in departmentRequests" :key="dept.group_id">
+    <section class="mb-8">
+
+      <!-- Department Header -->
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold flex items-center gap-2">
+          <span>🏢</span>
+          <span x-text="dept.group_name"></span>
+        </h3>
+
+        <span class="text-xs px-3 py-1 rounded-full bg-primary/20 text-primary font-semibold">
+          <span x-text="dept.tickets.length"></span> offen
+        </span>
+      </div>
+
+      <!-- Tickets -->
+      <ul class="space-y-3">
+        <template x-for="ticket in dept.tickets" :key="ticket.id">
+          <li
+            @click="openGroupTicket(ticket, dept.group_id)"
             class="ticket relative p-5 rounded-xl border
                    bg-white dark:bg-gray-700 cursor-pointer
                    transition hover:-translate-y-[2px] hover:shadow-xl">
 
-          <div class="ticket-accent bg-primary"></div>
+            <!-- Accent -->
+            <div class="ticket-accent bg-primary"></div>
 
-          <div class="flex justify-between gap-4 pl-3">
-            <div class="min-w-0">
-              <div class="font-semibold truncate" x-text="o.type"></div>
-              <div class="text-sm text-gray-500" x-text="o.date"></div>
+            <div class="flex justify-between gap-4 pl-3">
+
+              <!-- Ticket Info -->
+              <div class="min-w-0">
+                <div class="font-semibold truncate" x-text="ticket.title"></div>
+
+                <div class="text-sm text-gray-500 flex gap-3 mt-1">
+                  <span x-text="ticket.type_key"></span>
+                  <span>•</span>
+                  <span x-text="ticket.created_at"></span>
+                </div>
+              </div>
+
+              <!-- Status -->
+              <div class="flex flex-col items-end gap-1 shrink-0">
+                <span class="px-3 py-1 rounded-md text-xs font-semibold
+                             bg-primary/20 text-primary">
+                  🛠 Zu bearbeiten
+                </span>
+              </div>
+
             </div>
+          </li>
+        </template>
+      </ul>
 
-            <div class="flex flex-col items-end gap-1 shrink-0">
-              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-primary/20 text-primary">
-                Fachabteilung
-              </span>
-              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-emerald-100 text-emerald-800">
-                🛠 Zu bearbeiten
-              </span>
-            </div>
-          </div>
-        </li>
-      </template>
+    </section>
+  </template>
 
-      <template x-if="group_requests.length === 0">
-        <li class="text-gray-500 text-sm text-center py-8">
-          Keine Fachabteilungsaufträge.
-        </li>
-      </template>
-    </ul>
-  </div>
+  <!-- Empty State -->
+  <template x-if="departmentRequests.length === 0">
+    <div class="text-gray-500 text-sm text-center py-8">
+      🎉 Aktuell keine Fachabteilungsaufträge für dich.
+    </div>
+  </template>
+</div>
+
+
+
 
 </section>
 </div>

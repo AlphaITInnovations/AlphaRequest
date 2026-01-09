@@ -12,6 +12,7 @@ from starlette.status import HTTP_302_FOUND
 from alpharequestmanager.core.dependencies import get_current_user
 from alpharequestmanager.database.database import get_groupID_from_name
 from alpharequestmanager.services.ticket_permissions import can_user_create_ticket
+from alpharequestmanager.services.workflow_state import build_workflow, set_workflow_state
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.database import database
 import json
@@ -270,20 +271,37 @@ async def group_ticket_view(
     ticket_id: int,
     user: dict = Depends(get_current_user),
 ):
+    from alpharequestmanager.services.workflow_state import (
+        get_department_info,
+        user_can_complete_department,
+    )
+
+    department_id = request.query_params.get("department")
+    if not department_id:
+        raise HTTPException(400, "Department fehlt")
+
     manager = request.app.state.manager
     ticket = manager.get_ticket(ticket_id)
 
     if not ticket:
         raise HTTPException(404, "Ticket nicht gefunden")
 
+    # Beschreibung
     try:
         description_parsed = json.loads(ticket.description or "{}")
     except Exception:
         description_parsed = {}
 
-    # Optional: prüfen ob User Mitglied der Gruppe ist
-    #if not user_is_in_group(user["id"], ticket.assignee_group_id):
-    #    raise HTTPException(403, "Kein Zugriff")
+    # Department-Daten
+    department = get_department_info(ticket_id, department_id)
+    if not department:
+        raise HTTPException(403, "Dieses Ticket gehört nicht zu deiner Fachabteilung")
+
+    can_complete = user_can_complete_department(
+        ticket_id,
+        user["id"],
+        department_id
+    )
 
     return request.app.templates.TemplateResponse(
         f"tickets/{ticket_type.value}/group_view.html",
@@ -293,9 +311,17 @@ async def group_ticket_view(
             "description": description_parsed,
             "user": user,
             "priority": ticket.priority.value,
+
+            # 🔑 WICHTIG
+            "department_id": department_id,
+            "department": department,
+            "department_status": department.get("status"),
+            "can_complete": can_complete,
+
             "is_admin": user.get("is_admin", False),
         }
     )
+
 
 
 @router.post("/tickets/archive/{ticket_id}")
@@ -333,9 +359,12 @@ def complete_ticket_internal(ticket, request, user):
     except Exception:
         raise HTTPException(400, "Ticketbeschreibung ungültig")
 
-    group_id = get_groupID_from_name(ticket.ticket_type)
-    if not group_id:
-        raise HTTPException(500, "Keine Fachabteilung konfiguriert")
+    workflow = build_workflow(ticket)
+
+    if not workflow or "departments" not in workflow:
+        raise HTTPException(500, "Workflow konnte nicht erstellt werden")
+
+
 
     request.app.state.manager.update_ticket(
         ticket_id=ticket.id,
@@ -360,10 +389,12 @@ def complete_ticket_internal(ticket, request, user):
         user_name= "fachabteilung",
     )
 
-    database.set_assignee_group(
+    set_workflow_state(ticket.id, workflow)
+
+    logger.info(
+        "Ticket %s in in_request überführt | Departments=%s",
         ticket.id,
-        group_id=group_id,
-        group_name=ticket.ticket_type,
+        list(workflow["departments"].keys())
     )
 
 
@@ -374,3 +405,58 @@ def require_ticket_permission(user: dict, ticket_type: TicketType):
             status_code=403,
             detail="Keine Berechtigung diesen Auftrag zu erstellen"
         )
+
+
+### departments
+
+@router.get("/tickets/{ticket_id}/departments")
+async def get_my_departments(
+    ticket_id: int,
+    user: dict = Depends(get_current_user),
+):
+    from alpharequestmanager.services.workflow_state import get_departments_for_user
+
+    return get_departments_for_user(ticket_id, user["id"])
+
+
+@router.post("/tickets/{ticket_id}/departments/{group_id}/status")
+async def set_department_status_api(
+    ticket_id: int,
+    group_id: str,
+    status: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    from alpharequestmanager.services.workflow_state import (
+        user_can_complete_department,
+        set_department_status,
+        can_archive_ticket,
+    )
+
+    if not user_can_complete_department(ticket_id, user["id"], group_id):
+        raise HTTPException(403, "Keine Berechtigung für diese Fachabteilung")
+
+    if status not in {"done", "rejected", "skipped"}:
+        raise HTTPException(400, "Ungültiger Status")
+
+    set_department_status(ticket_id, group_id, status)
+
+    # Optional: Auto-Archiv
+    if can_archive_ticket(ticket_id):
+        database.update_ticket(
+            ticket_id=ticket_id,
+            status=RequestStatus.archived,
+        )
+
+    return {"ok": True}
+
+
+@router.get("/tickets/{ticket_id}/departments/all")
+async def get_all_departments(
+    ticket_id: int,
+    user: dict = Depends(get_current_user),
+):
+    if not user.get("is_admin"):
+        raise HTTPException(403)
+
+    from alpharequestmanager.services.workflow_state import get_all_department_statuses
+    return get_all_department_statuses(ticket_id)

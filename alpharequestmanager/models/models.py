@@ -66,7 +66,9 @@ class Ticket:
     # ================= META =================
     comment: str = ""
     ninja_metadata: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
+    workflow_state: Optional[str] = None
+
+    #tags: List[str] = field(default_factory=list)
 
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
@@ -129,8 +131,9 @@ class Ticket:
 
             comment=row.get("comment") or "",
             ninja_metadata=row.get("ninja_metadata"),
+            workflow_state=row.get("workflow_state"),
 
-            tags=parse_json(row.get("tags"), []),
+            #tags=parse_json(row.get("tags"), []),
 
             created_at=parse_dt(row.get("created_at")) or datetime.utcnow(),
             updated_at=parse_dt(row.get("updated_at")),
@@ -183,3 +186,7 @@ class Ticket:
             return datetime.fromisoformat(ts) if ts else None
         except Exception:
             return None
+
+    @property
+    def workflow_state_parsed(self) -> dict:
+        return self._safe_json(self.workflow_state, {})

@@ -2,11 +2,12 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from alpharequestmanager.core.dependencies import get_current_user
+from alpharequestmanager.models.models import Ticket
 from alpharequestmanager.services.ticket_permissions import get_allowed_ticket_types_for_user
+from alpharequestmanager.services.workflow_state import get_department_requests_for_user
 from alpharequestmanager.utils.config import config
 
 router = APIRouter()
-
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, user: dict = Depends(get_current_user)):
@@ -16,19 +17,14 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
     manager = request.app.state.manager
     allowed_types = get_allowed_ticket_types_for_user(user["id"])
     tickets = manager.list_by_assignee(user_id=user["id"])
-    print(allowed_types)
+    #print(allowed_types)
     orders = [
         ticket_to_dashboard_item(t)
         for t in tickets
     ]
 
-    group_requests = manager.list_by_assignee_group_by_user(user["id"])
+    department_requests = get_department_requests_for_user(user["id"])
 
-
-    group_requests = [
-        ticket_to_dashboard_item(t)
-        for t in group_requests
-    ]
 
     return request.app.templates.TemplateResponse(
         "dashboard.html",
@@ -36,7 +32,7 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
             "request": request,
             "user": user,
             "orders": orders,
-            "group_requests": group_requests,
+            "department_requests": department_requests,
             "is_admin": user.get("is_admin", False),
             "devpopup": config.DEVPOPUP,
             "allowed_ticket_types": allowed_types,

@@ -18,17 +18,19 @@ from alpharequestmanager.api import (
     users,
     groups,
 )
+from alpharequestmanager.database.database import get_group_ids_for_user, get_group_name_from_id
 
 from alpharequestmanager.services.ensure_ticket_groups import ensure_ticket_groups
 from alpharequestmanager.services.metrics import init_metrics
 from alpharequestmanager.database import database as db
 from alpharequestmanager.services.ticket_permissions import init_ticket_permissions
 from alpharequestmanager.services.ticket_service import TicketService
+from alpharequestmanager.services.workflow_state import get_tickets_for_department, get_tickets_for_user_departments, \
+    get_department_requests_for_user
 from alpharequestmanager.utils.config import config
 from starlette.datastructures import State
 from typing import cast
 from alpharequestmanager.models.models import TicketType
-
 
 
 def get_ticket_type_dict():
@@ -99,10 +101,12 @@ def run_server(https: bool = False):
 
 
 def main():
+    print(get_department_requests_for_user("a2046db5-4d1d-46aa-8bf6-49a867aabdad"))
+
     db.init_db()
     init_ticket_permissions()
     configure_event_loop()
-    ensure_ticket_groups()
+    #ensure_ticket_groups()
     run_server(https=config.HTTPS)
 
 

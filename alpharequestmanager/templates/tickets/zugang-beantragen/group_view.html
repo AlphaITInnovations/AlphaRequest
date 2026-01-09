@@ -4,7 +4,9 @@
 {% block content %}
 <div class="max-w-6xl mx-auto p-8 space-y-8">
 
-  <!-- ================= HEADER ================= -->
+  <!-- ================================================= -->
+  <!-- HEADER -->
+  <!-- ================================================= -->
   <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
     <h1 class="text-xl font-semibold">
       {{ ticket.title }}
@@ -14,180 +16,218 @@
     </p>
   </div>
 
-  <!-- ================= LAYOUT ================= -->
+
+
+  <!-- ================================================= -->
+  <!-- LAYOUT -->
+  <!-- ================================================= -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-    <!-- ================= META ================= -->
+    <!-- ================================================= -->
+    <!-- META -->
+    <!-- ================================================= -->
     <aside class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
       <div class="space-y-4 text-sm">
 
         <div>
-          <div class="font-medium">Status</div>
+          <div class="font-medium text-gray-500">Ticketstatus</div>
           <div>{{ ticket.status.value }}</div>
         </div>
 
         <div>
-          <div class="font-medium">Priorität</div>
+          <div class="font-medium text-gray-500">Priorität</div>
           <div>{{ ticket.priority.value|capitalize }}</div>
         </div>
 
         <div>
-          <div class="font-medium">Zuständig</div>
-          <div class="text-gray-500">System (Fachabteilung)</div>
-        </div>
-
-        <div>
-          <div class="font-medium">Antragsteller</div>
+          <div class="font-medium text-gray-500">Antragsteller</div>
           <div>{{ ticket.owner_name }}</div>
         </div>
 
       </div>
     </aside>
 
-    <!-- ================= CONTENT ================= -->
-    <section class="lg:col-span-2 space-y-8">
+    <!-- ================================================= -->
+    <!-- CONTENT -->
+    <!-- ================================================= -->
+    <section class="lg:col-span-2 space-y-10">
 
       <!-- ================================================= -->
-      <!-- PERSONALABTEILUNG -->
+      <!-- PERSONAL / HR -->
       <!-- ================================================= -->
       <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="text-lg font-semibold mb-4">
-          Personalabteilung
-        </h2>
+        <h2 class="font-semibold text-lg mb-4">Personal / HR</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><span class="label">Vorname</span>{{ description.personal.first_name }}</div>
+          <div><span class="label">Nachname</span>{{ description.personal.last_name }}</div>
+          <div><span class="label">Titel</span>{{ description.personal.title }}</div>
+          <div><span class="label">Eintrittsdatum</span>{{ description.personal.start_date }}</div>
+          <div><span class="label">Abteilung</span>{{ description.personal.department }}</div>
+          <div><span class="label">Kostenstelle</span>{{ description.personal.cost_center }}</div>
+          <div><span class="label">Niederlassung</span>{{ description.personal.location }}</div>
+          <div><span class="label">Homeoffice</span>{{ description.personal.homeoffice }}</div>
+          <div><span class="label">Firma lt. Vertrag</span>{{ description.personal.contract_company }}</div>
 
-          <div>
-            <div class="text-gray-500">Vorname</div>
-            <div class="font-medium">{{ description.personal.first_name or "–" }}</div>
+          <div class="md:col-span-2">
+            <span class="label">Privatadresse</span>
+            {{ description.personal.private_address }}
           </div>
 
           <div>
-            <div class="text-gray-500">Nachname</div>
-            <div class="font-medium">{{ description.personal.last_name or "–" }}</div>
+            <span class="label">Vorgesetzter (HR)</span>
+            {{ description.personal.supervisor_hr_name }}
           </div>
 
           <div>
-            <div class="text-gray-500">Anrede</div>
-            <div class="font-medium">{{ description.personal.salutation or "–" }}</div>
+            <span class="label">Ansprechpartner HR</span>
+            {{ description.personal.contact_person_name }}
           </div>
 
-          <div>
-            <div class="text-gray-500">Eintrittsdatum</div>
-            <div class="font-medium">{{ description.personal.start_date or "–" }}</div>
-          </div>
-
-          <div>
-            <div class="text-gray-500">Titel / Position</div>
-            <div class="font-medium">{{ description.personal.title or "–" }}</div>
-          </div>
-
-          <div>
-            <div class="text-gray-500">Arbeitsort</div>
-            <div class="font-medium">
-              {% if description.personal.homeoffice %}
-                100 % Homeoffice
-              {% else %}
-                {{ description.personal.location or "–" }}
-              {% endif %}
-            </div>
-          </div>
-
-          <div>
-            <div class="text-gray-500">Führungsposition</div>
-            <div class="font-medium">
-              {{ "Ja" if description.personal.is_leader == "yes" else "Nein" }}
-            </div>
-          </div>
-
-          {% if description.personal.is_leader == "yes" %}
-          <div>
-            <div class="text-gray-500">Führungsebene</div>
-            <div class="font-medium">{{ description.personal.leader_level or "–" }}</div>
+          {% if description.personal.notes %}
+          <div class="md:col-span-2">
+            <span class="label">Bemerkungen</span>
+            {{ description.personal.notes }}
           </div>
           {% endif %}
-
-          <div>
-            <div class="text-gray-500">Firmenwagen</div>
-            <div class="font-medium">
-              {{ "Ja" if description.personal.company_car == "yes" else "Nein" }}
-            </div>
-          </div>
-
-          {% if description.personal.company_car == "yes" %}
-          <div>
-            <div class="text-gray-500">Fahrzeugstufe</div>
-            <div class="font-medium">{{ description.personal.car_level or "–" }}</div>
-          </div>
-          {% endif %}
-
         </div>
       </div>
 
       <!-- ================================================= -->
-      <!-- FACHLICHE ANGABEN -->
+      <!-- ALLGEMEIN -->
       <!-- ================================================= -->
       <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="text-lg font-semibold mb-4">
-          Fachliche Angaben
-        </h2>
+        <h2 class="font-semibold text-lg mb-4">Allgemeines Auftreten</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
-            <div class="text-gray-500">Foto für Homepage</div>
-            <div class="font-medium">{{ description.fachlich.photo or "–" }}</div>
-          </div>
-
-          <div>
-            <div class="text-gray-500">IT-Hardware benötigt</div>
-            <div class="font-medium">{{ description.fachlich.hardware or "–" }}</div>
+            <span class="label">Firma</span>
+            {{ description.allgemein.appearance_company }}
           </div>
 
           <div class="md:col-span-2">
-            <div class="text-gray-500">Weitere Anforderungen</div>
-            <div class="font-medium whitespace-pre-line">
-              {{ description.fachlich.notes or "–" }}
-            </div>
+            <span class="label">Adresse</span>
+            <pre class="whitespace-pre-wrap">{{ description.allgemein.appearance_address }}</pre>
           </div>
-
         </div>
       </div>
 
+      <!-- ================================================= -->
+      <!-- IT -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">IT / Systemdaten</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><span class="label">Haupt-Kostenstelle</span>{{ description.it.main_cost_center }}</div>
+          <div><span class="label">Arbeitsbeginn</span>{{ description.it.work_start }}</div>
+          <div><span class="label">Telefon</span>{{ description.it.signature.phone }}</div>
+          <div><span class="label">Mobil</span>{{ description.it.signature.mobile }}</div>
+        </div>
+      </div>
+
+      <!-- ================================================= -->
+      <!-- FUHRPARK -->
+      <!-- ================================================= -->
+      {% if description.fuhrpark.car == "Ja" %}
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Fuhrpark</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><span class="label">Fahrzeugklasse</span>{{ description.fuhrpark.car_class }}</div>
+          <div><span class="label">Fahrzeug ab</span>{{ description.fuhrpark.car_from }}</div>
+        </div>
+      </div>
+      {% endif %}
+
     </section>
   </div>
+  <!-- ================================================= -->
+  <!-- DEPARTMENT STATUS -->
+  <!-- ================================================= -->
+  <div class="bg-gray-50 dark:bg-gray-800 border rounded-xl shadow p-6">
+    <div class="flex items-center justify-between gap-6">
 
-  <!-- ================= ACTIONS ================= -->
-  <div class="flex justify-end gap-4">
+      <div>
+        <h2 class="text-lg font-semibold">
+          Fachabteilung:
+          <span class="text-primary">{{ department.name }}</span>
+        </h2>
 
+        <p class="text-sm mt-1">
+          Status:
+          {% if department_status == "done" %}
+            <span class="text-green-600 font-semibold">✔ Ausgeführt</span>
+          {% elif department_status == "rejected" %}
+            <span class="text-red-600 font-semibold">✖ Abgelehnt</span>
+          {% else %}
+            <span class="text-primary font-semibold">🛠 In Bearbeitung</span>
+          {% endif %}
+        </p>
+      </div>
+
+      {% if can_complete and department_status != "done" %}
+        <button
+          onclick="completeDepartment()"
+          class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700
+                 text-white rounded-md font-semibold transition">
+          ✔ Ausgeführt
+        </button>
+
+      {% endif %}
+
+    </div>
+    <div class="flex justify-end">
     <a href="/dashboard"
        class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
-      Abbrechen
+      Zurück zum Dashboard
     </a>
-
-    <form
-      method="post"
-      action="/tickets/archive/{{ ticket.id }}"
-      onsubmit="return confirmArchive();"
-    >
-      <button
-        type="submit"
-        class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md">
-        Abschließen
-      </button>
-    </form>
-
   </div>
+  </div>
+  <!-- ================================================= -->
+  <!-- FOOTER -->
+  <!-- ================================================= -->
+
 
 </div>
 
-<script>
-function confirmArchive() {
-  return confirm(
-    "Wollen Sie diesen Auftrag wirklich abschließen?\n\n" +
-    "Der Auftrag gilt danach als vollständig bearbeitet und wird archiviert.\n" +
-    "Diese Aktion kann nicht rückgängig gemacht werden."
+<style>
+.label{
+  display:block;
+  font-size:.75rem;
+  color:#6B7280;
+  margin-bottom:.125rem;
+}
+</style>
+    <script>
+async function completeDepartment() {
+  const confirmed = confirm(
+    "Wurde der Auftrag wirklich ausgeführt?\n\n" +
+    "Dieser kann danach nicht mehr bearbeitet werden."
   );
+
+  if (!confirmed) return;
+
+  const response = await fetch(
+    "/tickets/{{ ticket.id }}/departments/{{ department_id }}/status",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        status: "done"
+      })
+    }
+  );
+
+  if (response.ok) {
+    // ✅ zurück zum Dashboard
+    window.location.href = "/dashboard";
+  } else {
+    alert("Fehler beim Abschließen des Auftrags.");
+  }
 }
 </script>
+
 {% endblock %}

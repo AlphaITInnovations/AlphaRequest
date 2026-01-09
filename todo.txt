@@ -1,4 +1,6 @@
 TODO:
+komplette fachabteilung funktionalität damit die tickets im phae3 von den einzelenn fachabteilungen abgehakt werden können
+
 - mehrere Fachabteilungen
 - Fachabteilungen konfigurierbar
 - Fachabteilung zu assignee verlauf hinzufügen
@@ -10,12 +12,6 @@ TODO:
 
 
 Admin Panel Neu
-
-
-
-
-
-
 
 
 TODO:
@@ -31,4 +27,14 @@ finish ticket muss alles ausgefüllt haben
 Evtl Überlegung:
 ninja api key user
 
+
+zugang beantragen bugs:
+abschließen in phase2 färbe nicht rot und aktualisiert nicht von alleine
+ansprechpartner werden nich richtig vorausgefüllt
+firmen werden nicht richtig vorausgefüllt
+pflichtfelder funktioniert nicht alle
+
+
+Vor release:
+wenn ein ticket von phase2 auf phase3 abgeschlossen wurde und der user zurück geht im browser dann ist das ticket in einem komischen state wo workflow gesetzt ist ABER das ticket trotzdem in phase2 ist.
 

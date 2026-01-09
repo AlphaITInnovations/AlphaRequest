@@ -2,11 +2,9 @@ import json
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
-
 import pymysql
 from pymysql.cursors import DictCursor
 from sqlalchemy.engine import make_url
-
 from alpharequestmanager.models.models import Ticket, RequestStatus
 from alpharequestmanager.utils.logger import logger
 
@@ -81,6 +79,7 @@ owner_id, owner_name, owner_info,
 comment, status, priority,
 created_at, updated_at,
 ninja_metadata,
+workflow_state,
 assignee_id, assignee_name,
 accountable_id, accountable_name,
 supervisor_id, supervisor_name,
@@ -113,6 +112,7 @@ def init_db():
         updated_at          VARCHAR(64) NULL,
 
         ninja_metadata      LONGTEXT NULL,
+        workflow_state      LONGTEXT NULL,
 
         assignee_id VARCHAR(255) NULL,
         assignee_name VARCHAR(255) NULL,
@@ -262,6 +262,7 @@ def update_ticket(ticket_id: int, **fields) -> None:
         "title", "description", "owner_id", "owner_name",
         "owner_info", "comment", "status", "priority",
         "ninja_metadata",
+        "workflow_state",
         "assignee_id", "assignee_name", "accountable_id", "accountable_name",
         "supervisor_id", "supervisor_name",
         "assignee_group_id", "assignee_group_name",
@@ -546,3 +547,4 @@ def set_assignee_group(ticket_id: int, group_id: str, group_name: str):
         assignee_group_id=group_id,
         assignee_group_name=group_name,
     )
+

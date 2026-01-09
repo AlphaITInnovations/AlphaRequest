@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block title %}
 Zugang beantragen – Neuer Auftrag
 {% endblock %}
@@ -7,7 +6,360 @@ Zugang beantragen – Neuer Auftrag
 {% block content %}
 <div class="max-w-7xl mx-auto p-8">
 
-    {% include "tickets/zugang-beantragen/form.html" %}
+    <form
+  method="post"
+  action="/tickets"
+  class="flex flex-col gap-8"
+  x-data="zugangPhase1Form()"
+  x-init="init()"
+  @keydown.enter.prevent="if ($event.target.tagName !== 'TEXTAREA') $event.preventDefault()"
+>
+<div x-ref="formTop"></div>
+
+<input type="hidden" name="ticket_type" value="zugang-beantragen">
+<input type="hidden" name="description" x-ref="description">
+
+<!-- ================= LAYOUT ================= -->
+<div class="flex flex-col lg:flex-row gap-8">
+
+  <!-- ================= LEFT: DETAILS ================= -->
+  <aside class="w-full lg:w-[360px] flex-shrink-0 bg-white dark:bg-gray-800 border rounded-xl shadow p-6 space-y-6">
+
+    <h2 class="font-semibold text-lg">Details</h2>
+
+    <!-- Verantwortlicher -->
+    {% set label = "Verantwortlicher" %}
+    {% set field_id = "accountable_id" %}
+    {% set field_name = "accountable_name" %}
+    {% set initial_id = "" %}
+    {% set initial_name = "" %}
+    {% include "components/user-dropdown.html" %}
+
+    <!-- Vorgesetzter -->
+    {% set label = "Vorgesetzter" %}
+    {% set field_id = "supervisor_id" %}
+    {% set field_name = "supervisor_name" %}
+    {% set initial_id = "" %}
+    {% set initial_name = "" %}
+    {% include "components/user-dropdown.html" %}
+
+    <!-- Priorität -->
+    <div>
+      <label class="font-medium">Priorität *</label>
+      <select name="priority" class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
+        <option value="low">Niedrig</option>
+        <option value="medium" selected>Mittel</option>
+        <option value="high">Hoch</option>
+        <option value="critical">Kritisch</option>
+      </select>
+    </div>
+
+    <!-- Kommentar -->
+    <div>
+      <label class="font-medium">Kommentar</label>
+      <textarea name="comment"
+                class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
+                placeholder="Optional…"></textarea>
+    </div>
+
+  </aside>
+
+  <!-- ================= RIGHT: CONTENT ================= -->
+  {% include "tickets/zugang-beantragen/form.html" %}
 
 </div>
+
+
+
+<!-- ================= ACTIONS ================= -->
+<div class="flex justify-end gap-4">
+  <a href="/dashboard" class="px-5 py-2.5 bg-gray-300 rounded-md">
+    Abbrechen
+  </a>
+
+<button
+  type="button"
+  @click="openAssigneeModal()"
+  class="px-6 py-2.5 bg-primary text-white rounded-md"
+>
+  Auftrag erstellen
+</button>
+
+</div>
+
+<div x-show="modalOpen" x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 w-[420px]">
+    <h3 class="text-lg font-semibold mb-4">
+      Wer soll den Auftrag bearbeiten?
+    </h3>
+
+    <div class="space-y-3">
+      <button class="w-full px-4 py-2 rounded bg-primary text-white"
+              @click="chooseAssignee('accountable')">
+        Verantwortlicher
+      </button>
+
+      <button class="w-full px-4 py-2 rounded bg-primary text-white"
+              @click="chooseAssignee('supervisor')">
+        Vorgesetzter
+      </button>
+    </div>
+
+    <button class="mt-4 text-sm text-gray-500"
+            @click="modalOpen = false">
+      Abbrechen
+    </button>
+  </div>
+</div>
+
+
+<input type="hidden" name="assignee_id" x-ref="assigneeId">
+<input type="hidden" name="assignee_name" x-ref="assigneeName">
+
+</form>
+</div>
+<style>
+.input{
+  width: 100%;
+  margin-top: .25rem;
+  padding: .5rem .75rem;
+  border-radius: .375rem;
+
+  /* 🔥 Theme-kompatibel */
+  background-color: var(--field-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.input:focus{
+  outline: none;
+  box-shadow: var(--ring);
+  border-color: transparent;
+}
+
+/* 🔴 Fehlerzustand – hell & dunkel */
+.input-error{
+  border-color: #EF4444;
+  background-color: color-mix(
+    in oklab,
+    var(--field-bg) 85%,
+    #EF4444 15%
+  );
+}
+</style>
+
+
+<script>
+function zugangPhase1Form() {
+  return {
+    modalOpen: false,
+    validationTriggered: false,
+
+    /* ================================
+       Firmen aus API
+    ================================ */
+    companies: [],
+
+    /* ================================
+       PERSONAL / HR
+    ================================ */
+    p: {
+      first_name: "",
+      last_name: "",
+      title: "",
+      private_address: "",
+      start_date: "",
+      homeoffice: "",
+      department: "",
+      cost_center: "",
+      location: "",
+      contract_company: "",
+      notes: "",
+
+      supervisor_hr_id: "",
+      supervisor_hr_name: "",
+      contact_person_id: "",
+      contact_person_name: ""
+    },
+
+    /* ================================
+       ALLGEMEIN
+    ================================ */
+    a: {
+      appearance_company: "",
+      appearance_address: ""
+    },
+
+    /* ================================
+       IT
+    ================================ */
+    it: {
+      main_cost_center: "",
+      work_start: "",
+      signature: {
+        title: "",
+        street: "",
+        zip: "",
+        city: "",
+        mobile: "",
+        phone: ""
+      },
+      timebutler: {
+        vacation_year: "",
+        vacation_start_year: "",
+        holiday_rule: "",
+        personal_number: ""
+      },
+      datev: {
+        user: "",
+        personal_number: ""
+      },
+      other_systems: "",
+      mailboxes: {
+        additional: "",
+        notes: ""
+      },
+      additional_cost_centers: ""
+    },
+
+    /* ================================
+       FUHRPARK
+    ================================ */
+    f: {
+      car: "",
+      car_class: "",
+      car_from: ""
+    },
+
+    /* ================================
+       PFLICHTFELDER (PHASE 1)
+    ================================ */
+    required: [
+      "first_name",
+      "last_name",
+      "title",
+      "private_address",
+      "start_date",
+      "homeoffice",
+      "department",
+      "cost_center",
+      "location",
+      "contract_company"
+    ],
+
+    /* ================================
+       INIT
+    ================================ */
+    async init() {
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch (e) {
+        console.error("Konnte Firmen nicht laden", e);
+        this.companies = [];
+      }
+    },
+
+    /* ================================
+       VALIDIERUNG
+    ================================ */
+    get hasErrors() {
+      return this.required.some(f => !this.p[f]);
+    },
+
+    fieldClass(field) {
+      return this.validationTriggered && !this.p[field]
+        ? "input input-error"
+        : "input";
+    },
+
+    sectionClass() {
+      return this.validationTriggered && this.hasErrors
+        ? "border border-red-300 bg-red-50 dark:bg-red-900/20"
+        : "border border-gray-200";
+    },
+
+    /* ================================
+       MODAL FLOW
+    ================================ */
+    openAssigneeModal() {
+      this.validationTriggered = true;
+
+      if (this.hasErrors) {
+        this.scrollToTop();
+        return;
+      }
+
+      if (
+        !document.querySelector('[name="accountable_id"]').value ||
+        !document.querySelector('[name="supervisor_id"]').value
+      ) {
+        this.scrollToTop();
+        alert("Bitte Verantwortlichen und Vorgesetzten auswählen.");
+        return;
+      }
+
+      this.modalOpen = true;
+    },
+
+    chooseAssignee(type) {
+      // Backend-Zuweisung (Details links)
+      const id = document.querySelector(`[name="${type}_id"]`)?.value;
+      const name = document.querySelector(`[name="${type}_name"]`)?.value;
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+
+      /* =========================================
+         🔥 HIER IST DER FEHLENDE TEIL
+         HR-Dropdowns → Alpine-State
+      ========================================= */
+      this.p.supervisor_hr_id =
+        document.querySelector('[name="supervisor_hr_id"]')?.value || "";
+
+      this.p.supervisor_hr_name =
+        document.querySelector('[name="supervisor_hr_name"]')?.value || "";
+
+      this.p.contact_person_id =
+        document.querySelector('[name="contact_person_id"]')?.value || "";
+
+      this.p.contact_person_name =
+        document.querySelector('[name="contact_person_name"]')?.value || "";
+
+      /* ========================================= */
+
+      this.$refs.description.value = JSON.stringify(
+        {
+          personal: this.p,
+          allgemein: this.a,
+          it: this.it,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+
+      this.modalOpen = false;
+      this.$el.submit();
+    },
+
+    /* ================================
+       UX
+    ================================ */
+    scrollToTop() {
+      this.$refs.formTop.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }
+  };
+}
+</script>
+
+
+
+
 {% endblock %}
