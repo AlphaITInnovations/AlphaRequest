@@ -101,8 +101,6 @@ def run_server(https: bool = False):
 
 
 def main():
-    print(get_department_requests_for_user("a2046db5-4d1d-46aa-8bf6-49a867aabdad"))
-
     db.init_db()
     init_ticket_permissions()
     configure_event_loop()
