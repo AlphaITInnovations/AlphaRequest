@@ -84,7 +84,8 @@ assignee_id, assignee_name,
 accountable_id, accountable_name,
 supervisor_id, supervisor_name,
 assignee_group_id, assignee_group_name,
-assignment_history
+assignment_history, 
+history
 """
 
 
@@ -126,7 +127,8 @@ def init_db():
         assignee_group_id VARCHAR(255) NULL,
         assignee_group_name VARCHAR(255) NULL,
     
-        assignment_history LONGTEXT NULL
+        assignment_history LONGTEXT NULL,
+        history LONGTEXT NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
@@ -178,7 +180,8 @@ def insert_ticket(
                 accountable_id, accountable_name,
                 supervisor_id, supervisor_name,
                 assignee_group_id, assignee_group_name,
-                assignment_history
+                assignment_history, 
+                history
             )
             VALUES (
                 %s, %s, %s,
@@ -190,6 +193,7 @@ def insert_ticket(
                 NULL, NULL,
                 NULL, NULL,
                 NULL, NULL,
+                %s, 
                 %s
             )
         """, (
@@ -198,6 +202,7 @@ def insert_ticket(
             comment, status, priority,
             now,
             ninja_metadata,
+            json.dumps([], ensure_ascii=False),
             json.dumps([], ensure_ascii=False),
         ))
         conn.commit()
@@ -267,6 +272,7 @@ def update_ticket(ticket_id: int, **fields) -> None:
         "supervisor_id", "supervisor_name",
         "assignee_group_id", "assignee_group_name",
         "assignment_history",
+        "history",
     }
 
     updates = {k: v for k, v in fields.items() if k in allowed}

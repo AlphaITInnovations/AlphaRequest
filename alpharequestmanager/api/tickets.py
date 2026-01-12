@@ -10,7 +10,8 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 from alpharequestmanager.core.dependencies import get_current_user
-from alpharequestmanager.database.database import get_groupID_from_name
+from alpharequestmanager.database.database import get_groupID_from_name, get_group_name_from_id
+from alpharequestmanager.services.ticket_history import add_history_event
 from alpharequestmanager.services.ticket_permissions import can_user_create_ticket
 from alpharequestmanager.services.workflow_state import build_workflow, set_workflow_state
 from alpharequestmanager.utils.logger import logger
@@ -115,6 +116,13 @@ async def create_ticket(
         priority=priority,
     )
 
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_created",
+    )
+
     logger.info("Ticket erstellt: %s", ticket_id)
     return RedirectResponse("/dashboard", status_code=302)
 
@@ -167,6 +175,19 @@ async def update_ticket(
 
     if action == "complete":
         complete_ticket_internal(ticket, request, user)
+        add_history_event(
+            ticket.id,
+            actor_id=user["id"],
+            actor_name=user["displayName"],
+            action="ticket_submitted",
+        )
+    else:
+        add_history_event(
+            ticket_id,
+            actor_id=user["id"],
+            actor_name=user["displayName"],
+            action="ticket_updated",
+        )
 
     return RedirectResponse("/dashboard", status_code=303)
 
@@ -185,6 +206,7 @@ async def delete_ticket_form(ticket_id: int, user: dict = Depends(get_current_us
     logger.info("Ticket gelöscht: id=%s von %s", ticket_id, user.get("email"))
 
     target = "/pruefung" if user.get("is_admin", False) else "/dashboard"
+
     return RedirectResponse(target, status_code=HTTP_302_FOUND)
 
 
@@ -345,6 +367,13 @@ async def archive_ticket(
         f"Ticket archiviert | ID={ticket.id} | User={user.get('displayName')}"
     )
 
+    add_history_event(
+        ticket.id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_archived_manual",
+    )
+
     return RedirectResponse("/dashboard", status_code=303)
 
 
@@ -439,12 +468,30 @@ async def set_department_status_api(
         raise HTTPException(400, "Ungültiger Status")
 
     set_department_status(ticket_id, group_id, status)
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="department_done",
+        details={
+            "department_id": group_id,
+            "department_name": get_group_name_from_id(group_id),
+        },
+    )
 
     # Optional: Auto-Archiv
     if can_archive_ticket(ticket_id):
         database.update_ticket(
             ticket_id=ticket_id,
             status=RequestStatus.archived,
+        )
+
+        add_history_event(
+            ticket_id,
+            actor_id=None,
+            actor_name="System",
+            actor_type="system",
+            action="ticket_archived",
         )
 
     return {"ok": True}

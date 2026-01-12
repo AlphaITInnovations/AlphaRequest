@@ -198,6 +198,7 @@ WORKFLOW_BUILDERS = {
     TicketType.niederlassung_schliessen: build_workflow_niederlassung_schliessen,
 }
 
+
 def build_workflow(ticket: Ticket) -> dict:
     builder = WORKFLOW_BUILDERS.get(ticket.ticket_type)
 

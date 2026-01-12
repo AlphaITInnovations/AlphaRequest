@@ -219,7 +219,7 @@
     <!-- Nav -->
     <nav id="sidebar-nav-desktop" class="flex-1 px-3 py-3 space-y-1">
       {% set is_dash  = request.url.path=='/dashboard' %}
-      {% set is_tix   = request.url.path=='/pruefung' %}
+      {% set is_tix   = request.url.path=='/ticket-overview' %}
       {% set is_set   = request.url.path.startswith('/settings') %}
 
       <!-- Dashboard -->
@@ -233,7 +233,7 @@
 
       {% if is_admin %}
       <!-- Tickets -->
-      <a href="/pruefung"
+      <a href="/ticket-overview"
          aria-current="{{ 'page' if is_tix else 'false' }}"
          class="group relative flex items-center gap-3 px-3 py-2 rounded-xl transition
                 hover:bg-white/10 {{ 'bg-white/15' if is_tix else '' }}">

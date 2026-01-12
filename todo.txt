@@ -1,6 +1,7 @@
 TODO:
 komplette fachabteilung funktionalität damit die tickets im phae3 von den einzelenn fachabteilungen abgehakt werden können
-
+- verlauf fixen
+- von phase3 zu bearbeiten -> workflow zurücksetzen beim speichern sonst inkonsitstent state
 - mehrere Fachabteilungen
 - Fachabteilungen konfigurierbar
 - Fachabteilung zu assignee verlauf hinzufügen

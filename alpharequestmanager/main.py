@@ -17,6 +17,7 @@ from alpharequestmanager.api import (
     ninja_oauth,
     users,
     groups,
+    ticket_overview,
 )
 from alpharequestmanager.database.database import get_group_ids_for_user, get_group_name_from_id
 
@@ -67,7 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(ninja_oauth.router)
     app.include_router(users.router)
     app.include_router(groups.router)
-
+    app.include_router(ticket_overview.router)
 
     init_metrics(app, config.SESSION_TIMEOUT, app.state.manager)
 
@@ -101,6 +102,7 @@ def run_server(https: bool = False):
 
 
 def main():
+
     db.init_db()
     init_ticket_permissions()
     configure_event_loop()

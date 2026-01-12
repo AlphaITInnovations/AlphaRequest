@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Ticket #{{ ticket.id }} – Detail{% endblock %}
+
+{% block content %}
+
+{# ================================================= #}
+{# JSON RENDER MACROS (ROBUST & DYNAMIC)              #}
+{# ================================================= #}
+
+{% macro labelize(s) -%}
+  {{ (s|string).replace("_", " ").replace("-", " ")|capitalize }}
+{%- endmacro %}
+
+{% macro render_scalar(v) -%}
+  {% if v is sameas true %}
+    <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800 font-semibold">Ja</span>
+  {% elif v is sameas false %}
+    <span class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 font-semibold">Nein</span>
+  {% elif v is number %}
+    <span class="font-medium">{{ v }}</span>
+  {% else %}
+    {% set s = v|string %}
+    {% if s|length == 36 and s.count('-') == 4 %}
+      <span class="font-mono text-xs bg-gray-100 border rounded px-2 py-1 break-all">{{ s }}</span>
+    {% elif s|length == 10 and s[4] == '-' and s[7] == '-' %}
+      <span class="font-mono text-sm bg-gray-100 border rounded px-2 py-1">{{ s }}</span>
+    {% elif '\n' in s or s|length > 120 %}
+      <div class="whitespace-pre-wrap text-sm bg-gray-50 border rounded-lg p-3 max-h-64 overflow-auto">
+        {{ s }}
+      </div>
+    {% else %}
+      <span class="text-sm font-medium break-words">{{ s }}</span>
+    {% endif %}
+  {% endif %}
+{%- endmacro %}
+
+{% macro render_any(value) -%}
+  {% if value is mapping %}
+    {{ render_mapping(value) }}
+  {% elif value is sequence and value is not string %}
+    {{ render_list(value) }}
+  {% else %}
+    {{ render_scalar(value) }}
+  {% endif %}
+{%- endmacro %}
+
+{% macro render_mapping(m) -%}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {% for k, v in m.items() %}
+      {% if v is none or v == "" or (v is mapping and v|length == 0) or (v is sequence and v is not string and v|length == 0) %}
+      {% else %}
+        {% if v is mapping or (v is sequence and v is not string) %}
+          <div class="md:col-span-2 border rounded-xl bg-white overflow-hidden">
+            <div class="px-4 py-2 border-b bg-gray-50 flex justify-between">
+              <div class="text-xs font-semibold uppercase text-gray-600">
+                {{ labelize(k) }}
+              </div>
+            </div>
+            <div class="p-4">
+              {{ render_any(v) }}
+            </div>
+          </div>
+        {% else %}
+          <div class="border rounded-xl bg-white p-3">
+            <div class="text-xs text-gray-500 mb-1">{{ labelize(k) }}</div>
+            {{ render_scalar(v) }}
+          </div>
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro render_list(seq) -%}
+  <div class="space-y-3">
+    {% for item in seq %}
+      <div class="border rounded-xl bg-white p-4">
+        {{ render_any(item) }}
+      </div>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+<div class="max-w-7xl mx-auto p-8 space-y-8">
+
+  <!-- HEADER -->
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="text-sm text-gray-500">Ticket #{{ ticket.id }}</div>
+      <h1 class="text-2xl font-semibold mt-1">{{ ticket.title }}</h1>
+    </div>
+
+    <a href="/ticket-overview"
+       class="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">
+      ← Zur Übersicht
+    </a>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
+
+    <!-- LEFT: META -->
+    <aside class="space-y-6">
+
+      <!-- Overview -->
+      <div class="bg-white border rounded-xl shadow p-5 text-sm space-y-3">
+        <h2 class="font-semibold text-lg mb-2">Übersicht</h2>
+
+        <div>
+          <span class="text-gray-500">Status</span>
+          <div class="font-medium">{{ ticket.status.value }}</div>
+        </div>
+
+        <div>
+          <span class="text-gray-500">Priorität</span>
+          <div class="font-medium capitalize">{{ ticket.priority.value }}</div>
+        </div>
+
+        <div>
+          <span class="text-gray-500">Erstellt</span>
+          <div class="font-medium js-time"
+               data-ts="{{ ticket.created_at.isoformat() }}"></div>
+        </div>
+
+        {% if ticket.updated_at %}
+        <div>
+          <span class="text-gray-500">Zuletzt geändert</span>
+          <div class="font-medium js-time"
+               data-ts="{{ ticket.updated_at.isoformat() }}"></div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Owner -->
+      <div class="bg-white border rounded-xl shadow p-5 text-sm">
+        <h3 class="font-semibold mb-2">Antragsteller</h3>
+        <div class="font-medium">{{ ticket.owner_name }}</div>
+      </div>
+
+      <!-- Workflow -->
+      {% if ticket.workflow_state_parsed and ticket.workflow_state_parsed.departments %}
+      <div class="bg-white border rounded-xl shadow p-5 text-sm">
+        <h3 class="font-semibold mb-3">Fachabteilungen</h3>
+
+        <ul class="space-y-2">
+          {% for _, dept in ticket.workflow_state_parsed.departments.items() %}
+          <li class="flex justify-between items-center border rounded px-3 py-2">
+            <span>{{ dept.name }}</span>
+            <span class="text-xs px-2 py-1 rounded
+              {% if dept.status == 'done' %}
+                bg-green-100 text-green-800
+              {% elif dept.status == 'open' %}
+                bg-yellow-100 text-yellow-800
+              {% else %}
+                bg-gray-200 text-gray-700
+              {% endif %}">
+              {{ dept.status }}
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </aside>
+
+    <!-- RIGHT: CONTENT -->
+    <section class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6 items-start">
+
+      <!-- AUFTRAGSINHALT -->
+      <div class="bg-white border rounded-xl shadow p-6 space-y-4">
+        <h2 class="text-lg font-semibold">Auftragsinhalt</h2>
+
+        {% if description and description is mapping %}
+          {% for section, data in description.items() %}
+            <details class="border rounded-xl bg-gray-50">
+              <summary class="cursor-pointer px-4 py-3 font-semibold">
+                {{ labelize(section) }}
+              </summary>
+              <div class="p-4">
+                {{ render_any(data) }}
+              </div>
+            </details>
+          {% endfor %}
+        {% else %}
+          <div class="text-sm text-gray-500 italic">
+            Keine Auftragsdaten vorhanden.
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- VERLAUF -->
+            <!-- VERLAUF -->
+      <aside class="bg-white border rounded-xl shadow p-6 xl:sticky xl:top-8 max-h-[80vh] overflow-auto">
+        <h2 class="text-lg font-semibold mb-6">Verlauf</h2>
+
+        {% if history and history|length > 0 %}
+        <ol class="relative border-l border-gray-300 pl-6 space-y-8">
+
+          {% for e in history %}
+            {# --- normalize event shape (dict OR object) --- #}
+            {% if e is mapping %}
+              {% set action = e.get("action") %}
+              {% set actor = e.get("actor", {}) %}
+              {% set details = e.get("details", {}) %}
+              {% set ts = e.get("timestamp") %}
+            {% else %}
+              {% set action = e.action %}
+              {% set actor = e.actor %}
+              {% set details = e.details %}
+              {% set ts = e.timestamp %}
+            {% endif %}
+
+            {# --- normalize actor fields --- #}
+            {% if actor is mapping %}
+              {% set actor_name = actor.get("name") or "System" %}
+              {% set actor_id = actor.get("id") %}
+              {% set actor_type = actor.get("type") %}
+            {% else %}
+              {% set actor_name = (actor.name if actor is not none and actor.name is defined else (actor or "System")) %}
+              {% set actor_id = (actor.id if actor is not none and actor.id is defined else none) %}
+              {% set actor_type = (actor.type if actor is not none and actor.type is defined else none) %}
+            {% endif %}
+
+            {# --- normalize department name (optional) --- #}
+            {% if details is mapping %}
+              {% set dept_name = details.get("department_name") %}
+            {% else %}
+              {% set dept_name = (details.department_name if details is not none and details.department_name is defined else none) %}
+            {% endif %}
+
+          <li class="relative group">
+
+            <span class="absolute -left-[11px] top-1
+                         w-5 h-5 rounded-full bg-primary">
+            </span>
+
+            <div class="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition">
+
+              <div class="flex justify-between items-start gap-4">
+                <div class="font-medium text-sm">
+                  {% if action == "ticket_created" %}
+                    📝 Ticket erstellt
+                  {% elif action == "ticket_updated" %}
+                    ✏️ Ticket bearbeitet
+                  {% elif action == "ticket_submitted" %}
+                    📤 An Fachabteilungen übergeben
+                  {% elif action == "department_done" %}
+                    ✅ Fachabteilung erledigt{% if dept_name %} – {{ dept_name }}{% endif %}
+                  {% elif action == "ticket_archived" %}
+                    📦 Ticket archiviert
+                  {% else %}
+                    ℹ️ {{ action }}
+                  {% endif %}
+                </div>
+
+                {# <-- wer hat's gemacht #}
+                <div class="text-xs text-gray-500 whitespace-nowrap">
+                  {{ actor_name }}
+                </div>
+              </div>
+
+              <div class="text-xs text-gray-400 mt-1 js-time"
+                   data-ts="{{ ts }}"></div>
+            </div>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+          <div class="text-sm text-gray-500 italic">
+            Kein Verlauf vorhanden.
+          </div>
+        {% endif %}
+      </aside>
+
+
+    </section>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.js-time').forEach(el => {
+  let ts = el.dataset.ts;
+  if (!ts) return;
+
+  if (ts.includes(' ') && !ts.includes('T')) {
+    ts = ts.replace(' ', 'T');
+  }
+  if (!ts.endsWith('Z') && !ts.match(/[+-]\d\d:\d\d$/)) {
+    ts += 'Z';
+  }
+
+  const d = new Date(ts);
+  el.textContent = isNaN(d) ? ts : d.toLocaleString();
+});
+</script>
+
+{% endblock %}

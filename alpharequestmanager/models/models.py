@@ -62,7 +62,7 @@ class Ticket:
     # ================= HISTORY =================
     # JSON-Array als String
     assignment_history: str = "[]"
-
+    history: str = "[]"
     # ================= META =================
     comment: str = ""
     ninja_metadata: Optional[str] = None
@@ -127,6 +127,7 @@ class Ticket:
             assignee_group_id=row.get("assignee_group_id"),
             assignee_group_name=row.get("assignee_group_name"),
 
+            history=row.get("history") or "[]",
             assignment_history=row.get("assignment_history") or "[]",
 
             comment=row.get("comment") or "",
@@ -166,6 +167,10 @@ class Ticket:
         ]
         """
         return self._safe_json(self.assignment_history, [])
+
+    @property
+    def history_parsed(self) -> list[dict]:
+        return self._safe_json(self.history, [])
 
     @property
     def owner_info_parsed(self) -> Dict[str, Any]:
