@@ -13,23 +13,23 @@
 
 {% macro render_scalar(v) -%}
   {% if v is sameas true %}
-    <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800 font-semibold">Ja</span>
+    <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200 font-semibold">Ja</span>
   {% elif v is sameas false %}
-    <span class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 font-semibold">Nein</span>
+    <span class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200 font-semibold">Nein</span>
   {% elif v is number %}
-    <span class="font-medium">{{ v }}</span>
+    <span class="font-medium text-gray-900 dark:text-gray-100">{{ v }}</span>
   {% else %}
     {% set s = v|string %}
     {% if s|length == 36 and s.count('-') == 4 %}
-      <span class="font-mono text-xs bg-gray-100 border rounded px-2 py-1 break-all">{{ s }}</span>
+      <span class="font-mono text-xs bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-2 py-1 break-all text-gray-800 dark:text-gray-100">{{ s }}</span>
     {% elif s|length == 10 and s[4] == '-' and s[7] == '-' %}
-      <span class="font-mono text-sm bg-gray-100 border rounded px-2 py-1">{{ s }}</span>
+      <span class="font-mono text-sm bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-gray-800 dark:text-gray-100">{{ s }}</span>
     {% elif '\n' in s or s|length > 120 %}
-      <div class="whitespace-pre-wrap text-sm bg-gray-50 border rounded-lg p-3 max-h-64 overflow-auto">
+      <div class="whitespace-pre-wrap text-sm bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-64 overflow-auto text-gray-800 dark:text-gray-100">
         {{ s }}
       </div>
     {% else %}
-      <span class="text-sm font-medium break-words">{{ s }}</span>
+      <span class="text-sm font-medium break-words text-gray-900 dark:text-gray-100">{{ s }}</span>
     {% endif %}
   {% endif %}
 {%- endmacro %}
@@ -50,9 +50,9 @@
       {% if v is none or v == "" or (v is mapping and v|length == 0) or (v is sequence and v is not string and v|length == 0) %}
       {% else %}
         {% if v is mapping or (v is sequence and v is not string) %}
-          <div class="md:col-span-2 border rounded-xl bg-white overflow-hidden">
-            <div class="px-4 py-2 border-b bg-gray-50 flex justify-between">
-              <div class="text-xs font-semibold uppercase text-gray-600">
+          <div class="md:col-span-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 overflow-hidden">
+            <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/60 flex justify-between">
+              <div class="text-xs font-semibold uppercase text-gray-600 dark:text-gray-300">
                 {{ labelize(k) }}
               </div>
             </div>
@@ -61,8 +61,8 @@
             </div>
           </div>
         {% else %}
-          <div class="border rounded-xl bg-white p-3">
-            <div class="text-xs text-gray-500 mb-1">{{ labelize(k) }}</div>
+          <div class="border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 p-3">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{{ labelize(k) }}</div>
             {{ render_scalar(v) }}
           </div>
         {% endif %}
@@ -74,7 +74,7 @@
 {% macro render_list(seq) -%}
   <div class="space-y-3">
     {% for item in seq %}
-      <div class="border rounded-xl bg-white p-4">
+      <div class="border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 p-4">
         {{ render_any(item) }}
       </div>
     {% endfor %}
@@ -86,12 +86,16 @@
   <!-- HEADER -->
   <div class="flex items-center justify-between">
     <div>
-      <div class="text-sm text-gray-500">Ticket #{{ ticket.id }}</div>
-      <h1 class="text-2xl font-semibold mt-1">{{ ticket.title }}</h1>
+      <div class="text-sm text-gray-500 dark:text-gray-400">Ticket #{{ ticket.id }}</div>
+      <h1 class="text-2xl font-semibold mt-1 text-gray-800 dark:text-gray-100">{{ ticket.title }}</h1>
     </div>
 
     <a href="/ticket-overview"
-       class="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">
+       class="px-4 py-2 rounded-md
+              bg-gray-200 hover:bg-gray-300
+              dark:bg-gray-800 dark:hover:bg-gray-700
+              text-gray-800 dark:text-gray-100
+              border border-gray-200 dark:border-gray-700">
       ← Zur Übersicht
     </a>
   </div>
@@ -103,56 +107,57 @@
     <aside class="space-y-6">
 
       <!-- Overview -->
-      <div class="bg-white border rounded-xl shadow p-5 text-sm space-y-3">
-        <h2 class="font-semibold text-lg mb-2">Übersicht</h2>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow p-5 text-sm space-y-3">
+        <h2 class="font-semibold text-lg mb-2 text-gray-800 dark:text-gray-100">Übersicht</h2>
 
         <div>
-          <span class="text-gray-500">Status</span>
-          <div class="font-medium">{{ ticket.status.value }}</div>
+          <span class="text-gray-500 dark:text-gray-400">Status</span>
+          <div class="font-medium text-gray-800 dark:text-gray-100">{{ ticket.status.value }}</div>
         </div>
 
         <div>
-          <span class="text-gray-500">Priorität</span>
-          <div class="font-medium capitalize">{{ ticket.priority.value }}</div>
+          <span class="text-gray-500 dark:text-gray-400">Priorität</span>
+          <div class="font-medium capitalize text-gray-800 dark:text-gray-100">{{ ticket.priority.value }}</div>
         </div>
 
         <div>
-          <span class="text-gray-500">Erstellt</span>
-          <div class="font-medium js-time"
+          <span class="text-gray-500 dark:text-gray-400">Erstellt</span>
+          <div class="font-medium js-time text-gray-800 dark:text-gray-100"
                data-ts="{{ ticket.created_at.isoformat() }}"></div>
         </div>
 
         {% if ticket.updated_at %}
         <div>
-          <span class="text-gray-500">Zuletzt geändert</span>
-          <div class="font-medium js-time"
+          <span class="text-gray-500 dark:text-gray-400">Zuletzt geändert</span>
+          <div class="font-medium js-time text-gray-800 dark:text-gray-100"
                data-ts="{{ ticket.updated_at.isoformat() }}"></div>
         </div>
         {% endif %}
       </div>
 
       <!-- Owner -->
-      <div class="bg-white border rounded-xl shadow p-5 text-sm">
-        <h3 class="font-semibold mb-2">Antragsteller</h3>
-        <div class="font-medium">{{ ticket.owner_name }}</div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow p-5 text-sm">
+        <h3 class="font-semibold mb-2 text-gray-800 dark:text-gray-100">Antragsteller</h3>
+        <div class="font-medium text-gray-800 dark:text-gray-100">{{ ticket.owner_name }}</div>
       </div>
 
       <!-- Workflow -->
       {% if ticket.workflow_state_parsed and ticket.workflow_state_parsed.departments %}
-      <div class="bg-white border rounded-xl shadow p-5 text-sm">
-        <h3 class="font-semibold mb-3">Fachabteilungen</h3>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow p-5 text-sm">
+        <h3 class="font-semibold mb-3 text-gray-800 dark:text-gray-100">Fachabteilungen</h3>
 
         <ul class="space-y-2">
           {% for _, dept in ticket.workflow_state_parsed.departments.items() %}
-          <li class="flex justify-between items-center border rounded px-3 py-2">
-            <span>{{ dept.name }}</span>
+          <li class="flex justify-between items-center border border-gray-200 dark:border-gray-700 rounded px-3 py-2
+                     bg-white dark:bg-gray-800">
+            <span class="text-gray-800 dark:text-gray-100">{{ dept.name }}</span>
             <span class="text-xs px-2 py-1 rounded
               {% if dept.status == 'done' %}
-                bg-green-100 text-green-800
+                bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200
               {% elif dept.status == 'open' %}
-                bg-yellow-100 text-yellow-800
+                bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200
               {% else %}
-                bg-gray-200 text-gray-700
+                bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300
               {% endif %}">
               {{ dept.status }}
             </span>
@@ -167,13 +172,13 @@
     <section class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6 items-start">
 
       <!-- AUFTRAGSINHALT -->
-      <div class="bg-white border rounded-xl shadow p-6 space-y-4">
-        <h2 class="text-lg font-semibold">Auftragsinhalt</h2>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow p-6 space-y-4">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Auftragsinhalt</h2>
 
         {% if description and description is mapping %}
           {% for section, data in description.items() %}
-            <details class="border rounded-xl bg-gray-50">
-              <summary class="cursor-pointer px-4 py-3 font-semibold">
+            <details class="border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/40 overflow-hidden">
+              <summary class="cursor-pointer px-4 py-3 font-semibold text-gray-800 dark:text-gray-100">
                 {{ labelize(section) }}
               </summary>
               <div class="p-4">
@@ -182,19 +187,18 @@
             </details>
           {% endfor %}
         {% else %}
-          <div class="text-sm text-gray-500 italic">
+          <div class="text-sm text-gray-500 dark:text-gray-400 italic">
             Keine Auftragsdaten vorhanden.
           </div>
         {% endif %}
       </div>
 
       <!-- VERLAUF -->
-            <!-- VERLAUF -->
-      <aside class="bg-white border rounded-xl shadow p-6 xl:sticky xl:top-8 max-h-[80vh] overflow-auto">
-        <h2 class="text-lg font-semibold mb-6">Verlauf</h2>
+      <aside class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow p-6 xl:sticky xl:top-8 max-h-[80vh] overflow-auto">
+        <h2 class="text-lg font-semibold mb-6 text-gray-800 dark:text-gray-100">Verlauf</h2>
 
         {% if history and history|length > 0 %}
-        <ol class="relative border-l border-gray-300 pl-6 space-y-8">
+        <ol class="relative border-l border-gray-300 dark:border-gray-700 pl-6 space-y-8">
 
           {% for e in history %}
             {# --- normalize event shape (dict OR object) --- #}
@@ -229,15 +233,13 @@
             {% endif %}
 
           <li class="relative group">
+            <span class="absolute -left-[11px] top-1 w-5 h-5 rounded-full bg-primary"></span>
 
-            <span class="absolute -left-[11px] top-1
-                         w-5 h-5 rounded-full bg-primary">
-            </span>
-
-            <div class="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition">
+            <div class="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-4
+                        hover:bg-gray-100 dark:hover:bg-gray-700 transition">
 
               <div class="flex justify-between items-start gap-4">
-                <div class="font-medium text-sm">
+                <div class="font-medium text-sm text-gray-800 dark:text-gray-100">
                   {% if action == "ticket_created" %}
                     📝 Ticket erstellt
                   {% elif action == "ticket_updated" %}
@@ -253,25 +255,25 @@
                   {% endif %}
                 </div>
 
-                {# <-- wer hat's gemacht #}
-                <div class="text-xs text-gray-500 whitespace-nowrap">
+                <div class="text-xs text-gray-500 dark:text-gray-300 whitespace-nowrap">
                   {{ actor_name }}
                 </div>
               </div>
 
-              <div class="text-xs text-gray-400 mt-1 js-time"
+              <div class="text-xs text-gray-400 dark:text-gray-400 mt-1 js-time"
                    data-ts="{{ ts }}"></div>
+
+
             </div>
           </li>
           {% endfor %}
         </ol>
         {% else %}
-          <div class="text-sm text-gray-500 italic">
+          <div class="text-sm text-gray-500 dark:text-gray-400 italic">
             Kein Verlauf vorhanden.
           </div>
         {% endif %}
       </aside>
-
 
     </section>
   </div>

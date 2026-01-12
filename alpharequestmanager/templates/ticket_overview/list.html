@@ -60,35 +60,28 @@ document.addEventListener('alpine:init', () => {
     statusClass(s) {
       return {
         in_request: 'bg-primary/15 text-primary',
-        in_progress: 'bg-yellow-100 text-yellow-800',
-        archived: 'bg-gray-200 text-gray-700',
-        rejected: 'bg-red-100 text-red-700'
-      }[s] || 'bg-gray-100 text-gray-600'
+        in_progress: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+        archived: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+        rejected: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200'
+      }[s] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
     },
 
     priorityClass(p) {
       return {
-        low: 'bg-gray-200 text-gray-800',
+        low: 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
         medium: 'bg-primary/20 text-primary',
-        high: 'bg-orange-200 text-orange-900',
-        critical: 'bg-red-200 text-red-900'
-      }[p] || 'bg-gray-200 text-gray-800'
+        high: 'bg-orange-200 text-orange-900 dark:bg-orange-900/40 dark:text-orange-200',
+        critical: 'bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-200'
+      }[p] || 'bg-gray-200 dark:bg-gray-700'
     },
 
-    // ✅ Timestamp-Fix: ISO ohne TZ wird als UTC behandelt, dann lokal formatiert
     formatLocal(ts) {
       if (!ts) return '–'
       let s = String(ts).trim()
-
-      // Wenn kein Zeitzoneninfo vorhanden → als UTC interpretieren
-      // Beispiele ohne TZ: "2026-01-12T09:00:28.984171"
-      // Beispiele mit TZ:  "2026-01-12T09:00:28.984171Z" oder "...+01:00"
       const hasTZ = s.endsWith('Z') || /[+-]\d\d:\d\d$/.test(s)
       if (!hasTZ) s += 'Z'
-
       const d = new Date(s)
       if (isNaN(d.getTime())) return ts
-
       return d.toLocaleString(undefined, {
         year: 'numeric',
         month: '2-digit',
@@ -107,12 +100,15 @@ document.addEventListener('alpine:init', () => {
 
   <!-- HEADER -->
   <div class="flex items-center justify-between">
-    <h1 class="text-2xl font-semibold">Ticket-Übersicht</h1>
+    <h1 class="text-2xl font-semibold text-gray-800 dark:text-gray-100">
+      Ticket-Übersicht
+    </h1>
 
     <button
       @click="deleteSelected"
       :disabled="selected.length === 0"
       class="px-4 py-2 rounded-md bg-red-600 text-white
+             hover:bg-red-700
              disabled:opacity-40 disabled:cursor-not-allowed">
       🗑️ Löschen (<span x-text="selected.length"></span>)
     </button>
@@ -123,10 +119,11 @@ document.addEventListener('alpine:init', () => {
     <template x-for="s in statuses" :key="s">
       <button
         @click="filter = s"
-        class="px-3 py-1.5 rounded-md text-sm font-medium capitalize"
+        class="px-3 py-1.5 rounded-md text-sm font-medium capitalize
+               border border-gray-200 dark:border-gray-700"
         :class="filter === s
           ? 'bg-primary text-white'
-          : 'bg-white border hover:bg-primary/10'">
+          : 'bg-white dark:bg-gray-800 hover:bg-primary/10 dark:hover:bg-gray-700'">
         <span x-text="s"></span>
       </button>
     </template>
@@ -136,14 +133,18 @@ document.addEventListener('alpine:init', () => {
         type="text"
         x-model="search"
         placeholder="Suchen…"
-        class="px-3 py-2 border rounded-md w-64">
+        class="px-3 py-2 border rounded-md w-64
+               bg-white dark:bg-gray-800
+               border-gray-300 dark:border-gray-700
+               text-gray-800 dark:text-gray-100
+               focus:ring-2 focus:ring-primary">
     </div>
   </div>
 
   <!-- TABLE -->
-  <div class="bg-white border rounded-xl shadow overflow-x-auto">
+  <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow overflow-x-auto">
     <table class="w-full text-sm">
-      <thead class="bg-gray-100 text-gray-600">
+      <thead class="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
         <tr>
           <th class="p-4 w-10 text-center">
             <input type="checkbox" @change="toggleAll">
@@ -157,9 +158,9 @@ document.addEventListener('alpine:init', () => {
         </tr>
       </thead>
 
-      <tbody class="divide-y">
+      <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
         <template x-for="t in filtered" :key="t.id">
-          <tr class="hover:bg-gray-50">
+          <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition">
 
             <td class="p-4 text-center">
               <input
@@ -173,16 +174,16 @@ document.addEventListener('alpine:init', () => {
             </td>
 
             <td class="p-4">
-              <div class="font-medium" x-text="t.title"></div>
-
-              <!-- ✅ schöner Timestamp + Tooltip mit Raw ISO -->
-              <div class="text-xs text-gray-500"
+              <div class="font-medium text-gray-800 dark:text-gray-100"
+                   x-text="t.title"></div>
+              <div class="text-xs text-gray-500 dark:text-gray-400"
                    :title="t.created_at"
                    x-text="formatLocal(t.created_at)">
               </div>
             </td>
 
-            <td class="p-4" x-text="t.creator"></td>
+            <td class="p-4 text-gray-700 dark:text-gray-300"
+                x-text="t.creator"></td>
 
             <td class="p-4">
               <span
@@ -203,7 +204,9 @@ document.addEventListener('alpine:init', () => {
             <td class="p-4 text-right">
               <a
                 :href="`/ticket-overview/${t.id}`"
-                class="px-3 py-1.5 rounded bg-primary/10 text-primary hover:bg-primary/20">
+                class="px-3 py-1.5 rounded
+                       bg-primary/10 text-primary
+                       hover:bg-primary/20">
                 Details →
               </a>
             </td>
@@ -213,7 +216,7 @@ document.addEventListener('alpine:init', () => {
 
         <template x-if="filtered.length === 0">
           <tr>
-            <td colspan="7" class="p-8 text-center text-gray-500">
+            <td colspan="7" class="p-8 text-center text-gray-500 dark:text-gray-400">
               Keine Tickets gefunden
             </td>
           </tr>
