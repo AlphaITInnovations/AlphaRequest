@@ -62,8 +62,16 @@ class TicketService:
     # ---------------------------------------------------------
     # Ticket-LISTEN
     # ---------------------------------------------------------
-    def list_all(self) -> List[Ticket]:
-        return db.list_all_tickets()
+    def list_all(
+            self,
+            *,
+            limit: int | None = None,
+            offset: int | None = None,
+    ) -> List[Ticket]:
+        return db.list_all_tickets(limit=limit, offset=offset)
+
+    def count_all(self) -> int:
+        return db.count_all_tickets()
 
     def list_by_owner(self, owner_id: str) -> List[Ticket]:
         return db.list_tickets_by_owner(owner_id)

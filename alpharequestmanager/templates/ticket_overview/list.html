@@ -226,5 +226,26 @@ document.addEventListener('alpine:init', () => {
     </table>
   </div>
 
+<div class="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400 mt-4">
+  <div>
+    Seite {{ page }} von {{ (total // page_size) + (1 if total % page_size else 0) }}
+  </div>
+
+  <div class="space-x-2">
+    {% if page > 1 %}
+      <a href="?page={{ page - 1 }}" class="px-3 py-1 rounded border hover:bg-gray-100 dark:hover:bg-gray-700">
+        ← Zurück
+      </a>
+    {% endif %}
+
+    {% if page * page_size < total %}
+      <a href="?page={{ page + 1 }}" class="px-3 py-1 rounded border hover:bg-gray-100 dark:hover:bg-gray-700">
+        Weiter →
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+
 </div>
 {% endblock %}

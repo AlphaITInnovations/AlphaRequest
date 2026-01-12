@@ -8,35 +8,47 @@ router = APIRouter()
 @router.get("/ticket-overview", response_class=HTMLResponse)
 async def ticket_overview(
     request: Request,
+    page: int = 1,
+    page_size: int = 50,
     user: dict = Depends(get_current_user),
 ):
     if not user.get("is_admin"):
         raise HTTPException(403)
 
-    manager = request.app.state.manager
-    items = []
+    page = max(page, 1)
+    page_size = min(max(page_size, 10), 100)  # Schutz
+    offset = (page - 1) * page_size
 
-    for t in manager.list_all():
+    manager = request.app.state.manager
+
+    tickets = manager.list_all(limit=page_size, offset=offset)
+    total = manager.count_all()
+
+    items = []
+    for t in tickets:
         items.append({
             "id": t.id,
             "title": t.title,
-            "type_key": t.ticket_type.value,  # <-- STRING!
+            "type_key": t.ticket_type.value,
             "status": t.status.value if hasattr(t.status, "value") else t.status,
             "priority": t.priority.value if hasattr(t.priority, "value") else t.priority,
             "created_at": t.created_at.isoformat() if hasattr(t.created_at, "isoformat") else t.created_at,
-            "creator": t.owner_name,  # <-- frontend erwartet creator
+            "creator": t.owner_name,
         })
 
-    #print(items)
     return request.app.templates.TemplateResponse(
         "ticket_overview/list.html",
         {
             "request": request,
             "user": user,
             "tickets": items,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
             "is_admin": True,
         },
     )
+
 
 
 @router.get("/ticket-overview/{ticket_id}", response_class=HTMLResponse)

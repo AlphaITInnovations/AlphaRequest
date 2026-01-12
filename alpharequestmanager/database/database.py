@@ -213,25 +213,63 @@ def insert_ticket(
 
 
 
-def _select_tickets(where_sql: str = "", params: Tuple = (), limit: Optional[int] = None) -> List[Ticket]:
+def _select_tickets(
+    where_sql: str = "",
+    params: Tuple = (),
+    *,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+) -> List[Ticket]:
     conn = get_connection()
     try:
-        limit_sql = f"LIMIT {limit}" if limit else ""
-        rows = _fetchall(conn, f"""
+        sql_params = list(params)
+        limit_sql = ""
+
+        if limit is not None:
+            limit_sql = " LIMIT %s"
+            sql_params.append(limit)
+
+            if offset is not None:
+                limit_sql += " OFFSET %s"
+                sql_params.append(offset)
+
+        rows = _fetchall(
+            conn,
+            f"""
             SELECT {TICKET_FIELDS}
             FROM {TICKET_TABLE}
             {where_sql}
             ORDER BY created_at DESC
             {limit_sql}
-        """, params)
+            """,
+            tuple(sql_params),
+        )
         return [Ticket.from_row(r) for r in rows]
     finally:
         conn.close()
 
 
 
-def list_all_tickets() -> List[Ticket]:
-    return _select_tickets()
+
+
+def list_all_tickets(
+    *,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> List[Ticket]:
+    return _select_tickets(limit=limit, offset=offset)
+
+def count_all_tickets() -> int:
+    conn = get_connection()
+    try:
+        row = _fetchone(
+            conn,
+            f"SELECT COUNT(*) as cnt FROM {TICKET_TABLE}",
+            (),
+        )
+        return row["cnt"] if row else 0
+    finally:
+        conn.close()
 
 
 def list_tickets_by_owner(owner_id: str) -> List[Ticket]:
