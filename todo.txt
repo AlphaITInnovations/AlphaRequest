@@ -1,5 +1,8 @@
 TODO:
-komplette fachabteilung funktionalität damit die tickets im phae3 von den einzelenn fachabteilungen abgehakt werden können
+
+- Weitergabe in phase2 fehlt
+- personalnummer vergeben ab zb 10 000 (wird dann noch angepasst) -> Personalabteilung
+- Datev anwendung falls ja -> textfeld: welche Rechte?
 - verlauf fixen
 - von phase3 zu bearbeiten -> workflow zurücksetzen beim speichern sonst inkonsitstent state
 - mehrere Fachabteilungen
@@ -10,7 +13,7 @@ komplette fachabteilung funktionalität damit die tickets im phae3 von den einze
 - Ticket Felder anpasssen
 - was wenn 2 leute parallel ein ticket speichern?
 - admins settings gruppen löschen entfernen
-
+- Beim erstellen bei der zuweisung abbrechen funktioniert nicht
 
 Admin Panel Neu
 

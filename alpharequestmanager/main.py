@@ -18,10 +18,11 @@ from alpharequestmanager.api import (
     users,
     groups,
     ticket_overview,
+    personalnummer
 )
 from alpharequestmanager.database.database import get_group_ids_for_user, get_group_name_from_id
-
 from alpharequestmanager.services.ensure_ticket_groups import ensure_ticket_groups
+from alpharequestmanager.services.personalnummer_generator import init_personalnummer, next_personalnummer
 from alpharequestmanager.services.metrics import init_metrics
 from alpharequestmanager.database import database as db
 from alpharequestmanager.services.ticket_permissions import init_ticket_permissions
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(users.router)
     app.include_router(groups.router)
     app.include_router(ticket_overview.router)
+    app.include_router(personalnummer.router)
 
     init_metrics(app, config.SESSION_TIMEOUT, app.state.manager)
 
@@ -101,12 +103,15 @@ def run_server(https: bool = False):
     )
 
 
+
+
 def main():
 
     db.init_db()
     init_ticket_permissions()
     configure_event_loop()
     #ensure_ticket_groups()
+    init_personalnummer()
     run_server(https=config.HTTPS)
 
 

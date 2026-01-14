@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 import pymysql
 from pymysql.cursors import DictCursor
+from sqlalchemy import values
 from sqlalchemy.engine import make_url
 from alpharequestmanager.models.models import Ticket, RequestStatus
 from alpharequestmanager.utils.logger import logger
@@ -591,4 +592,5 @@ def set_assignee_group(ticket_id: int, group_id: str, group_name: str):
         assignee_group_id=group_id,
         assignee_group_name=group_name,
     )
+
 

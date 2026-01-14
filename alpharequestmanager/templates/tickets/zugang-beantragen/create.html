@@ -65,7 +65,10 @@ Zugang beantragen – Neuer Auftrag
   </aside>
 
   <!-- ================= RIGHT: CONTENT ================= -->
-  {% include "tickets/zugang-beantragen/form.html" %}
+
+    {% include "tickets/zugang-beantragen/form.html" %}
+
+
 
 </div>
 
@@ -154,6 +157,11 @@ Zugang beantragen – Neuer Auftrag
 <script>
 function zugangPhase1Form() {
   return {
+    /* ================================
+       MODE
+    ================================ */
+    isCreate: true, // 👉 in edit.html auf false setzen
+
     modalOpen: false,
     validationTriggered: false,
 
@@ -181,7 +189,8 @@ function zugangPhase1Form() {
       supervisor_hr_id: "",
       supervisor_hr_name: "",
       contact_person_id: "",
-      contact_person_name: ""
+      contact_person_name: "",
+      personal_number: "" // ✅ HIER
     },
 
     /* ================================
@@ -210,11 +219,9 @@ function zugangPhase1Form() {
         vacation_year: "",
         vacation_start_year: "",
         holiday_rule: "",
-        personal_number: ""
       },
       datev: {
         user: "",
-        personal_number: ""
       },
       other_systems: "",
       mailboxes: {
@@ -264,6 +271,26 @@ function zugangPhase1Form() {
     },
 
     /* ================================
+       PERSONALNUMMER GENERATOR
+    ================================ */
+    async generatePersonalnummer() {
+      if (!this.isCreate) return;
+
+      try {
+        const res = await fetch("/api/personalnummer/next");
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Fehler");
+        }
+
+        const data = await res.json();
+        this.p.personal_number = data.personalnummer;
+      } catch (e) {
+        alert("Fehler beim Generieren der Personalnummer");
+      }
+    },
+
+    /* ================================
        VALIDIERUNG
     ================================ */
     get hasErrors() {
@@ -276,7 +303,7 @@ function zugangPhase1Form() {
         : "input";
     },
 
-    sectionClass() {
+    sectionClass(section) {
       return this.validationTriggered && this.hasErrors
         ? "border border-red-300 bg-red-50 dark:bg-red-900/20"
         : "border border-gray-200";
@@ -306,17 +333,13 @@ function zugangPhase1Form() {
     },
 
     chooseAssignee(type) {
-      // Backend-Zuweisung (Details links)
       const id = document.querySelector(`[name="${type}_id"]`)?.value;
       const name = document.querySelector(`[name="${type}_name"]`)?.value;
 
       this.$refs.assigneeId.value = id;
       this.$refs.assigneeName.value = name;
 
-      /* =========================================
-         🔥 HIER IST DER FEHLENDE TEIL
-         HR-Dropdowns → Alpine-State
-      ========================================= */
+      /* HR-Dropdowns → Alpine-State */
       this.p.supervisor_hr_id =
         document.querySelector('[name="supervisor_hr_id"]')?.value || "";
 
@@ -328,8 +351,6 @@ function zugangPhase1Form() {
 
       this.p.contact_person_name =
         document.querySelector('[name="contact_person_name"]')?.value || "";
-
-      /* ========================================= */
 
       this.$refs.description.value = JSON.stringify(
         {
@@ -358,6 +379,7 @@ function zugangPhase1Form() {
   };
 }
 </script>
+
 
 
 

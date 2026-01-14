@@ -49,6 +49,62 @@
             </select>
           </div>
 
+
+            <div class="space-y-1">
+              <label class="font-medium">Personalnummer</label>
+
+              <!-- CREATE -->
+              <template x-if="isCreate">
+                <div class="space-y-2">
+
+                  <button
+                    type="button"
+                    x-on:click="generatePersonalnummer"
+                    x-bind:disabled="p.personal_number !== ''"
+
+                    class="
+                      inline-flex items-center gap-2
+                      px-4 py-2 rounded-md
+                      border border-primary/30
+                      text-primary bg-primary/5
+                      hover:bg-primary/10
+                      text-sm font-medium
+                      transition
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                    "
+                  >
+                    <span>Personalnummer generieren</span>
+                  </button>
+
+                  <template x-if="p.personal_number">
+                    <div
+                      class="
+                        flex items-center justify-between
+                        px-4 py-2 rounded-md
+                        bg-primary/5 border border-primary/30
+                        font-mono text-sm text-primary
+                      "
+                    >
+                      <span x-text="p.personal_number"></span>
+                      <span class="text-xs font-medium">generiert</span>
+                    </div>
+                  </template>
+
+                </div>
+              </template>
+
+              <!-- EDIT -->
+              <template x-if="!isCreate">
+                <input
+                  x-model="p.personal_number"
+                  class="input bg-gray-100 cursor-not-allowed"
+                  readonly
+                >
+              </template>
+            </div>
+
+
+
         </div>
       </div>
 
@@ -277,11 +333,6 @@
         </select>
       </div>
 
-      <div>
-        <label class="font-medium">Personalnummer (DATEV)</label>
-        <input x-model="it.timebutler.personal_number" class="input">
-      </div>
-
       <div class="md:col-span-2">
         {% set label = "Vorgesetzter (Timebutler, optional)" %}
         {% set field_id = "tb_supervisor_id" %}
@@ -309,10 +360,7 @@
         </select>
       </div>
 
-      <div>
-        <label class="font-medium">Personalnummer festlegen</label>
-        <input x-model="it.datev.personal_number" class="input">
-      </div>
+
 
       <div class="md:col-span-2">
         <label class="font-medium">Weitere Systeme</label>

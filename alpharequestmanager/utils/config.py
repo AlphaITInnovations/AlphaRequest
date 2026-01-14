@@ -36,6 +36,9 @@ class Config:
     DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", False).lower())
     USER_SYNC_INTERVAL = int(os.getenv("USER_SYNC_INTERVAL", "30"))
 
+    PERSONALNUMMER_START = int(os.getenv("PERSONALNUMMER_START", 10000))
+    PERSONALNUMMER_END = int(os.getenv("PERSONALNUMMER_END", 100000))
+
     #Persistente Werte
     @property
     def COMPANIES(self):
