@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Fachabteilung – Auftrag{% endblock %}
 
+{% block head %}
+<style>
+  {% include "tickets/zugang-beantragen/style.css" %}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-6xl mx-auto p-8 space-y-8">
 
@@ -15,8 +21,6 @@
       Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}
     </p>
   </div>
-
-
 
   <!-- ================================================= -->
   <!-- LAYOUT -->
@@ -142,6 +146,7 @@
 
     </section>
   </div>
+
   <!-- ================================================= -->
   <!-- DEPARTMENT STATUS -->
   <!-- ================================================= -->
@@ -173,33 +178,24 @@
                  text-white rounded-md font-semibold transition">
           ✔ Ausgeführt
         </button>
-
       {% endif %}
 
     </div>
-    <div class="flex justify-end">
-    <a href="/dashboard"
-       class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
-      Zurück zum Dashboard
-    </a>
-  </div>
-  </div>
-  <!-- ================================================= -->
-  <!-- FOOTER -->
-  <!-- ================================================= -->
 
+    <div class="flex justify-end mt-4">
+      <a href="/dashboard"
+         class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
+        Zurück zum Dashboard
+      </a>
+    </div>
+  </div>
 
 </div>
 
-<style>
-.label{
-  display:block;
-  font-size:.75rem;
-  color:#6B7280;
-  margin-bottom:.125rem;
-}
-</style>
-    <script>
+<!-- ================================================= -->
+<!-- DEPARTMENT COMPLETE SCRIPT -->
+<!-- ================================================= -->
+<script>
 async function completeDepartment() {
   const confirmed = confirm(
     "Wurde der Auftrag wirklich ausgeführt?\n\n" +
@@ -212,17 +208,12 @@ async function completeDepartment() {
     "/tickets/{{ ticket.id }}/departments/{{ department_id }}/status",
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        status: "done"
-      })
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ status: "done" })
     }
   );
 
   if (response.ok) {
-    // ✅ zurück zum Dashboard
     window.location.href = "/dashboard";
   } else {
     alert("Fehler beim Abschließen des Auftrags.");

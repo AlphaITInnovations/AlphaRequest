@@ -4,16 +4,19 @@ Zugang beantragen – Neuer Auftrag
 {% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto p-8">
+<div class="max-w-7xl mx-auto p-8 pb-[6.5rem]">
 
-    <form
+<form
   method="post"
   action="/tickets"
   class="flex flex-col gap-8"
   x-data="zugangPhase1Form()"
   x-init="init()"
+  @input="validationTriggered = false"
+  @change="validationTriggered = false"
   @keydown.enter.prevent="if ($event.target.tagName !== 'TEXTAREA') $event.preventDefault()"
 >
+
 <div x-ref="formTop"></div>
 
 <input type="hidden" name="ticket_type" value="zugang-beantragen">
@@ -28,20 +31,36 @@ Zugang beantragen – Neuer Auftrag
     <h2 class="font-semibold text-lg">Details</h2>
 
     <!-- Verantwortlicher -->
-    {% set label = "Verantwortlicher" %}
-    {% set field_id = "accountable_id" %}
-    {% set field_name = "accountable_name" %}
-    {% set initial_id = "" %}
-    {% set initial_name = "" %}
-    {% include "components/user-dropdown.html" %}
+    <div
+      class="field-shell"
+      :class="detailError('accountable_id')
+        ? 'field-shell-error'
+        : ''"
+    >
+      {% set label = "Verantwortlicher *" %}
+      {% set field_id = "accountable_id" %}
+      {% set field_name = "accountable_name" %}
+      {% set initial_id = "" %}
+      {% set initial_name = "" %}
+      {% include "components/user-dropdown.html" %}
+    </div>
+
 
     <!-- Vorgesetzter -->
-    {% set label = "Vorgesetzter" %}
-    {% set field_id = "supervisor_id" %}
-    {% set field_name = "supervisor_name" %}
-    {% set initial_id = "" %}
-    {% set initial_name = "" %}
-    {% include "components/user-dropdown.html" %}
+    <div
+      class="field-shell"
+      :class="detailError('supervisor_id')
+        ? 'field-shell-error'
+        : ''"
+    >
+      {% set label = "Vorgesetzter *" %}
+      {% set field_id = "supervisor_id" %}
+      {% set field_name = "supervisor_name" %}
+      {% set initial_id = "" %}
+      {% set initial_name = "" %}
+      {% include "components/user-dropdown.html" %}
+    </div>
+
 
     <!-- Priorität -->
     <div>
@@ -57,39 +76,52 @@ Zugang beantragen – Neuer Auftrag
     <!-- Kommentar -->
     <div>
       <label class="font-medium">Kommentar</label>
-      <textarea name="comment"
-                class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
-                placeholder="Optional…"></textarea>
+      <textarea
+        name="comment"
+        class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
+        placeholder="Optional…"
+      ></textarea>
     </div>
 
   </aside>
 
   <!-- ================= RIGHT: CONTENT ================= -->
+  {% include "tickets/zugang-beantragen/form.html" %}
 
-    {% include "tickets/zugang-beantragen/form.html" %}
+</div>
 
+<!-- ================= STICKY ACTION BAR ================= -->
 
+<div class="sticky bottom-0 z-40 -mx-8 px-8 mt-6">
+  <div class="rounded-xl shadow-lg border bg-white/95 ...">
+  <div
+    class="border bg-white/95 dark:bg-gray-900/95 backdrop-blur
+           rounded-xl shadow-lg"
+  >
+    <div
+      class="max-w-7xl mx-auto py-3 pr-4 flex justify-end gap-4 items-center"
+    >
+      <a
+        href="/dashboard"
+        class="px-5 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition"
+      >
+        Abbrechen
+      </a>
 
+      <button
+        type="button"
+        @click="openAssigneeModal()"
+        class="px-6 py-2 rounded-md bg-primary text-white font-medium hover:opacity-90 transition"
+      >
+        Auftrag erstellen
+      </button>
+    </div>
+  </div>
 </div>
 
 
 
-<!-- ================= ACTIONS ================= -->
-<div class="flex justify-end gap-4">
-  <a href="/dashboard" class="px-5 py-2.5 bg-gray-300 rounded-md">
-    Abbrechen
-  </a>
-
-<button
-  type="button"
-  @click="openAssigneeModal()"
-  class="px-6 py-2.5 bg-primary text-white rounded-md"
->
-  Auftrag erstellen
-</button>
-
-</div>
-
+<!-- ================= MODAL ================= -->
 <div x-show="modalOpen" x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
 
@@ -117,42 +149,45 @@ Zugang beantragen – Neuer Auftrag
   </div>
 </div>
 
-
 <input type="hidden" name="assignee_id" x-ref="assigneeId">
 <input type="hidden" name="assignee_name" x-ref="assigneeName">
 
 </form>
 </div>
+
 <style>
 .input{
   width: 100%;
   margin-top: .25rem;
   padding: .5rem .75rem;
   border-radius: .375rem;
-
-  /* 🔥 Theme-kompatibel */
   background-color: var(--field-bg);
   color: var(--text);
   border: 1px solid var(--border);
 }
-
 .input:focus{
   outline: none;
   box-shadow: var(--ring);
   border-color: transparent;
 }
-
-/* 🔴 Fehlerzustand – hell & dunkel */
 .input-error{
   border-color: #EF4444;
-  background-color: color-mix(
-    in oklab,
-    var(--field-bg) 85%,
-    #EF4444 15%
-  );
+  background-color: color-mix(in oklab, var(--field-bg) 85%, #EF4444 15%);
 }
-</style>
 
+.field-shell {
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  padding: .5rem;
+  background-color: var(--field-bg);
+}
+
+.field-shell-error {
+  border-color: #EF4444;
+  background-color: color-mix(in oklab, var(--field-bg) 85%, #EF4444 15%);
+}
+
+</style>
 
 <script>
 function zugangPhase1Form() {
@@ -160,7 +195,8 @@ function zugangPhase1Form() {
     /* ================================
        MODE
     ================================ */
-    isCreate: true, // 👉 in edit.html auf false setzen
+    isCreate: true,
+    validationTick: 0,
 
     modalOpen: false,
     validationTriggered: false,
@@ -190,7 +226,7 @@ function zugangPhase1Form() {
       supervisor_hr_name: "",
       contact_person_id: "",
       contact_person_name: "",
-      personal_number: "" // ✅ HIER
+      personal_number: ""
     },
 
     /* ================================
@@ -241,9 +277,9 @@ function zugangPhase1Form() {
     },
 
     /* ================================
-       PFLICHTFELDER (PHASE 1)
+       PFLICHTFELDER
     ================================ */
-    required: [
+    requiredPersonal: [
       "first_name",
       "last_name",
       "title",
@@ -253,7 +289,13 @@ function zugangPhase1Form() {
       "department",
       "cost_center",
       "location",
-      "contract_company"
+      "contract_company",
+      "personal_number",
+    ],
+
+    requiredDetails: [
+      "accountable_id",
+      "supervisor_id"
     ],
 
     /* ================================
@@ -269,23 +311,24 @@ function zugangPhase1Form() {
         this.companies = [];
       }
     },
+sectionClass() {
+  return "";
+},
 
     /* ================================
-       PERSONALNUMMER GENERATOR
+       PERSONALNUMMER
     ================================ */
     async generatePersonalnummer() {
       if (!this.isCreate) return;
 
+      // Zitat Herr Vonjo
+      const fettfingerSafe = confirm("Nummer wirklich generieren?");
+      if (!fettfingerSafe) return;
       try {
         const res = await fetch("/api/personalnummer/next");
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || "Fehler");
-        }
-
         const data = await res.json();
         this.p.personal_number = data.personalnummer;
-      } catch (e) {
+      } catch {
         alert("Fehler beim Generieren der Personalnummer");
       }
     },
@@ -294,43 +337,102 @@ function zugangPhase1Form() {
        VALIDIERUNG
     ================================ */
     get hasErrors() {
-      return this.required.some(f => !this.p[f]);
+      const personalInvalid = this.requiredPersonal.some(f => !this.p[f]);
+
+      const hrInvalid = [
+        "supervisor_hr_id",
+        "contact_person_id"
+      ].some(name => !document.querySelector(`[name="${name}"]`)?.value);
+
+      const detailsInvalid = this.requiredDetails.some(
+        f => !document.querySelector(`[name="${f}"]`)?.value
+      );
+
+      return personalInvalid || hrInvalid || detailsInvalid;
     },
 
+
     fieldClass(field) {
-      return this.validationTriggered && !this.p[field]
+      const value =
+        field.endsWith("_id")
+          ? this.p[field]
+          : this.p[field];
+
+      return this.validationTriggered && !value
         ? "input input-error"
         : "input";
     },
 
-    sectionClass(section) {
-      return this.validationTriggered && this.hasErrors
-        ? "border border-red-300 bg-red-50 dark:bg-red-900/20"
-        : "border border-gray-200";
-    },
+hrError(name) {
+  this.validationTick; // 👈 erzwingt Reaktivität
+  if (!this.validationTriggered) return false;
+  return !document.querySelector(`[name="${name}"]`)?.value;
+},
+
+detailError(name) {
+  this.validationTick; // 👈 erzwingt Reaktivität
+  if (!this.validationTriggered) return false;
+  return !document.querySelector(`[name="${name}"]`)?.value;
+},
+debugValidation() {
+  const personalMissing = this.requiredPersonal.filter(
+    f => !this.p[f]
+  );
+
+  const hrMissing = [
+    "supervisor_hr_id",
+    "contact_person_id"
+  ].filter(
+    name => !document.querySelector(`[name="${name}"]`)?.value
+  );
+
+  const detailsMissing = this.requiredDetails.filter(
+    name => !document.querySelector(`[name="${name}"]`)?.value
+  );
+
+  console.group("🚨 Formular-Validierung");
+  console.log("❌ Personal (State):", personalMissing);
+  personalMissing.forEach(f => {
+    console.log(`  ${f}:`, this.p[f]);
+  });
+
+  console.log("❌ HR (DOM):", hrMissing);
+  hrMissing.forEach(f => {
+    console.log(
+      `  ${f}:`,
+      document.querySelector(`[name="${f}"]`)?.value
+    );
+  });
+
+  console.log("❌ Details (DOM):", detailsMissing);
+  detailsMissing.forEach(f => {
+    console.log(
+      `  ${f}:`,
+      document.querySelector(`[name="${f}"]`)?.value
+    );
+  });
+
+  console.groupEnd();
+},
+
 
     /* ================================
        MODAL FLOW
     ================================ */
-    openAssigneeModal() {
-      this.validationTriggered = true;
+openAssigneeModal() {
+  this.validationTriggered = true;
+  this.validationTick++; // 👈 WICHTIG
 
-      if (this.hasErrors) {
-        this.scrollToTop();
-        return;
-      }
+  if (this.hasErrors) {
+        this.debugValidation();   // 👈 NEU
 
-      if (
-        !document.querySelector('[name="accountable_id"]').value ||
-        !document.querySelector('[name="supervisor_id"]').value
-      ) {
-        this.scrollToTop();
-        alert("Bitte Verantwortlichen und Vorgesetzten auswählen.");
-        return;
-      }
+    this.scrollToTop();
+    return;
+  }
 
-      this.modalOpen = true;
-    },
+  this.modalOpen = true;
+},
+
 
     chooseAssignee(type) {
       const id = document.querySelector(`[name="${type}_id"]`)?.value;
@@ -339,16 +441,12 @@ function zugangPhase1Form() {
       this.$refs.assigneeId.value = id;
       this.$refs.assigneeName.value = name;
 
-      /* HR-Dropdowns → Alpine-State */
       this.p.supervisor_hr_id =
         document.querySelector('[name="supervisor_hr_id"]')?.value || "";
-
       this.p.supervisor_hr_name =
         document.querySelector('[name="supervisor_hr_name"]')?.value || "";
-
       this.p.contact_person_id =
         document.querySelector('[name="contact_person_id"]')?.value || "";
-
       this.p.contact_person_name =
         document.querySelector('[name="contact_person_name"]')?.value || "";
 
@@ -379,9 +477,5 @@ function zugangPhase1Form() {
   };
 }
 </script>
-
-
-
-
 
 {% endblock %}

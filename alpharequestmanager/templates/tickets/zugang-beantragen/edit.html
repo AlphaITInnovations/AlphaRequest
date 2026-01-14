@@ -1,412 +1,233 @@
 {% extends "base.html" %}
-{% block title %}Zugang beantragen – Auftrag bearbeiten{% endblock %}
+{% block title %}Fachabteilung – Auftrag{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto p-8">
-
-<form
-  method="post"
-  action="/tickets/update/{{ ticket.id }}"
-  class="flex flex-col gap-8"
-  x-data="zugangEditForm()"
-  x-init="init()"
-  @keydown.enter.prevent="if ($event.target.tagName !== 'TEXTAREA') $event.preventDefault()"
->
+<div class="max-w-6xl mx-auto p-8 space-y-8">
 
   <!-- ================================================= -->
-  <!-- REQUIRED BACKEND FIELDS -->
+  <!-- HEADER -->
   <!-- ================================================= -->
-  <input type="hidden" name="action" x-ref="action" value="save">
-  <input type="hidden" name="ticket_type" value="zugang-beantragen">
-  <input type="hidden" name="description" x-ref="description">
-
-  <!-- Backend verlangt diese IMMER -->
-  <input type="hidden" name="assignee_id" x-ref="assigneeId">
-  <input type="hidden" name="assignee_name" x-ref="assigneeName">
-
-  <div x-ref="formTop"></div>
-
-  <div class="flex flex-col lg:flex-row gap-8">
-
-    <!-- ================================================= -->
-    <!-- LEFT: DETAILS -->
-    <!-- ================================================= -->
-    <aside class="w-full lg:w-[360px] bg-white dark:bg-gray-800 border rounded-xl shadow p-6 space-y-6">
-
-      <h2 class="font-semibold text-lg">Details</h2>
-
-      {% set label = "Verantwortlicher" %}
-      {% set field_id = "accountable_id" %}
-      {% set field_name = "accountable_name" %}
-      {% set initial_id = ticket.accountable_id %}
-      {% set initial_name = ticket.accountable_name %}
-      {% include "components/user-dropdown.html" %}
-
-      {% set label = "Vorgesetzter" %}
-      {% set field_id = "supervisor_id" %}
-      {% set field_name = "supervisor_name" %}
-      {% set initial_id = ticket.supervisor_id %}
-      {% set initial_name = ticket.supervisor_name %}
-      {% include "components/user-dropdown.html" %}
-
-        <!-- ================= WEITERGEBEN BUTTON ================= -->
-<template x-if="!isCreate">
-  <div class="pt-4 border-t space-y-2">
-
-    <button
-      type="button"
-      @click="openAssignModal = true"
-      class="
-        w-full px-4 py-2 rounded-lg border
-        border-primary text-primary
-        hover:bg-primary/10 transition font-medium
-      "
-    >
-      🔁 Auftrag weitergeben
-    </button>
-
-    <div class="text-xs text-gray-500">
-      Aktueller Bearbeiter:
-      <span class="font-medium" x-text="currentAssigneeName"></span>
-    </div>
-
+  <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+    <h1 class="text-xl font-semibold">
+      {{ ticket.title }}
+    </h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}
+    </p>
   </div>
-</template>
 
 
-      <div>
-        <label class="font-medium">Priorität *</label>
-        <select name="priority"
-                x-model="priority"
-                class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
-          {% for p in ["low","medium","high","critical"] %}
-          <option value="{{ p }}">{{ p|capitalize }}</option>
-          {% endfor %}
-        </select>
+
+  <!-- ================================================= -->
+  <!-- LAYOUT -->
+  <!-- ================================================= -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- ================================================= -->
+    <!-- META -->
+    <!-- ================================================= -->
+    <aside class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+      <div class="space-y-4 text-sm">
+
+        <div>
+          <div class="font-medium text-gray-500">Ticketstatus</div>
+          <div>{{ ticket.status.value }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium text-gray-500">Priorität</div>
+          <div>{{ ticket.priority.value|capitalize }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium text-gray-500">Antragsteller</div>
+          <div>{{ ticket.owner_name }}</div>
+        </div>
+
       </div>
-
-      <div>
-        <label class="font-medium">Kommentar</label>
-        <textarea name="comment"
-                  class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700">{{ ticket.comment }}</textarea>
-      </div>
-
     </aside>
 
     <!-- ================================================= -->
-    <!-- RIGHT: FORM CONTENT -->
+    <!-- CONTENT -->
     <!-- ================================================= -->
-    {% include "tickets/zugang-beantragen/form.html" %}
+    <section class="lg:col-span-2 space-y-10">
 
-<div x-show="openAssignModal"
-     x-cloak
-     class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <!-- ================================================= -->
+      <!-- PERSONAL / HR -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Personal / HR</h2>
 
-  <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md p-6 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><span class="label">Vorname</span>{{ description.personal.first_name }}</div>
+          <div><span class="label">Nachname</span>{{ description.personal.last_name }}</div>
+          <div><span class="label">Titel</span>{{ description.personal.title }}</div>
+          <div><span class="label">Eintrittsdatum</span>{{ description.personal.start_date }}</div>
+          <div><span class="label">Abteilung</span>{{ description.personal.department }}</div>
+          <div><span class="label">Kostenstelle</span>{{ description.personal.cost_center }}</div>
+          <div><span class="label">Niederlassung</span>{{ description.personal.location }}</div>
+          <div><span class="label">Homeoffice</span>{{ description.personal.homeoffice }}</div>
+          <div><span class="label">Firma lt. Vertrag</span>{{ description.personal.contract_company }}</div>
 
-    <h3 class="text-lg font-semibold">
-      Auftrag weitergeben an
-    </h3>
+          <div class="md:col-span-2">
+            <span class="label">Privatadresse</span>
+            {{ description.personal.private_address }}
+          </div>
 
-    <label class="flex items-center gap-2">
-      <input type="radio" x-model="assigneeMode" value="accountable">
-      Verantwortlicher
-    </label>
+          <div>
+            <span class="label">Vorgesetzter (HR)</span>
+            {{ description.personal.supervisor_hr_name }}
+          </div>
 
-    <label class="flex items-center gap-2">
-      <input type="radio" x-model="assigneeMode" value="supervisor">
-      Vorgesetzter
-    </label>
+          <div>
+            <span class="label">Ansprechpartner HR</span>
+            {{ description.personal.contact_person_name }}
+          </div>
 
-    <label class="flex items-center gap-2">
-      <input type="radio" x-model="assigneeMode" value="custom">
-      Andere Person
-    </label>
-
-    <template x-if="assigneeMode === 'custom'">
-      <div class="mt-2">
-        {% set label = "Bearbeiter" %}
-        {% set initial_id = "" %}
-        {% set initial_name = "" %}
-        {% set field_id = "custom_assignee_id" %}
-        {% set field_name = "custom_assignee_name" %}
-        {% include "components/user-dropdown.html" %}
+          {% if description.personal.notes %}
+          <div class="md:col-span-2">
+            <span class="label">Bemerkungen</span>
+            {{ description.personal.notes }}
+          </div>
+          {% endif %}
+        </div>
       </div>
-    </template>
 
-    <div class="flex justify-end gap-3 pt-4">
-      <button
-        type="button"
-        @click="openAssignModal = false"
-        class="px-4 py-2 rounded bg-gray-300"
-      >
-        Abbrechen
-      </button>
+      <!-- ================================================= -->
+      <!-- ALLGEMEIN -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Allgemeines Auftreten</h2>
 
-      <button
-        type="button"
-        @click="applyAssignee(); openAssignModal = false"
-        class="px-4 py-2 rounded bg-primary text-white"
-      >
-        Übernehmen
-      </button>
-    </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <span class="label">Firma</span>
+            {{ description.allgemein.appearance_company }}
+          </div>
 
+          <div class="md:col-span-2">
+            <span class="label">Adresse</span>
+            <pre class="whitespace-pre-wrap">{{ description.allgemein.appearance_address }}</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================= -->
+      <!-- IT -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">IT / Systemdaten</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><span class="label">Haupt-Kostenstelle</span>{{ description.it.main_cost_center }}</div>
+          <div><span class="label">Arbeitsbeginn</span>{{ description.it.work_start }}</div>
+          <div><span class="label">Telefon</span>{{ description.it.signature.phone }}</div>
+          <div><span class="label">Mobil</span>{{ description.it.signature.mobile }}</div>
+        </div>
+      </div>
+
+      <!-- ================================================= -->
+      <!-- FUHRPARK -->
+      <!-- ================================================= -->
+      {% if description.fuhrpark.car == "Ja" %}
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Fuhrpark</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><span class="label">Fahrzeugklasse</span>{{ description.fuhrpark.car_class }}</div>
+          <div><span class="label">Fahrzeug ab</span>{{ description.fuhrpark.car_from }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+    </section>
   </div>
-</div>
-
-
-
-</div>
-
-
   <!-- ================================================= -->
-  <!-- ACTIONS -->
+  <!-- DEPARTMENT STATUS -->
   <!-- ================================================= -->
-  <div class="flex justify-between gap-4">
+  <div class="bg-gray-50 dark:bg-gray-800 border rounded-xl shadow p-6">
+    <div class="flex items-center justify-between gap-6">
 
-    <a href="/dashboard" class="px-5 py-2.5 bg-gray-300 rounded-md">
-      Abbrechen
+      <div>
+        <h2 class="text-lg font-semibold">
+          Fachabteilung:
+          <span class="text-primary">{{ department.name }}</span>
+        </h2>
+
+        <p class="text-sm mt-1">
+          Status:
+          {% if department_status == "done" %}
+            <span class="text-green-600 font-semibold">✔ Ausgeführt</span>
+          {% elif department_status == "rejected" %}
+            <span class="text-red-600 font-semibold">✖ Abgelehnt</span>
+          {% else %}
+            <span class="text-primary font-semibold">🛠 In Bearbeitung</span>
+          {% endif %}
+        </p>
+      </div>
+
+      {% if can_complete and department_status != "done" %}
+        <button
+          onclick="completeDepartment()"
+          class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700
+                 text-white rounded-md font-semibold transition">
+          ✔ Ausgeführt
+        </button>
+
+      {% endif %}
+
+    </div>
+    <div class="flex justify-end">
+    <a href="/dashboard"
+       class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
+      Zurück zum Dashboard
     </a>
-
-    <div class="flex gap-4">
-
-      <button type="submit"
-              @click="$refs.action.value='save'"
-              class="px-6 py-2.5 bg-primary text-white rounded-md">
-        Speichern
-      </button>
-
-      <button type="submit"
-              @click="
-                validationTriggered = true;
-
-                if (hasErrors()) {
-                  scrollToTop();
-                  $event.preventDefault();
-                  return;
-                }
-
-                if (!confirm('Auftrag wirklich abschließen?\nDanach ist keine Bearbeitung mehr möglich.')) {
-                  $event.preventDefault();
-                  return;
-                }
-
-                $refs.action.value = 'complete';
-              "
-              :class="!hasErrors()
-                ? 'bg-emerald-600 hover:bg-emerald-700'
-                : 'bg-gray-400 cursor-not-allowed'"
-              class="px-6 py-2.5 text-white rounded-md transition">
-        Abschließen
-      </button>
-
-    </div>
   </div>
+  </div>
+  <!-- ================================================= -->
+  <!-- FOOTER -->
+  <!-- ================================================= -->
 
-</form>
+
 </div>
-
-<!-- =========================================================
-     PREFILL USER-DROPDOWNS (VOR ALPINE INIT)
-========================================================= -->
-<script>
-(function () {
-  const personal = {{ description.personal | tojson }};
-  const it = {{ description.it | tojson }};
-
-  function patch(fieldId, id, name) {
-    const el = document.querySelector(`[data-field-id="${fieldId}"]`);
-    if (!el) return;
-    el.dataset.initialId = id || "";
-    el.dataset.initialName = name || "";
-  }
-
-  // HR
-  patch("supervisor_hr_id", personal.supervisor_hr_id, personal.supervisor_hr_name);
-  patch("contact_person_id", personal.contact_person_id, personal.contact_person_name);
-
-  // Timebutler
-  patch(
-    "tb_supervisor_id",
-    it?.timebutler?.supervisor_id,
-    it?.timebutler?.supervisor_name
-  );
-})();
-</script>
-
-<script>
-function zugangEditForm() {
-  return {
-          isCreate: false,
-
-      openAssignModal: false,
-assigneeMode: "accountable",
-
-currentAssigneeName: "{{ ticket.assignee_name }}",
-
-    priority: "{{ ticket.priority.value }}",
-    validationTriggered: false,
-    companies: [],
-
-    p: {{ description.personal | tojson }},
-    a: {{ description.allgemein | tojson }},
-    it: {{ description.it | tojson }},
-    f: {{ description.fuhrpark | tojson }},
-
-    async init() {
-      await this.loadCompanies();
-
-      // Firmen-Selects korrekt neu binden
-      this.$nextTick(() => {
-        this.p.contract_company = this.p.contract_company;
-        this.a.appearance_company = this.a.appearance_company;
-      });
-
-      this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
-      this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
-
-      this.$el.addEventListener("submit", () => {
-        this.syncHRFromDropdowns();
-
-        this.$refs.description.value = JSON.stringify({
-          personal: this.p,
-          allgemein: this.a,
-          it: this.it,
-          fuhrpark: this.f
-        }, null, 2);
-      });
-    },
-
-    async loadCompanies() {
-      try {
-        const res = await fetch("/api/companies");
-        const data = await res.json();
-        this.companies = data.companies || [];
-      } catch {
-        this.companies = [];
-      }
-    },
-
-      applyAssignee() {
-  let id = null;
-  let name = null;
-
-  if (this.assigneeMode === "custom") {
-    id = document.querySelector('[name="custom_assignee_id"]')?.value;
-    name = document.querySelector('[name="custom_assignee_name"]')?.value;
-  }
-
-  if (this.assigneeMode === "accountable") {
-    id = document.querySelector('[name="accountable_id"]')?.value;
-    name = document.querySelector('[name="accountable_name"]')?.value;
-  }
-
-  if (this.assigneeMode === "supervisor") {
-    id = document.querySelector('[name="supervisor_id"]')?.value;
-    name = document.querySelector('[name="supervisor_name"]')?.value;
-  }
-
-  if (!id || !name) {
-    alert("Bitte eine Person auswählen");
-    return;
-  }
-
-  // 🔥 DAS ist der entscheidende Teil
-  this.$refs.assigneeId.value = id;
-  this.$refs.assigneeName.value = name;
-
-  // UI-Update
-  this.currentAssigneeName = name;
-},
-
-
-    syncHRFromDropdowns() {
-      const sid = document.querySelector('[name="supervisor_hr_id"]')?.value;
-      const sname = document.querySelector('[name="supervisor_hr_name"]')?.value;
-      if (sid) this.p.supervisor_hr_id = sid;
-      if (sname) this.p.supervisor_hr_name = sname;
-
-      const cid = document.querySelector('[name="contact_person_id"]')?.value;
-      const cname = document.querySelector('[name="contact_person_name"]')?.value;
-      if (cid) this.p.contact_person_id = cid;
-      if (cname) this.p.contact_person_name = cname;
-
-      const tbid = document.querySelector('[name="tb_supervisor_id"]')?.value;
-      const tbname = document.querySelector('[name="tb_supervisor_name"]')?.value;
-      if (tbid) this.it.timebutler.supervisor_id = tbid;
-      if (tbname) this.it.timebutler.supervisor_name = tbname;
-    },
-
-    /* ===================================================
-       PFLICHTFELDER – ABHÄNGIG VON AUSWAHL
-    =================================================== */
-    requiredPaths() {
-      const req = [
-        "p.first_name",
-        "p.last_name",
-        "p.title",
-        "p.private_address",
-        "p.start_date",
-        "p.homeoffice",
-        "p.department",
-        "p.cost_center",
-        "p.location",
-        "p.contract_company",
-        "p.supervisor_hr_id",
-        "p.contact_person_id",
-        "a.appearance_company",
-        "it.main_cost_center",
-        "it.work_start"
-      ];
-
-      if (this.f.car === "Ja") {
-        req.push("f.car_class", "f.car_from");
-      }
-
-      if (this.it.mailboxes?.additional === "Ja") {
-        req.push("it.mailboxes.notes");
-      }
-
-      return req;
-    },
-
-    hasErrors() {
-      return this.requiredPaths().some(path => {
-        const value = path.split(".").reduce((o, k) => o?.[k], this);
-        return value === null || value === "";
-      });
-    },
-
-    fieldClass(path) {
-      if (!this.validationTriggered) return "input";
-      const value = path.split(".").reduce((o, k) => o?.[k], this);
-      return value === null || value === ""
-        ? "input input-error"
-        : "input";
-    },
-
-    scrollToTop() {
-      this.$refs.formTop.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-}
-</script>
 
 <style>
-.input{
-  width:100%;
-  margin-top:.25rem;
-  padding:.5rem .75rem;
-  border-radius:.375rem;
-  background-color:var(--field-bg);
-  color:var(--text);
-  border:1px solid var(--border);
-}
-.input-error{
-  border-color:#EF4444;
-  background-color:color-mix(in oklab, var(--field-bg) 85%, #EF4444 15%);
+.label{
+  display:block;
+  font-size:.75rem;
+  color:#6B7280;
+  margin-bottom:.125rem;
 }
 </style>
+    <script>
+async function completeDepartment() {
+  const confirmed = confirm(
+    "Wurde der Auftrag wirklich ausgeführt?\n\n" +
+    "Dieser kann danach nicht mehr bearbeitet werden."
+  );
+
+  if (!confirmed) return;
+
+  const response = await fetch(
+    "/tickets/{{ ticket.id }}/departments/{{ department_id }}/status",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        status: "done"
+      })
+    }
+  );
+
+  if (response.ok) {
+    // ✅ zurück zum Dashboard
+    window.location.href = "/dashboard";
+  } else {
+    alert("Fehler beim Abschließen des Auftrags.");
+  }
+}
+</script>
 
 {% endblock %}
