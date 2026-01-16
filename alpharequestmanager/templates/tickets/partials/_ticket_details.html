@@ -1,0 +1,141 @@
+<h2 class="font-semibold text-lg">Details</h2>
+
+<!-- ================= VERANTWORTLICHER ================= -->
+<div
+  :class="shellClass('accountable_id', getValue('accountable_id'))"
+>
+  {% set label = "Verantwortlicher" %}
+  {% set field_id = "accountable_id" %}
+  {% set field_name = "accountable_name" %}
+  {% set initial_id = accountable_id | default(ticket.accountable_id if ticket else '') %}
+  {% set initial_name = accountable_name | default(ticket.accountable_name if ticket else '') %}
+  {% include "components/user-dropdown.html" %}
+</div>
+
+<!-- ================= VORGESETZTER ================= -->
+<div
+  :class="shellClass('supervisor_id', getValue('supervisor_id'))"
+>
+  {% set label = "Vorgesetzter" %}
+  {% set field_id = "supervisor_id" %}
+  {% set field_name = "supervisor_name" %}
+  {% set initial_id = supervisor_id | default(ticket.supervisor_id if ticket else '') %}
+  {% set initial_name = supervisor_name | default(ticket.supervisor_name if ticket else '') %}
+  {% include "components/user-dropdown.html" %}
+</div>
+
+
+<!-- ================= PRIORITÄT ================= -->
+{% set priority = priority | default("medium") %}
+
+<div>
+  <label class="font-medium">Priorität</label>
+  <select
+    name="priority"
+    class="w-full mt-1 p-2 rounded border dark:bg-gray-700"
+    {% if phase == "view" %}disabled{% endif %}
+  >
+    {% for value, label in [
+      ("low", "Niedrig"),
+      ("medium", "Mittel"),
+      ("high", "Hoch"),
+      ("critical", "Kritisch")
+    ] %}
+      <option
+        value="{{ value }}"
+        {% if priority == value %}selected{% endif %}
+      >
+        {{ label }}
+      </option>
+    {% endfor %}
+  </select>
+</div>
+
+<!-- ================= KOMMENTAR ================= -->
+{% if phase != "view" %}
+<div>
+  <label class="font-medium">Kommentar</label>
+  <textarea
+    name="comment"
+    class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
+  >{{ ticket.comment if ticket else "" }}</textarea>
+</div>
+{% endif %}
+
+<!-- ================= WEITERGEBEN (NUR EDIT) ================= -->
+{% if phase == "edit" %}
+<div class="pt-4 border-t">
+
+  <button
+    type="button"
+    @click="openAssignModal = true"
+    class="w-full px-4 py-2 rounded-lg border
+           border-primary text-primary
+           hover:bg-primary/10 transition font-medium"
+  >
+    🔁 Auftrag weitergeben
+  </button>
+
+  <div class="text-xs text-gray-500 mt-1">
+    Aktueller Bearbeiter:
+    <span class="font-medium" x-text="currentAssigneeName"></span>
+  </div>
+</div>
+
+<!-- ================= WEITERGEBEN MODAL ================= -->
+<div
+  x-show="openAssignModal"
+  x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md p-6 space-y-4">
+
+    <h3 class="text-lg font-semibold">Auftrag weitergeben an</h3>
+
+    <label class="flex items-center gap-2">
+      <input type="radio" x-model="assigneeMode" value="accountable">
+      Verantwortlicher
+    </label>
+
+    <label class="flex items-center gap-2">
+      <input type="radio" x-model="assigneeMode" value="supervisor">
+      Vorgesetzter
+    </label>
+
+    <label class="flex items-center gap-2">
+      <input type="radio" x-model="assigneeMode" value="custom">
+      Andere Person
+    </label>
+
+    <template x-if="assigneeMode === 'custom'">
+      <div class="mt-2">
+        {% set label = "Bearbeiter" %}
+        {% set field_id = "custom_assignee_id" %}
+        {% set field_name = "custom_assignee_name" %}
+        {% set initial_id = "" %}
+        {% set initial_name = "" %}
+        {% include "components/user-dropdown.html" %}
+      </div>
+    </template>
+
+    <div class="flex justify-end gap-3 pt-4">
+      <button
+        type="button"
+        @click="openAssignModal = false"
+        class="px-4 py-2 rounded bg-gray-300"
+      >
+        Abbrechen
+      </button>
+
+      <button
+        type="button"
+        @click="applyAssignee(); openAssignModal = false"
+        class="px-4 py-2 rounded bg-primary text-white"
+      >
+        Übernehmen
+      </button>
+    </div>
+
+  </div>
+</div>
+{% endif %}

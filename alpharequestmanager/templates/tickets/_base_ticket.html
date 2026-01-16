@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block head %}
+  {{ super() }}
+
+  <!-- ===============================
+       BASE FORM STYLES
+  =============================== -->
+  <style>
+    .input {
+      width: 100%;
+      padding: .5rem .75rem;
+      border-radius: .375rem;
+      background-color: var(--field-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .input:focus {
+      outline: none;
+      box-shadow: var(--ring);
+      border-color: transparent;
+    }
+    .input-error {
+      border-color: #EF4444;
+      background-color: color-mix(in oklab, var(--field-bg) 85%, #EF4444 15%);
+    }
+
+    .field-shell {
+      border: 1px solid var(--border);
+      border-radius: .375rem;
+      padding: .5rem;
+      background-color: var(--field-bg);
+    }
+    .field-shell-error {
+      border-color: #EF4444;
+      background-color: color-mix(in oklab, var(--field-bg) 85%, #EF4444 15%);
+    }
+  </style>
+
+  <!-- ===============================
+       BASE FORM LOGIC (GLOBAL)
+  =============================== -->
+  <script>
+    window.baseForm = function () {
+      return {
+        /* -----------------------------
+           VALIDATION CORE
+        ----------------------------- */
+        validationTriggered: false,
+
+        isEmpty(v) {
+          return v === null || v === undefined || v === "";
+        },
+
+        /* rules:
+           {
+             fieldName: { required: true, pattern: /^[0-9]{5}$/ }
+           }
+        */
+        isInvalid(field, value) {
+          const rule = this.rules?.[field];
+          if (!rule) return false;
+
+          // 🔹 conditional required
+          if (rule.requiredIf) {
+            const requiredNow = rule.requiredIf.call(this);
+            if (!requiredNow) return false;
+            return this.isEmpty(value);
+          }
+
+          // 🔹 normal required
+          if (rule.required && this.isEmpty(value)) {
+            return true;
+          }
+
+          // 🔹 pattern
+          if (rule.pattern && !this.isEmpty(value) && !rule.pattern.test(value)) {
+            return true;
+          }
+
+          return false;
+        },
+
+
+        /* -----------------------------
+           CLASSES
+        ----------------------------- */
+        inputClass(field, value) {
+          return [
+            "input",
+            this.validationTriggered && this.isInvalid(field, value)
+              ? "input-error"
+              : ""
+          ];
+        },
+
+        shellClass(field) {
+          const value = this.getValue(field);
+
+          return this.validationTriggered && this.isInvalid(field, value)
+            ? "field-shell field-shell-error"
+            : "field-shell";
+        },
+
+
+        /* -----------------------------
+           VALIDATE + SCROLL
+        ----------------------------- */
+validateOrScroll() {
+  this.validationTriggered = true;
+
+  const errors = [];
+
+  Object.keys(this.rules || {}).forEach(field => {
+    const value = this.getValue(field);
+    const invalid = this.isInvalid(field, value);
+
+    if (invalid) {
+      errors.push({
+        field,
+        value,
+        rule: this.rules[field]
+      });
+    }
+  });
+
+  if (errors.length) {
+    console.group("❌ Validation errors (" + errors.length + ")");
+    console.table(errors);
+    console.groupEnd();
+
+    this.$refs.formTop?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+
+    return false;
+  }
+
+  return true;
+}
+
+
+
+
+      };
+    };
+  </script>
+    <script>
+document.addEventListener("alpine:init", () => {
+  Alpine.data("userDropdown", (config) => ({
+    search: "",
+    open: false,
+
+    selectedId: "",
+    selectedName: "",
+
+    fieldId: config.fieldId,
+    fieldName: config.fieldName,
+
+    users: [],
+    filtered: [],
+
+    async init() {
+      const res = await fetch("/api/admin/users", {
+        credentials: "same-origin"
+      });
+      const json = await res.json();
+
+      this.users = (json.users || []).map(u => ({
+        id: u.id,
+        display: u.displayName
+      }));
+
+      this.filtered = this.users;
+
+      if (config.initialId && config.initialName) {
+        this.selectedId = config.initialId;
+        this.selectedName = config.initialName;
+        this.search = config.initialName;
+      }
+    },
+
+    filter() {
+      const q = this.search.toLowerCase().trim();
+      this.filtered = q
+        ? this.users.filter(u =>
+            u.display.toLowerCase().includes(q)
+          )
+        : this.users;
+    },
+
+    select(u) {
+      this.selectedId = u.id;
+      this.selectedName = u.display;
+      this.search = u.display;
+      this.open = false;
+
+      // 🔥 Custom Event mit Payload
+      this.$dispatch("user-selected", {
+        fieldId: this.fieldId,
+        id: u.id,
+        name: u.display
+      });
+    },
+
+    close() {
+      this.open = false;
+    }
+  }));
+});
+</script>
+
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-8 pb-[6.5rem]">
+
+    <form
+      method="post"
+      action="{{ form_action }}"
+      class="flex flex-col gap-8"
+      {% if alpine_component %}
+        x-data="{{ alpine_component }}"
+        x-init="init && init()"
+      {% endif %}
+
+    >
+
+
+    <!-- Scroll Target -->
+    <div x-ref="formTop"></div>
+
+    {% block hidden_fields %}{% endblock %}
+
+    <div class="flex flex-col lg:flex-row gap-8">
+
+      <!-- LEFT: DETAILS -->
+      <aside class="w-full lg:w-[360px] bg-white dark:bg-gray-800 border rounded-xl shadow p-6 space-y-6">
+        {% block ticket_details %}{% endblock %}
+      </aside>
+
+      <!-- RIGHT: FIELDS -->
+      <section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
+        {% block ticket_fields %}{% endblock %}
+      </section>
+
+    </div>
+
+    {% block ticket_actions %}{% endblock %}
+    {% block extra_js %}{% endblock %}
+
+  </form>
+</div>
+{% endblock %}

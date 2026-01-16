@@ -1,232 +1,407 @@
-{% extends "base.html" %}
-{% block title %}Fachabteilung – Auftrag{% endblock %}
+{% extends "tickets/_base_ticket.html" %}
+{% block title %}Auftrag bearbeiten – {{ ticket.title }}{% endblock %}
 
-{% block content %}
-<div class="max-w-6xl mx-auto p-8 space-y-8">
+{% set form_action = "/tickets/update/" ~ ticket.id %}
+{% set alpine_component = "zugangPhase1Form()" %}
 
-  <!-- ================================================= -->
-  <!-- HEADER -->
-  <!-- ================================================= -->
-  <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-    <h1 class="text-xl font-semibold">
-      {{ ticket.title }}
-    </h1>
-    <p class="text-sm text-gray-500 mt-1">
-      Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}
-    </p>
-  </div>
+{% block hidden_fields %}
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
 
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
 
+{% block ticket_fields %}
+  {% include "tickets/zugang-beantragen/_form_fields.html" %}
+{% endblock %}
 
-  <!-- ================================================= -->
-  <!-- LAYOUT -->
-  <!-- ================================================= -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
 
-    <!-- ================================================= -->
-    <!-- META -->
-    <!-- ================================================= -->
-    <aside class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-      <div class="space-y-4 text-sm">
+{% block extra_js %}
 
-        <div>
-          <div class="font-medium text-gray-500">Ticketstatus</div>
-          <div>{{ ticket.status.value }}</div>
-        </div>
+<script>
+function zugangPhase1Form() {
+  return {
+    /* ===============================
+       BASE FORM (🔥 WICHTIG 🔥)
+    =============================== */
+    ...baseForm(),
 
-        <div>
-          <div class="font-medium text-gray-500">Priorität</div>
-          <div>{{ ticket.priority.value|capitalize }}</div>
-        </div>
+    /* ===============================
+       MODE
+    =============================== */
+    phase: "edit",
+    isCreate: false,
+    companies: [],
 
-        <div>
-          <div class="font-medium text-gray-500">Antragsteller</div>
-          <div>{{ ticket.owner_name }}</div>
-        </div>
+    /* ===============================
+       ASSIGN / WEITERGEBEN
+    =============================== */
+    openAssignModal: false,
+    assigneeMode: "accountable",
+    currentAssigneeName: "{{ ticket.assignee_name }}",
 
-      </div>
-    </aside>
+    /* ===============================
+       DESCRIPTION (PREFILL)
+    =============================== */
+    p: {
+      first_name: "",
+      last_name: "",
+      title: "",
+      private_address: "",
+      start_date: "",
+      homeoffice: "",
+      department: "",
+      cost_center: "",
+      location: "",
+      contract_company: "",
+      notes: "",
+      supervisor_hr_id: "",
+      supervisor_hr_name: "",
+      contact_person_id: "",
+      contact_person_name: "",
+      personal_number: "",
+      ...{{ description.personal | default({}) | tojson | safe }}
+    },
+    a: {
+      appearance_company: "",
+      appearance_address: "",
+      ...{{ description.allgemein | default({}) | tojson | safe }}
+    },
 
-    <!-- ================================================= -->
-    <!-- CONTENT -->
-    <!-- ================================================= -->
-    <section class="lg:col-span-2 space-y-10">
-
-      <!-- ================================================= -->
-      <!-- PERSONAL / HR -->
-      <!-- ================================================= -->
-      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">Personal / HR</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div><span class="label">Vorname</span>{{ description.personal.first_name }}</div>
-          <div><span class="label">Nachname</span>{{ description.personal.last_name }}</div>
-          <div><span class="label">Titel</span>{{ description.personal.title }}</div>
-          <div><span class="label">Eintrittsdatum</span>{{ description.personal.start_date }}</div>
-          <div><span class="label">Abteilung</span>{{ description.personal.department }}</div>
-          <div><span class="label">Kostenstelle</span>{{ description.personal.cost_center }}</div>
-          <div><span class="label">Niederlassung</span>{{ description.personal.location }}</div>
-          <div><span class="label">Homeoffice</span>{{ description.personal.homeoffice }}</div>
-          <div><span class="label">Firma lt. Vertrag</span>{{ description.personal.contract_company }}</div>
-
-          <div class="md:col-span-2">
-            <span class="label">Privatadresse</span>
-            {{ description.personal.private_address }}
-          </div>
-
-          <div>
-            <span class="label">Vorgesetzter (HR)</span>
-            {{ description.personal.supervisor_hr_name }}
-          </div>
-
-          <div>
-            <span class="label">Ansprechpartner HR</span>
-            {{ description.personal.contact_person_name }}
-          </div>
-
-          {% if description.personal.notes %}
-          <div class="md:col-span-2">
-            <span class="label">Bemerkungen</span>
-            {{ description.personal.notes }}
-          </div>
-          {% endif %}
-        </div>
-      </div>
-
-      <!-- ================================================= -->
-      <!-- ALLGEMEIN -->
-      <!-- ================================================= -->
-      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">Allgemeines Auftreten</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <span class="label">Firma</span>
-            {{ description.allgemein.appearance_company }}
-          </div>
-
-          <div class="md:col-span-2">
-            <span class="label">Adresse</span>
-            <pre class="whitespace-pre-wrap">{{ description.allgemein.appearance_address }}</pre>
-          </div>
-        </div>
-      </div>
-
-      <!-- ================================================= -->
-      <!-- IT -->
-      <!-- ================================================= -->
-      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">IT / Systemdaten</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div><span class="label">Haupt-Kostenstelle</span>{{ description.it.main_cost_center }}</div>
-          <div><span class="label">Arbeitsbeginn</span>{{ description.it.work_start }}</div>
-          <div><span class="label">Telefon</span>{{ description.it.signature.phone }}</div>
-          <div><span class="label">Mobil</span>{{ description.it.signature.mobile }}</div>
-        </div>
-      </div>
-
-      <!-- ================================================= -->
-      <!-- FUHRPARK -->
-      <!-- ================================================= -->
-      {% if description.fuhrpark.car == "Ja" %}
-      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">Fuhrpark</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div><span class="label">Fahrzeugklasse</span>{{ description.fuhrpark.car_class }}</div>
-          <div><span class="label">Fahrzeug ab</span>{{ description.fuhrpark.car_from }}</div>
-        </div>
-      </div>
-      {% endif %}
-
-    </section>
-  </div>
-  <!-- ================================================= -->
-  <!-- DEPARTMENT STATUS -->
-  <!-- ================================================= -->
-  <div class="bg-gray-50 dark:bg-gray-800 border rounded-xl shadow p-6">
-    <div class="flex items-center justify-between gap-6">
-
-      <div>
-        <h2 class="text-lg font-semibold">
-          Fachabteilung:
-          <span class="text-primary">{{ department.name }}</span>
-        </h2>
-
-        <p class="text-sm mt-1">
-          Status:
-          {% if department_status == "done" %}
-            <span class="text-green-600 font-semibold">✔ Ausgeführt</span>
-          {% elif department_status == "rejected" %}
-            <span class="text-red-600 font-semibold">✖ Abgelehnt</span>
-          {% else %}
-            <span class="text-primary font-semibold">🛠 In Bearbeitung</span>
-          {% endif %}
-        </p>
-      </div>
-
-      {% if can_complete and department_status != "done" %}
-        <button
-          onclick="completeDepartment()"
-          class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700
-                 text-white rounded-md font-semibold transition">
-          ✔ Ausgeführt
-        </button>
-
-      {% endif %}
-
-    </div>
-    <div class="flex justify-end">
-    <a href="/dashboard"
-       class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
-      Zurück zum Dashboard
-    </a>
-  </div>
-  </div>
-  <!-- ================================================= -->
-  <!-- FOOTER -->
-  <!-- ================================================= -->
-
-
-</div>
-
-<style>
-.label{
-  display:block;
-  font-size:.75rem;
-  color:#6B7280;
-  margin-bottom:.125rem;
-}
-</style>
-    <script>
-async function completeDepartment() {
-  const confirmed = confirm(
-    "Wurde der Auftrag wirklich ausgeführt?\n\n" +
-    "Dieser kann danach nicht mehr bearbeitet werden."
-  );
-
-  if (!confirmed) return;
-
-  const response = await fetch(
-    "/tickets/{{ ticket.id }}/departments/{{ department_id }}/status",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+    it: {
+      main_cost_center: "",
+      work_start: "",
+      signature: {
+        title: "",
+        street: "",
+        zip: "",
+        city: "",
+        mobile: "",
+        phone: ""
       },
-      body: new URLSearchParams({
-        status: "done"
-      })
-    }
-  );
+      timebutler: {
+        vacation_year: "",
+        vacation_start_year: "",
+        holiday_rule: "",
+        supervisor_id: "",
+        supervisor_name: ""
+      },
+      datev: { user: "" },
+      other_systems: "",
+      mailboxes: { additional: "", notes: "" },
+      additional_cost_centers: "",
+      ...{{ description.it | default({}) | tojson | safe }}
+    },
 
-  if (response.ok) {
-    // ✅ zurück zum Dashboard
-    window.location.href = "/dashboard";
-  } else {
-    alert("Fehler beim Abschließen des Auftrags.");
+    f: {
+      car: "",
+      car_class: "",
+      car_from: "",
+      ...{{ description.fuhrpark | default({}) | tojson | safe }}
+    },
+
+    /* ===============================
+       VALIDATION RULES
+       (nur relevant für COMPLETE)
+    =============================== */
+    rules: {
+      /* ===============================
+         PERSONAL / HR
+      =============================== */
+      first_name: { required: true },
+      last_name: { required: true },
+      title: { required: true },
+      private_address: { required: true },
+      start_date: { required: true },
+      homeoffice: { required: true },
+      department: { required: true },
+      cost_center: { required: true },
+      location: { required: true },
+      contract_company: { required: true },
+
+      personal_number: { required: true },
+
+      supervisor_hr_id: { required: true },
+      contact_person_id: { required: true },
+
+      /* ===============================
+         ALLGEMEIN
+      =============================== */
+      appearance_company: { required: true },
+      appearance_address: { required: true },
+
+      /* ===============================
+         IT – GRUNDDATEN
+      =============================== */
+      main_cost_center: { required: true },
+      work_start: { required: true },
+
+      /* ===============================
+         IT – SIGNATUR
+      =============================== */
+      signature_title: { required: true },
+      signature_street: { required: true },
+      signature_zip: {
+        required: true,
+        pattern: /^[0-9]{5}$/
+      },
+      signature_city: { required: true },
+      signature_mobile: { required: true },
+      signature_phone: { required: true },
+
+      /* ===============================
+         IT – TIMEBUTLER
+      =============================== */
+      vacation_year: { required: true },
+      vacation_start_year: { required: true },
+      holiday_rule: { required: true },
+      tb_supervisor_id: { required: true },
+
+      /* ===============================
+         IT – SYSTEME
+      =============================== */
+      datev_user: { required: true },
+      other_systems: { required: true },
+
+      /* ===============================
+         POSTFÄCHER
+      =============================== */
+      mailboxes_additional: { required: true },
+      mailboxes_notes: {
+        requiredIf() {
+          return this.it.mailboxes.additional === "Ja";
+        }
+      },
+
+      /* ===============================
+         FUHRPARK
+      =============================== */
+      car: { required: true },
+      car_class: {
+        requiredIf() {
+          return this.f.car === "Ja";
+        }
+      },
+      car_from: {
+        requiredIf() {
+          return this.f.car === "Ja";
+        }
+      },
+
+      /* ===============================
+         TICKET / WORKFLOW
+      =============================== */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+
+
+    /* ===============================
+       VALUE RESOLVER (für baseForm)
+    =============================== */
+    getValue(field) {
+      // PERSONAL
+      if (field in this.p) return this.p[field];
+
+      // ALLGEMEIN
+      if (field in this.a) return this.a[field];
+
+      // FUHRPARK
+      if (field in this.f) return this.f[field];
+
+      // IT – FLACH
+      if (field in this.it) return this.it[field];
+
+      // IT – SIGNATURE
+      if (field.startsWith("signature_")) {
+        const key = field.replace("signature_", "");
+        return this.it.signature?.[key] ?? "";
+      }
+
+      // IT – TIMEBUTLER
+      if (field === "vacation_year") return this.it.timebutler?.vacation_year ?? "";
+      if (field === "vacation_start_year") return this.it.timebutler?.vacation_start_year ?? "";
+      if (field === "holiday_rule") return this.it.timebutler?.holiday_rule ?? "";
+
+      // IT – DATEV
+      if (field === "datev_user") return this.it.datev?.user ?? "";
+
+      // IT – MAILBOXES
+      if (field === "mailboxes_additional") return this.it.mailboxes?.additional ?? "";
+      if (field === "mailboxes_notes") return this.it.mailboxes?.notes ?? "";
+
+      // FALLBACK DOM (für Dropdowns & Assignees)
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+
+
+
+
+    /* ===============================
+       INIT
+    =============================== */
+    async init() {
+      /* ===============================
+         COMPANIES LADEN
+      =============================== */
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
+      }
+
+      /* ===============================
+         USER-DROPDOWN EVENTS (🔥 WICHTIG)
+      =============================== */
+      this.$el.addEventListener("user-selected", (e) => {
+        const { fieldId, id, name } = e.detail;
+
+        if (fieldId === "supervisor_hr_id") {
+          this.p.supervisor_hr_id = id;
+          this.p.supervisor_hr_name = name;
+        }
+
+        if (fieldId === "contact_person_id") {
+          this.p.contact_person_id = id;
+          this.p.contact_person_name = name;
+        }
+
+        if (fieldId === "tb_supervisor_id") {
+          this.it.timebutler.supervisor_id = id;
+          this.it.timebutler.supervisor_name = name;
+        }
+      });
+
+      /* ===============================
+         SELECT-REBIND (Company Selects)
+      =============================== */
+      const contract = this.p.contract_company;
+      const appearance = this.a.appearance_company;
+
+      this.$nextTick(() => {
+        this.p.contract_company = "";
+        this.a.appearance_company = "";
+
+        this.$nextTick(() => {
+          this.p.contract_company = contract;
+          this.a.appearance_company = appearance;
+        });
+      });
+
+      /* ===============================
+         ASSIGNEE PRESET
+      =============================== */
+      this.$nextTick(() => {
+        this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
+        this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
+      });
+
+      /* ===============================
+         INITIAL DESCRIPTION SYNC
+      =============================== */
+      this.updateDescription();
+
+      /* ===============================
+         VALIDATION RESET
+      =============================== */
+      this.validationTriggered = false;
+    },
+
+
+
+
+    /* ===============================
+       DESCRIPTION SYNC
+    =============================== */
+updateDescription() {
+
+  this.$refs.description.value = JSON.stringify(
+    {
+      personal: this.p,
+      allgemein: this.a,
+      it: this.it,
+      fuhrpark: this.f
+    },
+    null,
+    2
+  );
+},
+
+
+    /* ===============================
+       SUBMIT
+    =============================== */
+    submitEdit(action = "save", event) {
+  // 🔥 WICHTIG: erst syncen
+
+  if (action === "complete") {
+    if (!this.validateOrScroll()) return;
+
+    const ok = confirm(
+      "Wollen Sie den Auftrag wirklich abschließen?\n\n" +
+      "Eine Bearbeitung ist danach nicht mehr möglich."
+    );
+    if (!ok) return;
   }
+
+  this.updateDescription();
+
+  const form = event.target.closest("form");
+  if (!form) return;
+
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "action";
+  input.value = action;
+  form.appendChild(input);
+
+  form.submit();
+},
+
+
+
+
+    /* ===============================
+       WEITERGEBEN
+    =============================== */
+    applyAssignee() {
+      let id = null;
+      let name = null;
+
+      if (this.assigneeMode === "accountable") {
+        id = document.querySelector('[name="accountable_id"]')?.value;
+        name = document.querySelector('[name="accountable_name"]')?.value;
+      }
+
+      if (this.assigneeMode === "supervisor") {
+        id = document.querySelector('[name="supervisor_id"]')?.value;
+        name = document.querySelector('[name="supervisor_name"]')?.value;
+      }
+
+      if (this.assigneeMode === "custom") {
+        id = document.querySelector('[name="custom_assignee_id"]')?.value;
+        name = document.querySelector('[name="custom_assignee_name"]')?.value;
+      }
+
+      if (!id) {
+        alert("Bitte Bearbeiter auswählen");
+        return;
+      }
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+      this.currentAssigneeName = name;
+      this.openAssignModal = false;
+    }
+  };
 }
 </script>
 

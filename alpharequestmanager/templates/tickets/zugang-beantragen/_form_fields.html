@@ -1,0 +1,548 @@
+<section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
+
+    <!-- ================================================= -->
+    <!-- A. PERSONAL / HR -->
+    <!-- ================================================= -->
+
+
+
+      <h2 class="text-xl font-semibold text-primary">
+        Personalabteilung
+      </h2>
+
+      <!-- ================= STAMMDATEN ================= -->
+      <div>
+        <h3 class="font-semibold mb-4">Stammdaten</h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          <div>
+            <label>Vorname</label>
+            <input
+              x-model="p.first_name"
+              :class="inputClass('first_name', p.first_name)"
+            >
+          </div>
+
+          <div>
+            <label>Nachname</label>
+            <input
+              x-model="p.last_name"
+              :class="inputClass('last_name', p.last_name)"
+            >
+          </div>
+
+          <div>
+            <label>Titel</label>
+            <input
+              x-model="p.title"
+              :class="inputClass('title', p.title)"
+            >
+          </div>
+
+          <div>
+            <label>Eintrittsdatum</label>
+            <input
+              type="date"
+              x-model="p.start_date"
+              :class="inputClass('start_date', p.start_date)"
+            >
+          </div>
+
+          <div class="md:col-span-2">
+            <label>Privatadresse</label>
+            <textarea
+              x-model="p.private_address"
+              :class="inputClass('private_address', p.private_address)"
+              class="h-24"
+            ></textarea>
+          </div>
+
+          <div>
+            <label>Homeoffice</label>
+            <select
+              x-model="p.homeoffice"
+              :class="inputClass('homeoffice', p.homeoffice)"
+            >
+              <option value="">Bitte wählen</option>
+              <option>Ja</option>
+              <option>Lt. Vertrag</option>
+              <option>Nein</option>
+            </select>
+          </div>
+
+          <!-- ================= PERSONALNUMMER ================= -->
+          <div
+            :class="shellClass('personal_number', p.personal_number)"
+          >
+            <label class="font-medium block mb-1">
+              Personalnummer
+            </label>
+
+            <template x-if="isCreate">
+              <div class="space-y-2">
+
+                <button
+                  type="button"
+                  @click="generatePersonalnummer"
+                  :disabled="p.personal_number !== ''"
+                  class="inline-flex items-center gap-2 px-4 py-2 rounded-md
+                         border border-primary/30 text-primary bg-primary/5
+                         hover:bg-primary/10 text-sm font-medium
+                         transition disabled:opacity-50"
+                >
+                  Personalnummer generieren
+                </button>
+
+                <template x-if="p.personal_number">
+                  <div
+                    class="flex items-center justify-between px-4 py-2 rounded-md
+                           bg-primary/5 border border-primary/30
+                           font-mono text-sm text-primary"
+                  >
+                    <span x-text="p.personal_number"></span>
+                    <span class="text-xs font-medium">generiert</span>
+                  </div>
+                </template>
+
+              </div>
+            </template>
+
+            <template x-if="!isCreate">
+              <input
+                x-model="p.personal_number"
+                class="input bg-gray-100 cursor-not-allowed"
+                readonly
+              >
+            </template>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ================= ORGANISATION ================= -->
+      <div>
+        <h3 class="font-semibold mb-4">Organisation</h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          <div>
+            <label>Abteilung</label>
+            <input
+              x-model="p.department"
+              :class="inputClass('department', p.department)"
+            >
+          </div>
+
+          <div>
+            <label>Kostenstelle</label>
+            <input
+              x-model="p.cost_center"
+              :class="inputClass('cost_center', p.cost_center)"
+            >
+          </div>
+
+          <div>
+            <label>Niederlassung</label>
+            <input
+              x-model="p.location"
+              :class="inputClass('location', p.location)"
+            >
+          </div>
+
+          <div>
+            <label>Firma lt. Arbeitsvertrag</label>
+            <select
+              x-model="p.contract_company"
+              :class="inputClass('contract_company', p.contract_company)"
+            >
+              <option value="">Bitte wählen</option>
+              <template x-for="company in companies" :key="company">
+                <option :value="company" x-text="company"></option>
+              </template>
+            </select>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ================= BEZIEHUNGEN ================= -->
+
+  <h3 class="font-semibold mb-4">Beziehungen</h3>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div :class="shellClass('supervisor_hr_id', getValue('supervisor_hr_id'))">
+      {% set label = "Vorgesetzter (HR)" %}
+      {% set field_id = "supervisor_hr_id" %}
+      {% set field_name = "supervisor_hr_name" %}
+      {% set initial_id = description.personal.supervisor_hr_id
+          if description and description.personal is defined else "" %}
+      {% set initial_name = description.personal.supervisor_hr_name
+          if description and description.personal is defined else "" %}
+      {% include "components/user-dropdown.html" %}
+    </div>
+
+    <!-- Ansprechpartner -->
+    <div :class="shellClass('contact_person_id', getValue('contact_person_id'))">
+      {% set label = "Ansprechpartner für Rückfragen" %}
+      {% set field_id = "contact_person_id" %}
+      {% set field_name = "contact_person_name" %}
+      {% set initial_id = description.personal.contact_person_id
+          if description and description.personal is defined else "" %}
+      {% set initial_name = description.personal.contact_person_name
+          if description and description.personal is defined else "" %}
+      {% include "components/user-dropdown.html" %}
+    </div>
+  </div>
+
+
+
+      <!-- ================= SONSTIGES ================= -->
+      <div>
+        <h3 class="font-semibold mb-4">Sonstiges</h3>
+        <textarea x-model="p.notes" class="input h-24"></textarea>
+      </div>
+
+    </section>
+
+
+    <!-- ================================================= -->
+    <!-- B. ALLGEMEINES AUFTRETEN -->
+    <!-- ================================================= -->
+<section class="p-6 rounded-xl border space-y-6">
+  <h2 class="text-xl font-semibold">Allgemein</h2>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Firma -->
+    <div>
+      <label>Firma (Signatur/Webseite) *</label>
+      <select
+        x-model="a.appearance_company"
+        :class="inputClass('appearance_company', a.appearance_company)"
+      >
+        <option value="">–</option>
+
+        <template x-for="company in companies" :key="company">
+          <option :value="company" x-text="company"></option>
+        </template>
+      </select>
+    </div>
+
+    <!-- Adresse -->
+    <div>
+      <label>Adresse (Signatur/Webseite) *</label>
+      <textarea
+        x-model="a.appearance_address"
+        :class="inputClass('appearance_address', a.appearance_address)"
+        class="h-20"
+      ></textarea>
+    </div>
+
+  </div>
+</section>
+
+
+    <!-- ================================================= -->
+    <!-- C. IT / SYSTEMDATEN -->
+    <!-- ================================================= -->
+    <section class="p-6 rounded-xl border space-y-12">
+
+  <h2 class="text-xl font-semibold">
+    IT / Systemdaten
+  </h2>
+
+  <!-- ================= C0. GRUNDDATEN ================= -->
+  <div>
+    <h3 class="font-semibold mb-4">Grunddaten</h3>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label class="font-medium">Haupt-Kostenstelle *</label>
+        <input
+          x-model="it.main_cost_center"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          :class="inputClass('main_cost_center', it.main_cost_center)"
+        >
+      </div>
+
+      <div>
+        <label class="font-medium">Arbeitsbeginn / Eintrittsdatum (IT) *</label>
+        <input
+          type="date"
+          x-model="it.work_start"
+          :class="inputClass('work_start', it.work_start)"
+        >
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= C1. SIGNATURDATEN ================= -->
+  <div>
+    <h3 class="font-semibold mb-4">E-Mail-Signaturdaten</h3>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label class="font-medium">Titel (Signatur) *</label>
+        <input
+          x-model="it.signature.title"
+          :class="inputClass('signature_title', it.signature.title)"
+        >
+      </div>
+
+      <div>
+        <label class="font-medium">Straße *</label>
+        <input
+          x-model="it.signature.street"
+          :class="inputClass('signature_street', it.signature.street)"
+        >
+      </div>
+
+      <div>
+        <label class="font-medium">Postleitzahl *</label>
+        <input
+          x-model="it.signature.zip"
+          pattern="[0-9]{5}"
+          placeholder="PLZ"
+          :class="inputClass('signature_zip', it.signature.zip)"
+        >
+      </div>
+
+      <div>
+        <label class="font-medium">Ort *</label>
+        <input
+          x-model="it.signature.city"
+          :class="inputClass('signature_city', it.signature.city)"
+        >
+      </div>
+
+      <div>
+        <label class="font-medium">Handy *</label>
+        <div class="flex">
+          <span
+            class="inline-flex items-center px-3 border border-r-0 rounded-l-md text-sm
+                   bg-[var(--field-bg)] text-[var(--text)] border-[var(--border)]">
+            +49
+          </span>
+          <input
+            x-model="it.signature.mobile"
+            inputmode="numeric"
+            :class="inputClass('signature_mobile', it.signature.mobile) + ' rounded-l-none'"
+          >
+        </div>
+      </div>
+
+      <div>
+        <label class="font-medium">Telefon *</label>
+        <input
+          x-model="it.signature.phone"
+          inputmode="numeric"
+          :class="inputClass('signature_phone', it.signature.phone)"
+        >
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= C2. TIMEBUTLER ================= -->
+  <div>
+    <h3 class="font-semibold mb-4">Timebutler-Daten</h3>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label class="font-medium">Urlaubsanspruch pro Jahr *</label>
+        <input
+          x-model="it.timebutler.vacation_year"
+          inputmode="numeric"
+          :class="inputClass('vacation_year', it.timebutler.vacation_year)"
+        >
+      </div>
+
+      <div>
+        <label class="font-medium">Urlaubsanspruch im Einstellungsjahr *</label>
+        <input
+          x-model="it.timebutler.vacation_start_year"
+          inputmode="numeric"
+          :class="inputClass('vacation_start_year', it.timebutler.vacation_start_year)"
+        >
+      </div>
+
+      <div>
+        <label class="font-medium">Feiertagsregelung *</label>
+        <select
+          x-model="it.timebutler.holiday_rule"
+          :class="inputClass('holiday_rule', it.timebutler.holiday_rule)"
+        >
+          <option value="">Bitte wählen</option>
+          <option>Baden-Württemberg</option>
+          <option>Bayern</option>
+          <option>Berlin</option>
+          <option>Brandenburg</option>
+          <option>Bremen</option>
+          <option>Hamburg</option>
+          <option>Hessen</option>
+          <option>Mecklenburg-Vorpommern</option>
+          <option>Niedersachsen</option>
+          <option>Nordrhein-Westfalen</option>
+          <option>Rheinland-Pfalz</option>
+          <option>Saarland</option>
+          <option>Sachsen</option>
+          <option>Sachsen-Anhalt</option>
+          <option>Schleswig-Holstein</option>
+          <option>Thüringen</option>
+        </select>
+      </div>
+
+      <div class="md:col-span-2">
+            <!-- Ansprechpartner -->
+        <div :class="shellClass('tb_supervisor_id', getValue('tb_supervisor_id'))">
+{% set label = "Vorgesetzter (Timebutler)" %}
+{% set field_id = "tb_supervisor_id" %}
+{% set field_name = "tb_supervisor_name" %}
+{% set initial_id = description.it.timebutler.supervisor_id
+if description and description.personal is defined else "" %}
+{% set initial_name = description.it.timebutler.supervisor_name
+if description and description.personal is defined else "" %}
+{% include "components/user-dropdown.html" %}
+
+        </div>
+      </div>
+
+
+
+    </div>
+  </div>
+
+  <!-- ================= C3. DATEV & SYSTEME ================= -->
+  <div>
+    <h3 class="font-semibold mb-4">DATEV / weitere Systeme</h3>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label class="font-medium">DATEV-Anwender? *</label>
+        <select
+          x-model="it.datev.user"
+          :class="inputClass('datev_user', it.datev.user)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="font-medium">Weitere Systeme *</label>
+        <textarea
+          x-model="it.other_systems"
+          :class="inputClass('other_systems', it.other_systems)"
+          class="h-24"
+        ></textarea>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= C4. POSTFÄCHER ================= -->
+  <div>
+    <h3 class="font-semibold mb-4">Postfächer & Kostenstellen</h3>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label class="font-medium">Zusätzliche Postfächer? *</label>
+        <select
+          x-model="it.mailboxes.additional"
+          :class="inputClass('mailboxes_additional', it.mailboxes.additional)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
+      </div>
+
+      <template x-if="it.mailboxes.additional === 'Ja'">
+        <div class="md:col-span-2">
+          <label class="font-medium">Details *</label>
+          <textarea
+            x-model="it.mailboxes.notes"
+            :class="inputClass('mailboxes_notes', it.mailboxes.notes)"
+            class="h-24"
+          ></textarea>
+        </div>
+      </template>
+
+      <div class="md:col-span-2">
+        <label class="font-medium">Zusätzliche Kostenstellen / Niederlassungen *</label>
+        <textarea
+          x-model="it.additional_cost_centers"
+          :class="inputClass('additional_cost_centers', it.additional_cost_centers)"
+          class="h-24"
+        ></textarea>
+      </div>
+
+    </div>
+  </div>
+
+</section>
+
+
+
+    <!-- ================================================= -->
+    <!-- D. FUHRPARK -->
+    <!-- ================================================= -->
+    <section class="p-6 rounded-xl border space-y-6">
+      <h2 class="text-xl font-semibold">Fuhrpark</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Dienstwagen -->
+        <div>
+          <label>Dienstwagen *</label>
+          <select
+            x-model="f.car"
+            :class="inputClass('car', f.car)"
+          >
+            <option value="">–</option>
+            <option>Ja</option>
+            <option>Nein</option>
+          </select>
+        </div>
+
+        <!-- Fahrzeugklasse (nur wenn Ja) -->
+        <template x-if="f.car === 'Ja'">
+          <div>
+            <label>Fahrzeugklasse *</label>
+            <select
+              x-model="f.car_class"
+              :class="inputClass('car_class', f.car_class)"
+            >
+              <option value="">Bitte wählen</option>
+              <option>A</option>
+              <option>B</option>
+              <option>C</option>
+              <option>D</option>
+            </select>
+          </div>
+        </template>
+
+        <!-- Benötigt ab (nur wenn Ja) -->
+        <template x-if="f.car === 'Ja'">
+          <div>
+            <label>Benötigt ab *</label>
+            <input
+              type="date"
+              x-model="f.car_from"
+              :class="inputClass('car_from', f.car_from)"
+            >
+          </div>
+        </template>
+
+      </div>
+</section>

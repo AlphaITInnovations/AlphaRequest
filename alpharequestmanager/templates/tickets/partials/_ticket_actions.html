@@ -1,0 +1,106 @@
+<!-- ================= STICKY ACTION BAR ================= -->
+<div class="sticky bottom-0 z-40 -mx-8 px-8 mt-6">
+  <div
+    class="border bg-white/95 dark:bg-gray-900/95 backdrop-blur
+           rounded-xl shadow-lg"
+  >
+    <div
+      class="max-w-7xl mx-auto py-3 pr-4 flex justify-end gap-4 items-center"
+    >
+      <!-- ABBRECHEN -->
+      <a
+        href="/dashboard"
+        class="px-5 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition"
+      >
+        Abbrechen
+      </a>
+
+
+
+      <!-- CREATE -->
+      {% if phase == "create" %}
+      <button
+        type="button"
+        @click="openAssigneeModal()"
+        class="px-6 py-2 rounded-md bg-primary text-white font-medium hover:opacity-90 transition"
+      >
+        Auftrag erstellen
+      </button>
+      {% endif %}
+
+      <!-- EDIT -->
+      {% if phase == "edit" %}
+<button
+  type="button"
+  @click="submitEdit('save', $event)"
+  class="px-6 py-2 rounded-md bg-primary text-white"
+>
+  Speichern
+</button>
+
+
+<button
+  type="button"
+  @click="submitEdit('complete', $event)"
+  class="px-6 py-2 rounded-md bg-green-600 text-white font-medium hover:opacity-90 transition"
+>
+  Abschließen
+</button>
+
+      {% endif %}
+
+      <!-- VIEW -->
+      {% if phase == "view" and is_admin %}
+      <form method="post" action="/tickets/archive/{{ ticket.id }}">
+        <button
+          type="submit"
+          class="px-6 py-2 rounded-md bg-gray-500 text-white font-medium hover:opacity-90 transition"
+        >
+          Archivieren
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<input type="hidden" name="assignee_id" x-ref="assigneeId">
+<input type="hidden" name="assignee_name" x-ref="assigneeName">
+<!-- ================= CREATE MODAL ================= -->
+{% if phase == "create" %}
+<div
+  x-show="modalOpen"
+  x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 w-[420px]">
+    <h3 class="text-lg font-semibold mb-4">
+      Wer soll den Auftrag bearbeiten?
+    </h3>
+
+    <div class="space-y-3">
+      <button
+        class="w-full px-4 py-2 rounded bg-primary text-white"
+        @click="chooseAssignee('accountable')"
+      >
+        Verantwortlicher
+      </button>
+
+      <button
+        class="w-full px-4 py-2 rounded bg-primary text-white"
+        @click="chooseAssignee('supervisor')"
+      >
+        Vorgesetzter
+      </button>
+    </div>
+
+    <button
+      class="mt-4 text-sm text-gray-500"
+      @click="modalOpen = false"
+    >
+      Abbrechen
+    </button>
+  </div>
+</div>
+
+
+{% endif %}

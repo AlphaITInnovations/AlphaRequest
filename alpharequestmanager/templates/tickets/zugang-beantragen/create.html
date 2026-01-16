@@ -1,214 +1,46 @@
-{% extends "base.html" %}
-{% block title %}
-Zugang beantragen – Neuer Auftrag
-{% endblock %}
+{% extends "tickets/_base_ticket.html" %}
 
-{% block content %}
-<div class="max-w-7xl mx-auto p-8 pb-[6.5rem]">
+{% set form_action = "/tickets" %}
+{% set alpine_component = "zugangPhase1Form()" %}
 
-<form
-  method="post"
-  action="/tickets"
-  class="flex flex-col gap-8"
-  x-data="zugangPhase1Form()"
-  x-init="init()"
-  @input="validationTriggered = false"
-  @change="validationTriggered = false"
-  @keydown.enter.prevent="if ($event.target.tagName !== 'TEXTAREA') $event.preventDefault()"
->
-
-<div x-ref="formTop"></div>
-
+{% block hidden_fields %}
 <input type="hidden" name="ticket_type" value="zugang-beantragen">
 <input type="hidden" name="description" x-ref="description">
+{% endblock %}
 
-<!-- ================= LAYOUT ================= -->
-<div class="flex flex-col lg:flex-row gap-8">
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
 
-  <!-- ================= LEFT: DETAILS ================= -->
-  <aside class="w-full lg:w-[360px] flex-shrink-0 bg-white dark:bg-gray-800 border rounded-xl shadow p-6 space-y-6">
+{% block ticket_fields %}
+  {% include "tickets/zugang-beantragen/_form_fields.html" %}
+{% endblock %}
 
-    <h2 class="font-semibold text-lg">Details</h2>
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
 
-    <!-- Verantwortlicher -->
-    <div
-      class="field-shell"
-      :class="detailError('accountable_id')
-        ? 'field-shell-error'
-        : ''"
-    >
-      {% set label = "Verantwortlicher *" %}
-      {% set field_id = "accountable_id" %}
-      {% set field_name = "accountable_name" %}
-      {% set initial_id = "" %}
-      {% set initial_name = "" %}
-      {% include "components/user-dropdown.html" %}
-    </div>
-
-
-    <!-- Vorgesetzter -->
-    <div
-      class="field-shell"
-      :class="detailError('supervisor_id')
-        ? 'field-shell-error'
-        : ''"
-    >
-      {% set label = "Vorgesetzter *" %}
-      {% set field_id = "supervisor_id" %}
-      {% set field_name = "supervisor_name" %}
-      {% set initial_id = "" %}
-      {% set initial_name = "" %}
-      {% include "components/user-dropdown.html" %}
-    </div>
-
-
-    <!-- Priorität -->
-    <div>
-      <label class="font-medium">Priorität *</label>
-      <select name="priority" class="w-full mt-1 p-2 rounded border dark:bg-gray-700">
-        <option value="low">Niedrig</option>
-        <option value="medium" selected>Mittel</option>
-        <option value="high">Hoch</option>
-        <option value="critical">Kritisch</option>
-      </select>
-    </div>
-
-    <!-- Kommentar -->
-    <div>
-      <label class="font-medium">Kommentar</label>
-      <textarea
-        name="comment"
-        class="w-full mt-1 p-2 rounded border h-28 dark:bg-gray-700"
-        placeholder="Optional…"
-      ></textarea>
-    </div>
-
-  </aside>
-
-  <!-- ================= RIGHT: CONTENT ================= -->
-  {% include "tickets/zugang-beantragen/form.html" %}
-
-</div>
-
-<!-- ================= STICKY ACTION BAR ================= -->
-
-<div class="sticky bottom-0 z-40 -mx-8 px-8 mt-6">
-  <div class="rounded-xl shadow-lg border bg-white/95 ...">
-  <div
-    class="border bg-white/95 dark:bg-gray-900/95 backdrop-blur
-           rounded-xl shadow-lg"
-  >
-    <div
-      class="max-w-7xl mx-auto py-3 pr-4 flex justify-end gap-4 items-center"
-    >
-      <a
-        href="/dashboard"
-        class="px-5 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition"
-      >
-        Abbrechen
-      </a>
-
-      <button
-        type="button"
-        @click="openAssigneeModal()"
-        class="px-6 py-2 rounded-md bg-primary text-white font-medium hover:opacity-90 transition"
-      >
-        Auftrag erstellen
-      </button>
-    </div>
-  </div>
-</div>
-
-
-
-<!-- ================= MODAL ================= -->
-<div x-show="modalOpen" x-cloak
-     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-
-  <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 w-[420px]">
-    <h3 class="text-lg font-semibold mb-4">
-      Wer soll den Auftrag bearbeiten?
-    </h3>
-
-    <div class="space-y-3">
-      <button class="w-full px-4 py-2 rounded bg-primary text-white"
-              @click="chooseAssignee('accountable')">
-        Verantwortlicher
-      </button>
-
-      <button class="w-full px-4 py-2 rounded bg-primary text-white"
-              @click="chooseAssignee('supervisor')">
-        Vorgesetzter
-      </button>
-    </div>
-
-    <button class="mt-4 text-sm text-gray-500"
-            @click="modalOpen = false">
-      Abbrechen
-    </button>
-  </div>
-</div>
-
-<input type="hidden" name="assignee_id" x-ref="assigneeId">
-<input type="hidden" name="assignee_name" x-ref="assigneeName">
-
-</form>
-</div>
-
-<style>
-.input{
-  width: 100%;
-  margin-top: .25rem;
-  padding: .5rem .75rem;
-  border-radius: .375rem;
-  background-color: var(--field-bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-.input:focus{
-  outline: none;
-  box-shadow: var(--ring);
-  border-color: transparent;
-}
-.input-error{
-  border-color: #EF4444;
-  background-color: color-mix(in oklab, var(--field-bg) 85%, #EF4444 15%);
-}
-
-.field-shell {
-  border: 1px solid var(--border);
-  border-radius: .375rem;
-  padding: .5rem;
-  background-color: var(--field-bg);
-}
-
-.field-shell-error {
-  border-color: #EF4444;
-  background-color: color-mix(in oklab, var(--field-bg) 85%, #EF4444 15%);
-}
-
-</style>
-
+{% block extra_js %}
 <script>
 function zugangPhase1Form() {
   return {
-    /* ================================
+    /* =================================================
+       BASE FORM (VALIDATION ENGINE)
+    ================================================= */
+    ...baseForm(),
+
+    /* =================================================
        MODE
-    ================================ */
+    ================================================= */
+    phase: "create",
     isCreate: true,
-    validationTick: 0,
-
     modalOpen: false,
-    validationTriggered: false,
 
-    /* ================================
-       Firmen aus API
-    ================================ */
+    /* =================================================
+       DATA
+    ================================================= */
     companies: [],
 
-    /* ================================
-       PERSONAL / HR
-    ================================ */
     p: {
       first_name: "",
       last_name: "",
@@ -229,17 +61,11 @@ function zugangPhase1Form() {
       personal_number: ""
     },
 
-    /* ================================
-       ALLGEMEIN
-    ================================ */
     a: {
       appearance_company: "",
       appearance_address: ""
     },
 
-    /* ================================
-       IT
-    ================================ */
     it: {
       main_cost_center: "",
       work_start: "",
@@ -255,184 +81,97 @@ function zugangPhase1Form() {
         vacation_year: "",
         vacation_start_year: "",
         holiday_rule: "",
+        supervisor_id: "",
+        supervisor_name: ""
       },
-      datev: {
-        user: "",
-      },
+      datev: { user: "" },
       other_systems: "",
-      mailboxes: {
-        additional: "",
-        notes: ""
-      },
+      mailboxes: { additional: "", notes: "" },
       additional_cost_centers: ""
     },
 
-    /* ================================
-       FUHRPARK
-    ================================ */
     f: {
       car: "",
       car_class: "",
       car_from: ""
     },
 
-    /* ================================
-       PFLICHTFELDER
-    ================================ */
-    requiredPersonal: [
-      "first_name",
-      "last_name",
-      "title",
-      "private_address",
-      "start_date",
-      "homeoffice",
-      "department",
-      "cost_center",
-      "location",
-      "contract_company",
-      "personal_number",
-    ],
+    /* =================================================
+       VALIDATION RULES (🔥 DAS IST DER KERN 🔥)
+    ================================================= */
+    rules: {
+      first_name: { required: true },
+      last_name: { required: true },
+      title: { required: true },
+      private_address: { required: true },
+      start_date: { required: true },
+      homeoffice: { required: true },
+      department: { required: true },
+      cost_center: { required: true },
+      location: { required: true },
+      contract_company: { required: true },
 
-    requiredDetails: [
-      "accountable_id",
-      "supervisor_id"
-    ],
+      personal_number: { required: true },
 
-    /* ================================
+      supervisor_hr_id: { required: true },
+      contact_person_id: { required: true },
+
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* =================================================
+       VALUE RESOLVER (wichtig für baseForm)
+    ================================================= */
+    getValue(field) {
+      const dom = document.querySelector(`[name="${field}"]`)?.value;
+      if (dom !== undefined && dom !== "") return dom;
+
+      if (this.p && field in this.p) return this.p[field];
+
+      return "";
+    },
+
+
+    /* =================================================
        INIT
-    ================================ */
+    ================================================= */
     async init() {
       try {
         const res = await fetch("/api/companies");
         const data = await res.json();
         this.companies = data.companies || [];
-      } catch (e) {
-        console.error("Konnte Firmen nicht laden", e);
+      } catch {
         this.companies = [];
       }
     },
-sectionClass() {
-  return "";
-},
 
-    /* ================================
+    /* =================================================
        PERSONALNUMMER
-    ================================ */
+    ================================================= */
     async generatePersonalnummer() {
       if (!this.isCreate) return;
+      if (!confirm("Nummer wirklich generieren?")) return;
 
-      // Zitat Herr Vonjo
-      const fettfingerSafe = confirm("Nummer wirklich generieren?");
-      if (!fettfingerSafe) return;
       try {
         const res = await fetch("/api/personalnummer/next");
         const data = await res.json();
-        this.p.personal_number = data.personalnummer;
+        this.p.personal_number = String(data.personalnummer);
       } catch {
         alert("Fehler beim Generieren der Personalnummer");
       }
     },
 
-    /* ================================
-       VALIDIERUNG
-    ================================ */
-    get hasErrors() {
-      const personalInvalid = this.requiredPersonal.some(f => !this.p[f]);
-
-      const hrInvalid = [
-        "supervisor_hr_id",
-        "contact_person_id"
-      ].some(name => !document.querySelector(`[name="${name}"]`)?.value);
-
-      const detailsInvalid = this.requiredDetails.some(
-        f => !document.querySelector(`[name="${f}"]`)?.value
-      );
-
-      return personalInvalid || hrInvalid || detailsInvalid;
+    /* =================================================
+       CREATE FLOW
+    ================================================= */
+    openAssigneeModal() {
+      this.validationTriggered = false;
+      this.$nextTick(() => {
+        if (!this.validateOrScroll()) return;
+        this.modalOpen = true;
+      });
     },
-
-
-    fieldClass(field) {
-      const value =
-        field.endsWith("_id")
-          ? this.p[field]
-          : this.p[field];
-
-      return this.validationTriggered && !value
-        ? "input input-error"
-        : "input";
-    },
-
-hrError(name) {
-  this.validationTick; // 👈 erzwingt Reaktivität
-  if (!this.validationTriggered) return false;
-  return !document.querySelector(`[name="${name}"]`)?.value;
-},
-
-detailError(name) {
-  this.validationTick; // 👈 erzwingt Reaktivität
-  if (!this.validationTriggered) return false;
-  return !document.querySelector(`[name="${name}"]`)?.value;
-},
-debugValidation() {
-  const personalMissing = this.requiredPersonal.filter(
-    f => !this.p[f]
-  );
-
-  const hrMissing = [
-    "supervisor_hr_id",
-    "contact_person_id"
-  ].filter(
-    name => !document.querySelector(`[name="${name}"]`)?.value
-  );
-
-  const detailsMissing = this.requiredDetails.filter(
-    name => !document.querySelector(`[name="${name}"]`)?.value
-  );
-
-  console.group("🚨 Formular-Validierung");
-  console.log("❌ Personal (State):", personalMissing);
-  personalMissing.forEach(f => {
-    console.log(`  ${f}:`, this.p[f]);
-  });
-
-  console.log("❌ HR (DOM):", hrMissing);
-  hrMissing.forEach(f => {
-    console.log(
-      `  ${f}:`,
-      document.querySelector(`[name="${f}"]`)?.value
-    );
-  });
-
-  console.log("❌ Details (DOM):", detailsMissing);
-  detailsMissing.forEach(f => {
-    console.log(
-      `  ${f}:`,
-      document.querySelector(`[name="${f}"]`)?.value
-    );
-  });
-
-  console.groupEnd();
-},
-
-
-    /* ================================
-       MODAL FLOW
-    ================================ */
-openAssigneeModal() {
-  this.validationTriggered = true;
-  this.validationTick++; // 👈 WICHTIG
-
-  if (this.hasErrors) {
-        this.debugValidation();   // 👈 NEU
-
-    this.scrollToTop();
-    return;
-  }
-
-  this.modalOpen = true;
-},
-
 
     chooseAssignee(type) {
       const id = document.querySelector(`[name="${type}_id"]`)?.value;
@@ -441,15 +180,22 @@ openAssigneeModal() {
       this.$refs.assigneeId.value = id;
       this.$refs.assigneeName.value = name;
 
+
       this.p.supervisor_hr_id =
         document.querySelector('[name="supervisor_hr_id"]')?.value || "";
+
       this.p.supervisor_hr_name =
         document.querySelector('[name="supervisor_hr_name"]')?.value || "";
+
       this.p.contact_person_id =
         document.querySelector('[name="contact_person_id"]')?.value || "";
+
       this.p.contact_person_name =
         document.querySelector('[name="contact_person_name"]')?.value || "";
 
+      /* ===============================
+         DESCRIPTION SERIALISIEREN
+      =============================== */
       this.$refs.description.value = JSON.stringify(
         {
           personal: this.p,
@@ -463,19 +209,9 @@ openAssigneeModal() {
 
       this.modalOpen = false;
       this.$el.submit();
-    },
-
-    /* ================================
-       UX
-    ================================ */
-    scrollToTop() {
-      this.$refs.formTop.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
     }
+
   };
 }
 </script>
-
 {% endblock %}
