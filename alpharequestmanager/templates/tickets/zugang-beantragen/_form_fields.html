@@ -212,8 +212,13 @@
     <!-- ================================================= -->
 <section class="p-6 rounded-xl border space-y-6">
   <h2 class="text-xl font-semibold">Allgemein</h2>
-
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="space-y-1">
+        <h2 class="text-xl font-semibold">Allgemein</h2>
+        <p class="text-sm text-gray-600">
+          Hinweis: Diese Angaben werden für das externe Auftreten genutzt (z. B. E-Mail-Signatur, Webseite).
+        </p>
+      </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
     <!-- Firma -->
     <div>
@@ -321,21 +326,30 @@
         >
       </div>
 
+
       <div>
-        <label class="font-medium">Handy *</label>
-        <div class="flex">
-          <span
-            class="inline-flex items-center px-3 border border-r-0 rounded-l-md text-sm
-                   bg-[var(--field-bg)] text-[var(--text)] border-[var(--border)]">
-            +49
-          </span>
-          <input
-            x-model="it.signature.mobile"
-            inputmode="numeric"
-            :class="inputClass('signature_mobile', it.signature.mobile) + ' rounded-l-none'"
-          >
-        </div>
-      </div>
+  <label class="font-medium">Handy *</label>
+
+  <div class="flex">
+    <span
+      class="inline-flex h-10 items-center px-2 text-xs font-medium
+             rounded-l-md border border-r-0
+             bg-[var(--field-bg)] text-[var(--text)]/70 border-[var(--border)]"
+    >
+      +49
+    </span>
+
+    <input
+      x-model="it.signature.mobile"
+      inputmode="numeric"
+      :class="'input h-10 rounded-l-none rounded-r-md border-l-0 ' + inputClass('signature_mobile', it.signature.mobile)"
+    >
+  </div>
+</div>
+
+
+
+
 
       <div>
         <label class="font-medium">Telefon *</label>
@@ -438,7 +452,7 @@ if description and description.personal is defined else "" %}
       </div>
 
       <div class="md:col-span-2">
-        <label class="font-medium">Weitere Systeme *</label>
+        <label class="font-medium">Weitere Software (PersoPro, TimeJob, Zoove, etc.)</label>
         <textarea
           x-model="it.other_systems"
           :class="inputClass('other_systems', it.other_systems)"
@@ -469,7 +483,7 @@ if description and description.personal is defined else "" %}
 
       <template x-if="it.mailboxes.additional === 'Ja'">
         <div class="md:col-span-2">
-          <label class="font-medium">Details *</label>
+          <label class="font-medium">Zusätzliche Postfächer bitte hier eintragen *</label>
           <textarea
             x-model="it.mailboxes.notes"
             :class="inputClass('mailboxes_notes', it.mailboxes.notes)"

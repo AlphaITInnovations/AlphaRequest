@@ -1,6 +1,8 @@
 TODO:
 
 - Datev anwendung falls ja -> textfeld: welche Rechte?
+- Handy Feld wird noch nicht rot
+
 
 - verlauf fixen
 - von phase3 zu bearbeiten -> workflow zurücksetzen beim speichern sonst inkonsitstent state
