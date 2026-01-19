@@ -239,6 +239,7 @@ async def create_ticket_page(
             "user": user,
             "ticket_type": ticket_type,
             "is_admin": user.get("is_admin", False),
+            "phase": "create",
         },
     )
 
@@ -282,6 +283,7 @@ async def edit_ticket_page(
 
             "is_admin": user.get("is_admin", False),
             "priority": ticket.priority.value,
+            "phase": "edit",
         },
     )
 
@@ -326,7 +328,7 @@ async def group_ticket_view(
     )
 
     return request.app.templates.TemplateResponse(
-        f"tickets/{ticket_type.value}/group_view.html",
+        f"tickets/{ticket_type.value}/view.html",
         {
             "request": request,
             "ticket": ticket,
@@ -341,6 +343,7 @@ async def group_ticket_view(
             "can_complete": can_complete,
 
             "is_admin": user.get("is_admin", False),
+            "phase": "view",
         }
     )
 

@@ -7,151 +7,75 @@
 {% set initial_name = initial_name if initial_name is defined else "" %}
 
 <div
-    x-data="assigneeSelect()"
-    class="relative mt-4"
-    @click.outside="close()"
-
-    data-initial-id="{{ initial_id }}"
-    data-initial-name="{{ initial_name }}"
-    data-field-id="{{ field_id }}"
-    data-field-name="{{ field_name }}"
+  x-data="userDropdown({
+    fieldId: '{{ field_id }}',
+    fieldName: '{{ field_name }}',
+    initialId: '{{ initial_id }}',
+    initialName: '{{ initial_name }}'
+  })"
+  class="relative mt-4"
+  @click.outside="close()"
 >
 
-    <!-- LABEL + INFO -->
-    <label class="font-medium flex items-center gap-2">
-        <span>{{ label }} *</span>
+  <!-- LABEL -->
+  <label class="font-medium flex items-center gap-2">
+    <span>{{ label }}</span>
 
-        {% if info_text %}
-        <span class="relative group cursor-help">
-            <!-- Icon -->
-            <svg xmlns="http://www.w3.org/2000/svg"
-                 class="w-4 h-4 text-gray-400 hover:text-primary"
-                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
-            </svg>
+    {% if info_text %}
+    <span class="relative group cursor-help">
+      <svg xmlns="http://www.w3.org/2000/svg"
+           class="w-4 h-4 text-gray-400 hover:text-primary"
+           fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
+      </svg>
 
-            <!-- Tooltip -->
-            <span
-                class="absolute left-1/2 -translate-x-1/2 top-6
-                       whitespace-nowrap px-3 py-1.5 rounded
-                       bg-gray-900 text-white text-xs
-                       opacity-0 group-hover:opacity-100
-                       transition pointer-events-none z-50">
-                {{ info_text }}
-            </span>
-        </span>
-        {% endif %}
-    </label>
+      <span
+        class="absolute left-1/2 -translate-x-1/2 top-6
+               whitespace-nowrap px-3 py-1.5 rounded
+               bg-gray-900 text-white text-xs
+               opacity-0 group-hover:opacity-100
+               transition pointer-events-none z-50">
+        {{ info_text }}
+      </span>
+    </span>
+    {% endif %}
+  </label>
 
-    <!-- INPUT -->
-    <input
-        type="text"
-        x-model="search"
-        @click.stop="open = true; filter()"
-        @input="filter()"
-        placeholder="Mitarbeiter auswählen…"
-        class="w-full mt-1 p-2 rounded border dark:bg-gray-700 cursor-pointer"
-        autocomplete="off"
-    >
+  <!-- SEARCH INPUT -->
+  <input
+    type="text"
+    x-model="search"
+    @focus="open = true; filter()"
+    @input="filter()"
+    placeholder="Mitarbeiter auswählen…"
+    class="input mt-1 cursor-pointer"
+    autocomplete="off"
+  >
 
-    <!-- DROPDOWN -->
-    <div
-        x-show="open"
-        x-transition
-        @click.stop
-        class="absolute z-30 w-full mt-1 max-h-56 overflow-auto
-               bg-white dark:bg-gray-800 border rounded shadow text-sm"
-    >
-        <template x-for="u in filtered" :key="u.id">
-            <div
-                @click.stop="select(u)"
-                class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-                x-text="u.display"
-            ></div>
-        </template>
+  <!-- DROPDOWN -->
+  <div
+    x-show="open"
+    x-transition
+    @click.stop
+    class="absolute z-30 w-full mt-1 max-h-56 overflow-auto
+           bg-white dark:bg-gray-800 border rounded shadow text-sm"
+  >
+    <template x-for="u in filtered" :key="u.id">
+      <div
+        @click="select(u)"
+        class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+        x-text="u.display"
+      ></div>
+    </template>
 
-        <div x-show="filtered.length === 0"
-             class="px-3 py-2 text-gray-500">
-            Keine Treffer
-        </div>
+    <div x-show="filtered.length === 0"
+         class="px-3 py-2 text-gray-500">
+      Keine Treffer
     </div>
+  </div>
 
-    <!-- Hidden Fields -->
-    <input type="hidden" :name="fieldId" :value="selectedId">
-    <input type="hidden" :name="fieldName" :value="selectedText">
+  <!-- 🔑 SINGLE SOURCE OF TRUTH -->
+  <input type="hidden" :name="fieldId" :value="selectedId">
+  <input type="hidden" :name="fieldName" :value="selectedName">
 </div>
-
-
-
-<script>
-document.addEventListener("alpine:init", () => {
-    Alpine.data("assigneeSelect", () => ({
-        search: "",
-        open: false,
-
-        selectedId: "",
-        selectedText: "",
-
-        fieldId: "",
-        fieldName: "",
-
-        users: [],
-        filtered: [],
-
-        async init() {
-            const res = await fetch("/api/admin/users", {
-                credentials: "same-origin"
-            });
-            const json = await res.json();
-
-            this.users = (json.users || []).map(u => ({
-                id: u.id,
-                display: u.displayName
-            }));
-            this.filtered = this.users;
-
-            const el = this.$el;
-
-            this.fieldId = el.dataset.fieldId || "assignee_id";
-            this.fieldName = el.dataset.fieldName || "assignee_name";
-
-            const initialId = el.dataset.initialId;
-            const initialName = el.dataset.initialName;
-
-            if (initialId && initialName) {
-                this.selectedId = initialId;
-                this.selectedText = initialName;
-                this.search = initialName;
-            }
-        },
-
-        toggle() {
-            this.open = !this.open;
-            if (this.open) {
-                this.filter();
-            }
-        },
-
-        filter() {
-            const q = this.search.toLowerCase().trim();
-            this.filtered = q
-                ? this.users.filter(u =>
-                    u.display.toLowerCase().includes(q)
-                  )
-                : this.users;
-        },
-
-        select(u) {
-            this.selectedId = u.id;
-            this.selectedText = u.display;
-            this.search = u.display;
-            this.open = false;
-        },
-
-        close() {
-            this.open = false;
-        }
-    }));
-});
-</script>

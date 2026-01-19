@@ -1,13 +1,10 @@
 TODO:
 
-- Weitergabe in phase2 fehlt
-- personalnummer vergeben ab zb 10 000 (wird dann noch angepasst) -> Personalabteilung
 - Datev anwendung falls ja -> textfeld: welche Rechte?
+
 - verlauf fixen
 - von phase3 zu bearbeiten -> workflow zurücksetzen beim speichern sonst inkonsitstent state
-- mehrere Fachabteilungen
-- Fachabteilungen konfigurierbar
-- Fachabteilung zu assignee verlauf hinzufügen
+
 - Update Mail
 - Ticket Permissions
 - Ticket Felder anpasssen
@@ -18,13 +15,8 @@ TODO:
 Admin Panel Neu
 
 
-TODO:
-- Backend Funktionen in create Ticket und finish ticket auftrennen (nur dann soll ninja ticket erstellt werden)
-create ticket kann auch leere felder haben
-finish ticket muss alles ausgefüllt haben
 
 
-- Ninja Data Sync wenn in ninja was geändert wird dann auch in AlphaRequest (zumindest bei anpassbaren feldern in ninja)
 - Browsericon favicon
 
 
