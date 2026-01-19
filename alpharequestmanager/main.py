@@ -1,40 +1,36 @@
 import asyncio
 import sys
 from pathlib import Path
+from typing import cast
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.responses import FileResponse
+from starlette.datastructures import State
 
-from alpharequestmanager.core.app_lifespan import lifespan
-from alpharequestmanager.core.session import setup_session
 from alpharequestmanager.api import (
-    auth,
-    dashboard,
-    tickets,
     admin,
     analytics,
-    ninja_oauth,
-    users,
+    auth,
+    dashboard,
     groups,
+    ninja_oauth,
+    personalnummer,
     ticket_overview,
-    personalnummer
+    tickets,
+    users,
 )
-from alpharequestmanager.database.database import get_group_ids_for_user, get_group_name_from_id
-from alpharequestmanager.services.ensure_ticket_groups import ensure_ticket_groups
-from alpharequestmanager.services.personalnummer_generator import init_personalnummer, next_personalnummer
-from alpharequestmanager.services.metrics import init_metrics
+from alpharequestmanager.core.app_lifespan import lifespan
+from alpharequestmanager.core.session import setup_session
 from alpharequestmanager.database import database as db
+from alpharequestmanager.models.models import TicketType
+from alpharequestmanager.services.metrics import init_metrics
+from alpharequestmanager.services.personalnummer_generator import init_personalnummer
 from alpharequestmanager.services.ticket_permissions import init_ticket_permissions
 from alpharequestmanager.services.ticket_service import TicketService
-from alpharequestmanager.services.workflow_state import get_tickets_for_department, get_tickets_for_user_departments, \
-    get_department_requests_for_user
 from alpharequestmanager.utils.config import config
-from starlette.datastructures import State
-from typing import cast
-from alpharequestmanager.models.models import TicketType
+
 
 
 def get_ticket_type_dict():
@@ -112,7 +108,6 @@ def main():
     db.init_db()
     init_ticket_permissions()
     configure_event_loop()
-    #ensure_ticket_groups()
     init_personalnummer()
     run_server(https=config.HTTPS)
 
