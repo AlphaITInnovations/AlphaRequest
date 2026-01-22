@@ -1,70 +1,119 @@
+{# ===============================
+   OPTIONAL: Department Status in Sticky Bar (LEFT)
+   - only shows when view + department context exists
+   =============================== #}
+
 <!-- ================= STICKY ACTION BAR ================= -->
 <div class="sticky bottom-0 z-40 -mx-8 px-8 mt-6">
   <div
     class="border bg-white/95 dark:bg-gray-900/95 backdrop-blur
            rounded-xl shadow-lg"
   >
-    <div
-      class="max-w-7xl mx-auto py-3 pr-4 flex justify-end gap-4 items-center"
-    >
-      <!-- ABBRECHEN -->
-      <a
-        href="/dashboard"
-        class="px-5 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition"
-      >
-        Abbrechen
-      </a>
+    {# ✅ changed: justify-end -> justify-between, plus left/right columns #}
+    <div class="max-w-7xl mx-auto py-3 pr-4 flex items-center justify-between gap-4">
+
+      <!-- LEFT: Department Status (only in view + department context) -->
+        <div class="min-w-0">
+          {% if phase == "view" and department is defined and department_id is defined %}
+            <div class="leading-snug">
+              <div class="text-lg font-semibold truncate">
+                Fachabteilung:
+                <span class="text-primary">{{ department.name }}</span>
+              </div>
+
+              <div class="text-sm mt-1">
+                Status:
+                {% if department_status == "done" %}
+                  <span class="text-green-600 font-semibold">✔ Ausgeführt</span>
+                {% elif department_status == "rejected" %}
+                  <span class="text-red-600 font-semibold">✖ Abgelehnt</span>
+                {% else %}
+                  <span class="text-primary font-semibold">🛠 In Bearbeitung</span>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+        </div>
 
 
+      <!-- RIGHT: Actions -->
+      <div class="flex items-center justify-end gap-4">
 
-      <!-- CREATE -->
-      {% if phase == "create" %}
-      <button
-        type="button"
-        @click="openAssigneeModal()"
-        class="px-6 py-2 rounded-md bg-primary text-white font-medium hover:opacity-90 transition"
-      >
-        Auftrag erstellen
-      </button>
-      {% endif %}
-
-      <!-- EDIT -->
-      {% if phase == "edit" %}
-<button
-  type="button"
-  @click="submitEdit('save', $event)"
-  class="px-6 py-2 rounded-md bg-primary text-white"
->
-  Speichern
-</button>
-
-
-<button
-  type="button"
-  @click="submitEdit('complete', $event)"
-  class="px-6 py-2 rounded-md bg-green-600 text-white font-medium hover:opacity-90 transition"
->
-  Abschließen
-</button>
-
-      {% endif %}
-
-      <!-- VIEW -->
-      {% if phase == "view" and is_admin %}
-      <form method="post" action="/tickets/archive/{{ ticket.id }}">
-        <button
-          type="submit"
-          class="px-6 py-2 rounded-md bg-gray-500 text-white font-medium hover:opacity-90 transition"
+        <!-- ABBRECHEN -->
+        <a
+          href="/dashboard"
+          class="px-5 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition"
         >
-          Archivieren
+          Abbrechen
+        </a>
+
+        <!-- CREATE -->
+        {% if phase == "create" %}
+        <button
+          type="button"
+          @click="openAssigneeModal()"
+          class="px-6 py-2 rounded-md bg-primary text-white font-medium hover:opacity-90 transition"
+        >
+          Auftrag erstellen
         </button>
-      </form>
-      {% endif %}
+        {% endif %}
+
+        <!-- EDIT -->
+        {% if phase == "edit" %}
+          <button
+            type="button"
+            @click="submitEdit('save', $event)"
+            class="px-6 py-2 rounded-md bg-primary text-white"
+          >
+            Speichern
+          </button>
+
+          <button
+            type="button"
+            @click="submitEdit('complete', $event)"
+            class="px-6 py-2 rounded-md bg-green-600 text-white font-medium hover:opacity-90 transition"
+          >
+            Abschließen
+          </button>
+        {% endif %}
+
+        <!-- VIEW -->
+        {% if phase == "view" %}
+          {# Department View: DONE #}
+          {% if department_id is defined and can_complete and department_status != "done" %}
+            <button
+              type="button"
+              onclick="completeDepartment()"
+              class="px-6 py-2 rounded-md bg-emerald-600 text-white font-medium hover:opacity-90 transition"
+            >
+              ✔ Ausgeführt
+            </button>
+          {% endif %}
+
+          {# Optional: keep Archivieren for admin view pages (non-department pages) #}
+          {% if is_admin and (department_id is not defined) %}
+            <form method="post" action="/tickets/archive/{{ ticket.id }}">
+              <button
+                type="submit"
+                class="px-6 py-2 rounded-md bg-gray-500 text-white font-medium hover:opacity-90 transition"
+              >
+                Archivieren
+              </button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+      </div>
     </div>
   </div>
 </div>
-<input type="hidden" name="assignee_id" x-ref="assigneeId">
-<input type="hidden" name="assignee_name" x-ref="assigneeName">
+
+{# Hidden fields only where Alpine refs exist (create/edit flow) #}
+{% if phase in ["create", "edit"] %}
+  <input type="hidden" name="assignee_id" x-ref="assigneeId">
+  <input type="hidden" name="assignee_name" x-ref="assigneeName">
+{% endif %}
+
 <!-- ================= CREATE MODAL ================= -->
 {% if phase == "create" %}
 <div
@@ -101,6 +150,33 @@
     </button>
   </div>
 </div>
+{% endif %}
 
+<!-- ================= VIEW: Department "done" Script ================= -->
+{% if phase == "view" and department_id is defined %}
+<script>
+async function completeDepartment() {
+  const confirmed = confirm(
+    "Wurde der Auftrag wirklich ausgeführt?\n\n" +
+    "Dieser kann danach nicht mehr bearbeitet werden."
+  );
 
+  if (!confirmed) return;
+
+  const response = await fetch(
+    "/tickets/{{ ticket.id }}/departments/{{ department_id }}/status",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ status: "done" })
+    }
+  );
+
+  if (response.ok) {
+    window.location.href = "/dashboard";
+  } else {
+    alert("Fehler beim Abschließen des Auftrags.");
+  }
+}
+</script>
 {% endif %}

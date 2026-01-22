@@ -90,7 +90,7 @@ function zugangPhase1Form() {
         supervisor_id: "",
         supervisor_name: ""
       },
-      datev: { user: "" },
+      datev: { user: "" , required_rights: ""},
       other_systems: "",
       mailboxes: { additional: "", notes: "" },
       additional_cost_centers: "",
@@ -165,6 +165,11 @@ function zugangPhase1Form() {
          IT – SYSTEME
       =============================== */
       datev_user: { required: true },
+      datev_required_rights: {
+        requiredIf() {
+          return this.it.datev.user === "Ja";
+        }
+      },
       //other_systems: { required: true },
 
       /* ===============================
@@ -230,7 +235,7 @@ function zugangPhase1Form() {
 
       // IT – DATEV
       if (field === "datev_user") return this.it.datev?.user ?? "";
-
+      if (field === "datev_required_rights") return this.it.datev?.required_rights ?? "";
       // IT – MAILBOXES
       if (field === "mailboxes_additional") return this.it.mailboxes?.additional ?? "";
       if (field === "mailboxes_notes") return this.it.mailboxes?.notes ?? "";

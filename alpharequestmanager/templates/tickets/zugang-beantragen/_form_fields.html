@@ -222,7 +222,7 @@
 
     <!-- Firma -->
     <div>
-      <label>Firma (Signatur/Webseite) *</label>
+      <label>Firma (Signatur/Webseite)</label>
       <select
         x-model="a.appearance_company"
         :class="inputClass('appearance_company', a.appearance_company)"
@@ -237,7 +237,7 @@
 
     <!-- Adresse -->
     <div>
-      <label>Adresse (Signatur/Webseite) *</label>
+      <label>Adresse (Signatur/Webseite)</label>
       <textarea
         x-model="a.appearance_address"
         :class="inputClass('appearance_address', a.appearance_address)"
@@ -265,7 +265,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
       <div>
-        <label class="font-medium">Haupt-Kostenstelle *</label>
+        <label class="font-medium">Haupt-Kostenstelle</label>
         <input
           x-model="it.main_cost_center"
           inputmode="numeric"
@@ -275,7 +275,7 @@
       </div>
 
       <div>
-        <label class="font-medium">Arbeitsbeginn / Eintrittsdatum (IT) *</label>
+        <label class="font-medium">Arbeitsbeginn / Eintrittsdatum (IT)</label>
         <input
           type="date"
           x-model="it.work_start"
@@ -293,7 +293,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
       <div>
-        <label class="font-medium">Titel (Signatur) *</label>
+        <label class="font-medium">Titel (Signatur)</label>
         <input
           x-model="it.signature.title"
           :class="inputClass('signature_title', it.signature.title)"
@@ -301,7 +301,7 @@
       </div>
 
       <div>
-        <label class="font-medium">Straße *</label>
+        <label class="font-medium">Straße</label>
         <input
           x-model="it.signature.street"
           :class="inputClass('signature_street', it.signature.street)"
@@ -309,7 +309,7 @@
       </div>
 
       <div>
-        <label class="font-medium">Postleitzahl *</label>
+        <label class="font-medium">Postleitzahl</label>
         <input
           x-model="it.signature.zip"
           pattern="[0-9]{5}"
@@ -319,43 +319,33 @@
       </div>
 
       <div>
-        <label class="font-medium">Ort *</label>
+        <label class="font-medium">Ort</label>
         <input
           x-model="it.signature.city"
+
           :class="inputClass('signature_city', it.signature.city)"
         >
       </div>
 
 
-      <div>
-  <label class="font-medium">Handy *</label>
-
-  <div class="flex">
-    <span
-      class="inline-flex h-10 items-center px-2 text-xs font-medium
-             rounded-l-md border border-r-0
-             bg-[var(--field-bg)] text-[var(--text)]/70 border-[var(--border)]"
-    >
-      +49
-    </span>
-
-    <input
-      x-model="it.signature.mobile"
-      inputmode="numeric"
-      :class="'input h-10 rounded-l-none rounded-r-md border-l-0 ' + inputClass('signature_mobile', it.signature.mobile)"
-    >
-  </div>
-</div>
-
-
-
-
+    <div>
+      <label class="font-medium">Handy</label>
+      <input
+          x-model="it.signature.mobile"
+          inputmode="tel"
+          placeholder="+491701234567"
+          @input="it.signature.mobile = ($event.target.value || '').replace(/[^0-9+]/g, '')"
+          :class="inputClass('signature_mobile', it.signature.mobile)"
+        >
+    </div>
 
       <div>
-        <label class="font-medium">Telefon *</label>
+        <label class="font-medium">Telefon</label>
         <input
           x-model="it.signature.phone"
-          inputmode="numeric"
+          inputmode="tel"
+          placeholder="+49911123456-0"
+          @input="it.signature.phone = ($event.target.value || '').replace(/[^0-9+-]/g, '')"
           :class="inputClass('signature_phone', it.signature.phone)"
         >
       </div>
@@ -370,7 +360,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
       <div>
-        <label class="font-medium">Urlaubsanspruch pro Jahr *</label>
+        <label class="font-medium">Urlaubsanspruch pro Jahr</label>
         <input
           x-model="it.timebutler.vacation_year"
           inputmode="numeric"
@@ -379,7 +369,7 @@
       </div>
 
       <div>
-        <label class="font-medium">Urlaubsanspruch im Einstellungsjahr *</label>
+        <label class="font-medium">Urlaubsanspruch im Einstellungsjahr</label>
         <input
           x-model="it.timebutler.vacation_start_year"
           inputmode="numeric"
@@ -388,7 +378,7 @@
       </div>
 
       <div>
-        <label class="font-medium">Feiertagsregelung *</label>
+        <label class="font-medium">Feiertagsregelung</label>
         <select
           x-model="it.timebutler.holiday_rule"
           :class="inputClass('holiday_rule', it.timebutler.holiday_rule)"
@@ -440,7 +430,7 @@ if description and description.personal is defined else "" %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
       <div>
-        <label class="font-medium">DATEV-Anwender? *</label>
+        <label class="font-medium">DATEV-Anwender?</label>
         <select
           x-model="it.datev.user"
           :class="inputClass('datev_user', it.datev.user)"
@@ -450,6 +440,19 @@ if description and description.personal is defined else "" %}
           <option>Nein</option>
         </select>
       </div>
+
+        <template x-if="it.datev.user === 'Ja'">
+          <div class="md:col-span-2">
+            <label class="font-medium">Welche DATEV-Rechte/Daten werden benötigt?</label>
+            <textarea
+              x-model="it.datev.required_rights"
+              :class="inputClass('datev_required_rights', it.datev.required_rights)"
+              placeholder="z.B. wie Nutzer Max Mustermann"
+              class="h-24 placeholder:text-gray-400"
+            ></textarea>
+          </div>
+        </template>
+
 
       <div class="md:col-span-2">
         <label class="font-medium">Weitere Software (PersoPro, TimeJob, Zoove, etc.)</label>
@@ -470,7 +473,7 @@ if description and description.personal is defined else "" %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
       <div>
-        <label class="font-medium">Zusätzliche Postfächer? *</label>
+        <label class="font-medium">Zusätzliche Postfächer?</label>
         <select
           x-model="it.mailboxes.additional"
           :class="inputClass('mailboxes_additional', it.mailboxes.additional)"
@@ -483,7 +486,7 @@ if description and description.personal is defined else "" %}
 
       <template x-if="it.mailboxes.additional === 'Ja'">
         <div class="md:col-span-2">
-          <label class="font-medium">Zusätzliche Postfächer bitte hier eintragen *</label>
+          <label class="font-medium">Zusätzliche Postfächer bitte hier eintragen</label>
           <textarea
             x-model="it.mailboxes.notes"
             :class="inputClass('mailboxes_notes', it.mailboxes.notes)"
@@ -493,7 +496,7 @@ if description and description.personal is defined else "" %}
       </template>
 
       <div class="md:col-span-2">
-        <label class="font-medium">Zusätzliche Kostenstellen / Niederlassungen *</label>
+        <label class="font-medium">Zusätzliche Kostenstellen / Niederlassungen</label>
         <textarea
           x-model="it.additional_cost_centers"
           :class="inputClass('additional_cost_centers', it.additional_cost_centers)"
@@ -518,7 +521,7 @@ if description and description.personal is defined else "" %}
 
         <!-- Dienstwagen -->
         <div>
-          <label>Dienstwagen *</label>
+          <label>Dienstwagen</label>
           <select
             x-model="f.car"
             :class="inputClass('car', f.car)"
@@ -532,7 +535,7 @@ if description and description.personal is defined else "" %}
         <!-- Fahrzeugklasse (nur wenn Ja) -->
         <template x-if="f.car === 'Ja'">
           <div>
-            <label>Fahrzeugklasse *</label>
+            <label>Fahrzeugklasse</label>
             <select
               x-model="f.car_class"
               :class="inputClass('car_class', f.car_class)"
@@ -549,7 +552,7 @@ if description and description.personal is defined else "" %}
         <!-- Benötigt ab (nur wenn Ja) -->
         <template x-if="f.car === 'Ja'">
           <div>
-            <label>Benötigt ab *</label>
+            <label>Benötigt ab?</label>
             <input
               type="date"
               x-model="f.car_from"

@@ -20460,3 +20460,87 @@
 2026-01-19 14:40:13,603 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=2dbbe9342f704a039a6e2231c65e2298 last=1768829928 now=1768830013 cookie_len=602
 2026-01-19 14:40:13,824 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=2dbbe9342f704a039a6e2231c65e2298 last=1768830013 now=1768830013 cookie_len=602
 2026-01-19 14:40:16,606 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=2dbbe9342f704a039a6e2231c65e2298 last=1768830013 now=1768830016 cookie_len=602
+2026-01-22 10:04:24,921 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2026-01-22 10:04:39,865 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2026-01-22 10:04:39,932 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2026-01-22 10:04:40,911 - INFO - alpharequestmanager - ✅ Loaded 616 users into cache
+2026-01-22 10:04:40,911 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2026-01-22 10:04:41,792 - INFO - alpharequestmanager - ✅ Loaded 616 users into cache
+2026-01-22 10:04:57,149 - INFO - alpharequestmanager - User logged out: None
+2026-01-22 10:04:58,862 - INFO - alpharequestmanager - ➡️ Session vor Token-Abruf: {'auth_flow': {'state': 'LSTCOpKVNkxMrjUu', 'redirect_uri': 'https://AI-MS-01.dom.local:5000/auth/callback', 'scope': ['offline_access', 'User.Read', 'Mail.Send', 'profile', 'openid'], 'auth_uri': 'https://login.microsoftonline.com/9f32fe97-32f1-412e-af1f-77c6c70d54db/oauth2/v2.0/authorize?client_id=d3672286-7126-46eb-89e9-f2d4368076b0&response_type=code&redirect_uri=https%3A%2F%2FAI-MS-01.dom.local%3A5000%2Fauth%2Fcallback&scope=Mail.Send+User.Read+offline_access+openid+profile&state=LSTCOpKVNkxMrjUu&code_challenge=nS0neIfmGgMy_JSVvZAbPdQ_sskfH8ReN3Y_LSUHjBo&code_challenge_method=S256&nonce=432dba2c33de921792815d0c56fe630bd3e8067443df6d3b4dfe940e4dd8351b&client_info=1', 'code_verifier': 'U7XYJsObS9prj2m8qwWEf0D_LanPZy~Vk1gzNAHKB6M', 'nonce': 'XPixMdstaUTVjhwA', 'claims_challenge': None}}
+2026-01-22 10:04:59,249 - INFO - alpharequestmanager - 🔁 Token Result keys: ['token_type', 'scope', 'expires_in', 'ext_expires_in', 'access_token', 'refresh_token', 'id_token', 'client_info', 'id_token_claims', 'token_source']
+2026-01-22 10:04:59,249 - INFO - alpharequestmanager - 🪪 ID Claims keys: ['aud', 'iss', 'iat', 'nbf', 'exp', 'email', 'groups', 'name', 'nonce', 'oid', 'preferred_username', 'rh', 'sid', 'sub', 'tid', 'uti', 'ver']
+2026-01-22 10:04:59,803 - INFO - alpharequestmanager - ✅ Session nach Schreiben: {'sid': 'edb341fe6a7742b19ae2494c9b94214a', 'user': {'id': 'a2046db5-4d1d-46aa-8bf6-49a867aabdad', 'displayName': 'Marco Schneider', 'email': 'Marco.Schneider@alpha-it-innovations.org', 'is_admin': True, 'phone': None, 'mobile': None, 'company': 'Alpha IT Innovations GmbH', 'position': 'IT', 'address': {'street': 'Forchheimer Straße 4', 'zip': '90425', 'city': 'Nürnberg'}}, 'last_activity': 1769072699}
+2026-01-22 10:04:59,807 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072699 cookie_len=602
+2026-01-22 10:05:02,555 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:02,801 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:02,881 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:02,882 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:02,919 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:02,943 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:02,965 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:02,980 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072702 cookie_len=602
+2026-01-22 10:05:20,611 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072720 cookie_len=602
+2026-01-22 10:05:20,698 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072720 cookie_len=602
+2026-01-22 10:05:21,572 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:21,682 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:21,743 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:21,744 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:21,785 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:21,801 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:21,816 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:21,831 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072721 cookie_len=602
+2026-01-22 10:05:25,527 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072725 cookie_len=602
+2026-01-22 10:05:25,585 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072725 cookie_len=602
+2026-01-22 10:05:27,897 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072727 cookie_len=602
+2026-01-22 10:05:28,019 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072728 cookie_len=602
+2026-01-22 10:05:28,105 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072728 cookie_len=602
+2026-01-22 10:05:28,106 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072728 cookie_len=602
+2026-01-22 10:05:28,144 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072728 cookie_len=602
+2026-01-22 10:05:28,159 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072728 cookie_len=602
+2026-01-22 10:05:28,173 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072728 cookie_len=602
+2026-01-22 10:05:28,189 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072728 cookie_len=602
+2026-01-22 10:05:35,577 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072735 cookie_len=602
+2026-01-22 10:05:35,713 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072735 cookie_len=602
+2026-01-22 10:05:40,483 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072740 cookie_len=602
+2026-01-22 10:05:40,584 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072740 cookie_len=602
+2026-01-22 10:05:44,274 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072744 cookie_len=602
+2026-01-22 10:05:46,216 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=edb341fe6a7742b19ae2494c9b94214a last=1769072699 now=1769072746 cookie_len=602
+2026-01-22 10:34:41,832 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2026-01-22 10:34:42,788 - INFO - alpharequestmanager - ✅ Loaded 616 users into cache
+2026-01-22 10:44:33,578 - INFO - alpharequestmanager - ➡️ Session vor Token-Abruf: {'auth_flow': {'state': 'XuVpLAbHgiaQjnKZ', 'redirect_uri': 'https://AI-MS-01.dom.local:5000/auth/callback', 'scope': ['offline_access', 'User.Read', 'Mail.Send', 'profile', 'openid'], 'auth_uri': 'https://login.microsoftonline.com/9f32fe97-32f1-412e-af1f-77c6c70d54db/oauth2/v2.0/authorize?client_id=d3672286-7126-46eb-89e9-f2d4368076b0&response_type=code&redirect_uri=https%3A%2F%2FAI-MS-01.dom.local%3A5000%2Fauth%2Fcallback&scope=Mail.Send+User.Read+offline_access+openid+profile&state=XuVpLAbHgiaQjnKZ&code_challenge=G2R0s4d3gVDb500Cf1TzoKzq-fEsomVh5PBOzooDyaY&code_challenge_method=S256&nonce=99d59fb6e12c939a09f2e7ef275181f56a5b15368f08b90e0638c1f3c2ebf5e5&client_info=1', 'code_verifier': 'DeKlUkQiW9V0c.n6YXF5mAz1N-P7t8IL_~ujZ3J4Ho2', 'nonce': 'RFCVzUMaYGilJXtN', 'claims_challenge': None}}
+2026-01-22 10:44:33,930 - INFO - alpharequestmanager - 🔁 Token Result keys: ['token_type', 'scope', 'expires_in', 'ext_expires_in', 'access_token', 'refresh_token', 'id_token', 'client_info', 'id_token_claims', 'token_source']
+2026-01-22 10:44:33,930 - INFO - alpharequestmanager - 🪪 ID Claims keys: ['aud', 'iss', 'iat', 'nbf', 'exp', 'email', 'groups', 'name', 'nonce', 'oid', 'preferred_username', 'rh', 'sid', 'sub', 'tid', 'uti', 'ver']
+2026-01-22 10:44:34,533 - INFO - alpharequestmanager - ✅ Session nach Schreiben: {'sid': 'd61874743d0546ffa35088d2d96b8960', 'user': {'id': 'a2046db5-4d1d-46aa-8bf6-49a867aabdad', 'displayName': 'Marco Schneider', 'email': 'Marco.Schneider@alpha-it-innovations.org', 'is_admin': True, 'phone': None, 'mobile': None, 'company': 'Alpha IT Innovations GmbH', 'position': 'IT', 'address': {'street': 'Forchheimer Straße 4', 'zip': '90425', 'city': 'Nürnberg'}}, 'last_activity': 1769075074}
+2026-01-22 10:44:34,536 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075074 cookie_len=602
+2026-01-22 10:44:40,319 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:44:40,482 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:44:40,504 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:44:40,533 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:44:40,538 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:44:40,542 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:44:40,546 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:44:40,550 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075080 cookie_len=602
+2026-01-22 10:48:38,230 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075074 now=1769075318 cookie_len=602
+2026-01-22 10:48:38,417 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075318 cookie_len=602
+2026-01-22 10:48:38,432 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075318 cookie_len=602
+2026-01-22 10:48:38,433 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075318 cookie_len=602
+2026-01-22 10:48:38,455 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075318 cookie_len=602
+2026-01-22 10:48:38,459 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075318 cookie_len=602
+2026-01-22 10:48:38,464 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075318 cookie_len=602
+2026-01-22 10:48:38,470 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075318 cookie_len=602
+2026-01-22 10:48:51,006 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,693 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,778 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,792 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,793 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,818 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,823 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,828 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:48:51,832 - INFO - alpharequestmanager - 🔍 session_keys=['sid', 'user', 'last_activity'] sid=d61874743d0546ffa35088d2d96b8960 last=1769075318 now=1769075331 cookie_len=602
+2026-01-22 10:50:04,403 - INFO - alpharequestmanager - Initializing database (MariaDB)
+2026-01-22 10:50:04,433 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2026-01-22 10:50:05,311 - INFO - alpharequestmanager - ✅ Loaded 616 users into cache
+2026-01-22 10:50:05,311 - INFO - alpharequestmanager - 🔄 Syncing AD user list…
+2026-01-22 10:50:06,233 - INFO - alpharequestmanager - ✅ Loaded 616 users into cache
+2026-01-22 10:51:34,023 - INFO - alpharequestmanager - Initializing database (MariaDB)

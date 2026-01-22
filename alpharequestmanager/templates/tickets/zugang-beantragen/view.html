@@ -2,10 +2,43 @@
 {% block title %}Fachabteilung – Auftrag{% endblock %}
 {% set form_action = "" %}
 {% set alpine_component = None %}
-
+{% set phase = "view" %}
 
 {% block content %}
 <div class="max-w-6xl mx-auto p-8 space-y-8">
+
+  {% set p = description.personal if description and description.personal is defined else {} %}
+  {% set a = description.allgemein if description and description.allgemein is defined else {} %}
+  {% set it = description.it if description and description.it is defined else {} %}
+  {% set sig = it.signature if it and it.signature is defined else {} %}
+  {% set tb = it.timebutler if it and it.timebutler is defined else {} %}
+  {% set datev = it.datev if it and it.datev is defined else {} %}
+  {% set mail = it.mailboxes if it and it.mailboxes is defined else {} %}
+  {% set f = description.fuhrpark if description and description.fuhrpark is defined else {} %}
+
+  <style>
+    .ro-label {
+      display: block;
+      font-size: .75rem;
+      line-height: 1rem;
+      color: rgb(107 114 128); /* gray-500 */
+      font-weight: 600;
+      margin-bottom: .125rem;
+    }
+    .ro-value {
+      font-size: .875rem;
+      line-height: 1.25rem;
+      color: inherit;
+      white-space: normal;
+      word-break: break-word;
+    }
+    .ro-pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: .875rem;
+      line-height: 1.25rem;
+    }
+  </style>
 
   <!-- ================================================= -->
   <!-- HEADER -->
@@ -29,7 +62,6 @@
     <!-- ================================================= -->
     <aside class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
       <div class="space-y-4 text-sm">
-
         <div>
           <div class="font-medium text-gray-500">Ticketstatus</div>
           <div>{{ ticket.status.value }}</div>
@@ -45,6 +77,26 @@
           <div>{{ ticket.owner_name }}</div>
         </div>
 
+        <div class="pt-4 border-t space-y-2">
+          <div class="font-medium text-gray-500">Details</div>
+          <div class="grid grid-cols-1 gap-3">
+            <div>
+              <span class="ro-label">Verantwortlicher</span>
+              <div class="ro-value">{{ ticket.accountable_name or "—" }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Vorgesetzter</span>
+              <div class="ro-value">{{ ticket.supervisor_name or "—" }}</div>
+            </div>
+            {% if ticket.comment %}
+            <div>
+              <span class="ro-label">Kommentar</span>
+              <pre class="ro-pre">{{ ticket.comment }}</pre>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
       </div>
     </aside>
 
@@ -54,168 +106,285 @@
     <section class="lg:col-span-2 space-y-10">
 
       <!-- ================================================= -->
-      <!-- PERSONAL / HR -->
+      <!-- PERSONAL / HR (vollständig) -->
       <!-- ================================================= -->
       <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">Personal / HR</h2>
+        <h2 class="font-semibold text-lg mb-4">Personalabteilung</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div><span class="label">Vorname</span>{{ description.personal.first_name }}</div>
-          <div><span class="label">Nachname</span>{{ description.personal.last_name }}</div>
-          <div><span class="label">Titel</span>{{ description.personal.title }}</div>
-          <div><span class="label">Eintrittsdatum</span>{{ description.personal.start_date }}</div>
-          <div><span class="label">Abteilung</span>{{ description.personal.department }}</div>
-          <div><span class="label">Kostenstelle</span>{{ description.personal.cost_center }}</div>
-          <div><span class="label">Niederlassung</span>{{ description.personal.location }}</div>
-          <div><span class="label">Homeoffice</span>{{ description.personal.homeoffice }}</div>
-          <div><span class="label">Firma lt. Vertrag</span>{{ description.personal.contract_company }}</div>
+        <h3 class="font-semibold mb-3">Stammdaten</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <span class="ro-label">Vorname</span>
+            <div class="ro-value">{{ p.first_name|default("—") }}</div>
+          </div>
+          <div>
+            <span class="ro-label">Nachname</span>
+            <div class="ro-value">{{ p.last_name|default("—") }}</div>
+          </div>
+          <div>
+            <span class="ro-label">Titel</span>
+            <div class="ro-value">{{ p.title|default("—") }}</div>
+          </div>
+          <div>
+            <span class="ro-label">Eintrittsdatum</span>
+            <div class="ro-value">{{ p.start_date|default("—") }}</div>
+          </div>
 
           <div class="md:col-span-2">
-            <span class="label">Privatadresse</span>
-            {{ description.personal.private_address }}
+            <span class="ro-label">Privatadresse</span>
+            {% if p.private_address %}
+              <pre class="ro-pre">{{ p.private_address }}</pre>
+            {% else %}
+              <div class="ro-value">—</div>
+            {% endif %}
           </div>
 
           <div>
-            <span class="label">Vorgesetzter (HR)</span>
-            {{ description.personal.supervisor_hr_name }}
+            <span class="ro-label">Homeoffice</span>
+            <div class="ro-value">{{ p.homeoffice|default("—") }}</div>
           </div>
 
           <div>
-            <span class="label">Ansprechpartner HR</span>
-            {{ description.personal.contact_person_name }}
+            <span class="ro-label">Personalnummer</span>
+            <div class="ro-value font-mono">{{ p.personal_number|default("—") }}</div>
           </div>
+        </div>
 
-          {% if description.personal.notes %}
-          <div class="md:col-span-2">
-            <span class="label">Bemerkungen</span>
-            {{ description.personal.notes }}
+        <div class="mt-6">
+          <h3 class="font-semibold mb-3">Organisation</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="ro-label">Abteilung</span>
+              <div class="ro-value">{{ p.department|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Kostenstelle</span>
+              <div class="ro-value">{{ p.cost_center|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Niederlassung</span>
+              <div class="ro-value">{{ p.location|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Firma lt. Arbeitsvertrag</span>
+              <div class="ro-value">{{ p.contract_company|default("—") }}</div>
+            </div>
           </div>
+        </div>
+
+        <div class="mt-6">
+          <h3 class="font-semibold mb-3">Beziehungen</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="ro-label">Vorgesetzter (HR)</span>
+              <div class="ro-value">{{ p.supervisor_hr_name|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Ansprechpartner für Rückfragen</span>
+              <div class="ro-value">{{ p.contact_person_name|default("—") }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6">
+          <h3 class="font-semibold mb-3">Sonstiges</h3>
+          {% if p.notes %}
+            <pre class="ro-pre">{{ p.notes }}</pre>
+          {% else %}
+            <div class="ro-value">—</div>
           {% endif %}
         </div>
       </div>
 
       <!-- ================================================= -->
-      <!-- ALLGEMEIN -->
+      <!-- ALLGEMEIN (vollständig) -->
       <!-- ================================================= -->
       <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">Allgemeines Auftreten</h2>
+        <h2 class="font-semibold text-lg mb-4">Allgemein</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <span class="label">Firma</span>
-            {{ description.allgemein.appearance_company }}
+            <span class="ro-label">Firma (Signatur/Webseite)</span>
+            <div class="ro-value">{{ a.appearance_company|default("—") }}</div>
           </div>
 
           <div class="md:col-span-2">
-            <span class="label">Adresse</span>
-            <pre class="whitespace-pre-wrap">{{ description.allgemein.appearance_address }}</pre>
+            <span class="ro-label">Adresse (Signatur/Webseite)</span>
+            {% if a.appearance_address %}
+              <pre class="ro-pre">{{ a.appearance_address }}</pre>
+            {% else %}
+              <div class="ro-value">—</div>
+            {% endif %}
           </div>
         </div>
       </div>
 
       <!-- ================================================= -->
-      <!-- IT -->
+      <!-- IT / SYSTEMDATEN (vollständig) -->
       <!-- ================================================= -->
-      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">IT / Systemdaten</h2>
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6 space-y-8">
+        <h2 class="font-semibold text-lg">IT / Systemdaten</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div><span class="label">Haupt-Kostenstelle</span>{{ description.it.main_cost_center }}</div>
-          <div><span class="label">Arbeitsbeginn</span>{{ description.it.work_start }}</div>
-          <div><span class="label">Telefon</span>{{ description.it.signature.phone }}</div>
-          <div><span class="label">Mobil</span>{{ description.it.signature.mobile }}</div>
+        <div>
+          <h3 class="font-semibold mb-3">Grunddaten</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="ro-label">Haupt-Kostenstelle</span>
+              <div class="ro-value">{{ it.main_cost_center|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Arbeitsbeginn / Eintrittsdatum (IT)</span>
+              <div class="ro-value">{{ it.work_start|default("—") }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-3">E-Mail-Signaturdaten</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="ro-label">Titel (Signatur)</span>
+              <div class="ro-value">{{ sig.title|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Straße</span>
+              <div class="ro-value">{{ sig.street|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Postleitzahl</span>
+              <div class="ro-value">{{ sig.zip|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Ort</span>
+              <div class="ro-value">{{ sig.city|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Handy</span>
+              <div class="ro-value">{{ sig.mobile|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Telefon</span>
+              <div class="ro-value">{{ sig.phone|default("—") }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-3">Timebutler-Daten</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="ro-label">Urlaubsanspruch pro Jahr</span>
+              <div class="ro-value">{{ tb.vacation_year|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Urlaubsanspruch im Einstellungsjahr</span>
+              <div class="ro-value">{{ tb.vacation_start_year|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Feiertagsregelung</span>
+              <div class="ro-value">{{ tb.holiday_rule|default("—") }}</div>
+            </div>
+            <div>
+              <span class="ro-label">Vorgesetzter (Timebutler)</span>
+              <div class="ro-value">{{ tb.supervisor_name|default("—") }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-3">DATEV / weitere Systeme</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="ro-label">DATEV-Anwender?</span>
+              <div class="ro-value">{{ datev.user|default("—") }}</div>
+            </div>
+
+            {% if datev.user == "Ja" %}
+            <div class="md:col-span-2">
+              <span class="ro-label">Welche DATEV-Rechte/Daten werden benötigt?</span>
+              {% if datev.required_rights %}
+                <pre class="ro-pre">{{ datev.required_rights }}</pre>
+              {% else %}
+                <div class="ro-value">—</div>
+              {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="md:col-span-2">
+              <span class="ro-label">Weitere Software (PersoPro, TimeJob, Zoove, etc.)</span>
+              {% if it.other_systems %}
+                <pre class="ro-pre">{{ it.other_systems }}</pre>
+              {% else %}
+                <div class="ro-value">—</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-3">Postfächer & Kostenstellen</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span class="ro-label">Zusätzliche Postfächer?</span>
+              <div class="ro-value">{{ mail.additional|default("—") }}</div>
+            </div>
+
+            {% if mail.additional == "Ja" %}
+            <div class="md:col-span-2">
+              <span class="ro-label">Zusätzliche Postfächer bitte hier eintragen</span>
+              {% if mail.notes %}
+                <pre class="ro-pre">{{ mail.notes }}</pre>
+              {% else %}
+                <div class="ro-value">—</div>
+              {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="md:col-span-2">
+              <span class="ro-label">Zusätzliche Kostenstellen / Niederlassungen</span>
+              {% if it.additional_cost_centers %}
+                <pre class="ro-pre">{{ it.additional_cost_centers }}</pre>
+              {% else %}
+                <div class="ro-value">—</div>
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- ================================================= -->
-      <!-- FUHRPARK -->
+      <!-- FUHRPARK (vollständig) -->
       <!-- ================================================= -->
-      {% if description.fuhrpark.car == "Ja" %}
       <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
         <h2 class="font-semibold text-lg mb-4">Fuhrpark</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div><span class="label">Fahrzeugklasse</span>{{ description.fuhrpark.car_class }}</div>
-          <div><span class="label">Fahrzeug ab</span>{{ description.fuhrpark.car_from }}</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <span class="ro-label">Dienstwagen</span>
+            <div class="ro-value">{{ f.car|default("—") }}</div>
+          </div>
+
+          {% if f.car == "Ja" %}
+          <div>
+            <span class="ro-label">Fahrzeugklasse</span>
+            <div class="ro-value">{{ f.car_class|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Benötigt ab?</span>
+            <div class="ro-value">{{ f.car_from|default("—") }}</div>
+          </div>
+          {% endif %}
         </div>
       </div>
-      {% endif %}
 
     </section>
   </div>
 
   <!-- ================================================= -->
-  <!-- DEPARTMENT STATUS -->
+  <!-- ACTIONS / DEPARTMENT STATUS (importiert) -->
   <!-- ================================================= -->
-  <div class="bg-gray-50 dark:bg-gray-800 border rounded-xl shadow p-6">
-    <div class="flex items-center justify-between gap-6">
-
-      <div>
-        <h2 class="text-lg font-semibold">
-          Fachabteilung:
-          <span class="text-primary">{{ department.name }}</span>
-        </h2>
-
-        <p class="text-sm mt-1">
-          Status:
-          {% if department_status == "done" %}
-            <span class="text-green-600 font-semibold">✔ Ausgeführt</span>
-          {% elif department_status == "rejected" %}
-            <span class="text-red-600 font-semibold">✖ Abgelehnt</span>
-          {% else %}
-            <span class="text-primary font-semibold">🛠 In Bearbeitung</span>
-          {% endif %}
-        </p>
-      </div>
-
-      {% if can_complete and department_status != "done" %}
-        <button
-          onclick="completeDepartment()"
-          class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700
-                 text-white rounded-md font-semibold transition">
-          ✔ Ausgeführt
-        </button>
-      {% endif %}
-
-    </div>
-
-    <div class="flex justify-end mt-4">
-      <a href="/dashboard"
-         class="px-5 py-2.5 bg-gray-300 dark:bg-gray-600 rounded-md">
-        Zurück zum Dashboard
-      </a>
-    </div>
-  </div>
+  {% include "tickets/partials/_ticket_actions.html" %}
 
 </div>
-
-<!-- ================================================= -->
-<!-- DEPARTMENT COMPLETE SCRIPT -->
-<!-- ================================================= -->
-<script>
-async function completeDepartment() {
-  const confirmed = confirm(
-    "Wurde der Auftrag wirklich ausgeführt?\n\n" +
-    "Dieser kann danach nicht mehr bearbeitet werden."
-  );
-
-  if (!confirmed) return;
-
-  const response = await fetch(
-    "/tickets/{{ ticket.id }}/departments/{{ department_id }}/status",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ status: "done" })
-    }
-  );
-
-  if (response.ok) {
-    window.location.href = "/dashboard";
-  } else {
-    alert("Fehler beim Abschließen des Auftrags.");
-  }
-}
-</script>
-
 {% endblock %}
