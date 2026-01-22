@@ -1,38 +1,14 @@
 TODO:
 
-- Datev anwendung falls ja -> textfeld: welche Rechte?
-- Handy Feld wird noch nicht rot
 
-
-- verlauf fixen
-- von phase3 zu bearbeiten -> workflow zurücksetzen beim speichern sonst inkonsitstent state
 
 - Update Mail
-- Ticket Permissions
-- Ticket Felder anpasssen
-- was wenn 2 leute parallel ein ticket speichern?
-- admins settings gruppen löschen entfernen
-- Beim erstellen bei der zuweisung abbrechen funktioniert nicht
-
-Admin Panel Neu
-
-
-
-
+- wenn nicht alle felder ausgefüllt sind und es rot wird und nach oben gescrollt wird oben einen hinweis dass nicht alles ausgefüllt ist
+- wenn ein ticket von phase2 auf phase3 abgeschlossen wurde und der user zurück geht im browser dann ist das ticket in einem komischen state wo workflow gesetzt ist ABER das ticket trotzdem in phase2 ist.
 - Browsericon favicon
+
 
 
 Evtl Überlegung:
 ninja api key user
-
-
-zugang beantragen bugs:
-abschließen in phase2 färbe nicht rot und aktualisiert nicht von alleine
-ansprechpartner werden nich richtig vorausgefüllt
-firmen werden nicht richtig vorausgefüllt
-pflichtfelder funktioniert nicht alle
-
-
-Vor release:
-wenn ein ticket von phase2 auf phase3 abgeschlossen wurde und der user zurück geht im browser dann ist das ticket in einem komischen state wo workflow gesetzt ist ABER das ticket trotzdem in phase2 ist.
-
+was wenn 2 leute parallel ein ticket speichern?

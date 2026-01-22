@@ -142,12 +142,14 @@
       </button>
     </div>
 
-    <button
+   <button
+      type="button"
       class="mt-4 text-sm text-gray-500"
-      @click="modalOpen = false"
+      @click.prevent="modalOpen = false"
     >
       Abbrechen
     </button>
+
   </div>
 </div>
 {% endif %}
