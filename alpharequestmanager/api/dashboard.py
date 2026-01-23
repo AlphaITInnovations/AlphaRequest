@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from alpharequestmanager.core.dependencies import get_current_user
 from alpharequestmanager.models.models import Ticket
+from alpharequestmanager.services.ticket_overview_service import is_overview_groups_member
 from alpharequestmanager.services.ticket_permissions import get_allowed_ticket_types_for_user
 from alpharequestmanager.services.workflow_state import get_department_requests_for_user
 from alpharequestmanager.utils.config import config
@@ -34,6 +35,7 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
             "orders": orders,
             "department_requests": department_requests,
             "is_admin": user.get("is_admin", False),
+            "is_overview_group": is_overview_groups_member(user.get("id")),
             "devpopup": config.DEVPOPUP,
             "allowed_ticket_types": allowed_types,
         }

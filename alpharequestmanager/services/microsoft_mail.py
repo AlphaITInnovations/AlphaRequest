@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pathlib
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Union
 import base64
@@ -9,10 +10,10 @@ import mimetypes
 import os
 
 import requests
-from fastapi import Request
+from fastapi import Request, Path
 
 from alpharequestmanager.services.microsoft_auth import acquire_app_token
-from alpharequestmanager.services.mail_templates import render_corporate_email
+from alpharequestmanager.utils.mail_templates import render_corporate_email
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 
@@ -55,17 +56,23 @@ class EmailAttachment:
         return data
 
 def inline_attachment_from_path(path: str, *, content_id: str, filename: str | None = None) -> EmailAttachment:
-    if not os.path.exists(path):
-        raise FileNotFoundError(path)
+    p = pathlib.Path(path)
 
-    fname = filename or os.path.basename(path)
-    ctype, _ = mimetypes.guess_type(path)
+    # Wenn relativer Pfad: relativ zu .../alpharequestmanager/
+    if not p.is_absolute():
+        package_root = pathlib.Path(__file__).resolve().parents[1]  # services/.. = alpharequestmanager/
+        p = (package_root / p).resolve()
+
+    if not p.exists():
+        raise FileNotFoundError(str(p))
+
+    fname = filename or p.name
+    ctype, _ = mimetypes.guess_type(str(p))
     ctype = ctype or "application/octet-stream"
 
-    with open(path, "rb") as f:
-        raw = f.read()
-
+    raw = p.read_bytes()
     b64 = base64.b64encode(raw).decode("utf-8")
+
     return EmailAttachment(
         filename=fname,
         content_bytes_b64=b64,
@@ -260,18 +267,35 @@ def send_mail_app_only(
     _post_sendmail(url, access_token, payload)
 
 
+def send_test_mail(to: str):
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
+        subject="AlphaRequest Testmail",
+        body=render_corporate_email(
+            subject="AlphaRequest Testmail",
+            headline="AlphaRequest (hier klicken)",
+            intro="Hallo,\n\n das hier ist eine Testmail vom AlphaRequest System\n",
+            info_box_url="https://alpharequest.dom.local/dashboard",
+            content="",
+        ),
+        to_recipients=[to],
+        body_type="HTML",
+        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
+    )
 
-send_mail_app_only(
-    sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-    subject="AlphaRequest Auftrags Update",
-    body=render_corporate_email(
+"""
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject="AlphaRequest Auftrags Update",
-        headline="Auftrag #52135 (hier klicken)",
-        intro="Hallo Marco,\n\n einer deiner Aufträge wurde geupdatet.\n",
-        info_box_url="https://alpharequest.dom.local/dashboard",
-        content="• Feld1: Platzhalter\n• Feld2: Platzhalter\n",
-    ),
-    to_recipients=["marco.schneider@alpha-it-innovations.org"],
-    body_type="HTML",
-    attachments=[inline_attachment_from_path("../static/logo.png", content_id="alpha_logo")],
-)
+        body=render_corporate_email(
+            subject="AlphaRequest Auftrags Update",
+            headline="Auftrag #52135 (hier klicken)",
+            intro="Hallo Marco,\n\n einer deiner Aufträge wurde geupdatet.\n",
+            info_box_url="https://alpharequest.dom.local/dashboard",
+            content="• Feld1: Platzhalter\n• Feld2: Platzhalter\n",
+        ),
+        to_recipients=["marco.schneider@alpha-it-innovations.org"],
+        body_type="HTML",
+        attachments=[inline_attachment_from_path("../static/logo.png", content_id="alpha_logo")],
+    )
+"""

@@ -82,6 +82,13 @@
           <i data-lucide="eye" class="w-5 h-5"></i>
           <span x-show="open" x-cloak class="text-sm font-medium">Ticket-Overview</span>
         </button>
+        <button type="button" @click="active = 'testmail'"
+          :class="active==='testmail' ? 'bg-primary text-white'
+            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+          class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+          <i data-lucide="mail" class="w-5 h-5"></i>
+          <span x-show="open" x-cloak class="text-sm font-medium">Testmail</span>
+        </button>
 
 
 
@@ -786,6 +793,74 @@
   </div>
 </section>
 
+<!-- Testmail -->
+<section x-show="active==='testmail'" x-cloak
+  class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark"
+  x-data="TestMailAdmin()">
+
+  <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <i data-lucide="mail" class="w-5 h-5 text-primary"></i>
+      <h2 class="text-lg font-semibold">Testmail</h2>
+    </div>
+    <span class="text-xs text-gray-500 dark:text-gray-400" x-text="statusText"></span>
+  </div>
+
+  <div class="p-5 space-y-5">
+    <div class="rounded-md border border-blue-300/60 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 px-4 py-3 text-sm">
+      Sendet eine Testmail über die konfigurierte Mail-Integration.
+      (Admin-Berechtigung erforderlich)
+    </div>
+
+    <!-- Eingabe -->
+    <div class="flex flex-col md:flex-row gap-3 md:items-end">
+      <div class="flex-1">
+        <label class="text-sm font-medium text-gray-700 dark:text-gray-200">Empfänger</label>
+        <input type="email"
+               x-model="to"
+               placeholder="name@firma.de"
+               class="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600
+                      bg-white dark:bg-fieldDark px-3 py-2
+                      focus:outline-none focus:ring-2 focus:ring-primary" />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Tipp: Nutze deine eigene Adresse zum schnellen Test.
+        </p>
+      </div>
+
+      <button type="button" @click="send()"
+              class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition disabled:opacity-60"
+              :disabled="loading">
+        <i data-lucide="send" class="w-4 h-4"></i>
+        Senden
+      </button>
+    </div>
+
+    <!-- Ergebnis-Status (grün/rot) -->
+    <template x-if="resultState !== 'idle'">
+      <div
+        class="rounded-md px-4 py-3 text-sm border"
+        :class="resultState === 'ok'
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300/60 text-emerald-900 dark:text-emerald-100'
+          : 'bg-red-50 dark:bg-red-900/20 border-red-300/60 text-red-900 dark:text-red-100'">
+        <div class="flex items-start gap-2">
+          <span x-show="resultState === 'ok'">✅</span>
+          <span x-show="resultState === 'error'">❌</span>
+          <div>
+            <div class="font-medium" x-text="resultTitle"></div>
+            <div class="mt-1" x-text="resultMessage"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Raw -->
+    <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-fieldDark">
+      <div class="text-sm font-medium mb-1">Antwort (raw)</div>
+      <pre class="text-xs whitespace-pre-wrap break-words nice-scrollbar max-h-56"
+           x-text="lastResult || '—'"></pre>
+    </div>
+  </div>
+</section>
 
 
 
@@ -794,6 +869,75 @@
     </div>
   </div>
 </div>
+    <script>
+function TestMailAdmin() {
+  return {
+    to: "",
+    loading: false,
+
+    statusText: "bereit",
+    resultState: "idle", // idle | ok | error
+    resultTitle: "",
+    resultMessage: "",
+    lastResult: "",
+
+    _setOk(msg, json) {
+      this.resultState = "ok";
+      this.resultTitle = "Testmail gesendet";
+      this.resultMessage = msg || "Die Testmail wurde erfolgreich versendet.";
+      this.lastResult = JSON.stringify(json ?? {}, null, 2);
+      this.statusText = "OK";
+      toast("Testmail: OK", true);
+    },
+
+    _setError(msg, jsonOrText) {
+      this.resultState = "error";
+      this.resultTitle = "Senden fehlgeschlagen";
+      this.resultMessage = msg || "Unbekannter Fehler";
+      this.lastResult = typeof jsonOrText === "string"
+        ? jsonOrText
+        : JSON.stringify(jsonOrText ?? {}, null, 2);
+      this.statusText = "Fehler";
+      toast(this.resultMessage, false);
+    },
+
+    async send() {
+      const to = (this.to || "").trim();
+      if (!to) return this._setError("Bitte eine Empfängeradresse eingeben.");
+
+      this.loading = true;
+      this.statusText = "sende …";
+      this.resultState = "idle";
+      this.lastResult = "";
+
+      try {
+        const res = await fetch("/api/admin/test-mail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ to })
+        });
+
+        const json = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          const detail = json?.detail || "Fehler beim Senden der Testmail";
+          throw new Error(detail);
+        }
+
+        this._setOk(`Empfänger: ${to}`, json);
+      } catch (e) {
+        this._setError(String(e?.message || e || "Unbekannter Fehler"), e?.message || "");
+      } finally {
+        this.loading = false;
+        if (window.lucide) lucide.createIcons();
+      }
+    }
+  }
+}
+</script>
+
+
 <script>
 function TicketOverviewEditor() {
   return {

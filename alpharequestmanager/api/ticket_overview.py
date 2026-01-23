@@ -3,6 +3,8 @@ from fastapi.responses import HTMLResponse
 from alpharequestmanager.core.dependencies import get_current_user
 import json
 
+from alpharequestmanager.services.ticket_overview_service import is_overview_groups_member
+
 router = APIRouter()
 
 @router.get("/ticket-overview", response_class=HTMLResponse)
@@ -12,8 +14,9 @@ async def ticket_overview(
     page_size: int = 50,
     user: dict = Depends(get_current_user),
 ):
-    if not user.get("is_admin"):
+    if not is_overview_groups_member(user.get("id")) and not user.get("is_admin"):
         raise HTTPException(403)
+
 
     page = max(page, 1)
     page_size = min(max(page_size, 10), 100)  # Schutz
@@ -57,7 +60,8 @@ async def ticket_overview_detail(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
-    if not user.get("is_admin"):
+
+    if not is_overview_groups_member(user.get("id")) and not user.get("is_admin"):
         raise HTTPException(403)
 
     manager = request.app.state.manager

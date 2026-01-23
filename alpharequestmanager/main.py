@@ -1,7 +1,7 @@
 import asyncio
 import sys
 from pathlib import Path
-from typing import cast
+from typing import cast, List
 
 import uvicorn
 from fastapi import FastAPI
@@ -19,14 +19,17 @@ from alpharequestmanager.api import (
     personalnummer,
     ticket_overview,
     tickets,
-    users,
+    users, ticket_overview_groups, mail,
 )
 from alpharequestmanager.core.app_lifespan import lifespan
 from alpharequestmanager.core.session import setup_session
 from alpharequestmanager.database import database as db
 from alpharequestmanager.models.models import TicketType
+from alpharequestmanager.services import ticket_overview_service
 from alpharequestmanager.services.metrics import init_metrics
 from alpharequestmanager.services.personalnummer_generator import init_personalnummer
+from alpharequestmanager.services.ticket_overview_service import get_overview_groups, save_overview_groups, \
+    add_overview_groups_member
 from alpharequestmanager.services.ticket_permissions import init_ticket_permissions
 from alpharequestmanager.services.ticket_service import TicketService
 from alpharequestmanager.utils.config import config
@@ -69,6 +72,8 @@ def create_app() -> FastAPI:
     app.include_router(groups.router)
     app.include_router(ticket_overview.router)
     app.include_router(personalnummer.router)
+    app.include_router(ticket_overview_groups.router)
+    app.include_router(mail.router)
 
     init_metrics(app, config.SESSION_TIMEOUT, app.state.manager)
 
@@ -104,7 +109,6 @@ def run_server(https: bool = False):
 
 
 def main():
-
     db.init_db()
     init_ticket_permissions()
     configure_event_loop()
