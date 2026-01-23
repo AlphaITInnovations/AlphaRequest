@@ -43,6 +43,9 @@
   <script>
     window.baseForm = function () {
       return {
+        showErrorBar: false,
+        errorCount: 0,
+        errorMessage: "Bitte alle Felder korrekt ausfüllen.",
         /* -----------------------------
            VALIDATION CORE
         ----------------------------- */
@@ -116,13 +119,12 @@ validateOrScroll() {
     const invalid = this.isInvalid(field, value);
 
     if (invalid) {
-      errors.push({
-        field,
-        value,
-        rule: this.rules[field]
-      });
+      errors.push({ field, value, rule: this.rules[field] });
     }
   });
+
+  this.errorCount = errors.length;
+  this.showErrorBar = errors.length > 0;
 
   if (errors.length) {
     console.group("❌ Validation errors (" + errors.length + ")");
@@ -139,6 +141,7 @@ validateOrScroll() {
 
   return true;
 }
+
 
 
 
@@ -230,6 +233,16 @@ document.addEventListener("alpine:init", () => {
 
     <!-- Scroll Target -->
     <div x-ref="formTop"></div>
+    <!-- Red Info Bar (Validation) -->
+    <div
+      x-show="showErrorBar"
+      x-transition.opacity.duration.150ms
+      class="rounded-lg border border-red-300 bg-red-50 text-red-900 px-4 py-3"
+      role="alert"
+    >
+      <div class="font-semibold" x-text="errorMessage"></div>
+      <div class="text-sm opacity-90" x-show="errorCount" x-text="`Fehler: ${errorCount}`"></div>
+    </div>
 
     {% block hidden_fields %}{% endblock %}
 

@@ -1,11 +1,24 @@
 TODO:
 
 
-
-- Update Mail
-- wenn nicht alle felder ausgefüllt sind und es rot wird und nach oben gescrollt wird oben einen hinweis dass nicht alles ausgefüllt ist
 - wenn ein ticket von phase2 auf phase3 abgeschlossen wurde und der user zurück geht im browser dann ist das ticket in einem komischen state wo workflow gesetzt ist ABER das ticket trotzdem in phase2 ist.
-- Browsericon favicon
+
+
+
+
+TODO MAIL:
+- Update Mail
+Nur grob, wann sollen die Leute eine Mail bekommen?
+
+Minimal:
+- Immer wenn zugewiesen/geändert der aktuelle Bearbeiter erhält eine Mail (z.B. Neuer Auftrag für dich …)
+- Fachabteilung
+
+Optional (evtl zu viel):
+-	Der initiale Ersteller erhält bei jedem Update eine Mail (z.B. Auftrag wurde gespeichert, Auftrag wurde weitergegeben, …) -> aber eigentlich zu viel spam
+-	Ausgewählte Zuständiger / Vorgesetzer erhält bei Updates eine Mail
+-	Oder nur Ersteller / Zuständiger / Vorgesetzter erhalten nur grobe infos wie, Auftrag befindet sich in der Bearbeitung, Auftrag befindet sich in der Durchführung, Auftrag wurde durchgeführt etc.
+
 
 
 
