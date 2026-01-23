@@ -233,17 +233,19 @@
         <span x-show="open" x-cloak class="text-sm font-medium">Übersicht</span>
       </a>
 
+    {# Tickets: Admin ODER Overview-Gruppe #}
+    {% if is_admin or is_overview_group %}
+    <a href="/ticket-overview"
+       aria-current="{{ 'page' if is_tix else 'false' }}"
+       class="group relative flex items-center gap-3 px-3 py-2 rounded-xl transition
+              hover:bg-white/10 {{ 'bg-white/15' if is_tix else '' }}">
+      <i data-lucide="ticket" class="w-5 h-5"></i>
+      <span x-show="open" x-cloak class="text-sm font-medium">Tickets</span>
+    </a>
+    {% endif %}
+
+
       {% if is_admin %}
-      <!-- Tickets -->
-      <a href="/ticket-overview"
-         aria-current="{{ 'page' if is_tix else 'false' }}"
-         class="group relative flex items-center gap-3 px-3 py-2 rounded-xl transition
-                hover:bg-white/10 {{ 'bg-white/15' if is_tix else '' }}">
-        <i data-lucide="ticket" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Tickets</span>
-      </a>
-
-
 
       <!-- Admin · Settings -->
       <a href="/settings"
@@ -351,3 +353,67 @@
   </script>
 </body>
 </html>
+    <script>
+document.addEventListener("alpine:init", () => {
+  Alpine.data("userDropdown", (config) => ({
+    search: "",
+    open: false,
+
+    selectedId: "",
+    selectedName: "",
+
+    fieldId: config.fieldId,
+    fieldName: config.fieldName,
+
+    users: [],
+    filtered: [],
+
+    async init() {
+      const res = await fetch("/api/admin/users", {
+        credentials: "same-origin"
+      });
+      const json = await res.json();
+
+      this.users = (json.users || []).map(u => ({
+        id: u.id,
+        display: u.displayName
+      }));
+
+      this.filtered = this.users;
+
+      if (config.initialId && config.initialName) {
+        this.selectedId = config.initialId;
+        this.selectedName = config.initialName;
+        this.search = config.initialName;
+      }
+    },
+
+    filter() {
+      const q = this.search.toLowerCase().trim();
+      this.filtered = q
+        ? this.users.filter(u =>
+            u.display.toLowerCase().includes(q)
+          )
+        : this.users;
+    },
+
+    select(u) {
+      this.selectedId = u.id;
+      this.selectedName = u.display;
+      this.search = u.display;
+      this.open = false;
+
+      // 🔥 Custom Event mit Payload
+      this.$dispatch("user-selected", {
+        fieldId: this.fieldId,
+        id: u.id,
+        name: u.display
+      });
+    },
+
+    close() {
+      this.open = false;
+    }
+  }));
+});
+</script>

@@ -75,6 +75,14 @@
           <i data-lucide="users" class="w-5 h-5"></i>
           <span x-show="open" x-cloak class="text-sm font-medium">Fachabteilungen</span>
         </button>
+        <button type="button" @click="active = 'ticket_overview'"
+          :class="active==='ticket_overview' ? 'bg-primary text-white'
+            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+          class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+          <i data-lucide="eye" class="w-5 h-5"></i>
+          <span x-show="open" x-cloak class="text-sm font-medium">Ticket-Overview</span>
+        </button>
+
 
 
     </nav>
@@ -699,6 +707,84 @@
   </div>
 </section>
 
+<!-- Ticket Overview -->
+<section x-show="active==='ticket_overview'" x-cloak
+  class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark"
+  x-data="TicketOverviewEditor()"
+  x-init="init()">
+
+  <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <i data-lucide="eye" class="w-5 h-5 text-primary"></i>
+      <h2 class="text-lg font-semibold">Ticket-Overview</h2>
+    </div>
+    <span class="text-xs text-gray-500" x-text="members.length + ' Mitglieder'"></span>
+  </div>
+
+  <div class="p-5 space-y-5">
+
+    <!-- Info -->
+    <div class="rounded-md border border-blue-300/60 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 px-4 py-3 text-sm">
+      Diese Liste steuert, welche Benutzer in der Ticket-Übersicht berücksichtigt werden.
+      Änderungen werden direkt gespeichert.
+    </div>
+
+    <!-- Member badges -->
+    <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-fieldDark">
+      <template x-if="members.length === 0">
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          Keine Mitglieder vorhanden.
+        </p>
+      </template>
+
+      <div class="flex flex-wrap gap-2">
+        <template x-for="uid in members" :key="uid">
+          <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-sm">
+            <span class="text-gray-800 dark:text-gray-100" x-text="userName(uid)"></span>
+
+            <button type="button"
+                    class="rounded-full hover:bg-primary/20 p-0.5 transition"
+                    title="Entfernen"
+                    @click="remove(uid)">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </span>
+        </template>
+      </div>
+    </div>
+
+    <!-- Add member -->
+    <!-- Add member -->
+<div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-fieldDark">
+  <div class="flex flex-col md:flex-row gap-3 md:items-end">
+
+<div class="flex-1">
+  {% set label = "Benutzer hinzufügen" %}
+  {% set info_text = "Wähle einen Benutzer aus und klicke auf Hinzufügen." %}
+  {% set field_id = "ticket_overview_user_id" %}
+  {% set field_name = "ticket_overview_user_name" %}
+  {% set initial_id = "" %}
+  {% set initial_name = "" %}
+  {% include "components/user-dropdown.html" %}
+</div>
+
+
+
+    <button type="button" @click="addSelected()"
+            class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition">
+      <i data-lucide="plus" class="w-4 h-4"></i>
+      Hinzufügen
+    </button>
+  </div>
+
+  <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+    Hinweis: Doppelte Einträge werden automatisch verhindert.
+  </p>
+</div>
+
+
+  </div>
+</section>
 
 
 
@@ -708,6 +794,102 @@
     </div>
   </div>
 </div>
+<script>
+function TicketOverviewEditor() {
+  return {
+    users: [],
+    members: [],
+
+    async init() {
+      await this.loadUsers();
+      await this.loadMembers();
+      this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+    },
+
+    // USERS ---------------------------------------------------
+    async loadUsers() {
+      try {
+        const res = await fetch("/api/admin/users", { credentials: "same-origin" });
+        const json = await res.json();
+        this.users = json.users || [];
+      } catch (e) {
+        this.users = [];
+      }
+    },
+
+    userName(id) {
+      const u = this.users.find(u => u.id === id);
+      return u ? (u.displayName || u.mail || u.id) : id;
+    },
+
+    // MEMBERS -------------------------------------------------
+    async loadMembers() {
+      const res = await fetch("/api/ticket-overview-groups", { credentials: "same-origin" });
+      const json = await res.json();
+      if (!res.ok) {
+        toast(json.detail || "Fehler beim Laden", false);
+        this.members = [];
+        return;
+      }
+      this.members = Array.isArray(json.members) ? json.members : [];
+      this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+    },
+
+        _getSelectedId() {
+          const el = document.querySelector('input[name="ticket_overview_user_id"]');
+          return (el?.value || "").trim();
+        },
+
+
+    _clearSelection() {
+      // hidden fields
+      const idEl = document.querySelector('input[name="ticket_overview_user_id"]');
+      const nameEl = document.querySelector('input[name="ticket_overview_user_name"]');
+      if (idEl) idEl.value = "";
+      if (nameEl) nameEl.value = "";
+
+      // sichtbares Suchfeld im Dropdown leeren (best-effort)
+      const wrapper = idEl?.closest('[x-data^="userDropdown"]');
+      const textInput = wrapper?.querySelector('input[type="text"]');
+      if (textInput) textInput.value = "";
+    },
+
+    async addSelected() {
+      const user_id = this._getSelectedId();
+      if (!user_id) return toast("Bitte zuerst einen Benutzer auswählen.", false);
+
+      const res = await fetch("/api/ticket-overview-groups/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ user_id })
+      });
+
+      const json = await res.json();
+      if (!res.ok) return toast(json.detail || "Fehler beim Hinzufügen", false);
+
+      this.members = Array.isArray(json.members) ? json.members : this.members;
+      this._clearSelection();
+      toast(json.added ? "Hinzugefügt ✅" : "War schon vorhanden.", true);
+      this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+    },
+
+    async remove(user_id) {
+      const res = await fetch(`/api/ticket-overview-groups/members/${encodeURIComponent(user_id)}`, {
+        method: "DELETE",
+        credentials: "same-origin"
+      });
+
+      const json = await res.json();
+      if (!res.ok) return toast(json.detail || "Fehler beim Entfernen", false);
+
+      this.members = Array.isArray(json.members) ? json.members : this.members;
+      toast(json.removed ? "Entfernt ✅" : "War nicht enthalten.", true);
+      this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+    }
+  };
+}
+</script>
 
 <script>
   function toast(msg, ok) {

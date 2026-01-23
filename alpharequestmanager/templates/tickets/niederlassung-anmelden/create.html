@@ -1,8 +1,41 @@
-{% extends "base.html" %}
-{% block title %}Niederlassung Anmelden – Neues Ticket{% endblock %}
+{% extends "tickets/_base_ticket.html" %}
 
-{% block content %}
-<div class="max-w-7xl mx-auto p-8">
-    {% include "tickets/hardware/form.html" %}
-</div>
+{% set form_action = "/tickets" %}
+{% set alpine_component = "niederlassungbeantragenPhase1Form()" %}
+
+{% block hidden_fields %}
+<input type="hidden" name="ticket_type" value="niederlassung-anmelden">
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
+
+{% block ticket_fields %}
+  {% include "tickets/niederlassung-anmelden/_form_fields.html" %}
+{% endblock %}
+
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.niederlassungbeantragenPhase1Form = function () {
+    return {
+      ...window.baseForm(),   // ← bringt inputClass(), validateOrScroll(), rules, etc.
+      example: "",
+
+      init() {
+        // optional: init logic
+      },
+
+      rules: {
+        first_name: { required: true }
+      }
+    };
+  };
+</script>
+
 {% endblock %}
