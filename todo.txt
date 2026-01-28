@@ -3,8 +3,6 @@ TODO:
 
 
 - abbrechen knopf im dark mode sieht komisch aus
-- wenn ein ticket von phase2 auf phase3 abgeschlossen wurde und der user zurück geht im browser dann ist das ticket in einem komischen state wo workflow gesetzt ist ABER das ticket trotzdem in phase2 ist.
-
 
 
 
@@ -22,7 +20,8 @@ Optional (evtl zu viel):
 -	Oder nur Ersteller / Zuständiger / Vorgesetzter erhalten nur grobe infos wie, Auftrag befindet sich in der Bearbeitung, Auftrag befindet sich in der Durchführung, Auftrag wurde durchgeführt etc.
 
 
-
+TODO Features:
+- Nachrichtenzentrale
 
 Evtl Überlegung:
 ninja api key user

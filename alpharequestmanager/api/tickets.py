@@ -164,14 +164,15 @@ async def update_ticket(
 
     ticket = request.app.state.manager.get_ticket(ticket_id)
 
-    if ticket.assignee_id != assignee_id:
-        database.set_assignee(ticket_id, assignee_id, assignee_name)
+    if ticket.status == RequestStatus.in_progress:
+        if ticket.assignee_id != assignee_id:
+            database.set_assignee(ticket_id, assignee_id, assignee_name)
 
-    if ticket.accountable_id != accountable_id:
-        database.set_accountable(ticket_id, accountable_id, accountable_name)
+        if ticket.accountable_id != accountable_id:
+            database.set_accountable(ticket_id, accountable_id, accountable_name)
 
-    if ticket.supervisor_id != supervisor_id:
-        database.set_supervisor(ticket_id, supervisor_id, supervisor_name)
+        if ticket.supervisor_id != supervisor_id:
+            database.set_supervisor(ticket_id, supervisor_id, supervisor_name)
 
     if action == "complete":
         complete_ticket_internal(ticket, request, user)
@@ -213,6 +214,9 @@ async def delete_ticket_form(ticket_id: int, user: dict = Depends(get_current_us
 def validate_assignee(user_cache, assignee_id: str) -> bool:
     if not assignee_id:
         return False
+    print(assignee_id)
+    if assignee_id == "fachabteilung":
+        return True
     return any(u.get("id") == assignee_id for u in user_cache)
 
 

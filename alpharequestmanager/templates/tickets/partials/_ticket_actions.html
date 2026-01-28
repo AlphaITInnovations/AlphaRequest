@@ -83,6 +83,14 @@
           {% if department_id is defined and can_complete and department_status != "done" %}
             <button
               type="button"
+              class="px-4 py-2 rounded-lg border border-yellow-400 text-yellow-800 bg-yellow-50 hover:bg-yellow-100"
+              onclick="confirmEmergencyEdit()"
+            >
+              Bearbeiten
+            </button>
+
+            <button
+              type="button"
               onclick="completeDepartment()"
               class="px-6 py-2 rounded-md bg-emerald-600 text-white font-medium hover:opacity-90 transition"
             >
@@ -180,5 +188,23 @@ async function completeDepartment() {
     alert("Fehler beim Abschließen des Auftrags.");
   }
 }
+
+/* ✅ HIER DER FIX */
+function confirmEmergencyEdit() {
+  const ok = confirm(
+    "⚠️ Achtung\n\n" +
+    "In dieser Phase soll das Ticket nur im Notfall bearbeitet werden.\n\n" +
+    "Möchten Sie wirklich fortfahren?"
+  );
+
+  if (!ok) return;
+
+  const url = new URL(window.location.href);
+  url.pathname = url.pathname.replace("/tickets/group/", "/tickets/edit/");
+  url.searchParams.delete("department");
+
+  window.location.href = url.toString();
+}
 </script>
+
 {% endif %}

@@ -340,7 +340,6 @@ updateDescription() {
   );
 },
 
-
     /* ===============================
        SUBMIT
     =============================== */
@@ -361,6 +360,7 @@ updateDescription() {
 
   const form = event.target.closest("form");
   if (!form) return;
+
 
   const input = document.createElement("input");
   input.type = "hidden";

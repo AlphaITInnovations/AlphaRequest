@@ -134,13 +134,17 @@
             >
           </div>
 
-          <div>
-            <label>Kostenstelle</label>
-            <input
-              x-model="p.cost_center"
-              :class="inputClass('cost_center', p.cost_center)"
-            >
-          </div>
+        <div>
+          <label>Kostenstelle</label>
+          <input
+            type="text"
+            inputmode="numeric"
+            x-model="p.cost_center"
+            @input="p.cost_center = ($event.target.value || '').replace(/\D/g, '')"
+            :class="inputClass('cost_center', p.cost_center)"
+          >
+        </div>
+
 
           <div>
             <label>Niederlassung</label>
@@ -264,15 +268,17 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-      <div>
-        <label class="font-medium">Haupt-Kostenstelle</label>
-        <input
-          x-model="it.main_cost_center"
-          inputmode="numeric"
-          pattern="[0-9]*"
-          :class="inputClass('main_cost_center', it.main_cost_center)"
-        >
-      </div>
+        <div>
+          <label class="font-medium">Haupt-Kostenstelle</label>
+          <input
+            type="text"
+            inputmode="numeric"
+            x-model="it.main_cost_center"
+            @input="it.main_cost_center = ($event.target.value || '').replace(/\D/g, '')"
+            :class="inputClass('main_cost_center', it.main_cost_center)"
+          >
+        </div>
+
 
       <div>
         <label class="font-medium">Arbeitsbeginn / Eintrittsdatum (IT)</label>
@@ -308,15 +314,21 @@
         >
       </div>
 
-      <div>
-        <label class="font-medium">Postleitzahl</label>
-        <input
-          x-model="it.signature.zip"
-          pattern="[0-9]{5}"
-          placeholder="PLZ"
-          :class="inputClass('signature_zip', it.signature.zip)"
-        >
-      </div>
+        <div>
+          <label class="font-medium">Postleitzahl</label>
+          <input
+            type="text"
+            inputmode="numeric"
+            maxlength="5"
+            x-model="it.signature.zip"
+            pattern="[0-9]{5}"
+            @input="it.signature.zip = ($event.target.value || '')
+              .replace(/\D/g, '')
+              .slice(0, 5)"
+            :class="inputClass('signature_zip', it.signature.zip)"
+          >
+        </div>
+
 
       <div>
         <label class="font-medium">Ort</label>
@@ -359,23 +371,29 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-      <div>
-        <label class="font-medium">Urlaubsanspruch pro Jahr</label>
-        <input
-          x-model="it.timebutler.vacation_year"
-          inputmode="numeric"
-          :class="inputClass('vacation_year', it.timebutler.vacation_year)"
-        >
-      </div>
+        <div>
+          <label class="font-medium">Urlaubsanspruch pro Jahr</label>
+          <input
+            type="text"
+            inputmode="numeric"
+            x-model="it.timebutler.vacation_year"
+            @input="it.timebutler.vacation_year = ($event.target.value || '').replace(/\D/g, '')"
+            :class="inputClass('vacation_year', it.timebutler.vacation_year)"
+          >
+        </div>
 
-      <div>
-        <label class="font-medium">Urlaubsanspruch im Einstellungsjahr</label>
-        <input
-          x-model="it.timebutler.vacation_start_year"
-          inputmode="numeric"
-          :class="inputClass('vacation_start_year', it.timebutler.vacation_start_year)"
-        >
-      </div>
+
+    <div>
+      <label class="font-medium">Urlaubsanspruch im Einstellungsjahr</label>
+      <input
+        type="text"
+        inputmode="numeric"
+        x-model="it.timebutler.vacation_start_year"
+        @input="it.timebutler.vacation_start_year = ($event.target.value || '').replace(/\D/g, '')"
+        :class="inputClass('vacation_start_year', it.timebutler.vacation_start_year)"
+      >
+    </div>
+
 
       <div>
         <label class="font-medium">Feiertagsregelung</label>
