@@ -1,11 +1,11 @@
 {% extends "tickets/_base_ticket.html" %}
 
 {% set form_action = "/tickets" %}
-{% set alpine_component = "niederlassungbeantragenPhase1Form()" %}
+{% set alpine_component = "niederlassungAnmeldenPhase1Form()" %}
 
 {% block hidden_fields %}
-<input type="hidden" name="ticket_type" value="niederlassung-anmelden">
-<input type="hidden" name="description" x-ref="description">
+  <input type="hidden" name="ticket_type" value="niederlassung-anmelden">
+  <input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -22,20 +22,164 @@
 
 {% block extra_js %}
 <script>
-  window.niederlassungbeantragenPhase1Form = function () {
-    return {
-      ...window.baseForm(),   // ← bringt inputClass(), validateOrScroll(), rules, etc.
-      example: "",
+function niederlassungAnmeldenPhase1Form() {
+  return {
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
 
-      init() {
-        // optional: init logic
-      },
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    modalOpen: false,
 
-      rules: {
-        first_name: { required: true }
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    /* ----------------- MIETE ------------------ */
+    miete: {
+      location: "",
+      company: "",
+      reopening: "",
+      cost_center: "",
+      start_date: "",
+      address: "",
+      supervisor_id: "",
+      supervisor_name: "",
+      contact_person_id: "",
+      contact_person_name: ""
+    },
+
+    /* ----------------- IT ------------------ */
+    it: {
+      server_rack: "",
+      network_cabling: "",
+      line_installed: "",
+      line_details: ""
+    },
+
+    /* ----------------- MARKETING ------------------ */
+    m: {
+      opening_hours: ""
+    },
+
+    /* ----------------- FUHRPARK ------------------ */
+    f: {
+      pool_cars: "",
+      pool_cars_from: ""
+    },
+
+    /* =================================================
+       VALIDATION RULES
+       (🔥 NUR MIETE 🔥)
+    ================================================= */
+    rules: {
+      /* MIETE */
+      location: { required: true },
+      company: { required: true },
+      reopening: { required: true },
+      cost_center: { required: true },
+      start_date: { required: true },
+      address: { required: true },
+      supervisor_id: { required: true },
+      contact_person_id: { required: true },
+
+      /* WORKFLOW */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* =================================================
+       VALUE RESOLVER (für baseForm)
+    ================================================= */
+    getValue(field) {
+      // MIETE
+      if (field in this.miete) return this.miete[field];
+
+      // IT
+      if (field in this.it) return this.it[field];
+
+      // MARKETING
+      if (field in this.m) return this.m[field];
+
+      // FUHRPARK
+      if (field in this.f) return this.f[field];
+
+      // FALLBACK
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      /* COMPANIES */
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
       }
-    };
-  };
-</script>
 
+      /* USER-DROPDOWN EVENTS */
+      this.$el.addEventListener("user-selected", (e) => {
+        const { fieldId, id, name } = e.detail;
+
+        if (fieldId === "supervisor_id") {
+          this.miete.supervisor_id = id;
+          this.miete.supervisor_name = name;
+        }
+
+        if (fieldId === "contact_person_id") {
+          this.miete.contact_person_id = id;
+          this.miete.contact_person_name = name;
+        }
+      });
+    },
+
+    /* =================================================
+       CREATE FLOW
+    ================================================= */
+    openAssigneeModal() {
+      this.validationTriggered = false;
+
+      this.$nextTick(() => {
+        if (!this.validateOrScroll()) return;
+        this.modalOpen = true;
+      });
+    },
+
+    chooseAssignee(type) {
+      const id = document.querySelector(`[name="${type}_id"]`)?.value;
+      const name = document.querySelector(`[name="${type}_name"]`)?.value;
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+
+      /* ===============================
+         DESCRIPTION SERIALISIEREN
+      =============================== */
+      this.$refs.description.value = JSON.stringify(
+        {
+          miete: this.miete,
+          it: this.it,
+          marketing: this.m,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+
+      this.modalOpen = false;
+      this.$el.submit();
+    }
+  };
+}
+</script>
 {% endblock %}

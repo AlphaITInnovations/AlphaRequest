@@ -89,7 +89,11 @@ function zugangsperrenEditForm() {
 
       /* FUHRPARK */
       car: { required: true },
-      car_return_date: { required: true },
+      car_return_date: {
+        requiredIf() {
+          return this.f.car === "Ja";
+        }
+      },
 
       /* WORKFLOW */
       accountable_id: { required: true },

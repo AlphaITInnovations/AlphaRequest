@@ -4,6 +4,7 @@ TODO:
 
 - abbrechen knopf im dark mode sieht komisch aus
 - zugang sperren IT Felder fehlen
+- niederlassung beantragen: wer macht: Vermieter wird mit der Installation / Beauftragung beauftragt.
 
 
 TODO MAIL:

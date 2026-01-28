@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Auftrag – Niederlassung anmelden{% endblock %}
+
+{% set phase = "view" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto p-8 space-y-8">
+
+  {% set miete = description.miete if description and description.miete is defined else {} %}
+  {% set it = description.it if description and description.it is defined else {} %}
+  {% set m = description.marketing if description and description.marketing is defined else {} %}
+  {% set f = description.fuhrpark if description and description.fuhrpark is defined else {} %}
+
+  <style>
+    .ro-label {
+      display: block;
+      font-size: .75rem;
+      line-height: 1rem;
+      color: rgb(107 114 128);
+      font-weight: 600;
+      margin-bottom: .125rem;
+    }
+    .ro-value {
+      font-size: .875rem;
+      line-height: 1.25rem;
+      white-space: normal;
+      word-break: break-word;
+    }
+    .ro-pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: .875rem;
+      line-height: 1.25rem;
+    }
+  </style>
+
+  <!-- ================================================= -->
+  <!-- HEADER -->
+  <!-- ================================================= -->
+  <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+    <h1 class="text-xl font-semibold">
+      {{ ticket.title }}
+    </h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}
+    </p>
+  </div>
+
+  <!-- ================================================= -->
+  <!-- LAYOUT -->
+  <!-- ================================================= -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- ================================================= -->
+    <!-- META -->
+    <!-- ================================================= -->
+    <aside class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+      <div class="space-y-4 text-sm">
+
+        <div>
+          <div class="font-medium text-gray-500">Ticketstatus</div>
+          <div>{{ ticket.status.value }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium text-gray-500">Priorität</div>
+          <div>{{ ticket.priority.value|capitalize }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium text-gray-500">Antragsteller</div>
+          <div>{{ ticket.owner_name }}</div>
+        </div>
+
+        <div class="pt-4 border-t space-y-2">
+          <div class="font-medium text-gray-500">Details</div>
+
+          <div>
+            <span class="ro-label">Verantwortlicher</span>
+            <div class="ro-value">{{ ticket.accountable_name or "—" }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Vorgesetzter</span>
+            <div class="ro-value">{{ ticket.supervisor_name or "—" }}</div>
+          </div>
+
+          {% if ticket.comment %}
+          <div>
+            <span class="ro-label">Kommentar</span>
+            <pre class="ro-pre">{{ ticket.comment }}</pre>
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ================================================= -->
+    <!-- CONTENT -->
+    <!-- ================================================= -->
+    <section class="lg:col-span-2 space-y-10">
+
+      <!-- ================================================= -->
+      <!-- MIETE / NIEDERLASSUNG -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Niederlassung</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <div>
+            <span class="ro-label">Ort der Niederlassung</span>
+            <div class="ro-value">{{ miete.location|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Firma der Niederlassung</span>
+            <div class="ro-value">{{ miete.company|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Wiedereröffnung</span>
+            <div class="ro-value">{{ miete.reopening|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Kostenstelle</span>
+            <div class="ro-value">{{ miete.cost_center|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Startdatum</span>
+            <div class="ro-value">{{ miete.start_date|default("—") }}</div>
+          </div>
+
+          <div class="md:col-span-2">
+            <span class="ro-label">Adresse</span>
+            {% if miete.address %}
+              <pre class="ro-pre">{{ miete.address }}</pre>
+            {% else %}
+              <div class="ro-value">—</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <span class="ro-label">Vorgesetzter der Niederlassung</span>
+            <div class="ro-value">{{ miete.supervisor_name|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Ansprechpartner für Rückfragen</span>
+            <div class="ro-value">{{ miete.contact_person_name|default("—") }}</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ================================================= -->
+      <!-- IT -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">IT</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <div>
+            <span class="ro-label">Serverschrank vorhanden?</span>
+            <div class="ro-value">{{ it.server_rack|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Netzwerkverkabelung</span>
+            <div class="ro-value">{{ it.network_cabling|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">DSL-/Glasfaser-Dose vorhanden?</span>
+            <div class="ro-value">{{ it.line_installed|default("—") }}</div>
+          </div>
+
+          <div class="md:col-span-2">
+            <span class="ro-label">Anschluss / Position</span>
+            {% if it.line_details %}
+              <pre class="ro-pre">{{ it.line_details }}</pre>
+            {% else %}
+              <div class="ro-value">—</div>
+            {% endif %}
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ================================================= -->
+      <!-- MARKETING -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Marketing</h2>
+
+        <span class="ro-label">Öffnungszeiten der Niederlassung</span>
+        {% if m.opening_hours %}
+          <pre class="ro-pre">{{ m.opening_hours }}</pre>
+        {% else %}
+          <div class="ro-value">—</div>
+        {% endif %}
+      </div>
+
+      <!-- ================================================= -->
+      <!-- FUHRPARK -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Fuhrpark</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <div>
+            <span class="ro-label">Poolfahrzeuge benötigt?</span>
+            <div class="ro-value">{{ f.pool_cars|default("—") }}</div>
+          </div>
+
+          {% if f.pool_cars == "Ja" %}
+          <div>
+            <span class="ro-label">Benötigt ab</span>
+            <div class="ro-value">{{ f.pool_cars_from|default("—") }}</div>
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <!-- ================================================= -->
+  <!-- ACTIONS -->
+  <!-- ================================================= -->
+  {% include "tickets/partials/_ticket_actions.html" %}
+
+</div>
+{% endblock %}

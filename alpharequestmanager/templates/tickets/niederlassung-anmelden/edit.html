@@ -2,9 +2,10 @@
 {% block title %}Auftrag bearbeiten – {{ ticket.title }}{% endblock %}
 
 {% set form_action = "/tickets/update/" ~ ticket.id %}
+{% set alpine_component = "niederlassungAnmeldenEditForm()" %}
 
 {% block hidden_fields %}
-<input type="hidden" name="description" x-ref="description">
+  <input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -20,6 +21,208 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+function niederlassungAnmeldenEditForm() {
+  return {
+    /* ===============================
+       BASE FORM
+    =============================== */
+    ...baseForm(),
 
+    /* ===============================
+       MODE
+    =============================== */
+    phase: "edit",
+    isCreate: false,
 
+    /* ===============================
+       ASSIGN
+    =============================== */
+    openAssignModal: false,
+    assigneeMode: "accountable",
+    currentAssigneeName: "{{ ticket.assignee_name }}",
+
+    /* ===============================
+       DATA
+    =============================== */
+    companies: [],
+
+    /* ---------- MIETE ---------- */
+    miete: {
+      location: "",
+      company: "",
+      reopening: "",
+      cost_center: "",
+      start_date: "",
+      address: "",
+      supervisor_id: "",
+      supervisor_name: "",
+      contact_person_id: "",
+      contact_person_name: "",
+      ...{{ description.miete | default({}) | tojson | safe }}
+    },
+
+    /* ---------- IT ---------- */
+    it: {
+      server_rack: "",
+      network_cabling: "",
+      line_installed: "",
+      line_details: "",
+      ...{{ description.it | default({}) | tojson | safe }}
+    },
+
+    /* ---------- MARKETING ---------- */
+    m: {
+      opening_hours: "",
+      ...{{ description.marketing | default({}) | tojson | safe }}
+    },
+
+    /* ---------- FUHRPARK ---------- */
+    f: {
+      pool_cars: "",
+      pool_cars_from: "",
+      ...{{ description.fuhrpark | default({}) | tojson | safe }}
+    },
+
+    /* ===============================
+       VALIDATION (ALLES PFLICHT)
+    =============================== */
+    rules: {
+      /* MIETE */
+      location: { required: true },
+      company: { required: true },
+      reopening: { required: true },
+      cost_center: { required: true },
+      start_date: { required: true },
+      address: { required: true },
+      supervisor_id: { required: true },
+      contact_person_id: { required: true },
+
+      /* IT */
+      server_rack: { required: true },
+      network_cabling: { required: true },
+      line_installed: { required: true },
+      line_details: {
+        requiredIf() {
+          return this.it.line_installed === "Ja";
+        }
+      },
+
+      /* MARKETING */
+      opening_hours: { required: true },
+
+      /* FUHRPARK */
+      pool_cars: { required: true },
+      pool_cars_from: {
+        requiredIf() {
+          return this.f.pool_cars === "Ja";
+        }
+      },
+
+      /* WORKFLOW */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* ===============================
+       VALUE RESOLVER
+    =============================== */
+    getValue(field) {
+      if (field in this.miete) return this.miete[field];
+      if (field in this.it) return this.it[field];
+      if (field in this.m) return this.m[field];
+      if (field in this.f) return this.f[field];
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* ===============================
+       INIT
+    =============================== */
+    async init() {
+      /* COMPANIES */
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
+      }
+
+      /* USER DROPDOWNS */
+      this.$el.addEventListener("user-selected", (e) => {
+        const { fieldId, id, name } = e.detail;
+
+        if (fieldId === "supervisor_id") {
+          this.miete.supervisor_id = id;
+          this.miete.supervisor_name = name;
+        }
+
+        if (fieldId === "contact_person_id") {
+          this.miete.contact_person_id = id;
+          this.miete.contact_person_name = name;
+        }
+      });
+
+      /* COMPANY SELECT REBIND */
+      const company = this.miete.company;
+      this.$nextTick(() => {
+        this.miete.company = "";
+        this.$nextTick(() => {
+          this.miete.company = company;
+        });
+      });
+
+      /* ASSIGNEE PRESET */
+      this.$nextTick(() => {
+        this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
+        this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
+      });
+
+      this.updateDescription();
+      this.validationTriggered = false;
+    },
+
+    /* ===============================
+       DESCRIPTION SYNC
+    =============================== */
+    updateDescription() {
+      this.$refs.description.value = JSON.stringify(
+        {
+          miete: this.miete,
+          it: this.it,
+          marketing: this.m,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+    },
+
+    /* ===============================
+       SUBMIT
+    =============================== */
+    submitEdit(action = "save", event) {
+      if (action === "complete") {
+        if (!this.validateOrScroll()) return;
+        if (!confirm("Wollen Sie den Auftrag wirklich abschließen?\n\nEine Bearbeitung ist danach nicht mehr möglich.")) {
+          return;
+        }
+      }
+
+      this.updateDescription();
+
+      const form = event.target.closest("form");
+      if (!form) return;
+
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "action";
+      input.value = action;
+      form.appendChild(input);
+
+      form.submit();
+    }
+  };
+}
+</script>
 {% endblock %}

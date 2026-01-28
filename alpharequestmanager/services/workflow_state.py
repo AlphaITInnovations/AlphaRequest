@@ -150,7 +150,6 @@ def user_can_complete_department(ticket_id: int, user_id: str, group_id: str) ->
 # ============================================================
 
 def build_workflow_zugang_beantragen(description: dict) -> dict:
-    print("workflow description:", description)
     groups = {g["name"].lower(): g for g in get_groups()}
 
     workflow = {"departments": {}}
@@ -181,10 +180,32 @@ def build_workflow_hardware(description: dict) -> dict:
     pass
 
 def build_workflow_niederlassung_schliessen(description: dict) -> dict:
-    pass
+    return build_workflow_zugang_beantragen(description)
+
 
 def build_workflow_niederlassung_anmelden(description: dict) -> dict:
-    pass
+    groups = {g["name"].lower(): g for g in get_groups()}
+
+    workflow = {"departments": {}}
+
+    def add_group(name: str):
+        g = groups.get(name.lower())
+        if not g:
+            return
+        workflow["departments"][g["id"]] = {
+            "name": g["name"],
+            "required": True,
+            "status": DEPARTMENT_STATUS_OPEN,
+        }
+
+    add_group("Miete")
+    add_group("IT")
+    add_group("Marketing")
+
+    if description.get("fuhrpark", {}).get("pool_cars") == "Ja":
+        add_group("Fuhrpark")
+
+    return workflow
 
 def build_workflow_niederlassung_umzug(description: dict) -> dict:
     pass

@@ -1,23 +1,229 @@
 <section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
 
+  <!-- ================================================= -->
+  <!-- A. MIETE -->
+  <!-- ================================================= -->
+  <div>
+    <h2 class="text-xl font-semibold text-primary mb-4">
+      Miete / Niederlassung
+    </h2>
 
-      <h2 class="text-xl font-semibold text-primary">
-        Example Section
-      </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-      <!-- ================= STAMMDATEN ================= -->
       <div>
-        <h3 class="font-semibold mb-4">Example Section</h3>
+        <label>Ort der Niederlassung</label>
+        <input
+          x-model="miete.location"
+          :class="inputClass('location', miete.location)"
+        >
+      </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+        <label>Firma der Niederlassung</label>
+        <select
+          x-model="miete.company"
+          :class="inputClass('company', miete.company)"
+        >
+          <option value="">Bitte wählen</option>
+          <template x-for="company in companies" :key="company">
+            <option :value="company" x-text="company"></option>
+          </template>
+        </select>
+      </div>
 
-          <div>
-            <label>Example Field</label>
-            <input
-              x-model="example"
-              :class="inputClass('first_name', example)"
-            >
+      <div>
+        <label>Wiedereröffnung?</label>
+        <select
+          x-model="miete.reopening"
+          :class="inputClass('reopening', miete.reopening)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
+      </div>
+
+      <!-- Vorgesetzter -->
+      <div :class="shellClass('supervisor_id', getValue('supervisor_id'))">
+        {% set label = "Vorgesetzter der Niederlassung" %}
+        {% set field_id = "supervisor_id" %}
+        {% set field_name = "supervisor_name" %}
+
+        {% set initial_id = description.miete.supervisor_id
+            if description and description.miete is defined else "" %}
+        {% set initial_name = description.miete.supervisor_name
+            if description and description.miete is defined else "" %}
+
+        {% include "components/user-dropdown.html" %}
+      </div>
+
+      <!-- Ansprechpartner -->
+      <div :class="shellClass('contact_person_id', getValue('contact_person_id'))">
+        {% set label = "Ansprechpartner für Rückfragen" %}
+        {% set field_id = "contact_person_id" %}
+        {% set field_name = "contact_person_name" %}
+
+        {% set initial_id = description.miete.contact_person_id
+            if description and description.miete is defined else "" %}
+        {% set initial_name = description.miete.contact_person_name
+            if description and description.miete is defined else "" %}
+
+        {% include "components/user-dropdown.html" %}
+      </div>
+
+      <div>
+        <label>Kostenstelle</label>
+        <input
+          type="text"
+          inputmode="numeric"
+          x-model="miete.cost_center"
+          @input="miete.cost_center = ($event.target.value || '').replace(/\D/g,'')"
+          :class="inputClass('cost_center', miete.cost_center)"
+        >
+      </div>
+
+      <div>
+        <label>Startdatum</label>
+        <input
+          type="date"
+          x-model="miete.start_date"
+          :class="inputClass('start_date', miete.start_date)"
+        >
+      </div>
+
+      <div class="md:col-span-2">
+        <label>Adresse</label>
+        <textarea
+          x-model="miete.address"
+          :class="inputClass('address', miete.address)"
+          class="h-24"
+        ></textarea>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================================================= -->
+  <!-- B. IT -->
+  <!-- ================================================= -->
+  <div>
+    <h2 class="text-xl font-semibold text-primary mb-4">
+      IT
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label>Serverschrank vorhanden?</label>
+        <select
+          x-model="it.server_rack"
+          :class="inputClass('server_rack', it.server_rack)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Netzwerkverkabelung</label>
+        <input
+          type="text"
+          x-model="it.network_cabling"
+          :class="inputClass('network_cabling', it.network_cabling)"
+          placeholder="z. B. Cat 6, Cat 7"
+        >
+      </div>
+
+      <div>
+        <label>DSL- oder Glasfaser-Dose vorhanden?</label>
+        <select
+          x-model="it.line_installed"
+          :class="inputClass('line_installed', it.line_installed)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
+      </div>
+
+      <template x-if="it.line_installed === 'Ja'">
+        <div class="md:col-span-2">
+          <label>Art / Anschluss & Position</label>
+          <textarea
+            x-model="it.line_details"
+            :class="inputClass('line_details', it.line_details)"
+            class="h-20"
+            placeholder="z.B. Glasfaser im Technikraum EG"
+          ></textarea>
+        </div>
+      </template>
+
+      <template x-if="it.line_installed === 'Nein'">
+        <div class="md:col-span-2">
+          <label>Hinweis</label>
+          <div class="text-sm text-gray-500">
+            Vermieter wird mit der Installation / Beauftragung beauftragt.
           </div>
         </div>
+      </template>
+
+    </div>
+  </div>
+
+  <!-- ================================================= -->
+  <!-- C. MARKETING -->
+  <!-- ================================================= -->
+  <div>
+    <h2 class="text-xl font-semibold text-primary mb-4">
+      Marketing
+    </h2>
+
+    <div>
+      <label>Öffnungszeiten der Niederlassung</label>
+      <textarea
+        x-model="m.opening_hours"
+        :class="inputClass('opening_hours', m.opening_hours)"
+        class="h-24"
+        placeholder="z.B. Mo–Fr 08:00–17:00"
+      ></textarea>
+    </div>
+  </div>
+
+  <!-- ================================================= -->
+  <!-- D. FUHRPARK -->
+  <!-- ================================================= -->
+  <div>
+    <h2 class="text-xl font-semibold text-primary mb-4">
+      Fuhrpark
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label>Poolfahrzeuge benötigt?</label>
+        <select
+          x-model="f.pool_cars"
+          :class="inputClass('pool_cars', f.pool_cars)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
       </div>
+
+      <template x-if="f.pool_cars === 'Ja'">
+        <div>
+          <label>Benötigt ab</label>
+          <input
+            type="date"
+            x-model="f.pool_cars_from"
+            :class="inputClass('pool_cars_from', f.pool_cars_from)"
+          >
+        </div>
+      </template>
+
+    </div>
+  </div>
+
 </section>
