@@ -4,8 +4,8 @@
 {% set alpine_component = "zugangsperrenPhase1Form()" %}
 
 {% block hidden_fields %}
-<input type="hidden" name="ticket_type" value="zugang-sperren">
-<input type="hidden" name="description" x-ref="description">
+  <input type="hidden" name="ticket_type" value="zugang-sperren">
+  <input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -22,20 +22,122 @@
 
 {% block extra_js %}
 <script>
-  window.zugangsperrenPhase1Form = function () {
-    return {
-      ...window.baseForm(),
-      example: "",
+function zugangsperrenPhase1Form() {
+  return {
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
 
-      init() {
-        // optional: init logic
-      },
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    modalOpen: false,
 
-      rules: {
-        first_name: { required: true }
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    /* ----------------- PERSONAL ------------------ */
+    p: {
+      first_name: "",
+      last_name: "",
+      cost_center: "",
+      contract_company: "",
+      exit_date: ""
+    },
+
+    /* ----------------- IT (PLATZHALTER) ------------------ */
+    it: {
+      field1: "",
+      field2: ""
+    },
+
+    /* ----------------- FUHRPARK ------------------ */
+    f: {
+      car: "",
+      car_return_date: ""
+    },
+
+    /* =================================================
+       VALIDATION RULES
+       (nur Personalabteilung)
+    ================================================= */
+    rules: {
+      first_name: { required: true },
+      last_name: { required: true },
+      cost_center: { required: true },
+      contract_company: { required: true },
+      exit_date: { required: true },
+
+      /* Ticket-Workflow */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* =================================================
+       VALUE RESOLVER (für baseForm)
+    ================================================= */
+    getValue(field) {
+      if (field in this.p) return this.p[field];
+      if (field in this.it) return this.it[field];
+      if (field in this.f) return this.f[field];
+
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
       }
-    };
-  };
-</script>
+    },
 
+    /* =================================================
+       CREATE FLOW
+    ================================================= */
+    openAssigneeModal() {
+      this.validationTriggered = false;
+
+      this.$nextTick(() => {
+        if (!this.validateOrScroll()) return;
+        this.modalOpen = true;
+      });
+    },
+
+    chooseAssignee(type) {
+      const id = document.querySelector(`[name="${type}_id"]`)?.value;
+      const name = document.querySelector(`[name="${type}_name"]`)?.value;
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+
+      /* ===============================
+         DESCRIPTION SERIALISIEREN
+      =============================== */
+      this.$refs.description.value = JSON.stringify(
+        {
+          personal: this.p,
+          it: this.it,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+
+      this.modalOpen = false;
+      this.$el.submit();
+    }
+  };
+}
+</script>
 {% endblock %}

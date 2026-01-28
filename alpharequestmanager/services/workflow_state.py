@@ -175,7 +175,7 @@ def build_workflow_zugang_beantragen(description: dict) -> dict:
 
 
 def build_workflow_zugang_sperren(description: dict) -> dict:
-    pass
+    return build_workflow_zugang_beantragen(description)
 
 def build_workflow_hardware(description: dict) -> dict:
     pass

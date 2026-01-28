@@ -2,9 +2,10 @@
 {% block title %}Auftrag bearbeiten – {{ ticket.title }}{% endblock %}
 
 {% set form_action = "/tickets/update/" ~ ticket.id %}
+{% set alpine_component = "zugangsperrenEditForm()" %}
 
 {% block hidden_fields %}
-<input type="hidden" name="description" x-ref="description">
+  <input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -20,6 +21,200 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+function zugangsperrenEditForm() {
+  return {
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
 
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "edit",
+    isCreate: false,
 
+    /* =================================================
+       ASSIGN / WEITERGEBEN
+    ================================================= */
+    openAssignModal: false,
+    assigneeMode: "accountable",
+    currentAssigneeName: "{{ ticket.assignee_name }}",
+
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    /* ----------------- PERSONAL ------------------ */
+    p: {
+      first_name: "",
+      last_name: "",
+      cost_center: "",
+      contract_company: "",
+      exit_date: "",
+      ...{{ description.personal | default({}) | tojson | safe }}
+    },
+
+    /* ----------------- IT ------------------ */
+    it: {
+      field1: "",
+      field2: "",
+      ...{{ description.it | default({}) | tojson | safe }}
+    },
+
+    /* ----------------- FUHRPARK ------------------ */
+    f: {
+      car: "",
+      car_return_date: "",
+      ...{{ description.fuhrpark | default({}) | tojson | safe }}
+    },
+
+    /* =================================================
+       VALIDATION RULES
+       (🔥 ALLE FELDER PFLICHT 🔥)
+    ================================================= */
+    rules: {
+      /* PERSONAL */
+      first_name: { required: true },
+      last_name: { required: true },
+      cost_center: { required: true },
+      contract_company: { required: true },
+      exit_date: { required: true },
+
+      /* IT */
+      it_field1: { required: true },
+      it_field2: { required: true },
+
+      /* FUHRPARK */
+      car: { required: true },
+      car_return_date: { required: true },
+
+      /* WORKFLOW */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* =================================================
+       VALUE RESOLVER (für baseForm)
+    ================================================= */
+    getValue(field) {
+      // PERSONAL
+      if (field in this.p) return this.p[field];
+
+      // IT
+      if (field === "it_field1") return this.it.field1 ?? "";
+      if (field === "it_field2") return this.it.field2 ?? "";
+
+      // FUHRPARK
+      if (field in this.f) return this.f[field];
+
+      // FALLBACK (Dropdowns etc.)
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      /* COMPANIES */
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
+      }
+
+      /* ASSIGNEE PRESET */
+      this.$nextTick(() => {
+        this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
+        this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
+      });
+
+      /* INITIAL DESCRIPTION SYNC */
+      this.updateDescription();
+
+      this.validationTriggered = false;
+    },
+
+    /* =================================================
+       DESCRIPTION SYNC
+    ================================================= */
+    updateDescription() {
+      this.$refs.description.value = JSON.stringify(
+        {
+          personal: this.p,
+          it: this.it,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+    },
+
+    /* =================================================
+       SUBMIT
+    ================================================= */
+    submitEdit(action = "save", event) {
+      if (action === "complete") {
+        if (!this.validateOrScroll()) return;
+
+        const ok = confirm(
+          "Wollen Sie den Auftrag wirklich abschließen?\n\n" +
+          "Eine Bearbeitung ist danach nicht mehr möglich."
+        );
+        if (!ok) return;
+      }
+
+      this.updateDescription();
+
+      const form = event.target.closest("form");
+      if (!form) return;
+
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "action";
+      input.value = action;
+      form.appendChild(input);
+
+      form.submit();
+    },
+
+    /* =================================================
+       WEITERGEBEN
+    ================================================= */
+    applyAssignee() {
+      let id = null;
+      let name = null;
+
+      if (this.assigneeMode === "accountable") {
+        id = document.querySelector('[name="accountable_id"]')?.value;
+        name = document.querySelector('[name="accountable_name"]')?.value;
+      }
+
+      if (this.assigneeMode === "supervisor") {
+        id = document.querySelector('[name="supervisor_id"]')?.value;
+        name = document.querySelector('[name="supervisor_name"]')?.value;
+      }
+
+      if (this.assigneeMode === "custom") {
+        id = document.querySelector('[name="custom_assignee_id"]')?.value;
+        name = document.querySelector('[name="custom_assignee_name"]')?.value;
+      }
+
+      if (!id) {
+        alert("Bitte Bearbeiter auswählen");
+        return;
+      }
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+      this.currentAssigneeName = name;
+      this.openAssignModal = false;
+    }
+  };
+}
+</script>
 {% endblock %}

@@ -1,23 +1,137 @@
 <section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
 
+  <!-- ================================================= -->
+  <!-- A. PERSONAL -->
+  <!-- ================================================= -->
+  <div>
+    <h2 class="text-xl font-semibold text-primary mb-4">
+      Personalabteilung
+    </h2>
 
-      <h2 class="text-xl font-semibold text-primary">
-        Example Section
-      </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-      <!-- ================= STAMMDATEN ================= -->
       <div>
-        <h3 class="font-semibold mb-4">Example Section</h3>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <div>
-            <label>Example Field</label>
-            <input
-              x-model="example"
-              :class="inputClass('first_name', example)"
-            >
-          </div>
-        </div>
+        <label>Vorname</label>
+        <input
+          x-model="p.first_name"
+          :class="inputClass('first_name', p.first_name)"
+        >
       </div>
+
+      <div>
+        <label>Nachname</label>
+        <input
+          x-model="p.last_name"
+          :class="inputClass('last_name', p.last_name)"
+        >
+      </div>
+
+      <div>
+        <label>Kostenstelle</label>
+        <input
+          type="text"
+          inputmode="numeric"
+          x-model="p.cost_center"
+          @input="p.cost_center = ($event.target.value || '').replace(/\D/g,'')"
+          :class="inputClass('cost_center', p.cost_center)"
+        >
+      </div>
+
+      <div>
+        <label>Firma lt. Arbeitsvertrag</label>
+        <select
+          x-model="p.contract_company"
+          :class="inputClass('contract_company', p.contract_company)"
+        >
+          <option value="">Bitte wählen</option>
+          <template x-for="company in companies" :key="company">
+            <option :value="company" x-text="company"></option>
+          </template>
+        </select>
+      </div>
+
+      <div>
+        <label>Austrittsdatum</label>
+        <input
+          type="date"
+          x-model="p.exit_date"
+          :class="inputClass('exit_date', p.exit_date)"
+        >
+      </div>
+
+    </div>
+  </div>
+
+<!-- ================================================= -->
+<!-- B. IT -->
+<!-- ================================================= -->
+<div>
+  <h2 class="text-xl font-semibold text-primary mb-4">
+    IT
+  </h2>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <div>
+      <label>IT Feld 1 (Platzhalter)</label>
+      <input
+        x-model="it.field1"
+        :class="inputClass('it_field1', it.field1)"
+        placeholder="wird später definiert"
+      >
+    </div>
+
+    <div>
+      <label>IT Feld 2 (Platzhalter)</label>
+      <input
+        x-model="it.field2"
+        :class="inputClass('it_field2', it.field2)"
+        placeholder="wird später definiert"
+      >
+    </div>
+
+  </div>
+
+  <p class="text-xs text-gray-500 mt-2">
+    Hinweis: IT-Felder werden zu einem späteren Zeitpunkt erweitert.
+  </p>
+</div>
+
+
+  <!-- ================================================= -->
+  <!-- C. FUHRPARK -->
+  <!-- ================================================= -->
+  <div>
+    <h2 class="text-xl font-semibold text-primary mb-4">
+      Fuhrpark
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label>Dienstwagen vorhanden?</label>
+        <select
+          x-model="f.car"
+          :class="inputClass('car', f.car)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
+      </div>
+
+      <template x-if="f.car === 'Ja'">
+        <div>
+          <label>Rückgabedatum</label>
+          <input
+            type="date"
+            x-model="f.car_return_date"
+            :class="inputClass('car_return_date', f.car_return_date)"
+          >
+        </div>
+      </template>
+
+    </div>
+  </div>
+
 </section>
