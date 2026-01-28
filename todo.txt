@@ -5,7 +5,9 @@ TODO:
 - abbrechen knopf im dark mode sieht komisch aus
 - zugang sperren IT Felder fehlen
 - niederlassung beantragen: wer macht: Vermieter wird mit der Installation / Beauftragung beauftragt.
-
+- bestätigungsfelder bei niederlassung schließen, dass nummer und internet gekündigt wird
+- hardware bestellung fehlt
+- niederlassung umziehen fehlt
 
 TODO MAIL:
 - Update Mail

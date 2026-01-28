@@ -180,7 +180,27 @@ def build_workflow_hardware(description: dict) -> dict:
     pass
 
 def build_workflow_niederlassung_schliessen(description: dict) -> dict:
-    return build_workflow_zugang_beantragen(description)
+    groups = {g["name"].lower(): g for g in get_groups()}
+
+    workflow = {"departments": {}}
+
+    def add_group(name: str):
+        g = groups.get(name.lower())
+        if not g:
+            return
+        workflow["departments"][g["id"]] = {
+            "name": g["name"],
+            "required": True,
+            "status": DEPARTMENT_STATUS_OPEN,
+        }
+
+    add_group("IT")
+    add_group("Personalabteilung")
+
+    if description.get("fuhrpark", {}).get("pool_cars") == "Ja":
+        add_group("Fuhrpark")
+
+    return workflow
 
 
 def build_workflow_niederlassung_anmelden(description: dict) -> dict:

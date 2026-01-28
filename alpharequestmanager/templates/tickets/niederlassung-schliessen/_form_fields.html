@@ -1,23 +1,117 @@
-<section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
+<section class="flex-1 space-y-12">
 
+  <!-- ================================================= -->
+  <!-- A. PERSONAL / HR -->
+  <!-- ================================================= -->
+  <div class="space-y-6">
+    <h2 class="text-xl font-semibold text-primary">
+      Personalabteilung
+    </h2>
 
-      <h2 class="text-xl font-semibold text-primary">
-        Example Section
-      </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-      <!-- ================= STAMMDATEN ================= -->
       <div>
-        <h3 class="font-semibold mb-4">Example Section</h3>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <div>
-            <label>Example Field</label>
-            <input
-              x-model="example"
-              :class="inputClass('first_name', example)"
-            >
-          </div>
-        </div>
+        <label>Welche Niederlassung betrifft es?</label>
+        <input
+          x-model="p.location"
+          :class="inputClass('location', p.location)"
+          placeholder="z. B. Nürnberg Nord"
+        >
       </div>
+
+      <div class="md:col-span-2">
+        <label>Adresse der Niederlassung</label>
+        <textarea
+          x-model="p.address"
+          :class="inputClass('address', p.address)"
+          class="h-24"
+          placeholder="Straße, PLZ Ort"
+        ></textarea>
+      </div>
+
+      <div>
+        <label>Schließungsdatum</label>
+        <input
+          type="date"
+          x-model="p.closing_date"
+          :class="inputClass('closing_date', p.closing_date)"
+        >
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================================================= -->
+  <!-- B. IT -->
+  <!-- ================================================= -->
+  <div class="space-y-6">
+    <h2 class="text-xl font-semibold text-primary">
+      IT
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label>Was geschieht mit der Hardware vor Ort?</label>
+        <select
+          x-model="it.hardware_action"
+          :class="inputClass('hardware_action', it.hardware_action)"
+        >
+          <option value="">Bitte wählen</option>
+          <option value="return_it">Wird an die IT gesendet</option>
+          <option value="transfer_branch">Wird in eine andere Niederlassung transferiert</option>
+        </select>
+      </div>
+
+      <template x-if="it.hardware_action === 'transfer_branch'">
+        <div class="md:col-span-2">
+          <label>Welche Niederlassung?</label>
+          <textarea
+            x-model="it.transfer_target"
+            :class="inputClass('transfer_target', it.transfer_target)"
+            class="h-20"
+            placeholder="Adresse der Ziel-Niederlassung"
+          ></textarea>
+        </div>
+      </template>
+
+    </div>
+  </div>
+
+  <!-- ================================================= -->
+  <!-- C. FUHRPARK -->
+  <!-- ================================================= -->
+  <div class="space-y-6">
+    <h2 class="text-xl font-semibold text-primary">
+      Fuhrpark
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <div>
+        <label>Sind Poolfahrzeuge vor Ort?</label>
+        <select
+          x-model="f.pool_cars"
+          :class="inputClass('pool_cars', f.pool_cars)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
+      </div>
+
+      <template x-if="f.pool_cars === 'Ja'">
+        <div>
+          <label>Rückgabedatum</label>
+          <input
+            type="date"
+            x-model="f.return_date"
+            :class="inputClass('return_date', f.return_date)"
+          >
+        </div>
+      </template>
+
+    </div>
+  </div>
+
 </section>

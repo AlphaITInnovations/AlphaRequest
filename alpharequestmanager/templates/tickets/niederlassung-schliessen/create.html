@@ -1,11 +1,11 @@
 {% extends "tickets/_base_ticket.html" %}
 
 {% set form_action = "/tickets" %}
-{% set alpine_component = "niederlassungschliessenPhase1Form()" %}
+{% set alpine_component = "niederlassungSchliessenPhase1Form()" %}
 
 {% block hidden_fields %}
-<input type="hidden" name="ticket_type" value="niederlassung-schliessen">
-<input type="hidden" name="description" x-ref="description">
+  <input type="hidden" name="ticket_type" value="niederlassung-schliessen">
+  <input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -22,20 +22,111 @@
 
 {% block extra_js %}
 <script>
-  window.niederlassungschliessenPhase1Form = function () {
-    return {
-      ...window.baseForm(),   // ← bringt inputClass(), validateOrScroll(), rules, etc.
-      example: "",
+function niederlassungSchliessenPhase1Form() {
+  return {
+    /* ===============================
+       BASE FORM
+    =============================== */
+    ...baseForm(),
 
-      init() {
-        // optional: init logic
-      },
+    /* ===============================
+       MODE
+    =============================== */
+    phase: "create",
+    isCreate: true,
+    modalOpen: false,
 
-      rules: {
-        first_name: { required: true }
-      }
-    };
+    /* ===============================
+       DATA
+    =============================== */
+
+    /* -------- PERSONAL / HR -------- */
+    p: {
+      location: "",
+      address: "",
+      closing_date: ""
+    },
+
+    /* -------- IT -------- */
+    it: {
+      hardware_action: "",
+      transfer_target: ""
+    },
+
+    /* -------- FUHRPARK -------- */
+    f: {
+      pool_cars: "",
+      return_date: ""
+    },
+
+    /* ===============================
+       VALIDATION RULES
+       (🔥 NUR PERSONALABTEILUNG 🔥)
+    =============================== */
+    rules: {
+      location: { required: true },
+      address: { required: true },
+      closing_date: { required: true },
+
+      /* WORKFLOW */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* ===============================
+       VALUE RESOLVER
+    =============================== */
+    getValue(field) {
+      if (field in this.p) return this.p[field];
+      if (field in this.it) return this.it[field];
+      if (field in this.f) return this.f[field];
+
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* ===============================
+       INIT
+    =============================== */
+    init() {
+      this.validationTriggered = false;
+    },
+
+    /* ===============================
+       CREATE FLOW
+    =============================== */
+    openAssigneeModal() {
+      this.validationTriggered = false;
+
+      this.$nextTick(() => {
+        if (!this.validateOrScroll()) return;
+        this.modalOpen = true;
+      });
+    },
+
+    chooseAssignee(type) {
+      const id = document.querySelector(`[name="${type}_id"]`)?.value;
+      const name = document.querySelector(`[name="${type}_name"]`)?.value;
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+
+      /* ===============================
+         DESCRIPTION SERIALISIEREN
+      =============================== */
+      this.$refs.description.value = JSON.stringify(
+        {
+          personal: this.p,
+          it: this.it,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+
+      this.modalOpen = false;
+      this.$el.submit();
+    }
   };
+}
 </script>
-
 {% endblock %}
