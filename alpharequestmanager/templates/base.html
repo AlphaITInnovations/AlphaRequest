@@ -149,13 +149,14 @@
       --ring:          0 0 0 4px rgba(62,170,184,.25);
     }
     .dark{
-      --bg:            #0B1014;
-      --text:          #E5E7EB;
-      --card-bg:       #1B2026;
-      --field-bg:      #242A31;
-      --border:        #404854;
-      --muted:         #9CA3AF;
+      --bg:            #0E1318;      /* weniger hart als 0B1014 */
+      --text:          #E6E8EB;      /* minimal wärmer */
+      --card-bg:       #161C22;      /* klarer Layer */
+      --field-bg:      #1B2229;
+      --border:        rgba(255,255,255,0.08); /* statt Grau */
+      --muted:         #A1A6AE;
     }
+
 
     /* === Utility-Klassen === */
     .modal-panel{
@@ -166,19 +167,31 @@
       box-shadow: 0 20px 50px -20px rgba(0,0,0,.35);
     }
     .card{
-      background-color: color-mix(in oklab, var(--card-bg) 96%, transparent);
+      background-color: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 0.75rem;
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.04),
+        0 8px 24px rgba(0,0,0,0.35);
     }
+
     .card--pad{ padding: 1rem; }
     .field{
       background-color: var(--field-bg);
       color: var(--text);
       border: 1px solid var(--border);
-      border-radius: .5rem;
-      padding: .5rem .75rem;
+      border-radius: .6rem;
+      padding: .55rem .75rem;
+      transition: background-color .15s ease, box-shadow .15s ease;
     }
-    .field:focus{ outline: none; box-shadow: var(--ring); border-color: transparent; }
+    .field:focus{
+      outline: none;
+      box-shadow:
+        0 0 0 1px rgba(62,170,184,.35),
+        0 0 0 4px rgba(62,170,184,.18);
+      border-color: transparent;
+    }
+
 
     body{ background: var(--bg); color: var(--text); }
   </style>
