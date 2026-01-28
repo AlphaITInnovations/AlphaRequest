@@ -2,35 +2,6 @@
 {% block title %}Übersicht – AlphaRequest{% endblock %}
 
 {% block head %}
-<style>
-  :root {
-    --primary: #3EAAB8;
-    --primary-hover: #2B7D89;
-  }
-
-  .nice-scrollbar::-webkit-scrollbar { width:8px; }
-  .nice-scrollbar::-webkit-scrollbar-thumb {
-      background:rgba(0,0,0,.25);
-      border-radius:8px;
-  }
-
-  .ticket-accent {
-      position:absolute;
-      left:0;
-      top:12px;
-      bottom:12px;
-      width:4px;
-      border-radius:4px;
-      opacity:.7;
-      transition:all .25s ease;
-  }
-
-  .ticket:hover .ticket-accent {
-      width:6px;
-      opacity:1;
-  }
-</style>
-
 <script>
 document.addEventListener("alpine:init", () => {
   Alpine.data("dashboardManager", () => ({
@@ -39,8 +10,6 @@ document.addEventListener("alpine:init", () => {
     orders: {{ orders | tojson }},
     departmentRequests: {{ department_requests | tojson }},
     userName: "{{ user.displayName }}",
-
-    // 🔑 vom Backend
     allowedTypes: {{ allowed_ticket_types | tojson }},
 
     ticketTypes: [
@@ -49,8 +18,16 @@ document.addEventListener("alpine:init", () => {
       { key: "zugang-sperren", icon: "🔒", label: "Offboarding Mitarbeiter:innen" },
       { key: "niederlassung-anmelden", icon: "🏢", label: "Niederlassung anmelden" },
       { key: "niederlassung-umzug", icon: "🔄", label: "Niederlassung umziehen" },
-      { key: "niederlassung-schliessen", icon: "❌", label: "Niederlassung schließen" },
+      { key: "niederlassung-schliessen", icon: "❌", label: "Niederlassung schließen" }
     ],
+
+    /* ================= FILTER ================= */
+    filter: {
+      search: "",
+      status: "all",
+      priority: "all",
+      department: "all"
+    },
 
     /* ================= HELPERS ================= */
     canCreate(key) {
@@ -71,31 +48,42 @@ document.addEventListener("alpine:init", () => {
         `/tickets/group/${o.type_key}/${o.id}?department=${groupId}`;
     },
 
+    filteredOrders() {
+      return this.orders.filter(o => {
+        const q = this.filter.search.toLowerCase();
+        return (
+          (!q || o.type.toLowerCase().includes(q)) &&
+          (this.filter.status === "all" || o.status === this.filter.status) &&
+          (this.filter.priority === "all" || o.priority === this.filter.priority)
+        );
+      });
+    },
+
+    filteredDepartments() {
+      if (this.filter.department === "all") {
+        return this.departmentRequests;
+      }
+      return this.departmentRequests.filter(
+        d => d.group_id === this.filter.department
+      );
+    },
+
     statusLabel(s) {
       return {
         in_progress: "In Bearbeitung",
         in_request: "Zu bearbeiten",
         approved: "Erledigt",
-        rejected: "Abgelehnt",
+        rejected: "Abgelehnt"
       }[s] || s;
     },
 
     statusBadge(s) {
       return {
-        in_progress: "bg-yellow-100 text-yellow-800",
+        in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300",
         in_request: "bg-primary/20 text-primary",
-        approved: "bg-green-100 text-green-800",
-        rejected: "bg-red-100 text-red-800",
-      }[s] || "bg-gray-200 text-gray-700";
-    },
-
-    priorityLabel(p) {
-      return {
-        low: "Niedrig",
-        medium: "Mittel",
-        high: "Hoch",
-        critical: "Kritisch",
-      }[p] || p;
+        approved: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300",
+        rejected: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300"
+      }[s];
     },
 
     priorityIcon(p) {
@@ -103,193 +91,179 @@ document.addEventListener("alpine:init", () => {
         low: "🟢",
         medium: "🟡",
         high: "🟠",
-        critical: "🔴",
+        critical: "🔴"
       }[p] || "⚪";
     },
 
-    statusAccent(s) {
+    priorityLabel(p) {
       return {
-        in_progress: "bg-yellow-400",
-        in_request: "bg-primary",
-        approved: "bg-green-500",
-        rejected: "bg-red-500",
-      }[s] || "bg-gray-400";
+        low: "Niedrig",
+        medium: "Mittel",
+        high: "Hoch",
+        critical: "Kritisch"
+      }[p] || p;
     }
 
-  }))
-})
+  }));
+});
 </script>
 {% endblock %}
 
 {% block content %}
-<div x-data="dashboardManager()" class="min-h-[80vh]">
+<div x-data="dashboardManager()" class="min-h-[80vh] space-y-6">
 
 <!-- ================= HEADER ================= -->
-<header class="mb-6">
-  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border px-6 py-5">
-    <h1 class="text-2xl font-bold">
-      Willkommen, <span x-text="userName"></span> 👋
-    </h1>
-  </div>
-</header>
+<div class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6">
+  <h1 class="text-2xl font-bold">
+    Willkommen, <span x-text="userName"></span> 👋
+  </h1>
+</div>
 
 <div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
 
 <!-- ================= SIDEBAR ================= -->
-<aside class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-6 lg:sticky lg:top-6 h-fit">
-  <h2 class="text-lg font-semibold mb-5 text-primary">
+<aside class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6 space-y-4 lg:sticky lg:top-6">
+
+  <h2 class="text-lg font-semibold text-primary">
     Neuer Auftrag
   </h2>
 
-  <div class="grid gap-4">
-
-    <template x-for="t in ticketTypes" :key="t.key">
-      <template x-if="canCreate(t.key)">
-        <button
-          @click="openNew(t.key)"
-          class="group flex items-center gap-4 px-6 py-4
-                 bg-primary text-white rounded-xl
-                 transition-all hover:bg-primary-hover
-                 hover:shadow-xl hover:-translate-y-[1px]">
-
-          <span class="text-2xl transition group-hover:scale-110"
-                x-text="t.icon"></span>
-
-          <span class="font-medium truncate"
-                x-text="t.label"></span>
-        </button>
-      </template>
+  <template x-for="t in ticketTypes" :key="t.key">
+    <template x-if="canCreate(t.key)">
+      <button
+        @click="openNew(t.key)"
+        class="w-full flex items-center gap-4 px-5 py-3 rounded-xl
+               bg-primary text-white font-medium
+               shadow hover:shadow-lg transition"
+      >
+        <span class="text-xl" x-text="t.icon"></span>
+        <span class="truncate" x-text="t.label"></span>
+      </button>
     </template>
+  </template>
 
-    <!-- EMPTY STATE -->
-    <template x-if="ticketTypes.every(t => !canCreate(t.key))">
-      <div class="text-sm text-gray-500 italic text-center py-6">
-        Du hast aktuell keine Berechtigung, neue Tickets zu erstellen.
-      </div>
-    </template>
-
-  </div>
 </aside>
 
 <!-- ================= CONTENT ================= -->
 <section class="space-y-6">
 
-  <!-- ================= DEINE AUFTRÄGE ================= -->
-  <div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
-    <h2 class="text-xl font-semibold mb-4 text-primary">
-      Deine Aufträge
-    </h2>
+<!-- ================= DEINE AUFTRÄGE ================= -->
+<div class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6
+            dark:shadow-[0_0_0_1px_rgba(62,170,184,0.08)]">
 
-    <ul class="space-y-4 max-h-[480px] overflow-auto nice-scrollbar pr-1">
-      <template x-for="o in orders" :key="o.id">
-        <li @click="openUserTicket(o)"
-            class="ticket relative p-5 rounded-xl border
-                   bg-white dark:bg-gray-700 cursor-pointer
-                   transition hover:-translate-y-[2px] hover:shadow-xl">
-
-          <div class="ticket-accent" :class="statusAccent(o.status)"></div>
-
-          <div class="flex justify-between gap-4 pl-3">
-            <div class="min-w-0">
-              <div class="font-semibold truncate" x-text="o.type"></div>
-              <div class="text-sm text-gray-500" x-text="o.date"></div>
-            </div>
-
-            <div class="flex flex-col items-end gap-1 shrink-0">
-              <span class="px-3 py-1 rounded-md text-xs font-semibold"
-                    :class="statusBadge(o.status)"
-                    x-text="statusLabel(o.status)"></span>
-
-              <span class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-200 text-gray-800">
-                <span x-text="priorityIcon(o.priority)"></span>
-                <span x-text="priorityLabel(o.priority)"></span>
-              </span>
-            </div>
-          </div>
-        </li>
-      </template>
-
-      <template x-if="orders.length === 0">
-        <li class="text-gray-500 text-sm text-center py-8">
-          Keine eigenen Aufträge vorhanden.
-        </li>
-      </template>
-    </ul>
-  </div>
-
-<!-- ================= FACHABTEILUNGEN ================= -->
-<div class="bg-gray-50 dark:bg-gray-800 rounded-xl shadow border p-5">
-  <h2 class="text-xl font-semibold mb-6 text-primary">
-    Fachabteilungen · Deine Aufgaben
+  <h2 class="text-xl font-semibold text-primary mb-4">
+    Deine Aufträge
   </h2>
 
-  <!-- Fachabteilung -->
-  <template x-for="dept in departmentRequests" :key="dept.group_id">
-    <section class="mb-8">
+  <!-- FILTER -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+    <input class="field" placeholder="Auftrag suchen…" x-model="filter.search">
+    <select class="field" x-model="filter.status">
+      <option value="all">Alle Status</option>
+      <option value="in_request">Zu bearbeiten</option>
+      <option value="in_progress">In Bearbeitung</option>
+      <option value="approved">Erledigt</option>
+    </select>
+    <select class="field" x-model="filter.priority">
+      <option value="all">Alle Prioritäten</option>
+      <option value="low">Niedrig</option>
+      <option value="medium">Mittel</option>
+      <option value="high">Hoch</option>
+      <option value="critical">Kritisch</option>
+    </select>
+  </div>
 
-      <!-- Department Header -->
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold flex items-center gap-2">
-          <span>🏢</span>
-          <span x-text="dept.group_name"></span>
+  <ul class="space-y-4 max-h-[460px] overflow-auto pr-1">
+    <template x-for="o in filteredOrders()" :key="o.id">
+      <li
+        @click="openUserTicket(o)"
+        class="relative p-5 rounded-xl cursor-pointer
+               bg-gray-50 dark:bg-fieldDark
+               shadow hover:shadow-xl transition"
+      >
+        <div class="flex justify-between gap-4">
+          <div class="min-w-0">
+            <div class="font-semibold truncate" x-text="o.type"></div>
+            <div class="text-sm text-muted" x-text="o.date"></div>
+          </div>
+
+          <div class="flex flex-col items-end gap-2 shrink-0">
+            <span class="px-3 py-1 rounded-md text-xs font-semibold"
+                  :class="statusBadge(o.status)"
+                  x-text="statusLabel(o.status)"></span>
+
+            <span class="text-xs font-medium">
+              <span x-text="priorityIcon(o.priority)"></span>
+              <span x-text="priorityLabel(o.priority)"></span>
+            </span>
+          </div>
+        </div>
+      </li>
+    </template>
+  </ul>
+</div>
+
+<!-- ================= FACHABTEILUNGEN ================= -->
+<div class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6
+            dark:shadow-[0_0_0_1px_rgba(62,170,184,0.08)]">
+
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl font-semibold text-primary">
+      Fachabteilungen · Deine Aufgaben
+    </h2>
+
+    <select class="field w-56" x-model="filter.department">
+      <option value="all">Alle Fachabteilungen</option>
+      <template x-for="d in departmentRequests" :key="d.group_id">
+        <option :value="d.group_id" x-text="d.group_name"></option>
+      </template>
+    </select>
+  </div>
+
+  <template x-for="dept in filteredDepartments()" :key="dept.group_id">
+    <section class="mb-6 rounded-xl p-4
+                    bg-gray-50 dark:bg-fieldDark
+                    shadow-inner">
+
+      <div class="flex items-center justify-between mb-3"
+           x-data="{ open: true }">
+
+        <h3 class="font-semibold flex items-center gap-2 cursor-pointer"
+            @click="open = !open">
+          🏢 <span x-text="dept.group_name"></span>
         </h3>
 
         <span class="text-xs px-3 py-1 rounded-full bg-primary/20 text-primary font-semibold">
-          <span x-text="dept.tickets.length"></span> offen
+          <span x-text="dept.tickets.length"></span>
         </span>
       </div>
 
-      <!-- Tickets -->
-      <ul class="space-y-3">
-        <template x-for="ticket in dept.tickets" :key="ticket.id">
+      <ul x-show="dept.tickets.length > 0" class="space-y-3">
+        <template x-for="t in dept.tickets" :key="t.id">
           <li
-            @click="openGroupTicket(ticket, dept.group_id)"
-            class="ticket relative p-5 rounded-xl border
-                   bg-white dark:bg-gray-700 cursor-pointer
-                   transition hover:-translate-y-[2px] hover:shadow-xl">
-
-            <!-- Accent -->
-            <div class="ticket-accent bg-primary"></div>
-
-            <div class="flex justify-between gap-4 pl-3">
-
-              <!-- Ticket Info -->
-              <div class="min-w-0">
-                <div class="font-semibold truncate" x-text="ticket.title"></div>
-
-                <div class="text-sm text-gray-500 flex gap-3 mt-1">
-                  <span x-text="ticket.type_key"></span>
-                  <span>•</span>
-                  <span x-text="ticket.created_at"></span>
-                </div>
-              </div>
-
-              <!-- Status -->
-              <div class="flex flex-col items-end gap-1 shrink-0">
-                <span class="px-3 py-1 rounded-md text-xs font-semibold
-                             bg-primary/20 text-primary">
-                  🛠 Zu bearbeiten
-                </span>
-              </div>
-
+            @click="openGroupTicket(t, dept.group_id)"
+            class="p-4 rounded-xl cursor-pointer
+                   bg-white dark:bg-cardDark
+                   shadow hover:shadow-lg transition"
+          >
+            <div class="font-semibold truncate" x-text="t.title"></div>
+            <div class="text-sm text-muted">
+              <span x-text="t.type_key"></span> •
+              <span x-text="t.created_at"></span>
             </div>
           </li>
         </template>
       </ul>
 
+      <div x-show="dept.tickets.length === 0"
+           class="text-sm text-muted italic mt-2">
+        Keine offenen Aufgaben für diese Fachabteilung.
+      </div>
+
     </section>
   </template>
 
-  <!-- Empty State -->
-  <template x-if="departmentRequests.length === 0">
-    <div class="text-gray-500 text-sm text-center py-8">
-      🎉 Aktuell keine Fachabteilungsaufträge für dich.
-    </div>
-  </template>
 </div>
-
-
-
 
 </section>
 </div>

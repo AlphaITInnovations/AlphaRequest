@@ -1,13 +1,11 @@
-TODO:
-
-
-
-- abbrechen knopf im dark mode sieht komisch aus
-- zugang sperren IT Felder fehlen
+TODO Formulare:
 - niederlassung beantragen: wer macht: Vermieter wird mit der Installation / Beauftragung beauftragt.
 - bestätigungsfelder bei niederlassung schließen, dass nummer und internet gekündigt wird
-- hardware bestellung fehlt
+- hardware bestellung spezialfall
 - niederlassung umziehen fehlt
+- zugang sperren IT Felder fehlen
+
+
 
 TODO MAIL:
 - Update Mail
@@ -23,9 +21,13 @@ Optional (evtl zu viel):
 -	Oder nur Ersteller / Zuständiger / Vorgesetzter erhalten nur grobe infos wie, Auftrag befindet sich in der Bearbeitung, Auftrag befindet sich in der Durchführung, Auftrag wurde durchgeführt etc.
 
 
+
 TODO Features:
 - Nachrichtenzentrale
 
-Evtl Überlegung:
-ninja api key user
-was wenn 2 leute parallel ein ticket speichern?
+
+
+TODO Technische Überlegungen:
+- ninja api key user
+- was wenn 2 leute parallel ein ticket speichern? -> evtl ticket sperren wenn in bearbeitung
+- Settings Page redesignen (dropdown reuse etc)
