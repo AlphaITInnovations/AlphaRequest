@@ -45,6 +45,19 @@ def _user_can_delete_ticket(user: dict, ticket_id: int) -> bool:
     return any(t.id == ticket_id for t in owned)
 
 
+def generate_title(ticket_type, user):
+    # Titel generieren
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    if ticket_type == TicketType.zugang_beantragen:
+        label = "Onboarding Mitarbeiter:innen"
+    else:
+        label = TICKET_LABELS.get(ticket_type, ticket_type.value)
+
+    generated_title = f"{label} – {user['displayName']} – {now_str}"
+
+    return generated_title
+
 
 @router.post("/tickets")
 async def create_ticket(
@@ -92,15 +105,12 @@ async def create_ticket(
     except Exception:
         raise HTTPException(400, "Ticketdaten sind kein gültiges JSON")
 
-    # Titel generieren
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    label = TICKET_LABELS.get(ticket_type, ticket_type.value)
-    generated_title = f"{label} – {user['displayName']} – {now_str}"
+
 
     manager = request.app.state.manager
 
     ticket_id = manager.create_ticket(
-        title=generated_title,
+        title=generate_title(ticket_type, user),
         ticket_type=ticket_type,
         description=description,
         owner_id=user["id"],
