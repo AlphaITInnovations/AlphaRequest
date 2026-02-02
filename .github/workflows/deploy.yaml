@@ -13,11 +13,11 @@ jobs:
       - name: Trigger Dokploy webhook
         run: |
           curl -k -X POST \
-            https://dokploy.dom.local/api/deploy/UTYNxBY74JiZ2OAQ1o-qJ \
+            https://dokploy.dom.local/api/deploy/Y5zV7srD5O1bxA5v1Zilw \
             -H "Content-Type: application/json" \
             -d '{
               "branch": "main",
               "repository": "'"${{ github.repository }}"'",
-              "ref": "'"${{ github.ref }}"'",
+              "ref": "refs/heads/main,
               "sha": "'"${{ github.sha }}"'"
             }'
