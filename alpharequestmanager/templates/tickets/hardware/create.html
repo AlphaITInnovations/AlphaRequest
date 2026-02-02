@@ -24,15 +24,195 @@
 <script>
 function hardwareCreateForm() {
   return {
+    /* =================================================
+       BASE FORM (🔥 WICHTIG 🔥)
+    ================================================= */
     ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
     phase: "create",
     isCreate: true,
+    modalOpen: false,
 
-    submitHardware(payload) {
-      this.$refs.description.value = JSON.stringify(payload, null, 2);
+    /* =================================================
+       DATA
+    ================================================= */
+    data: {
+      mitarbeiterTyp: "",
+
+      /* BASISDATEN (PFLICHT) */
+      vorname: "",
+      nachname: "",
+      kostenstelle: "",
+      firma: "",
+
+      addr_strasse: "",
+      addr_nr: "",
+      addr_plz: "",
+      addr_stadt: "",
+      addr_tuerschild: "",
+
+      lieferungBis: "",
+
+      /* HARDWARE */
+      monitor: { benoetigt: false, anzahl: 1 },
+      geraet: "",
+
+      artikel: {
+        Notebook: false,
+        MiniPC: false,
+        Dockingstation: false,
+        MausUndTastatur: false,
+        Headset: false,
+        Webcam: false,
+        HandyUndSim: false
+      },
+
+      dockingVorhanden: false,
+      bemerkung: "",
+      grundBestellung: ""
+    },
+
+    /* =================================================
+       FIRMA
+    ================================================= */
+    companies: [],
+    companiesLoading: false,
+    companiesError: "",
+
+    /* =================================================
+       IMAGE PREVIEW
+    ================================================= */
+    hoverKey: null,
+    previewIdx: 0,
+    previewUrls: [],
+    imgMap: {
+      Monitor: ['Monitor.jpg','monitor.jpg'],
+      Notebook: ['Notebook.jpg','notebook.jpg'],
+      MiniPC: ['MiniPC.jpg','minipc.jpg'],
+      Dockingstation: ['Dockingstation.jpg','dockingstation.jpg'],
+      MausUndTastatur:['MausUndTastatur.jpg','mausundtastatur.jpg'],
+      Headset:['Headset.jpg','headset.jpg'],
+      Webcam:['Webcam.jpg','webcam.jpg'],
+      HandyUndSim:['HandyUndSim.jpg','handyundsim.jpg']
+    },
+
+    /* =================================================
+       VALIDATION (🔥 NUR BASISDATEN 🔥)
+    ================================================= */
+    rules: {
+      mitarbeiterTyp: { required: true },
+
+      vorname: { required: true },
+      nachname: { required: true },
+      kostenstelle: { required: true },
+      firma: { required: true },
+
+      addr_strasse: { required: true },
+      addr_nr: { required: true },
+      addr_plz: { required: true },
+      addr_stadt: { required: true },
+
+      lieferungBis: { required: true },
+
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* =================================================
+       VALUE RESOLVER (🔥 KRITISCH 🔥)
+    ================================================= */
+    getValue(field) {
+      if (field in this.data) return this.data[field];
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      this.fetchCompanies();
+
+      /* RESET BEI MITARBEITERTYP-WECHSEL */
+      this.$watch("data.mitarbeiterTyp", () => {
+        this.resetHardwareOnly();
+      });
+    },
+
+    async fetchCompanies() {
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companiesError = "Firmen konnten nicht geladen werden";
+      }
+    },
+
+    /* =================================================
+       IMAGE HOVER
+    ================================================= */
+    hover(key) {
+      this.hoverKey = key;
+      if (!key || !this.imgMap[key]) {
+        this.previewUrls = [];
+        return;
+      }
+      this.previewUrls = this.imgMap[key].map(f => `/static/${f}`);
+      this.previewIdx = 0;
+    },
+
+    /* =================================================
+       RESET HARDWARE
+    ================================================= */
+    resetHardwareOnly() {
+      this.data.monitor = { benoetigt: false, anzahl: 1 };
+      this.data.geraet = "";
+      this.data.artikel = {
+        Notebook:false, MiniPC:false, Dockingstation:false,
+        MausUndTastatur:false, Headset:false, Webcam:false, HandyUndSim:false
+      };
+      this.data.dockingVorhanden = false;
+      this.data.bemerkung = "";
+      this.data.grundBestellung = "";
+      this.previewUrls = [];
+      this.hoverKey = null;
+    },
+
+    /* =================================================
+       CREATE FLOW (🔥 DAS FEHLTE 🔥)
+    ================================================= */
+    openAssigneeModal() {
+      this.validationTriggered = false;
+
+      this.$nextTick(() => {
+        if (!this.validateOrScroll()) return;
+        this.modalOpen = true;
+      });
+    },
+
+    chooseAssignee(type) {
+      const id = document.querySelector(`[name="${type}_id"]`)?.value;
+      const name = document.querySelector(`[name="${type}_name"]`)?.value;
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+
+      /* DESCRIPTION */
+      this.$refs.description.value = JSON.stringify(
+        {
+          hardware: this.data
+        },
+        null,
+        2
+      );
+
+      this.modalOpen = false;
       this.$el.submit();
     }
-  }
+  };
 }
 </script>
 {% endblock %}

@@ -5,22 +5,217 @@
 {% set alpine_component = "hardwareEditForm()" %}
 
 {% block hidden_fields %}
-<input type="hidden" name="description" x-ref="description">
+  <input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
 {% endblock %}
 
 {% block ticket_fields %}
   {% include "tickets/hardware/_form_fields.html" %}
 {% endblock %}
 
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
 {% block extra_js %}
 <script>
 function hardwareEditForm() {
   return {
+    /* =================================================
+       BASE FORM
+    ================================================= */
     ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
     phase: "edit",
     isCreate: false,
-    initialData: {{ description | tojson | safe }}
-  }
+
+    /* =================================================
+       INITIAL DATA
+    ================================================= */
+    initialData: {{ description | tojson | safe }},
+
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    data: {
+      mitarbeiterTyp: "",
+
+      /* BASISDATEN */
+      vorname: "",
+      nachname: "",
+      kostenstelle: "",
+      firma: "",
+
+      addr_strasse: "",
+      addr_nr: "",
+      addr_plz: "",
+      addr_stadt: "",
+      addr_tuerschild: "",
+
+      lieferungBis: "",
+
+      /* HARDWARE */
+      monitor: {
+        benoetigt: false,
+        anzahl: 1
+      },
+
+      geraet: "",
+
+      artikel: {
+        Notebook: false,
+        MiniPC: false,
+        Dockingstation: false,
+        MausUndTastatur: false,
+        Headset: false,
+        Webcam: false,
+        HandyUndSim: false
+      },
+
+      dockingVorhanden: false,
+      bemerkung: "",
+      grundBestellung: ""
+    },
+
+    /* =================================================
+       VALIDATION RULES
+       (🔥 ALLES PFLICHT – ABHÄNGIG VOM TYP 🔥)
+    ================================================= */
+    rules: {
+      /* -------- BASISDATEN (IMMER) -------- */
+      mitarbeiterTyp: { required: true },
+
+      vorname: { required: true },
+      nachname: { required: true },
+      kostenstelle: { required: true },
+      firma: { required: true },
+
+      addr_strasse: { required: true },
+      addr_nr: { required: true },
+      addr_plz: { required: true },
+      addr_stadt: { required: true },
+
+      lieferungBis: { required: true },
+
+
+
+      grundBestellung: {
+        requiredIf() {
+          return this.data.mitarbeiterTyp === "Bestandsmitarbeiter";
+        }
+      },
+
+      /* -------- WORKFLOW -------- */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* =================================================
+       VALUE RESOLVER (KRITISCH 🔥)
+    ================================================= */
+    getValue(field) {
+      /* BASIS */
+      if (field in this.data) return this.data[field] ?? "";
+
+      /* BESTANDSMITARBEITER: Hardware gewählt? */
+      if (field === "artikel_bestand") {
+        return (
+          Object.values(this.data.artikel).some(Boolean) ||
+          this.data.monitor.benoetigt
+        ) ? "ok" : "";
+      }
+
+      /* NEUER MITARBEITER: Hardware gewählt? */
+      if (field === "artikel_neu") {
+        return (
+          this.data.geraet ||
+          Object.values(this.data.artikel).some(Boolean) ||
+          this.data.monitor.benoetigt
+        ) ? "ok" : "";
+      }
+
+      /* FALLBACK (Workflow Felder) */
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      /* Firmen */
+      try {
+        const res = await fetch("/api/companies");
+        const json = await res.json();
+        this.companies = json.companies || [];
+      } catch {
+        this.companies = [];
+      }
+
+      /* Initialdaten aus Description laden */
+      this.$nextTick(() => {
+        if (this.initialData?.data) {
+          Object.assign(this.data, this.initialData.data);
+        }
+
+        /* Assignee setzen */
+        this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
+        this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
+
+        this.updateDescription();
+        this.validationTriggered = false;
+      });
+    },
+
+    /* =================================================
+       DESCRIPTION SYNC
+    ================================================= */
+    updateDescription() {
+      this.$refs.description.value = JSON.stringify(
+        {
+          ticketType: "Hardwarebestellung",
+          data: this.data
+        },
+        null,
+        2
+      );
+    },
+
+    /* =================================================
+       SUBMIT
+    ================================================= */
+    submitEdit(action = "save", event) {
+      if (action === "complete") {
+        if (!this.validateOrScroll()) return;
+
+        const ok = confirm(
+          "Wollen Sie den Auftrag wirklich abschließen?\n\n" +
+          "Danach ist keine Bearbeitung mehr möglich."
+        );
+        if (!ok) return;
+      }
+
+      this.updateDescription();
+
+      const form = event.target.closest("form");
+      if (!form) return;
+
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "action";
+      input.value = action;
+      form.appendChild(input);
+
+      form.submit();
+    }
+  };
 }
 </script>
 {% endblock %}

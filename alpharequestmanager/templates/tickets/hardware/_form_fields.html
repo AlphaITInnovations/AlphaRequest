@@ -6,7 +6,10 @@
   <div class="space-y-4">
     <h3 class="font-semibold mb-4">👤 Mitarbeitertyp</h3>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div
+      class="grid grid-cols-1 sm:grid-cols-2 gap-4"
+      :class="inputClass('mitarbeiterTyp', data.mitarbeiterTyp)"
+    >
       <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer">
         <input
           type="radio"
@@ -28,7 +31,7 @@
   </div>
 
   <!-- ================================================= -->
-  <!-- 📇 BASISDATEN (IMMER SICHTBAR) -->
+  <!-- 📇 BASISDATEN (🔥 PFLICHT 🔥) -->
   <!-- ================================================= -->
   <div class="space-y-6">
     <h3 class="font-semibold mb-4">📇 Basisdaten</h3>
@@ -37,21 +40,27 @@
 
       <div>
         <label>Vorname</label>
-        <input class="input" x-model="data.vorname">
+        <input
+          x-model="data.vorname"
+          :class="inputClass('vorname', data.vorname)"
+        >
       </div>
 
       <div>
         <label>Nachname</label>
-        <input class="input" x-model="data.nachname">
+        <input
+          x-model="data.nachname"
+          :class="inputClass('nachname', data.nachname)"
+        >
       </div>
 
       <div>
         <label>Kostenstelle</label>
         <input
-          class="input"
           x-model="data.kostenstelle"
           inputmode="numeric"
           @input="data.kostenstelle = (data.kostenstelle || '').replace(/\D/g,'')"
+          :class="inputClass('kostenstelle', data.kostenstelle)"
         >
       </div>
 
@@ -64,14 +73,16 @@
 
         <template x-if="!companiesLoading && companiesError">
           <input
-            class="input"
             x-model="data.firma"
-            placeholder="Firma manuell eingeben"
+            :class="inputClass('firma', data.firma)"
           >
         </template>
 
         <template x-if="!companiesLoading && !companiesError">
-          <select class="input" x-model="data.firma">
+          <select
+            x-model="data.firma"
+            :class="inputClass('firma', data.firma)"
+          >
             <option value="">Bitte wählen</option>
             <template x-for="firma in companies" :key="firma">
               <option :value="firma" x-text="firma"></option>
@@ -80,44 +91,60 @@
         </template>
       </div>
 
-      <!-- Adresse -->
+      <!-- ================= ADRESSE ================= -->
       <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-6 gap-4">
 
         <div class="md:col-span-3">
           <label>Straße</label>
-          <input class="input" x-model="data.addr_strasse">
+          <input
+            x-model="data.addr_strasse"
+            :class="inputClass('addr_strasse', data.addr_strasse)"
+          >
         </div>
 
         <div class="md:col-span-1">
           <label>Nr.</label>
-          <input class="input" x-model="data.addr_nr">
+          <input
+            x-model="data.addr_nr"
+            :class="inputClass('addr_nr', data.addr_nr)"
+          >
         </div>
 
         <div class="md:col-span-2">
           <label>PLZ</label>
           <input
-            class="input"
             x-model="data.addr_plz"
             inputmode="numeric"
             @input="data.addr_plz = (data.addr_plz || '').replace(/\D/g,'').slice(0,5)"
+            :class="inputClass('addr_plz', data.addr_plz)"
           >
         </div>
 
         <div class="md:col-span-3">
           <label>Stadt</label>
-          <input class="input" x-model="data.addr_stadt">
+          <input
+            x-model="data.addr_stadt"
+            :class="inputClass('addr_stadt', data.addr_stadt)"
+          >
         </div>
 
         <div class="md:col-span-3">
           <label>Name am Türschild (optional)</label>
-          <input class="input" x-model="data.addr_tuerschild">
+          <input
+            class="input"
+            x-model="data.addr_tuerschild"
+          >
         </div>
 
       </div>
 
       <div>
         <label>Lieferung bis</label>
-        <input type="date" class="input" x-model="data.lieferungBis">
+        <input
+          type="date"
+          x-model="data.lieferungBis"
+          :class="inputClass('lieferungBis', data.lieferungBis)"
+        >
       </div>
 
     </div>
@@ -126,144 +153,414 @@
   <!-- ================================================= -->
   <!-- 🧰 BESTANDSMITARBEITER -->
   <!-- ================================================= -->
-  <div
-    class="space-y-6"
-    x-show="data.mitarbeiterTyp === 'Bestandsmitarbeiter'"
-    x-collapse
-  >
-    <h3 class="font-semibold">🧰 Hardware & Grund</h3>
+<div
+  x-show="data.mitarbeiterTyp === 'Bestandsmitarbeiter'"
+  x-transition
+  class="space-y-8"
+>
 
-    <div class="grid grid-cols-2 gap-3">
+  <h3 class="font-semibold text-lg">🧰 Hardware & Grund</h3>
 
-      <label @mouseenter="hover('Notebook')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.Notebook">
-        Notebook
+  <!-- ================= ARTIKEL ================= -->
+  <div class="space-y-3">
+    <h4 class="font-medium">📦 Hardware auswählen</h4>
+
+    <!-- 🔥 VALIDATION-WRAPPER -->
+    <div
+      class="grid grid-cols-1 md:grid-cols-2 gap-4"
+      :class="inputClass(
+        'artikel',
+        Object.values(data.artikel).some(Boolean) || data.monitor.benoetigt ? 'ok' : ''
+      )"
+    >
+
+      <!-- Notebook -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.Notebook
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Notebook')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.Notebook">
+        <span class="text-lg">💻</span>
+        <span class="font-medium">Notebook</span>
       </label>
 
-      <label @mouseenter="hover('MiniPC')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.MiniPC">
-        Mini-PC
+      <!-- MiniPC -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.MiniPC
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('MiniPC')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.MiniPC">
+        <span class="text-lg">🖥️</span>
+        <span class="font-medium">Mini-PC</span>
       </label>
 
-      <label @mouseenter="hover('Dockingstation')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.Dockingstation">
-        Dockingstation
+      <!-- Dockingstation -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.Dockingstation
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Dockingstation')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.Dockingstation">
+        <span class="text-lg">🔌</span>
+        <span class="font-medium">Dockingstation</span>
       </label>
 
-      <label @mouseenter="hover('MausUndTastatur')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.MausUndTastatur">
-        Maus & Tastatur
+      <!-- Maus & Tastatur -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.MausUndTastatur
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('MausUndTastatur')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.MausUndTastatur">
+        <span class="text-lg">🖱️</span>
+        <span class="font-medium">Maus & Tastatur</span>
       </label>
 
-      <label @mouseenter="hover('Headset')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.Headset">
-        Headset
+      <!-- Headset -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.Headset
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Headset')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.Headset">
+        <span class="text-lg">🎧</span>
+        <span class="font-medium">Headset</span>
       </label>
 
-      <label @mouseenter="hover('Webcam')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.Webcam">
-        Webcam
+      <!-- Webcam -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.Webcam
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Webcam')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.Webcam">
+        <span class="text-lg">📷</span>
+        <span class="font-medium">Webcam</span>
       </label>
 
-      <label @mouseenter="hover('HandyUndSim')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.HandyUndSim">
-        Handy & SIM
+      <!-- Handy -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.HandyUndSim
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('HandyUndSim')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.HandyUndSim">
+        <span class="text-lg">📱</span>
+        <span class="font-medium">Handy & SIM</span>
       </label>
 
-    </div>
-
-    <div class="space-y-2">
-      <label>
-        <input type="checkbox" x-model="data.monitor.benoetigt">
-        Monitor benötigt
-      </label>
-
-      <div x-show="data.monitor.benoetigt" x-collapse>
-        <select class="input w-32" x-model.number="data.monitor.anzahl">
-          <option :value="1">1</option>
-          <option :value="2">2</option>
-        </select>
-      </div>
-    </div>
-
-    <div>
-      <label>Grund der Neubestellung</label>
-      <textarea class="input h-24" x-model="data.grundBestellung"></textarea>
     </div>
   </div>
 
-  <!-- ================================================= -->
-  <!-- 💻 NEUER MITARBEITER -->
-  <!-- ================================================= -->
+  <!-- ================= MONITOR ================= -->
   <div
-    class="space-y-6"
-    x-show="data.mitarbeiterTyp === 'Neuer Mitarbeiter'"
-    x-collapse
+    class="space-y-3"
+    :class="inputClass(
+      'artikel',
+      Object.values(data.artikel).some(Boolean) || data.monitor.benoetigt ? 'ok' : ''
+    )"
   >
-    <h3 class="font-semibold">💻 Hardwareausstattung</h3>
+    <h4 class="font-medium">🖥️ Monitor</h4>
 
-    <label>
-      <input type="checkbox" x-model="data.monitor.benoetigt">
-      Monitor benötigt
+    <label
+      class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+             transition hover:bg-gray-50 dark:hover:bg-gray-700"
+      :class="data.monitor.benoetigt
+        ? 'ring-2 ring-primary border-primary'
+        : 'border-gray-300 dark:border-gray-600'"
+      @mouseenter="hover('Monitor')"
+      @mouseleave="hover(null)"
+    >
+      <input type="checkbox" class="hidden" x-model="data.monitor.benoetigt">
+      <span class="text-lg">🖥️</span>
+      <span class="font-medium">Monitor benötigt</span>
     </label>
 
-    <div x-show="data.monitor.benoetigt" x-collapse>
+    <div x-show="data.monitor.benoetigt" x-transition class="pl-4">
+      <label class="block text-sm mb-1">Anzahl</label>
       <select class="input w-32" x-model.number="data.monitor.anzahl">
         <option :value="1">1</option>
         <option :value="2">2</option>
       </select>
     </div>
+  </div>
 
-    <div class="grid grid-cols-2 gap-4">
-      <label @mouseenter="hover('Notebook')" @mouseleave="hover(null)">
-        <input type="radio" value="Laptop" x-model="data.geraet">
-        Laptop
-      </label>
+  <!-- ================= GRUND ================= -->
+  <div>
+    <label class="block font-medium mb-1">📝 Grund der Neubestellung</label>
+    <textarea
+      x-model="data.grundBestellung"
+      :class="inputClass('grundBestellung', data.grundBestellung)"
+      class="h-24"
+    ></textarea>
+  </div>
 
-      <label @mouseenter="hover('MiniPC')" @mouseleave="hover(null)">
-        <input type="radio" value="MiniPC" x-model="data.geraet">
-        Desktop (Mini-PC)
-      </label>
-    </div>
+</div>
 
-    <div class="grid grid-cols-2 gap-3">
 
-      <label @mouseenter="hover('Dockingstation')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.Dockingstation">
-        Dockingstation
-      </label>
 
-      <label>
-        <input type="checkbox" x-model="data.dockingVorhanden">
-        Dockingstation vorhanden
-      </label>
 
-      <label @mouseenter="hover('MausUndTastatur')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.MausUndTastatur">
-        Maus & Tastatur
-      </label>
 
-      <label @mouseenter="hover('Headset')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.Headset">
-        Headset
-      </label>
+  <!-- ================================================= -->
+  <!-- 💻 NEUER MITARBEITER -->
+  <!-- ================================================= -->
+  <div
+  x-show="data.mitarbeiterTyp === 'Neuer Mitarbeiter'"
+  x-transition
+  class="space-y-8"
+>
 
-      <label @mouseenter="hover('Webcam')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.Webcam">
-        Webcam
-      </label>
+  <h3 class="font-semibold text-lg">💻 Hardwareausstattung</h3>
 
-      <label @mouseenter="hover('HandyUndSim')" @mouseleave="hover(null)">
-        <input type="checkbox" x-model="data.artikel.HandyUndSim">
-        Handy & SIM
-      </label>
+  <!-- ================= MONITOR ================= -->
+  <div
+    class="space-y-3"
+    :class="inputClass(
+      'artikel',
+      Object.values(data.artikel).some(Boolean) || data.monitor.benoetigt ? 'ok' : ''
+    )"
+  >
+    <label
+      class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+             transition hover:bg-gray-50 dark:hover:bg-gray-700"
+      :class="data.monitor.benoetigt
+        ? 'ring-2 ring-primary border-primary'
+        : 'border-gray-300 dark:border-gray-600'"
+      @mouseenter="hover('Monitor')"
+      @mouseleave="hover(null)"
+    >
+      <input type="checkbox" class="hidden" x-model="data.monitor.benoetigt">
+      <span class="text-lg">🖥️</span>
+      <span class="font-medium">Monitor benötigt</span>
+    </label>
 
-    </div>
-
-    <div>
-      <label>Optionale Bemerkung</label>
-      <textarea class="input h-24" x-model="data.bemerkung"></textarea>
+    <div x-show="data.monitor.benoetigt" x-transition class="pl-4">
+      <label class="block text-sm mb-1">Anzahl</label>
+      <select class="input w-32" x-model.number="data.monitor.anzahl">
+        <option :value="1">1</option>
+        <option :value="2">2</option>
+      </select>
     </div>
   </div>
+
+  <!-- ================= GERÄTETYP (🔥 PFLICHT 🔥) ================= -->
+  <div
+    class="space-y-3"
+    :class="inputClass('geraet', data.geraet)"
+  >
+    <h4 class="font-medium">💻 Gerätetyp</h4>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.geraet === 'Laptop'
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Notebook')"
+        @mouseleave="hover(null)"
+      >
+        <input type="radio" class="hidden" value="Laptop" x-model="data.geraet">
+        <span class="text-lg">💻</span>
+        <span class="font-medium">Laptop</span>
+      </label>
+
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.geraet === 'MiniPC'
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('MiniPC')"
+        @mouseleave="hover(null)"
+      >
+        <input type="radio" class="hidden" value="MiniPC" x-model="data.geraet">
+        <span class="text-lg">🖥️</span>
+        <span class="font-medium">Desktop (Mini-PC)</span>
+      </label>
+
+    </div>
+  </div>
+
+  <!-- ================= DOCKINGSTATION ================= -->
+  <div
+    x-show="data.geraet === 'Laptop'"
+    x-transition
+    class="space-y-3"
+    :class="inputClass(
+      'artikel',
+      Object.values(data.artikel).some(Boolean) || data.dockingVorhanden ? 'ok' : ''
+    )"
+  >
+    <h4 class="font-medium">🔌 Dockingstation</h4>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.Dockingstation
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Dockingstation')"
+        @mouseleave="hover(null)"
+      >
+        <input
+          type="radio"
+          class="hidden"
+          name="docking_option"
+          @change="
+            data.artikel.Dockingstation = true;
+            data.dockingVorhanden = false;
+          "
+          :checked="data.artikel.Dockingstation"
+        >
+        <span class="text-lg">📦</span>
+        <span class="font-medium">Dockingstation bestellen</span>
+      </label>
+
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.dockingVorhanden
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+      >
+        <input
+          type="radio"
+          class="hidden"
+          name="docking_option"
+          @change="
+            data.dockingVorhanden = true;
+            data.artikel.Dockingstation = false;
+          "
+          :checked="data.dockingVorhanden"
+        >
+        <span class="text-lg">✅</span>
+        <span class="font-medium">Dockingstation vorhanden</span>
+      </label>
+
+    </div>
+  </div>
+
+  <!-- ================= PERIPHERIE ================= -->
+  <div
+    class="space-y-3"
+    :class="inputClass(
+      'artikel',
+      Object.values(data.artikel).some(Boolean) || data.monitor.benoetigt ? 'ok' : ''
+    )"
+  >
+    <h4 class="font-medium">🖱️ Peripherie</h4>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <!-- Maus & Tastatur -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.MausUndTastatur
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('MausUndTastatur')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.MausUndTastatur">
+        <span>🖱️</span>
+        <span>Maus & Tastatur</span>
+      </label>
+
+      <!-- Headset -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.Headset
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Headset')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.Headset">
+        <span>🎧</span>
+        <span>Headset</span>
+      </label>
+
+      <!-- Webcam -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.Webcam
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('Webcam')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.Webcam">
+        <span>📷</span>
+        <span>Webcam</span>
+      </label>
+
+      <!-- Handy -->
+      <label
+        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+               transition hover:bg-gray-50 dark:hover:bg-gray-700"
+        :class="data.artikel.HandyUndSim
+          ? 'ring-2 ring-primary border-primary'
+          : 'border-gray-300 dark:border-gray-600'"
+        @mouseenter="hover('HandyUndSim')"
+        @mouseleave="hover(null)"
+      >
+        <input type="checkbox" class="hidden" x-model="data.artikel.HandyUndSim">
+        <span>📱</span>
+        <span>Handy & SIM</span>
+      </label>
+
+    </div>
+  </div>
+
+  <!-- ================= BEMERKUNG ================= -->
+  <div>
+    <label class="block font-medium mb-1">📝 Optionale Bemerkung</label>
+    <textarea
+      class="input h-24"
+      x-model="data.bemerkung"
+      placeholder="z. B. Standort, Sonderwünsche, Hinweise …"
+    ></textarea>
+  </div>
+
+</div>
+
+
 
 </section>
