@@ -8,12 +8,14 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Trigger Dokploy webhook
+      - name: Trigger Dokploy (GitHub-style)
         run: |
-          curl -k -X POST \
-            https://dokploy.dom.local/api/deploy/Y5zV7srD5O1bxA5v1Zilw \
+          curl -k -X POST https://dokploy.dom.local/api/deploy/UTYNxBY74JiZ2OAQ1o-qJ \
             -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
             -d '{
-              "branch": "main",
-              "sha": "'"${{ github.sha }}"'"
+              "ref": "refs/heads/main",
+              "repository": {
+                "full_name": "AlphaITInnovations/AlphaRequestManager"
+              }
             }'
