@@ -1,0 +1,22 @@
+name: Deploy via Dokploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Trigger Dokploy webhook
+        run: |
+          curl -X POST \
+            https://dokploy.dom.local/api/deploy/UTYNxBY74JiZ2OAQ1o-qJ \
+            -H "Content-Type: application/json" \
+            -d '{
+              "repository": "'"${{ github.repository }}"'",
+              "ref": "'"${{ github.ref }}"'",
+              "sha": "'"${{ github.sha }}"'"
+            }'
