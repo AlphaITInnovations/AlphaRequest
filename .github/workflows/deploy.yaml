@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Trigger Dokploy webhook
         run: |
-          curl -X POST \
+          curl -k -X POST \
             https://dokploy.dom.local/api/deploy/UTYNxBY74JiZ2OAQ1o-qJ \
             -H "Content-Type: application/json" \
             -d '{
