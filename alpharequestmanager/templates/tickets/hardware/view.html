@@ -1,23 +1,220 @@
 {% extends "base.html" %}
-{% block title %}Hardwarebestellung{% endblock %}
+{% block title %}Auftrag – Hardwarebestellung{% endblock %}
+{% set phase = "view" %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto space-y-6">
+<div class="max-w-6xl mx-auto p-8 space-y-8">
 
-  <div class="card card--pad">
-    <h1 class="text-xl font-semibold">{{ ticket.title }}</h1>
-    <p class="text-sm text-muted">
-      Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y") }}
+  {% set h = description.hardware if description and description.hardware is defined else {} %}
+  {% set m = h.monitor if h.monitor is defined else {} %}
+  {% set a = h.artikel if h.artikel is defined else {} %}
+
+
+
+  <!-- ================================================= -->
+  <!-- HEADER -->
+  <!-- ================================================= -->
+  <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+    <h1 class="text-xl font-semibold">
+      {{ ticket.title }}
+    </h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}
     </p>
   </div>
 
-  <div class="card card--pad">
-    <h2 class="font-semibold mb-3">Bestellung</h2>
-    <pre class="text-sm whitespace-pre-wrap">
-{{ description | tojson(indent=2) }}
-    </pre>
+  <!-- ================================================= -->
+  <!-- LAYOUT -->
+  <!-- ================================================= -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- ================================================= -->
+    <!-- META -->
+    <!-- ================================================= -->
+    <aside class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+      <div class="space-y-4 text-sm">
+
+        <div>
+          <div class="font-medium text-gray-500">Ticketstatus</div>
+          <div>{{ ticket.status.value }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium text-gray-500">Priorität</div>
+          <div>{{ ticket.priority.value|capitalize }}</div>
+        </div>
+
+        <div>
+          <div class="font-medium text-gray-500">Antragsteller</div>
+          <div>{{ ticket.owner_name }}</div>
+        </div>
+
+        <div class="pt-4 border-t space-y-2">
+          <div class="font-medium text-gray-500">Details</div>
+
+          <div>
+            <span class="ro-label">Verantwortlicher</span>
+            <div class="ro-value">{{ ticket.accountable_name or "—" }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Vorgesetzter</span>
+            <div class="ro-value">{{ ticket.supervisor_name or "—" }}</div>
+          </div>
+
+          {% if ticket.comment %}
+          <div>
+            <span class="ro-label">Kommentar</span>
+            <pre class="ro-pre">{{ ticket.comment }}</pre>
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ================================================= -->
+    <!-- CONTENT -->
+    <!-- ================================================= -->
+    <section class="lg:col-span-2 space-y-10">
+
+      <!-- ================================================= -->
+      <!-- BASISDATEN -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Basisdaten</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <span class="ro-label">Mitarbeitertyp</span>
+            <div class="ro-value">{{ h.mitarbeiterTyp|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Vorname</span>
+            <div class="ro-value">{{ h.vorname|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Nachname</span>
+            <div class="ro-value">{{ h.nachname|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Kostenstelle</span>
+            <div class="ro-value">{{ h.kostenstelle|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Firma</span>
+            <div class="ro-value">{{ h.firma|default("—") }}</div>
+          </div>
+
+          <div class="md:col-span-2">
+            <span class="ro-label">Lieferadresse</span>
+            {% if h.addr_strasse or h.addr_stadt %}
+              <pre class="ro-pre">
+{{ h.addr_strasse|default("") }} {{ h.addr_nr|default("") }}
+{{ h.addr_plz|default("") }} {{ h.addr_stadt|default("") }}
+{% if h.addr_tuerschild %}
+(Türschild: {{ h.addr_tuerschild }})
+{% endif %}
+              </pre>
+            {% else %}
+              <div class="ro-value">—</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <span class="ro-label">Lieferung bis</span>
+            <div class="ro-value">{{ h.lieferungBis|default("—") }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================= -->
+      <!-- HARDWARE -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Hardware</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <div>
+            <span class="ro-label">Gerätetyp</span>
+            <div class="ro-value">{{ h.geraet|default("—") }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Monitor benötigt?</span>
+            <div class="ro-value">
+              {% if m.benoetigt %}
+                Ja ({{ m.anzahl }}×)
+              {% else %}
+                Nein
+              {% endif %}
+            </div>
+          </div>
+
+          <div>
+            <span class="ro-label">Dockingstation bestellen</span>
+            <div class="ro-value">{{ "Ja" if a.Dockingstation else "Nein" }}</div>
+          </div>
+
+          <div>
+            <span class="ro-label">Dockingstation vorhanden</span>
+            <div class="ro-value">{{ "Ja" if h.dockingVorhanden else "Nein" }}</div>
+          </div>
+
+          <div class="md:col-span-2">
+            <span class="ro-label">Zusätzliche Hardware</span>
+            <div class="ro-value">
+              {% set items = [] %}
+              {% if a.Notebook %}{% set _ = items.append("Notebook") %}{% endif %}
+              {% if a.MiniPC %}{% set _ = items.append("Mini-PC") %}{% endif %}
+              {% if a.MausUndTastatur %}{% set _ = items.append("Maus & Tastatur") %}{% endif %}
+              {% if a.Headset %}{% set _ = items.append("Headset") %}{% endif %}
+              {% if a.Webcam %}{% set _ = items.append("Webcam") %}{% endif %}
+              {% if a.HandyUndSim %}{% set _ = items.append("Handy & SIM") %}{% endif %}
+              {{ items|join(", ") if items else "—" }}
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ================================================= -->
+      <!-- GRUND / BEMERKUNG -->
+      <!-- ================================================= -->
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
+        <h2 class="font-semibold text-lg mb-4">Zusatzinformationen</h2>
+
+        <div class="mb-4">
+          <span class="ro-label">Grund der Neubestellung</span>
+          {% if h.grundBestellung %}
+            <pre class="ro-pre">{{ h.grundBestellung }}</pre>
+          {% else %}
+            <div class="ro-value">—</div>
+          {% endif %}
+        </div>
+
+        <div>
+          <span class="ro-label">Bemerkung</span>
+          {% if h.bemerkung %}
+            <pre class="ro-pre">{{ h.bemerkung }}</pre>
+          {% else %}
+            <div class="ro-value">—</div>
+          {% endif %}
+        </div>
+      </div>
+
+    </section>
   </div>
 
+  <!-- ================================================= -->
+  <!-- ACTIONS -->
+  <!-- ================================================= -->
   {% include "tickets/partials/_ticket_actions.html" %}
+
 </div>
 {% endblock %}

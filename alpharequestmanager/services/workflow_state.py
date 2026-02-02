@@ -177,7 +177,23 @@ def build_workflow_zugang_sperren(description: dict) -> dict:
     return build_workflow_zugang_beantragen(description)
 
 def build_workflow_hardware(description: dict) -> dict:
-    pass
+    groups = {g["name"].lower(): g for g in get_groups()}
+
+    workflow = {"departments": {}}
+
+    def add_group(name: str):
+        g = groups.get(name.lower())
+        if not g:
+            return
+        workflow["departments"][g["id"]] = {
+            "name": g["name"],
+            "required": True,
+            "status": DEPARTMENT_STATUS_OPEN,
+        }
+
+    add_group("IT")
+
+    return workflow
 
 def build_workflow_niederlassung_schliessen(description: dict) -> dict:
     groups = {g["name"].lower(): g for g in get_groups()}

@@ -24,31 +24,31 @@
 <script>
 function hardwareEditForm() {
   return {
-    /* =================================================
+    /* ===============================
        BASE FORM
-    ================================================= */
+    =============================== */
     ...baseForm(),
 
-    /* =================================================
+    /* ===============================
        MODE
-    ================================================= */
+    =============================== */
     phase: "edit",
     isCreate: false,
 
-    /* =================================================
-       INITIAL DATA
-    ================================================= */
-    initialData: {{ description | tojson | safe }},
+    /* ===============================
+       ASSIGN / WEITERGEBEN
+    =============================== */
+    openAssignModal: false,
+    assigneeMode: "accountable",
+    currentAssigneeName: "{{ ticket.assignee_name }}",
 
-    /* =================================================
-       DATA
-    ================================================= */
+    /* ===============================
+       DATA (🔥 PREFILL AUS DB 🔥)
+    =============================== */
     companies: [],
 
     data: {
       mitarbeiterTyp: "",
-
-      /* BASISDATEN */
       vorname: "",
       nachname: "",
       kostenstelle: "",
@@ -62,12 +62,7 @@ function hardwareEditForm() {
 
       lieferungBis: "",
 
-      /* HARDWARE */
-      monitor: {
-        benoetigt: false,
-        anzahl: 1
-      },
-
+      monitor: { benoetigt: false, anzahl: 1 },
       geraet: "",
 
       artikel: {
@@ -82,15 +77,16 @@ function hardwareEditForm() {
 
       dockingVorhanden: false,
       bemerkung: "",
-      grundBestellung: ""
+      grundBestellung: "",
+
+      /* 🔥 HIER IST DER FIX 🔥 */
+      ...({{ description.hardware | default({}) | tojson | safe }})
     },
 
-    /* =================================================
-       VALIDATION RULES
-       (🔥 ALLES PFLICHT – ABHÄNGIG VOM TYP 🔥)
-    ================================================= */
+    /* ===============================
+       VALIDATION
+    =============================== */
     rules: {
-      /* -------- BASISDATEN (IMMER) -------- */
       mitarbeiterTyp: { required: true },
 
       vorname: { required: true },
@@ -105,50 +101,27 @@ function hardwareEditForm() {
 
       lieferungBis: { required: true },
 
-
-
       grundBestellung: {
         requiredIf() {
           return this.data.mitarbeiterTyp === "Bestandsmitarbeiter";
         }
       },
 
-      /* -------- WORKFLOW -------- */
       accountable_id: { required: true },
       supervisor_id: { required: true }
     },
 
-    /* =================================================
-       VALUE RESOLVER (KRITISCH 🔥)
-    ================================================= */
+    /* ===============================
+       VALUE RESOLVER
+    =============================== */
     getValue(field) {
-      /* BASIS */
       if (field in this.data) return this.data[field] ?? "";
-
-      /* BESTANDSMITARBEITER: Hardware gewählt? */
-      if (field === "artikel_bestand") {
-        return (
-          Object.values(this.data.artikel).some(Boolean) ||
-          this.data.monitor.benoetigt
-        ) ? "ok" : "";
-      }
-
-      /* NEUER MITARBEITER: Hardware gewählt? */
-      if (field === "artikel_neu") {
-        return (
-          this.data.geraet ||
-          Object.values(this.data.artikel).some(Boolean) ||
-          this.data.monitor.benoetigt
-        ) ? "ok" : "";
-      }
-
-      /* FALLBACK (Workflow Felder) */
       return document.querySelector(`[name="${field}"]`)?.value ?? "";
     },
 
-    /* =================================================
+    /* ===============================
        INIT
-    ================================================= */
+    =============================== */
     async init() {
       /* Firmen */
       try {
@@ -159,38 +132,31 @@ function hardwareEditForm() {
         this.companies = [];
       }
 
-      /* Initialdaten aus Description laden */
+      /* Assignee PRESET (🔥 WICHTIG) */
       this.$nextTick(() => {
-        if (this.initialData?.data) {
-          Object.assign(this.data, this.initialData.data);
-        }
-
-        /* Assignee setzen */
         this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
         this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
-
         this.updateDescription();
         this.validationTriggered = false;
       });
     },
 
-    /* =================================================
-       DESCRIPTION SYNC
-    ================================================= */
+    /* ===============================
+       DESCRIPTION → DB FORMAT
+    =============================== */
     updateDescription() {
       this.$refs.description.value = JSON.stringify(
         {
-          ticketType: "Hardwarebestellung",
-          data: this.data
+          hardware: this.data
         },
         null,
         2
       );
     },
 
-    /* =================================================
+    /* ===============================
        SUBMIT
-    ================================================= */
+    =============================== */
     submitEdit(action = "save", event) {
       if (action === "complete") {
         if (!this.validateOrScroll()) return;
