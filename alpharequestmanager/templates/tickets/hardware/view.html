@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Hardwarebestellung{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6">
+
+  <div class="card card--pad">
+    <h1 class="text-xl font-semibold">{{ ticket.title }}</h1>
+    <p class="text-sm text-muted">
+      Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y") }}
+    </p>
+  </div>
+
+  <div class="card card--pad">
+    <h2 class="font-semibold mb-3">Bestellung</h2>
+    <pre class="text-sm whitespace-pre-wrap">
+{{ description | tojson(indent=2) }}
+    </pre>
+  </div>
+
+  {% include "tickets/partials/_ticket_actions.html" %}
+</div>
+{% endblock %}

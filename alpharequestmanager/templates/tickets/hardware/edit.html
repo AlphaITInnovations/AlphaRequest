@@ -1,25 +1,26 @@
 {% extends "tickets/_base_ticket.html" %}
-{% block title %}Auftrag bearbeiten – {{ ticket.title }}{% endblock %}
+{% block title %}Hardwareauftrag bearbeiten{% endblock %}
 
 {% set form_action = "/tickets/update/" ~ ticket.id %}
+{% set alpine_component = "hardwareEditForm()" %}
 
 {% block hidden_fields %}
 <input type="hidden" name="description" x-ref="description">
-{% endblock %}
-
-{% block ticket_details %}
-  {% include "tickets/partials/_ticket_details.html" %}
 {% endblock %}
 
 {% block ticket_fields %}
   {% include "tickets/hardware/_form_fields.html" %}
 {% endblock %}
 
-{% block ticket_actions %}
-  {% include "tickets/partials/_ticket_actions.html" %}
-{% endblock %}
-
 {% block extra_js %}
-
-
+<script>
+function hardwareEditForm() {
+  return {
+    ...baseForm(),
+    phase: "edit",
+    isCreate: false,
+    initialData: {{ description | tojson | safe }}
+  }
+}
+</script>
 {% endblock %}

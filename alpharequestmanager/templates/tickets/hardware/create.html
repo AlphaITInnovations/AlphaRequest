@@ -1,7 +1,7 @@
 {% extends "tickets/_base_ticket.html" %}
 
 {% set form_action = "/tickets" %}
-{% set alpine_component = "hardwarePhase1Form()" %}
+{% set alpine_component = "hardwareCreateForm()" %}
 
 {% block hidden_fields %}
 <input type="hidden" name="ticket_type" value="hardware">
@@ -22,20 +22,17 @@
 
 {% block extra_js %}
 <script>
-  window.hardwarePhase1Form = function () {
-    return {
-      ...window.baseForm(),   // ← bringt inputClass(), validateOrScroll(), rules, etc.
-      example: "",
+function hardwareCreateForm() {
+  return {
+    ...baseForm(),
+    phase: "create",
+    isCreate: true,
 
-      init() {
-        // optional: init logic
-      },
-
-      rules: {
-        first_name: { required: true }
-      }
-    };
-  };
+    submitHardware(payload) {
+      this.$refs.description.value = JSON.stringify(payload, null, 2);
+      this.$el.submit();
+    }
+  }
+}
 </script>
-
 {% endblock %}

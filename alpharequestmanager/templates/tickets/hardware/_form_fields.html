@@ -1,23 +1,183 @@
-<section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
+<!-- ================================================= -->
+<!-- HARDWAREBESTELLUNG – FORM FIELDS -->
+<!-- ================================================= -->
 
+<!-- ================= MITARBEITERTYP ================= -->
+<div class="space-y-8">
+  <h3 class="font-semibold mb-4">👤 Mitarbeitertyp</h3>
 
-      <h2 class="text-xl font-semibold text-primary">
-        Example Section
-      </h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer">
+      <input type="radio" value="Bestandsmitarbeiter" x-model="data.mitarbeiterTyp">
+      Bestandsmitarbeiter
+    </label>
 
-      <!-- ================= STAMMDATEN ================= -->
-      <div>
-        <h3 class="font-semibold mb-4">Example Section</h3>
+    <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer">
+      <input type="radio" value="Neuer Mitarbeiter" x-model="data.mitarbeiterTyp">
+      Neuer Mitarbeiter
+    </label>
+  </div>
+</div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- ================= BASISDATEN ================= -->
+<div class="space-y-8">
+  <h3 class="font-semibold mb-4">📇 Basisdaten</h3>
 
-          <div>
-            <label>Example Field</label>
-            <input
-              x-model="example"
-              :class="inputClass('first_name', example)"
-            >
-          </div>
-        </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <div>
+      <label>Vorname</label>
+      <input class="input" x-model="data.vorname">
+    </div>
+
+    <div>
+      <label>Nachname</label>
+      <input class="input" x-model="data.nachname">
+    </div>
+
+    <div>
+      <label>Kostenstelle</label>
+      <input
+        class="input"
+        inputmode="numeric"
+        x-model="data.kostenstelle"
+        @input="data.kostenstelle = (data.kostenstelle || '').replace(/\D/g,'')"
+      >
+    </div>
+
+    <div>
+      <label>Firma</label>
+
+      <template x-if="companiesLoading">
+        <div class="input text-gray-400">Firmen werden geladen …</div>
+      </template>
+
+      <template x-if="!companiesLoading && companiesError">
+        <input class="input" x-model="data.firma" placeholder="Firma manuell eingeben">
+      </template>
+
+      <template x-if="!companiesLoading && !companiesError">
+        <select class="input" x-model="data.firma">
+          <option value="">Bitte wählen</option>
+          <template x-for="c in companies" :key="c">
+            <option :value="c" x-text="c"></option>
+          </template>
+        </select>
+      </template>
+    </div>
+
+    <!-- Adresse -->
+    <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-6 gap-4">
+      <div class="md:col-span-3">
+        <label>Straße</label>
+        <input class="input" x-model="data.addr_strasse">
       </div>
-</section>
+
+      <div>
+        <label>Nr.</label>
+        <input class="input" x-model="data.addr_nr">
+      </div>
+
+      <div class="md:col-span-2">
+        <label>PLZ</label>
+        <input
+          class="input"
+          x-model="data.addr_plz"
+          inputmode="numeric"
+          @input="data.addr_plz = (data.addr_plz || '').replace(/\D/g,'').slice(0,5)"
+        >
+      </div>
+
+      <div class="md:col-span-3">
+        <label>Stadt</label>
+        <input class="input" x-model="data.addr_stadt">
+      </div>
+
+      <div class="md:col-span-3">
+        <label>Name am Türschild (optional)</label>
+        <input class="input" x-model="data.addr_tuerschild">
+      </div>
+    </div>
+
+    <div>
+      <label>Lieferung bis</label>
+      <input type="date" class="input" x-model="data.lieferungBis">
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= BESTANDSMITARBEITER ================= -->
+<div class="space-y-8" x-show="data.mitarbeiterTyp === 'Bestandsmitarbeiter'">
+  <h3 class="font-semibold mb-4">🧰 Hardware & Grund</h3>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+    <label><input type="checkbox" x-model="data.artikel.Notebook"> Notebook</label>
+    <label><input type="checkbox" x-model="data.artikel.MiniPC"> Mini-PC</label>
+    <label><input type="checkbox" x-model="data.artikel.Dockingstation"> Dockingstation</label>
+    <label><input type="checkbox" x-model="data.artikel.MausUndTastatur"> Maus & Tastatur</label>
+    <label><input type="checkbox" x-model="data.artikel.Headset"> Headset</label>
+    <label><input type="checkbox" x-model="data.artikel.Webcam"> Webcam</label>
+    <label><input type="checkbox" x-model="data.artikel.HandyUndSim"> Handy & SIM</label>
+
+    <label class="md:col-span-2">
+      <input type="checkbox" x-model="data.monitor.benoetigt">
+      Monitor benötigt
+    </label>
+
+    <div x-show="data.monitor.benoetigt">
+      <label>Anzahl Monitore</label>
+      <select class="input" x-model.number="data.monitor.anzahl">
+        <option :value="1">1</option>
+        <option :value="2">2</option>
+      </select>
+    </div>
+
+    <div class="md:col-span-2">
+      <label>Grund der Neubestellung</label>
+      <textarea class="input h-24" x-model="data.grundBestellung"></textarea>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= NEUER MITARBEITER ================= -->
+<div class="space-y-8" x-show="data.mitarbeiterTyp === 'Neuer Mitarbeiter'">
+  <h3 class="font-semibold mb-4">💻 Hardwareausstattung</h3>
+
+  <div>
+    <label><input type="checkbox" x-model="data.monitor.benoetigt"> Monitor benötigt</label>
+    <div x-show="data.monitor.benoetigt" class="mt-2">
+      <select class="input w-32" x-model.number="data.monitor.anzahl">
+        <option :value="1">1</option>
+        <option :value="2">2</option>
+      </select>
+    </div>
+  </div>
+
+  <div>
+    <label>Gerätetyp</label>
+    <div class="flex gap-4 mt-2">
+      <label><input type="radio" value="Laptop" x-model="data.geraet"> Laptop</label>
+      <label><input type="radio" value="MiniPC" x-model="data.geraet"> Mini-PC</label>
+    </div>
+  </div>
+
+  <div>
+    <label><input type="checkbox" x-model="data.artikel.Dockingstation"> Dockingstation bestellen</label>
+    <label class="ml-4"><input type="checkbox" x-model="data.dockingVorhanden"> Docking vorhanden</label>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4">
+    <label><input type="checkbox" x-model="data.artikel.MausUndTastatur"> Maus & Tastatur</label>
+    <label><input type="checkbox" x-model="data.artikel.Headset"> Headset</label>
+    <label><input type="checkbox" x-model="data.artikel.Webcam"> Webcam</label>
+    <label><input type="checkbox" x-model="data.artikel.HandyUndSim"> Handy & SIM</label>
+  </div>
+
+  <div>
+    <label>Bemerkung (optional)</label>
+    <textarea class="input h-24" x-model="data.bemerkung"></textarea>
+  </div>
+</div>
