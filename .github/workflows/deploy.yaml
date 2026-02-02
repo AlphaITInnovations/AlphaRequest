@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Trigger Dokploy (GitHub-style)
         run: |
-          curl -k -X POST https://dokploy.dom.local/api/deploy/UTYNxBY74JiZ2OAQ1o-qJ \
+          curl -k -X POST https://dokploy.dom.local/api/deploy/UAGuvlBiscs27UjOeilRb \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
