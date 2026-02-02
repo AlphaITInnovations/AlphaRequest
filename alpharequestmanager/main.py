@@ -109,6 +109,7 @@ def run_server(https: bool = False):
 
 
 def main():
+    print("starting")
     db.init_db()
     init_ticket_permissions()
     configure_event_loop()
