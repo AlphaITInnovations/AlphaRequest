@@ -16,6 +16,7 @@ jobs:
             https://dokploy.dom.local/api/deploy/UTYNxBY74JiZ2OAQ1o-qJ \
             -H "Content-Type: application/json" \
             -d '{
+              "branch": "main",
               "repository": "'"${{ github.repository }}"'",
               "ref": "'"${{ github.ref }}"'",
               "sha": "'"${{ github.sha }}"'"
