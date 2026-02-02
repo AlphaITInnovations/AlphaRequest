@@ -18,6 +18,6 @@ jobs:
             -d '{
               "branch": "main",
               "repository": "'"${{ github.repository }}"'",
-              "ref": "refs/heads/main,
+              "ref": "refs/heads/main",
               "sha": "'"${{ github.sha }}"'"
             }'
