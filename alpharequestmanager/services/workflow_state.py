@@ -244,7 +244,7 @@ def build_workflow_niederlassung_anmelden(description: dict) -> dict:
     return workflow
 
 def build_workflow_niederlassung_umzug(description: dict) -> dict:
-    pass
+    return build_workflow_niederlassung_anmelden(description)
 
 WORKFLOW_BUILDERS = {
     TicketType.zugang_beantragen: build_workflow_zugang_beantragen,

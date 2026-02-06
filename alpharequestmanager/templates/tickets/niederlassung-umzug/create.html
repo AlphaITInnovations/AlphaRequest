@@ -4,8 +4,8 @@
 {% set alpine_component = "niederlassungumzugPhase1Form()" %}
 
 {% block hidden_fields %}
-<input type="hidden" name="ticket_type" value="niederlassung-umzug">
-<input type="hidden" name="description" x-ref="description">
+  <input type="hidden" name="ticket_type" value="niederlassung-umzug">
+  <input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -22,20 +22,230 @@
 
 {% block extra_js %}
 <script>
-  window.niederlassungumzugPhase1Form = function () {
-    return {
-      ...window.baseForm(),   // ← bringt inputClass(), validateOrScroll(), rules, etc.
-      example: "",
+function niederlassungumzugPhase1Form() {
+  return {
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
 
-      init() {
-        // optional: init logic
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    modalOpen: false,
+
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    /* ----------------- MIETE ALT ------------------ */
+    miete_alt: {
+      location: "",
+      company: "",
+      lease_action: "",          // cancel | keep
+      lease_cancel_date: "",
+      lease_keep_reason: ""
+    },
+
+    /* ----------------- MIETE NEU ------------------ */
+    miete_neu: {
+      location: "",
+      company: "",
+      sign_visible: "",
+      reopening: "",
+      cost_center: "",
+      start_date: "",
+      address: "",
+
+      location_supervisor_id: "",
+      location_supervisor_name: "",
+
+      contact_person_id: "",
+      contact_person_name: ""
+    },
+
+    /* ----------------- IT ALT ------------------ */
+    it_alt: {
+      confirm_dsl_cancel: false,
+      confirm_landline_cancel: false,
+      network_hw_action: "",
+      network_hw_other: ""
+    },
+
+
+    /* ----------------- IT NEU ------------------ */
+    it_neu: {
+      server_rack: "",
+      network_cabling: "",
+      line_installed: "",
+      line_type: "",
+      line_location: "",
+      landlord_name: "",
+      landlord_contact: ""
+    },
+
+    /* ----------------- MARKETING ------------------ */
+    m: {
+      opening_hours: ""
+    },
+
+    /* ----------------- FUHRPARK ------------------ */
+    f: {
+      pool_cars: "",
+      pool_cars_from: ""
+    },
+
+    /* =================================================
+       VALIDATION RULES
+       (🔥 ALLE FELDER PFLICHT + conditional 🔥)
+    ================================================= */
+    rules: {
+      /* MIETE ALT */
+      alt_location: { required: true },
+      alt_company: { required: true },
+      alt_lease_action: { required: true },
+      alt_lease_cancel_date: {
+        requiredIf() { return this.miete_alt.lease_action === "cancel"; }
+      },
+      alt_lease_keep_reason: {
+        requiredIf() { return this.miete_alt.lease_action === "keep"; }
       },
 
-      rules: {
-        first_name: { required: true }
-      }
-    };
-  };
-</script>
+      /* MIETE NEU */
+      new_location: { required: true },
+      new_company: { required: true },
+      new_sign_visible: { required: true },
+      new_reopening: { required: true },
+      new_cost_center: { required: true },
+      new_start_date: { required: true },
+      new_address: { required: true },
+      location_supervisor_id: { required: true },
+      contact_person_id: { required: true },
 
+
+      /* WORKFLOW */
+      accountable_id: { required: true },
+      supervisor_id: { required: true }
+    },
+
+    /* =================================================
+       VALUE RESOLVER (für baseForm)
+    ================================================= */
+    getValue(field) {
+      /* MIETE ALT */
+      if (field === "alt_location") return this.miete_alt.location ?? "";
+      if (field === "alt_company") return this.miete_alt.company ?? "";
+      if (field === "alt_lease_action") return this.miete_alt.lease_action ?? "";
+      if (field === "alt_lease_cancel_date") return this.miete_alt.lease_cancel_date ?? "";
+      if (field === "alt_lease_keep_reason") return this.miete_alt.lease_keep_reason ?? "";
+
+      /* MIETE NEU */
+      if (field === "new_location") return this.miete_neu.location ?? "";
+      if (field === "new_company") return this.miete_neu.company ?? "";
+      if (field === "new_sign_visible") return this.miete_neu.sign_visible ?? "";
+      if (field === "new_reopening") return this.miete_neu.reopening ?? "";
+      if (field === "new_cost_center") return this.miete_neu.cost_center ?? "";
+      if (field === "new_start_date") return this.miete_neu.start_date ?? "";
+      if (field === "new_address") return this.miete_neu.address ?? "";
+
+      /* USER DROPDOWNS */
+      if (field === "location_supervisor_id") return this.miete_neu.location_supervisor_id ?? "";
+      if (field === "contact_person_id") return this.miete_neu.contact_person_id ?? "";
+
+      /* IT ALT */
+      if (field === "alt_network_hw_action") return this.it_alt.network_hw_action ?? "";
+      if (field === "alt_network_hw_other") return this.it_alt.network_hw_other ?? "";
+    if (field === "confirm_dsl_cancel") return !!this.it_alt.confirm_dsl_cancel;
+    if (field === "confirm_landline_cancel") return !!this.it_alt.confirm_landline_cancel;
+
+      /* IT NEU */
+      if (field === "new_server_rack") return this.it_neu.server_rack ?? "";
+      if (field === "new_network_cabling") return this.it_neu.network_cabling ?? "";
+      if (field === "new_line_installed") return this.it_neu.line_installed ?? "";
+      if (field === "new_line_type") return this.it_neu.line_type ?? "";
+      if (field === "new_line_location") return this.it_neu.line_location ?? "";
+      if (field === "new_landlord_name") return this.it_neu.landlord_name ?? "";
+      if (field === "new_landlord_contact") return this.it_neu.landlord_contact ?? "";
+
+      /* MARKETING */
+      if (field === "opening_hours") return this.m.opening_hours ?? "";
+
+      /* FUHRPARK */
+      if (field in this.f) return this.f[field] ?? "";
+
+      /* FALLBACK (Workflow Felder, native inputs etc.) */
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      /* COMPANIES */
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
+      }
+
+      /* USER-DROPDOWN EVENTS */
+      this.$el.addEventListener("user-selected", (e) => {
+        const { fieldId, id, name } = e.detail;
+
+        if (fieldId === "location_supervisor_id") {
+          this.miete_neu.location_supervisor_id = id;
+          this.miete_neu.location_supervisor_name = name;
+        }
+
+        if (fieldId === "contact_person_id") {
+          this.miete_neu.contact_person_id = id;
+          this.miete_neu.contact_person_name = name;
+        }
+      });
+    },
+
+    /* =================================================
+       CREATE FLOW
+    ================================================= */
+    openAssigneeModal() {
+      this.validationTriggered = false;
+
+      this.$nextTick(() => {
+        if (!this.validateOrScroll()) return;
+        this.modalOpen = true;
+      });
+    },
+
+    chooseAssignee(type) {
+      const id = document.querySelector(`[name="${type}_id"]`)?.value;
+      const name = document.querySelector(`[name="${type}_name"]`)?.value;
+
+      this.$refs.assigneeId.value = id;
+      this.$refs.assigneeName.value = name;
+
+      /* DESCRIPTION SERIALISIEREN */
+      this.$refs.description.value = JSON.stringify(
+        {
+          miete_alt: this.miete_alt,
+          miete_neu: this.miete_neu,
+          it_alt: this.it_alt,
+          it_neu: this.it_neu,
+          marketing: this.m,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+
+      this.modalOpen = false;
+      this.$el.submit();
+    }
+  };
+}
+</script>
 {% endblock %}
