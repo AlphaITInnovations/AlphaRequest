@@ -134,6 +134,16 @@
             <div class="ro-value">{{ miete.start_date|default("—") }}</div>
           </div>
 
+          <div>
+            <span class="ro-label">Firma an Klingel / Eingang sichtbar?</span>
+            <div class="ro-value">{{ miete.sign_visible|default("—") }}</div>
+            {% if miete.sign_visible == "Nein" %}
+              <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                📌 Bitte Zettel oder ähnliches an Klingel / Eingang anbringen.
+              </p>
+            {% endif %}
+          </div>
+
           <div class="md:col-span-2">
             <span class="ro-label">Adresse</span>
             {% if miete.address %}
@@ -145,7 +155,7 @@
 
           <div>
             <span class="ro-label">Vorgesetzter der Niederlassung</span>
-            <div class="ro-value">{{ miete.supervisor_name|default("—") }}</div>
+            <div class="ro-value">{{ miete.location_supervisor_name|default("—") }}</div>
           </div>
 
           <div>
@@ -175,18 +185,40 @@
           </div>
 
           <div>
-            <span class="ro-label">DSL-/Glasfaser-Dose vorhanden?</span>
+            <span class="ro-label">Ist im Büro bereits eine DSL- oder Glasfaser-Dose installiert?</span>
             <div class="ro-value">{{ it.line_installed|default("—") }}</div>
           </div>
 
-          <div class="md:col-span-2">
-            <span class="ro-label">Anschluss / Position</span>
-            {% if it.line_details %}
-              <pre class="ro-pre">{{ it.line_details }}</pre>
-            {% else %}
-              <div class="ro-value">—</div>
-            {% endif %}
-          </div>
+          {% if it.line_installed == "Ja" %}
+            <div>
+              <span class="ro-label">Welche Art / Anschluss?</span>
+              <div class="ro-value">{{ it.line_type|default("—") }}</div>
+            </div>
+
+            <div class="md:col-span-2">
+              <span class="ro-label">Wo befindet sie sich?</span>
+              {% if it.line_location %}
+                <pre class="ro-pre">{{ it.line_location }}</pre>
+              {% else %}
+                <div class="ro-value">—</div>
+              {% endif %}
+            </div>
+          {% elif it.line_installed == "Nein" %}
+            <div class="md:col-span-2 rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm">
+              <strong>📌 Hinweis:</strong>
+              Vermieter mit der Installation/Beauftragung beauftragen.
+            </div>
+
+            <div>
+              <span class="ro-label">Vermieter – Name</span>
+              <div class="ro-value">{{ it.landlord_name|default("—") }}</div>
+            </div>
+
+            <div>
+              <span class="ro-label">Vermieter – Kontaktdaten (Telefon oder E-Mail)</span>
+              <div class="ro-value">{{ it.landlord_contact|default("—") }}</div>
+            </div>
+          {% endif %}
 
         </div>
       </div>

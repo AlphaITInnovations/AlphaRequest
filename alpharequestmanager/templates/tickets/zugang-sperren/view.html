@@ -15,7 +15,7 @@
       display: block;
       font-size: .75rem;
       line-height: 1rem;
-      color: rgb(107 114 128);
+      color: rgb(107 114 128); /* gray-500 */
       font-weight: 600;
       margin-bottom: .125rem;
     }
@@ -24,12 +24,22 @@
       line-height: 1.25rem;
       white-space: normal;
       word-break: break-word;
+      color: inherit;
     }
     .ro-pre {
       white-space: pre-wrap;
       word-break: break-word;
       font-size: .875rem;
       line-height: 1.25rem;
+      color: inherit;
+    }
+    .hint-box {
+      border: 1px solid rgb(253 230 138); /* amber-200 */
+      background: rgb(255 251 235); /* amber-50 */
+    }
+    .dark .hint-box {
+      border-color: rgb(217 119 6); /* amber-600 */
+      background: rgba(120,53,15,.2);
     }
   </style>
 
@@ -37,9 +47,7 @@
   <!-- HEADER -->
   <!-- ================================================= -->
   <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-    <h1 class="text-xl font-semibold">
-      {{ ticket.title }}
-    </h1>
+    <h1 class="text-xl font-semibold">{{ ticket.title }}</h1>
     <p class="text-sm text-gray-500 mt-1">
       Erstellt am {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}
     </p>
@@ -107,7 +115,6 @@
         <h2 class="font-semibold text-lg mb-4">Personalabteilung</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
           <div>
             <span class="ro-label">Vorname</span>
             <div class="ro-value">{{ p.first_name|default("—") }}</div>
@@ -132,28 +139,89 @@
             <span class="ro-label">Austrittsdatum</span>
             <div class="ro-value">{{ p.exit_date|default("—") }}</div>
           </div>
-
         </div>
       </div>
 
       <!-- ================================================= -->
       <!-- IT -->
       <!-- ================================================= -->
-      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6">
-        <h2 class="font-semibold text-lg mb-4">IT</h2>
+      <div class="bg-white dark:bg-gray-800 border rounded-xl shadow p-6 space-y-6">
+        <h2 class="font-semibold text-lg">IT</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
+          <!-- Mailweiterleitung -->
           <div>
-            <span class="ro-label">IT Feld 1</span>
-            <div class="ro-value">{{ it.field1|default("—") }}</div>
+            <span class="ro-label">Mailweiterleitung?</span>
+            <div class="ro-value">{{ it.mail_forwarding|default("—") }}</div>
           </div>
 
+          {% if it.mail_forwarding == "Ja" %}
           <div>
-            <span class="ro-label">IT Feld 2</span>
-            <div class="ro-value">{{ it.field2|default("—") }}</div>
+            <span class="ro-label">Weiterleiten an (eine Person)</span>
+            <div class="ro-value">{{ it.mail_forward_to|default("—") }}</div>
+          </div>
+          {% else %}
+          <div>
+            <span class="ro-label">Weiterleiten an (eine Person)</span>
+            <div class="ro-value">—</div>
+          </div>
+          {% endif %}
+
+          <!-- Postfachzugriff -->
+          <div>
+            <span class="ro-label">Postfachzugriff gewähren?</span>
+            <div class="ro-value">{{ it.mailbox_access|default("—") }}</div>
           </div>
 
+          {% if it.mailbox_access == "Ja" %}
+          <div class="md:col-span-2">
+            <span class="ro-label">Zugriff für (mehrere Personen möglich)</span>
+            {% if it.mailbox_access_for %}
+              <pre class="ro-pre">{{ it.mailbox_access_for }}</pre>
+            {% else %}
+              <div class="ro-value">—</div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="md:col-span-2">
+            <span class="ro-label">Zugriff für (mehrere Personen möglich)</span>
+            <div class="ro-value">—</div>
+          </div>
+          {% endif %}
+
+          <!-- Abwesenheitsnotiz -->
+          <div>
+            <span class="ro-label">Abwesenheitsnotiz aktivieren?</span>
+            <div class="ro-value">{{ it.auto_reply|default("—") }}</div>
+          </div>
+
+          {% if it.auto_reply == "Ja" %}
+          <div class="md:col-span-2">
+            <span class="ro-label">Text der Abwesenheitsnotiz</span>
+            {% if it.auto_reply_text %}
+              <pre class="ro-pre">{{ it.auto_reply_text }}</pre>
+            {% else %}
+              <div class="ro-value">—</div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="md:col-span-2">
+            <span class="ro-label">Text der Abwesenheitsnotiz</span>
+            <div class="ro-value">—</div>
+          </div>
+          {% endif %}
+
+        </div>
+
+        <!-- Hinweise -->
+        <div class="hint-box rounded-lg p-4 text-sm">
+          <div class="font-semibold mb-1">📌 Wichtige Hinweise</div>
+          <ul class="list-disc pl-5 space-y-1">
+            <li><strong>Mailweiterleitung</strong> und <strong>Postfachzugriff</strong> sind jeweils <strong>maximal 30 Tage</strong> möglich.</li>
+            <li>Postfächer werden weiterhin gesichert, <strong>neue E-Mails werden jedoch nicht mehr zugestellt</strong>.</li>
+            <li>Abwesenheitsnotiz enthält ggf. Platzhalter (<code>&lt;Name&gt;</code>, <code>&lt;Ersatzmailadresse&gt;</code>).</li>
+          </ul>
         </div>
       </div>
 
@@ -164,7 +232,6 @@
         <h2 class="font-semibold text-lg mb-4">Fuhrpark</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
           <div>
             <span class="ro-label">Dienstwagen vorhanden?</span>
             <div class="ro-value">{{ f.car|default("—") }}</div>
@@ -175,8 +242,12 @@
             <span class="ro-label">Rückgabedatum</span>
             <div class="ro-value">{{ f.car_return_date|default("—") }}</div>
           </div>
+          {% else %}
+          <div>
+            <span class="ro-label">Rückgabedatum</span>
+            <div class="ro-value">—</div>
+          </div>
           {% endif %}
-
         </div>
       </div>
 

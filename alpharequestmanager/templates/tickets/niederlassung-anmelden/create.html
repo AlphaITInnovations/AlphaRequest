@@ -49,10 +49,11 @@ function niederlassungAnmeldenPhase1Form() {
       cost_center: "",
       start_date: "",
       address: "",
-      supervisor_id: "",
-      supervisor_name: "",
+      location_supervisor_id: "",
+      location_supervisor_name: "",
       contact_person_id: "",
-      contact_person_name: ""
+      contact_person_name: "",
+      sign_visible: ""
     },
 
     /* ----------------- IT ------------------ */
@@ -60,7 +61,10 @@ function niederlassungAnmeldenPhase1Form() {
       server_rack: "",
       network_cabling: "",
       line_installed: "",
-      line_details: ""
+      line_type: "",
+      line_location: "",
+      landlord_name: "",
+      landlord_contact: ""
     },
 
     /* ----------------- MARKETING ------------------ */
@@ -74,6 +78,7 @@ function niederlassungAnmeldenPhase1Form() {
       pool_cars_from: ""
     },
 
+
     /* =================================================
        VALIDATION RULES
        (🔥 NUR MIETE 🔥)
@@ -86,8 +91,9 @@ function niederlassungAnmeldenPhase1Form() {
       cost_center: { required: true },
       start_date: { required: true },
       address: { required: true },
-      supervisor_id: { required: true },
+      location_supervisor_id: { required: true },
       contact_person_id: { required: true },
+      sign_visible: { required: true },
 
       /* WORKFLOW */
       accountable_id: { required: true },
@@ -131,9 +137,9 @@ function niederlassungAnmeldenPhase1Form() {
       this.$el.addEventListener("user-selected", (e) => {
         const { fieldId, id, name } = e.detail;
 
-        if (fieldId === "supervisor_id") {
-          this.miete.supervisor_id = id;
-          this.miete.supervisor_name = name;
+        if (fieldId === "location_supervisor_id") {
+          this.miete.location_supervisor_id = id;
+          this.miete.location_supervisor_name = name;
         }
 
         if (fieldId === "contact_person_id") {

@@ -43,15 +43,34 @@
         </select>
       </div>
 
-      <!-- Vorgesetzter -->
-      <div :class="shellClass('supervisor_id', getValue('supervisor_id'))">
-        {% set label = "Vorgesetzter der Niederlassung" %}
-        {% set field_id = "supervisor_id" %}
-        {% set field_name = "supervisor_name" %}
+      <!-- ✅ NEU: Klingel / Eingang sichtbar -->
+      <div>
+        <label>Firma bereits an der Klingel / am Eingang sichtbar?</label>
+        <select
+          x-model="miete.sign_visible"
+          :class="inputClass('sign_visible', miete.sign_visible)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
 
-        {% set initial_id = description.miete.supervisor_id
+        <template x-if="miete.sign_visible === 'Nein'">
+          <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
+            📌 Bitte Zettel oder ähnliches an Klingel / Eingang anbringen.
+          </p>
+        </template>
+      </div>
+
+      <!-- Vorgesetzter -->
+      <div :class="shellClass('location_supervisor_id', getValue('location_supervisor_id'))">
+        {% set label = "Vorgesetzter der Niederlassung" %}
+        {% set field_id = "location_supervisor_id" %}
+        {% set field_name = "location_supervisor_name" %}
+
+        {% set initial_id = description.miete.location_supervisor_id
             if description and description.miete is defined else "" %}
-        {% set initial_name = description.miete.supervisor_name
+        {% set initial_name = description.miete.location_supervisor_name
             if description and description.miete is defined else "" %}
 
         {% include "components/user-dropdown.html" %}
@@ -135,8 +154,9 @@
         >
       </div>
 
+      <!-- ✅ Text angepasst: Frage exakt wie gewünscht -->
       <div>
-        <label>DSL- oder Glasfaser-Dose vorhanden?</label>
+        <label>Ist im Büro bereits eine DSL- oder Glasfaser-Dose installiert?</label>
         <select
           x-model="it.line_installed"
           :class="inputClass('line_installed', it.line_installed)"
@@ -147,23 +167,59 @@
         </select>
       </div>
 
+      <!-- Wenn JA: Art + Ort -->
       <template x-if="it.line_installed === 'Ja'">
-        <div class="md:col-span-2">
-          <label>Art / Anschluss & Position</label>
-          <textarea
-            x-model="it.line_details"
-            :class="inputClass('line_details', it.line_details)"
-            class="h-20"
-            placeholder="z.B. Glasfaser im Technikraum EG"
-          ></textarea>
+        <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label>Welche Art / Anschluss?</label>
+            <select
+              x-model="it.line_type"
+              :class="inputClass('line_type', it.line_type)"
+            >
+              <option value="">Bitte wählen</option>
+              <option>DSL</option>
+              <option>Glasfaser</option>
+            </select>
+          </div>
+
+          <div class="md:col-span-2">
+            <label>Wo befindet sie sich?</label>
+            <textarea
+              x-model="it.line_location"
+              :class="inputClass('line_location', it.line_location)"
+              class="h-20"
+              placeholder="z. B. Glasfaser-Dose im Technikraum EG, linke Wand"
+            ></textarea>
+          </div>
         </div>
       </template>
 
+      <!-- Wenn NEIN: Vermieter beauftragen + Vermieter-Daten -->
       <template x-if="it.line_installed === 'Nein'">
-        <div class="md:col-span-2">
-          <label>Hinweis</label>
-          <div class="text-sm text-gray-500">
-            Vermieter wird mit der Installation / Beauftragung beauftragt.
+        <div class="md:col-span-2 space-y-4">
+          <div class="rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm">
+            <strong>📌 Hinweis:</strong>
+            Vermieter wird mit der Installation beauftragt
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label>Vermieter – Name</label>
+              <input
+                x-model="it.landlord_name"
+                :class="inputClass('landlord_name', it.landlord_name)"
+                placeholder="Name des Vermieters / der Verwaltung"
+              >
+            </div>
+
+            <div>
+              <label>Vermieter – Kontaktdaten (Telefon oder E-Mail)</label>
+              <input
+                x-model="it.landlord_contact"
+                :class="inputClass('landlord_contact', it.landlord_contact)"
+                placeholder="z. B. 01234 56789 oder vermieter@firma.de"
+              >
+            </div>
           </div>
         </div>
       </template>

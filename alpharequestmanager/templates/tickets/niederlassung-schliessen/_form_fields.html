@@ -49,6 +49,45 @@
       IT
     </h2>
 
+    <!-- ================= WICHTIGE HINWEISE + BESTÄTIGUNG ================= -->
+<!-- ================= WICHTIGE HINWEISE + BESTÄTIGUNG ================= -->
+<div class="rounded-xl border border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 p-5">
+  <div class="text-sm text-red-800 dark:text-red-200">
+    <div class="font-semibold mb-3">⚠️ Wichtige Hinweise</div>
+
+    <div class="space-y-3">
+
+      <label class="flex items-start gap-3">
+        <input
+          type="checkbox"
+          x-model="it.confirm_dsl_cancel"
+          :class="inputClass('confirm_dsl_cancel', it.confirm_dsl_cancel)"
+          class="mt-1 h-4 w-4 shrink-0"
+        >
+        <span class="leading-snug">
+          <strong>Die DSL/Internetleitung wird gekündigt.</strong>
+        </span>
+      </label>
+
+      <label class="flex items-start gap-3">
+        <input
+          type="checkbox"
+          x-model="it.confirm_landline_cancel"
+          :class="inputClass('confirm_landline_cancel', it.confirm_landline_cancel)"
+          class="mt-1 h-4 w-4 shrink-0"
+        >
+        <span class="leading-snug">
+          <strong>Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!</strong>
+        </span>
+      </label>
+
+    </div>
+  </div>
+</div>
+
+
+
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
       <div>

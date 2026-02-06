@@ -19,35 +19,21 @@
 {% block ticket_actions %}
   {% include "tickets/partials/_ticket_actions.html" %}
 {% endblock %}
-
 {% block extra_js %}
 <script>
 function zugangsperrenEditForm() {
   return {
-    /* =================================================
-       BASE FORM
-    ================================================= */
     ...baseForm(),
 
-    /* =================================================
-       MODE
-    ================================================= */
     phase: "edit",
     isCreate: false,
 
-    /* =================================================
-       ASSIGN / WEITERGEBEN
-    ================================================= */
     openAssignModal: false,
     assigneeMode: "accountable",
     currentAssigneeName: "{{ ticket.assignee_name }}",
 
-    /* =================================================
-       DATA
-    ================================================= */
     companies: [],
 
-    /* ----------------- PERSONAL ------------------ */
     p: {
       first_name: "",
       last_name: "",
@@ -57,71 +43,66 @@ function zugangsperrenEditForm() {
       ...{{ description.personal | default({}) | tojson | safe }}
     },
 
-    /* ----------------- IT ------------------ */
     it: {
-      field1: "",
-      field2: "",
+      mail_forwarding: "",
+      mail_forward_to: "",
+      mailbox_access: "",
+      mailbox_access_for: "",
+      auto_reply: "",
+      auto_reply_text: "",
       ...{{ description.it | default({}) | tojson | safe }}
     },
 
-    /* ----------------- FUHRPARK ------------------ */
     f: {
       car: "",
       car_return_date: "",
       ...{{ description.fuhrpark | default({}) | tojson | safe }}
     },
 
-    /* =================================================
-       VALIDATION RULES
-       (🔥 ALLE FELDER PFLICHT 🔥)
-    ================================================= */
     rules: {
-      /* PERSONAL */
       first_name: { required: true },
       last_name: { required: true },
       cost_center: { required: true },
       contract_company: { required: true },
       exit_date: { required: true },
 
-      /* IT */
-      it_field1: { required: true },
-      it_field2: { required: true },
+      mail_forwarding: { required: true },
+      mailbox_access: { required: true },
+      auto_reply: { required: true },
 
-      /* FUHRPARK */
-      car: { required: true },
-      car_return_date: {
-        requiredIf() {
-          return this.f.car === "Ja";
-        }
+      mail_forward_to: {
+        requiredIf() { return this.it.mail_forwarding === "Ja"; }
+      },
+      mailbox_access_for: {
+        requiredIf() { return this.it.mailbox_access === "Ja"; }
+      },
+      auto_reply_text: {
+        requiredIf() { return this.it.auto_reply === "Ja"; }
       },
 
-      /* WORKFLOW */
+      car: { required: true },
+      car_return_date: {
+        requiredIf() { return this.f.car === "Ja"; }
+      },
+
       accountable_id: { required: true },
       supervisor_id: { required: true }
     },
 
-    /* =================================================
-       VALUE RESOLVER (für baseForm)
-    ================================================= */
     getValue(field) {
-      // PERSONAL
       if (field in this.p) return this.p[field];
-
-      // IT
-      if (field === "it_field1") return this.it.field1 ?? "";
-      if (field === "it_field2") return this.it.field2 ?? "";
-
-      // FUHRPARK
+      if (field in this.it) return this.it[field];
       if (field in this.f) return this.f[field];
-
-      // FALLBACK (Dropdowns etc.)
       return document.querySelector(`[name="${field}"]`)?.value ?? "";
     },
 
-    /* =================================================
-       INIT
-    ================================================= */
     async init() {
+      /* ASSIGNEE PRESET */
+      this.$nextTick(() => {
+        this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
+        this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
+      });
+
       /* COMPANIES */
       try {
         const res = await fetch("/api/companies");
@@ -131,36 +112,30 @@ function zugangsperrenEditForm() {
         this.companies = [];
       }
 
-      /* ASSIGNEE PRESET */
+      /* ✅ SELECT-REBIND (Company Select) */
+      const contract = this.p.contract_company;
+
       this.$nextTick(() => {
-        this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
-        this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
+        this.p.contract_company = "";
+
+        this.$nextTick(() => {
+          this.p.contract_company = contract;
+        });
       });
 
       /* INITIAL DESCRIPTION SYNC */
       this.updateDescription();
-
       this.validationTriggered = false;
     },
 
-    /* =================================================
-       DESCRIPTION SYNC
-    ================================================= */
     updateDescription() {
       this.$refs.description.value = JSON.stringify(
-        {
-          personal: this.p,
-          it: this.it,
-          fuhrpark: this.f
-        },
+        { personal: this.p, it: this.it, fuhrpark: this.f },
         null,
         2
       );
     },
 
-    /* =================================================
-       SUBMIT
-    ================================================= */
     submitEdit(action = "save", event) {
       if (action === "complete") {
         if (!this.validateOrScroll()) return;
@@ -186,9 +161,6 @@ function zugangsperrenEditForm() {
       form.submit();
     },
 
-    /* =================================================
-       WEITERGEBEN
-    ================================================= */
     applyAssignee() {
       let id = null;
       let name = null;
@@ -221,4 +193,5 @@ function zugangsperrenEditForm() {
   };
 }
 </script>
+
 {% endblock %}

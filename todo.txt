@@ -1,10 +1,10 @@
 TODO Formulare:
 - niederlassung beantragen: wer macht: Vermieter wird mit der Installation / Beauftragung beauftragt.
-- bestätigungsfelder bei niederlassung schließen, dass nummer und internet gekündigt wird
-- hardware bestellung spezialfall
+- bestätigungsfelder bei niederlassung schließen, dass Telefonnummer und internet gekündigt wird (danach nicht mehr verfügbar)
 - niederlassung umziehen fehlt
 - zugang sperren IT Felder fehlen
 
+- Überall phase1 und phase2 rules richtig definieren
 
 
 TODO MAIL:

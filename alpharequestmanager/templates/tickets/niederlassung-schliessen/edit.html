@@ -58,6 +58,8 @@ function niederlassungSchliessenEditForm() {
     it: {
       hardware_action: "",
       transfer_target: "",
+      confirm_dsl_cancel: "",
+      confirm_landline_cancel: "",
       ...{{ description.it | default({}) | tojson | safe }}
     },
 
@@ -85,6 +87,9 @@ function niederlassungSchliessenEditForm() {
           return this.it.hardware_action === "transfer_branch";
         }
       },
+    confirm_dsl_cancel: { required: true },
+    confirm_landline_cancel: { required: true },
+
 
       /* FUHRPARK */
       pool_cars: { required: true },
