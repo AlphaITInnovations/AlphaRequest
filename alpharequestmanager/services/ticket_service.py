@@ -23,16 +23,14 @@ class TicketService:
             comment: str,
             assignee_id: str,
             assignee_name: str,
-            supervisor_id: str,
-            supervisor_name: str,
             accountable_id: str,
             accountable_name: str,
             priority: TicketPriority = TicketPriority.medium,
     ) -> int:
 
         # --- Pflichtvalidierung ---
-        if not assignee_id or not supervisor_id:
-            raise ValueError("Assignee und Supervisor müssen gesetzt sein")
+        if not assignee_id:
+            raise ValueError("Assignee muss gesetzt sein")
 
         # --- Ticket anlegen ---
         ticket_id = db.insert_ticket(
@@ -50,11 +48,11 @@ class TicketService:
         # --- Initial Assignments (mit History!) ---
         self.assign_to_user(ticket_id, assignee_id, assignee_name)
         self.assign_accountable(ticket_id, accountable_id, accountable_name)
-        self.assign_supervisor(ticket_id, supervisor_id, supervisor_name)
+
 
         logger.info(
             f"Created ticket #{ticket_id} "
-            f"(assignee={assignee_name}, supervisor={supervisor_name})"
+            f"(assignee={assignee_name}"
         )
 
         return ticket_id
@@ -179,10 +177,6 @@ class TicketService:
     def assign_to_user(self, ticket_id: int, user_id: str, user_name: str):
         logger.info(f"Assign ticket #{ticket_id} to user {user_name}")
         db.set_assignee(ticket_id, user_id, user_name)
-
-    def assign_supervisor(self, ticket_id: int, user_id: str, user_name: str):
-        logger.info(f"Set supervisor for ticket #{ticket_id}: {user_name}")
-        db.set_supervisor(ticket_id, user_id, user_name)
 
     def assign_accountable(self, ticket_id: int, user_id: str, user_name: str):
         logger.info(f"Set accountable for ticket #{ticket_id}: {user_name}")

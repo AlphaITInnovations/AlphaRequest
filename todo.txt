@@ -1,25 +1,48 @@
 TODO Formulare:
-- niederlassung umziehen
 - Überall phase1 und phase2 rules richtig definieren
+- wann mail gesendet -> bei neues ticket zugeordnet
+- monitoring metrics
 
 
-TODO MAIL:
-- Update Mail
-Nur grob, wann sollen die Leute eine Mail bekommen?
-
-Minimal:
-- Immer wenn zugewiesen/geändert der aktuelle Bearbeiter erhält eine Mail (z.B. Neuer Auftrag für dich …)
-- Fachabteilung
-
-Optional (evtl zu viel):
--	Der initiale Ersteller erhält bei jedem Update eine Mail (z.B. Auftrag wurde gespeichert, Auftrag wurde weitergegeben, …) -> aber eigentlich zu viel spam
--	Ausgewählte Zuständiger / Vorgesetzer erhält bei Updates eine Mail
--	Oder nur Ersteller / Zuständiger / Vorgesetzter erhalten nur grobe infos wie, Auftrag befindet sich in der Bearbeitung, Auftrag befindet sich in der Durchführung, Auftrag wurde durchgeführt etc.
+zugang beantragen:
+    IT Systemdaten redundante felder entfernen Haupt-Kostenstelle, Eintrittsdatum, E-Mail-Signaturdaten
+    view.html ist die sturktur noch veraltet mit personalabteilung statt basisdaten etc
 
 
+    wenn eröffnung nur pflichtfelder von phase1 anzeigen (alle anderen nicht)
+    personalabteilung soll in bassisdaten umbenannt werden
 
-TODO Features:
-- Nachrichtenzentrale
+    timebutler nach oben in basisdaten
+    urlaubsanspruch im einstellungsjahr kann raus
+
+    feiertagsregelung kann raus, dafür bundesland bei niederlassung mit hin
+    arbeitszeit in studnen noch mit rein
+    hinweisfeld vorgesetzer (vertraglich vorgesetzer)
+
+    fahrzeugklasse ändern in fahrzeuggruppe 1-7 -> nach oben zu den basisdaten, also kompletter fuhrpark mit zu basisdaten (muss aber in der json sturktur trotzdem unter fuhrpark bleiben)
+    vorgesetzter timbutler umbenennen -> umbenennen: Wer soll den urlaub freigeben
+
+
+
+Zugang sperren:
+    abfindungsvereinbarung ja/nein
+    termin mit christine
+     abwesenheitsnotiz template funktioniert nicht
+     fuhrpark ja muss in die basisdaten
+     feld zugang sperren ab: Hinweis: ab dann kann sich der benutzer nicht mehr anmelden
+
+niederlassung-anmelden:
+    kostenstelle nicht in basisdaten
+    großer marco macht workflow visuell
+
+
+hardwarebesetllung
+    handy und sim aufteilen
+    Ticket in Ninja
+
+Mail:
+ An fachabteilungsverteiler
+ Verteiler in Webinterface konfigurierbar
 
 
 

@@ -1,42 +1,35 @@
-{# ===============================
-   OPTIONAL: Department Status in Sticky Bar (LEFT)
-   - only shows when view + department context exists
-   =============================== #}
+{# =========================================================
+   STICKY ACTION BAR
+========================================================= #}
 
-<!-- ================= STICKY ACTION BAR ================= -->
 <div class="sticky bottom-0 z-40 -mx-8 px-8 mt-6">
-  <div
-    class="border bg-white/95 dark:bg-gray-900/95 backdrop-blur
-           rounded-xl shadow-lg"
-  >
-    {# ✅ changed: justify-end -> justify-between, plus left/right columns #}
+  <div class="border bg-white/95 dark:bg-gray-900/95 backdrop-blur rounded-xl shadow-lg">
     <div class="max-w-7xl mx-auto py-3 pr-4 flex items-center justify-between gap-4">
 
-      <!-- LEFT: Department Status (only in view + department context) -->
-        <div class="min-w-0">
-          {% if phase == "view" and department is defined and department_id is defined %}
-            <div class="leading-snug">
-              <div class="text-lg font-semibold truncate">
-                Fachabteilung:
-                <span class="text-primary">{{ department.name }}</span>
-              </div>
-
-              <div class="text-sm mt-1">
-                Status:
-                {% if department_status == "done" %}
-                  <span class="text-green-600 font-semibold">✔ Ausgeführt</span>
-                {% elif department_status == "rejected" %}
-                  <span class="text-red-600 font-semibold">✖ Abgelehnt</span>
-                {% else %}
-                  <span class="text-primary font-semibold">🛠 In Bearbeitung</span>
-                {% endif %}
-              </div>
+      <!-- LEFT: Department Status -->
+      <div class="min-w-0">
+        {% if phase == "view" and department is defined and department_id is defined %}
+          <div class="leading-snug">
+            <div class="text-lg font-semibold truncate">
+              Fachabteilung:
+              <span class="text-primary">{{ department.name }}</span>
             </div>
-          {% endif %}
-        </div>
 
+            <div class="text-sm mt-1">
+              Status:
+              {% if department_status == "done" %}
+                <span class="text-green-600 font-semibold">✔ Ausgeführt</span>
+              {% elif department_status == "rejected" %}
+                <span class="text-red-600 font-semibold">✖ Abgelehnt</span>
+              {% else %}
+                <span class="text-primary font-semibold">🛠 In Bearbeitung</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
 
-      <!-- RIGHT: Actions -->
+      <!-- RIGHT: ACTION BUTTONS -->
       <div class="flex items-center justify-end gap-4">
 
         <!-- ABBRECHEN -->
@@ -50,19 +43,18 @@
           Abbrechen
         </a>
 
-
-        <!-- CREATE -->
+        <!-- ================= CREATE ================= -->
         {% if phase == "create" %}
         <button
           type="button"
-          @click="openAssigneeModal()"
+          @click="openCreateConfirm()"
           class="px-6 py-2 rounded-md bg-primary text-white font-medium hover:opacity-90 transition"
         >
           Auftrag erstellen
         </button>
         {% endif %}
 
-        <!-- EDIT -->
+        <!-- ================= EDIT ================= -->
         {% if phase == "edit" %}
           <button
             type="button"
@@ -81,9 +73,8 @@
           </button>
         {% endif %}
 
-        <!-- VIEW -->
+        <!-- ================= VIEW ================= -->
         {% if phase == "view" %}
-          {# Department View: DONE #}
           {% if department_id is defined and can_complete and department_status != "done" %}
             <button
               type="button"
@@ -102,7 +93,6 @@
             </button>
           {% endif %}
 
-          {# Optional: keep Archivieren for admin view pages (non-department pages) #}
           {% if is_admin and (department_id is not defined) %}
             <form method="post" action="/tickets/archive/{{ ticket.id }}">
               <button
@@ -120,50 +110,107 @@
   </div>
 </div>
 
-{# Hidden fields only where Alpine refs exist (create/edit flow) #}
+
+{# =========================================================
+   HIDDEN ASSIGNEE FIELDS
+========================================================= #}
 {% if phase in ["create", "edit"] %}
   <input type="hidden" name="assignee_id" x-ref="assigneeId">
   <input type="hidden" name="assignee_name" x-ref="assigneeName">
 {% endif %}
 
-<!-- ================= CREATE MODAL ================= -->
+
+{# =========================================================
+   CREATE CONFIRM MODAL
+========================================================= #}
 {% if phase == "create" %}
 <div
-  x-show="modalOpen"
+  x-show="confirmCreateOpen"
   x-cloak
   class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 >
-  <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 w-[420px]">
-    <h3 class="text-lg font-semibold mb-4">
-      Wer soll den Auftrag bearbeiten?
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+
+    <h3 class="text-lg font-semibold">
+      Auftrag erstellen
     </h3>
 
-    <div class="space-y-3">
+    <p class="text-sm text-gray-600 dark:text-gray-300">
+      Wollen Sie den Auftrag jetzt erstellen und der verantwortlichen Person zuweisen?
+    </p>
+
+    <div class="flex justify-end gap-3 pt-4">
+
       <button
-        class="w-full px-4 py-2 rounded bg-primary text-white"
-        @click="chooseAssignee('accountable')"
+        type="button"
+        @click="confirmCreateOpen = false"
+        class="px-4 py-2 rounded-md border dark:border-gray-600
+               bg-gray-100 dark:bg-gray-700
+               hover:bg-gray-200 dark:hover:bg-gray-600 transition"
       >
-        Verantwortlicher
+        Abbrechen
       </button>
 
       <button
-        class="w-full px-4 py-2 rounded bg-primary text-white"
-        @click="chooseAssignee('supervisor')"
+        type="button"
+        @click="confirmCreate()"
+        class="px-4 py-2 rounded-md bg-primary text-white hover:bg-primary/90 transition"
       >
-        Vorgesetzter
+        Erstellen
       </button>
+
     </div>
-
-   <button
-      type="button"
-      class="mt-4 text-sm text-gray-500"
-      @click.prevent="modalOpen = false"
-    >
-      Abbrechen
-    </button>
-
   </div>
 </div>
+{% endif %}
+
+
+{# =========================================================
+   COMPLETE CONFIRM MODAL (EDIT)
+========================================================= #}
+{% if phase == "edit" %}
+<div
+  x-show="confirmCompleteOpen"
+  x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+
+    <h3 class="text-lg font-semibold">
+      Auftrag abschließen
+    </h3>
+
+    <p class="text-sm text-gray-600 dark:text-gray-300">
+      Wollen Sie den Auftrag wirklich abschließen?
+      <br><br>
+      Eine Bearbeitung ist danach nicht mehr möglich.
+    </p>
+
+    <div class="flex justify-end gap-3 pt-4">
+
+      <button
+        type="button"
+        @click="confirmCompleteOpen = false"
+        class="px-4 py-2 rounded-md border dark:border-gray-600
+               bg-gray-100 dark:bg-gray-700
+               hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+      >
+        Abbrechen
+      </button>
+
+      <button
+        type="button"
+        @click="confirmCompleteOpen = false; performSubmit(pendingAction)"
+        class="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 transition"
+      >
+        Abschließen
+      </button>
+
+    </div>
+  </div>
+</div>
+
+
 {% endif %}
 
 <!-- ================= VIEW: Department "done" Script ================= -->

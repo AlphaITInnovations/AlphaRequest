@@ -118,7 +118,7 @@ def render_corporate_email(
     header_subtitle: str = "Automatisierte Benachrichtigung",
     info_box_url: Optional[str] = None,  # HEADLINE link
     footer_text: Optional[str] = None,
-    legal_hint: str = "Bitte nicht auf diese E-Mail antworten, sofern nicht anders angegeben.",
+    legal_hint: str = "Bitte nicht auf diese E-Mail antworten.",
 ) -> str:
     """
     Corporate email template.

@@ -11,6 +11,9 @@ from fastapi.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 from alpharequestmanager.core.dependencies import get_current_user
 from alpharequestmanager.database.database import get_groupID_from_name, get_group_name_from_id
+from alpharequestmanager.services.microsoft_graph import send_mail, get_cached_user_mail
+from alpharequestmanager.services.microsoft_mail import send_test_mail, send_newrequest_mail, \
+    send_mail_to_fachabteilung, send_mail_to_all_fachabteilung
 from alpharequestmanager.services.ticket_history import add_history_event
 from alpharequestmanager.services.ticket_permissions import can_user_create_ticket
 from alpharequestmanager.services.workflow_state import build_workflow, set_workflow_state
@@ -56,7 +59,7 @@ def generate_title(ticket_type, user):
     else:
         label = TICKET_LABELS.get(ticket_type, ticket_type.value)
 
-    generated_title = f"{label} – {user['displayName']} – {now_str}"
+    generated_title = f"{label} – {now_str}"
 
     return generated_title
 
@@ -69,9 +72,6 @@ async def create_ticket(
 
     assignee_id: str = Form(...),
     assignee_name: str = Form(...),
-
-    supervisor_id: str = Form(...),
-    supervisor_name: str = Form(...),
 
     accountable_id: str = Form(...),
     accountable_name: str = Form(...),
@@ -90,10 +90,8 @@ async def create_ticket(
 
     # Assignee prüfen
     if not assignee_id:
-        raise HTTPException(400, "Assignee ist ein Pflichtfeld")
+        raise HTTPException(400, "Verantwortlicher ist ein Pflichtfeld")
 
-    if not supervisor_id:
-        raise HTTPException(400, "Assignee ist ein Pflichtfeld")
 
     if not validate_assignee(user_cache, assignee_id):
         raise HTTPException(
@@ -107,12 +105,12 @@ async def create_ticket(
     except Exception:
         raise HTTPException(400, "Ticketdaten sind kein gültiges JSON")
 
-
+    tit = generate_title(ticket_type, user)
 
     manager = request.app.state.manager
 
     ticket_id = manager.create_ticket(
-        title=generate_title(ticket_type, user),
+        title=tit,
         ticket_type=ticket_type,
         description=description,
         owner_id=user["id"],
@@ -121,8 +119,6 @@ async def create_ticket(
         comment=comment,
         assignee_id=assignee_id,
         assignee_name=assignee_name,
-        supervisor_id=supervisor_id,
-        supervisor_name=supervisor_name,
         accountable_id=accountable_id,
         accountable_name=accountable_name,
         priority=priority,
@@ -136,6 +132,10 @@ async def create_ticket(
     )
 
     logger.info("Ticket erstellt: %s", ticket_id)
+
+    mail_to = get_cached_user_mail(request.app, assignee_id)
+    logger.info("Sending mail to %s", mail_to)
+    send_newrequest_mail(mail_to, priority, tit, ticket_type, ticket_id)
     return RedirectResponse("/dashboard", status_code=302)
 
 
@@ -153,8 +153,7 @@ async def update_ticket(
     assignee_name: str = Form(...),
     accountable_id: str = Form(...),
     accountable_name: str = Form(...),
-    supervisor_id: str = Form(...),
-    supervisor_name: str = Form(...),
+
     priority: TicketPriority = Form(...),
     action: str = Form("save"),
     user: dict = Depends(get_current_user),
@@ -164,8 +163,7 @@ async def update_ticket(
     if not validate_assignee(request.app.state.user_cache, assignee_id):
         raise HTTPException(400, "Ungültiger Assignee")
 
-    if not validate_assignee(request.app.state.user_cache, supervisor_id):
-        raise HTTPException(400, "Ungültiger Supervisor")
+
 
     database.update_ticket(
         ticket_id=ticket_id,
@@ -182,9 +180,6 @@ async def update_ticket(
 
         if ticket.accountable_id != accountable_id:
             database.set_accountable(ticket_id, accountable_id, accountable_name)
-
-        if ticket.supervisor_id != supervisor_id:
-            database.set_supervisor(ticket_id, supervisor_id, supervisor_name)
 
     if action == "complete":
         complete_ticket_internal(ticket, request, user)
@@ -291,9 +286,6 @@ async def edit_ticket_page(
 
             "assignee_id": ticket.assignee_id,
             "assignee_name": ticket.assignee_name,
-
-            "supervisor_id": ticket.supervisor_id,
-            "supervisor_name": ticket.supervisor_name,
 
             "description": description_parsed,
 
@@ -431,13 +423,11 @@ def complete_ticket_internal(ticket, request, user):
         user_name="fachabteilung",
     )
 
-    database.set_supervisor(
-        ticket_id=ticket.id,
-        user_id = "fachabteilung",
-        user_name= "fachabteilung",
-    )
+
 
     set_workflow_state(ticket.id, workflow)
+
+    send_mail_to_all_fachabteilung(workflow, ticket)
 
     logger.info(
         "Ticket %s in in_request überführt | Departments=%s",

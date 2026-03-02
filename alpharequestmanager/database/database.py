@@ -83,7 +83,6 @@ ninja_metadata,
 workflow_state,
 assignee_id, assignee_name,
 accountable_id, accountable_name,
-supervisor_id, supervisor_name,
 assignee_group_id, assignee_group_name,
 assignment_history, 
 history
@@ -121,9 +120,6 @@ def init_db():
         
         accountable_id      VARCHAR(255) NULL,
         accountable_name  VARCHAR(255) NULL,
-    
-        supervisor_id VARCHAR(255) NULL,
-        supervisor_name VARCHAR(255) NULL,
     
         assignee_group_id VARCHAR(255) NULL,
         assignee_group_name VARCHAR(255) NULL,
@@ -179,7 +175,6 @@ def insert_ticket(
                 ninja_metadata,
                 assignee_id, assignee_name,
                 accountable_id, accountable_name,
-                supervisor_id, supervisor_name,
                 assignee_group_id, assignee_group_name,
                 assignment_history, 
                 history
@@ -190,7 +185,6 @@ def insert_ticket(
                 %s, %s, %s,
                 %s, NULL,
                 %s,
-                NULL, NULL,
                 NULL, NULL,
                 NULL, NULL,
                 NULL, NULL,
@@ -308,7 +302,6 @@ def update_ticket(ticket_id: int, **fields) -> None:
         "ninja_metadata",
         "workflow_state",
         "assignee_id", "assignee_name", "accountable_id", "accountable_name",
-        "supervisor_id", "supervisor_name",
         "assignee_group_id", "assignee_group_name",
         "assignment_history",
         "history",
@@ -440,8 +433,17 @@ def set_ninja_token(token: Optional[dict]):
 # Groups
 def get_groups() -> List[dict]:
     groups = settings_get("TICKET_GROUPS", default=[])
+
     if not isinstance(groups, list):
         return []
+
+    # Backward compatibility
+    for g in groups:
+        if "members" not in g:
+            g["members"] = []
+        if "distributions" not in g:
+            g["distributions"] = []
+
     return groups
 
 
@@ -512,12 +514,33 @@ def get_group_name_from_id(group_id: str) -> Optional[str]:
     return None
 
 
+def get_distributions_from_group(group_id: str) -> List[str]:
+    """
+    Gibt die Verteiler-Mailadressen einer Gruppe zurück.
+    Falls Gruppe nicht existiert → leere Liste.
+    """
+    if not group_id:
+        return []
+
+    groups = get_groups()
+
+    for g in groups:
+        if g.get("id") == group_id:
+            distributions = g.get("distributions", [])
+            return distributions if isinstance(distributions, list) else []
+
+    return []
+
+def get_distributions_from_group_name(group_name: str) -> List[str]:
+    group_id = get_groupID_from_name(group_name)
+    if not group_id:
+        return []
+    return get_distributions_from_group(group_id)
 
 def _append_assignment_history(
     ticket_id: int,
     *,
     assignee: Optional[Dict[str, str]] = None,
-    supervisor: Optional[Dict[str, str]] = None,
     accountable: Optional[Dict[str, str]] = None,
     group: Optional[Dict[str, str]] = None,
     action: Optional[str] = None,
@@ -528,7 +551,6 @@ def _append_assignment_history(
     history.append({
         "timestamp": _now_iso(),
         "assignee": assignee,
-        "supervisor": supervisor,
         "accountable": accountable,
         "group": group,
         "action": action,
@@ -553,24 +575,10 @@ def set_assignee(ticket_id: int, user_id: str, user_name: str):
     )
 
 
-def set_supervisor(ticket_id: int, user_id: str, user_name: str):
-    _append_assignment_history(
-        ticket_id,
-        supervisor={"id": user_id, "name": user_name},
-        action="set_supervisor"
-    )
-
-    update_ticket(
-        ticket_id,
-        supervisor_id=user_id,
-        supervisor_name=user_name,
-    )
-
-
 def set_accountable(ticket_id: int, user_id: str, user_name: str):
     _append_assignment_history(
         ticket_id,
-        supervisor={"id": user_id, "name": user_name},
+        accountable={"id": user_id, "name": user_name},
         action="set_accountable"
     )
 

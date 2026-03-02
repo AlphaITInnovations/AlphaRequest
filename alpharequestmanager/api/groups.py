@@ -4,6 +4,7 @@ from alpharequestmanager.database import database as db
 from alpharequestmanager.utils.logger import logger
 import uuid
 from fastapi import Request
+import re
 
 router = APIRouter(prefix="/api", tags=["ticket-groups"])
 
@@ -19,7 +20,15 @@ def require_admin(user):
 @router.get("/groups")
 async def list_groups(user=Depends(get_current_user)):
     require_admin(user)
-    return db.get_groups()
+
+    groups = db.get_groups()
+
+    # Backward compatibility
+    for g in groups:
+        if "distributions" not in g:
+            g["distributions"] = []
+
+    return groups
 
 
 # ------------------------------------------------------------------------------
@@ -36,16 +45,19 @@ async def create_group(
     if not name:
         raise HTTPException(400, "Group 'name' is required")
 
+    distributions = payload.get("distributions", [])
+    distributions = validate_distribution_list(distributions)
+
     groups = db.get_groups()
 
-    # Unique name
     if any(g["name"].lower() == name.lower() for g in groups):
         raise HTTPException(400, f"Group name '{name}' already exists")
 
     new_group = {
         "id": uuid.uuid4().hex,
         "name": name,
-        "members": []
+        "members": [],
+        "distributions": distributions
     }
 
     groups.append(new_group)
@@ -62,30 +74,37 @@ async def update_group(
     request: Request,
     group_id: str,
     payload: dict = Body(...),
-
     user=Depends(get_current_user)
 ):
     require_admin(user)
 
     name = payload.get("name", "").strip()
     members = payload.get("members", [])
+    distributions = payload.get("distributions", None)
 
-    # AD-Userliste (User-Cache aus app.state)
     user_cache = request.app.state.user_cache
     valid_ids = {u["id"] for u in user_cache}
 
-    # Validierung
     for m in members:
         if m not in valid_ids:
             raise HTTPException(400, f"Invalid user ID '{m}' in members")
+
+    if distributions is not None:
+        distributions = validate_distribution_list(distributions)
 
     groups = db.get_groups()
 
     for g in groups:
         if g["id"] == group_id:
             g["name"] = name
-            if members is not None:
-                g["members"] = members
+            g["members"] = members
+
+            # Rückwärtskompatibel:
+            if "distributions" not in g:
+                g["distributions"] = []
+
+            if distributions is not None:
+                g["distributions"] = distributions
 
             db.save_groups(groups)
             return g
@@ -169,3 +188,22 @@ async def remove_member_from_group(
     db.save_groups(groups)
 
     return group
+
+
+### helper
+
+
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+def validate_distribution_list(distributions):
+    if not isinstance(distributions, list):
+        raise HTTPException(400, "distributions must be a list")
+
+    cleaned = []
+    for mail in distributions:
+        mail = str(mail).strip().lower()
+        if not EMAIL_REGEX.match(mail):
+            raise HTTPException(400, f"Invalid email address '{mail}'")
+        cleaned.append(mail)
+
+    return list(set(cleaned))  # Duplikate entfernen

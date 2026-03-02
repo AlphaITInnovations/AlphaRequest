@@ -155,3 +155,16 @@ async def list_all_users_with_e3_license(access_token: str) -> List[Dict[str, st
             params = None  # Nicht nochmal Query-Params mitschicken
 
     return users
+
+def get_cached_user_mail(app, user_id: str) -> str | None:
+    """
+    Gibt die Mailadresse eines Users aus dem Cache zurück.
+    """
+
+    users = getattr(app.state, "user_cache", [])
+
+    for user in users:
+        if user["id"] == user_id:
+            return user.get("mail")
+
+    return None

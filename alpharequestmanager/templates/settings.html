@@ -2,98 +2,174 @@
 {% block title %}Admin · Settings{% endblock %}
 
 {% block content %}
-<div x-data="{ open: true, active: 'general' }" class="flex h-full gap-4">
 
+
+
+<div
+  x-data="{
+    open: true,
+    active: 'general',
+    navClass(key) {
+      return this.active === key
+        ? 'bg-primary text-white'
+        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60';
+    }
+  }"
+  class="flex h-full gap-4"
+>
   <!-- Sidebar -->
-  <aside
-    :class="open ? 'w-64' : 'w-16'"
-    class="flex-shrink-0 transition-all duration-300 ease-in-out
-           bg-white dark:bg-cardDark border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden"
-    aria-label="Lokale Einstellungen Navigation"
-  >
-    <div class="flex items-center justify-between px-2 py-2 border-b border-gray-200 dark:border-gray-700">
-      <button type="button" @click="open = !open"
-              class="p-2 rounded-md hover:bg-primary/10 dark:hover:bg-primaryHover/20 transition"
-              :aria-expanded="open.toString()" aria-controls="settings-local-nav"
-              title="Navigation ein-/ausklappen">
-        <i data-lucide="panel-left-open" class="w-5 h-5 text-primary"></i>
-      </button>
-      <span x-show="open" x-cloak class="text-sm font-semibold text-gray-700 dark:text-gray-100 pr-2">Einstellungen</span>
-    </div>
+<!-- Sidebar -->
+<aside
+  :class="open ? 'w-64' : 'w-16'"
+  class="flex-shrink-0 transition-all duration-300 ease-in-out
+         bg-white dark:bg-cardDark
+         border border-gray-200 dark:border-gray-700
+         rounded-lg shadow-sm overflow-hidden"
+>
 
-    <nav id="settings-local-nav" class="p-2 space-y-1">
-      <button type="button" @click="active = 'general'"
-        :class="active==='general' ? 'bg-primary text-white'
-          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+  <!-- Header -->
+  <div class="flex items-center justify-between px-3 py-3 border-b border-gray-200 dark:border-gray-700">
+    <button
+      @click="open = !open"
+      class="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+    >
+      <i data-lucide="panel-left-open" class="w-5 h-5 text-primary"></i>
+    </button>
+
+    <span
+      x-show="open"
+      x-transition
+      class="text-sm font-semibold text-gray-700 dark:text-gray-100"
+    >
+      Admin Settings
+    </span>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="p-3 space-y-1 text-sm">
+
+    <!-- SYSTEM -->
+    <div class="mt-2">
+      <p x-show="open"
+         class="px-3 py-1 text-xs uppercase tracking-wider text-gray-400">
+        System
+      </p>
+
+      <button
+        @click="active='general'"
+        :class="navClass('general')"
         class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
         <i data-lucide="settings" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Allgemein</span>
+        <span x-show="open">Allgemein</span>
       </button>
 
-      <button type="button" @click="active = 'microsoft'"
-        :class="active==='microsoft' ? 'bg-primary text-white'
-          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
-        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
-        <i data-lucide="shield-check" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Microsoft Auth</span>
-      </button>
-
-      <button type="button" @click="active = 'ninja'"
-        :class="active==='ninja' ? 'bg-primary text-white'
-          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
-        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
-        <i data-lucide="zap" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Ninja Auth</span>
-      </button>
-
-      <button type="button" @click="active = 'session'"
-        :class="active==='session' ? 'bg-primary text-white'
-          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+      <button
+        @click="active='session'"
+        :class="navClass('session')"
         class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
         <i data-lucide="timer" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Session</span>
+        <span x-show="open">Session & Security</span>
+      </button>
+    </div>
+
+    <!-- AUTH -->
+    <div class="mt-6">
+      <p x-show="open"
+         class="px-3 py-1 text-xs uppercase tracking-wider text-gray-400">
+        Authentifizierung
+      </p>
+
+      <button
+        @click="active='microsoft'"
+        :class="navClass('microsoft')"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="shield-check" class="w-5 h-5"></i>
+        <span x-show="open">Microsoft OAuth</span>
       </button>
 
-      <button type="button" @click="active = 'companies'"
-        :class="active==='companies' ? 'bg-primary text-white'
-          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
+      <button
+        @click="active='ninja'"
+        :class="navClass('ninja')"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="zap" class="w-5 h-5"></i>
+        <span x-show="open">NinjaOne Integration</span>
+      </button>
+    </div>
+
+    <!-- ORGANISATION -->
+    <div class="mt-6">
+      <p x-show="open"
+         class="px-3 py-1 text-xs uppercase tracking-wider text-gray-400">
+        Organisation
+      </p>
+
+      <button
+        @click="active='companies'"
+        :class="navClass('companies')"
         class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
         <i data-lucide="building-2" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Firmen</span>
+        <span x-show="open">Firmen</span>
       </button>
-        <button type="button" @click="active = 'permissions'"
-          :class="active==='permissions' ? 'bg-primary text-white'
-            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
-          <i data-lucide="shield" class="w-5 h-5"></i>
-          <span x-show="open" x-cloak class="text-sm font-medium">Permissions</span>
-        </button>
-        <button type="button" @click="active = 'groups'"
-          :class="active==='groups' ? 'bg-primary text-white'
-            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
-          <i data-lucide="users" class="w-5 h-5"></i>
-          <span x-show="open" x-cloak class="text-sm font-medium">Fachabteilungen</span>
-        </button>
-        <button type="button" @click="active = 'ticket_overview'"
-          :class="active==='ticket_overview' ? 'bg-primary text-white'
-            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
-          <i data-lucide="eye" class="w-5 h-5"></i>
-          <span x-show="open" x-cloak class="text-sm font-medium">Ticket-Overview</span>
-        </button>
-        <button type="button" @click="active = 'testmail'"
-          :class="active==='testmail' ? 'bg-primary text-white'
-            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
-          <i data-lucide="mail" class="w-5 h-5"></i>
-          <span x-show="open" x-cloak class="text-sm font-medium">Testmail</span>
-        </button>
 
+      <button
+        @click="active='groups'"
+        :class="navClass('groups')"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="users" class="w-5 h-5"></i>
+        <span x-show="open">Fachabteilungen</span>
+      </button>
 
+      <button
+        @click="active='personalnummer'"
+        :class="navClass('personalnummer')"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+        <span x-show="open">Personalnummer Reset</span>
+      </button>
+    </div>
 
-    </nav>
-  </aside>
+    <!-- PERMISSIONS -->
+    <div class="mt-6">
+      <p x-show="open"
+         class="px-3 py-1 text-xs uppercase tracking-wider text-gray-400">
+        Permissions
+      </p>
+
+      <button
+        @click="active='permissions'"
+        :class="navClass('permissions')"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="shield" class="w-5 h-5"></i>
+        <span x-show="open">Auftragstypen</span>
+      </button>
+
+      <button
+        @click="active='ticket_overview'"
+        :class="navClass('ticket_overview')"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="eye" class="w-5 h-5"></i>
+        <span x-show="open">Ticketübersicht</span>
+      </button>
+    </div>
+
+    <!-- MAIL -->
+    <div class="mt-6">
+      <p x-show="open"
+         class="px-3 py-1 text-xs uppercase tracking-wider text-gray-400">
+        Kommunikation
+      </p>
+
+      <button
+        @click="active='testmail'"
+        :class="navClass('testmail')"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-md transition">
+        <i data-lucide="mail" class="w-5 h-5"></i>
+        <span x-show="open">Mail Test</span>
+      </button>
+    </div>
+
+  </nav>
+</aside>
 
   <!-- Main -->
   <div class="flex-1 min-w-0">
@@ -452,27 +528,19 @@
          bg-white dark:bg-cardDark shadow-sm">
 
   <!-- HEADER -->
-  <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4
-              flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <i data-lucide="shield-check" class="w-5 h-5 text-primary"></i>
-      <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">
-        Ticket-Erstellrechte
-      </h2>
-    </div>
-
-    <button
-      @click="savePermissions"
-      :disabled="!hasChanges()"
-      class="inline-flex items-center gap-2 px-4 py-2 rounded-lg
-             font-medium transition
-             bg-primary text-white hover:bg-primaryHover
-             disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed
-             dark:disabled:bg-gray-700 dark:disabled:text-gray-400">
-      <i data-lucide="save" class="w-4 h-4"></i>
-      Speichern
-    </button>
+ <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4
+            flex items-center justify-between">
+  <div class="flex items-center gap-2">
+    <i data-lucide="shield-check" class="w-5 h-5 text-primary"></i>
+    <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">
+      Ticket-Erstellrechte
+    </h2>
   </div>
+
+  <span class="text-xs text-gray-500 dark:text-gray-400">
+    Änderungen werden automatisch gespeichert
+  </span>
+</div>
 
   <!-- CONTENT -->
   <div class="p-6 space-y-10">
@@ -553,14 +621,9 @@
 </section>
 
 
-
-
-
-<!-- Ticket Groups -->
-<!-- Ticket Groups -->
 <section x-show="active==='groups'" x-cloak
   class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark"
-  x-data="GroupsEditor()">
+  x-data="GroupsEditor()" x-init="init()">
 
   <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center justify-between">
     <div class="flex items-center gap-2">
@@ -572,7 +635,7 @@
 
   <div class="p-5 space-y-6">
 
-    <!-- Neue Gruppe erstellen -->
+    <!-- Neue Gruppe -->
     <div class="flex gap-3 items-center">
       <input x-model="newGroupName"
         type="text"
@@ -581,7 +644,8 @@
 
       <button @click="createGroup"
         class="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primaryHover text-white font-medium px-4 py-2 transition">
-        <i data-lucide="plus" class="w-4 h-4"></i> Erstellen
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        Erstellen
       </button>
     </div>
 
@@ -589,121 +653,143 @@
       <p class="text-gray-500 dark:text-gray-400">Noch keine Gruppen vorhanden.</p>
     </template>
 
-    <!-- Gruppenliste -->
-    <ul class="space-y-4" role="list">
+    <!-- Gruppen -->
+    <ul class="space-y-6">
       <template x-for="g in groups" :key="g.id">
 
-        <li class="border rounded-lg p-4 bg-white dark:bg-fieldDark
-                   border-gray-300 dark:border-gray-600 shadow-sm">
+        <li class="border rounded-xl p-6 bg-white dark:bg-fieldDark border-gray-300 dark:border-gray-600 shadow-sm space-y-6">
 
-          <!-- Kopfzeile -->
-          <div class="flex items-center justify-between mb-3">
+          <!-- HEADER -->
+          <div class="flex items-center justify-between">
 
-            <!-- Name / Edit Mode -->
-            <template x-if="!edit[g.id]">
-              <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100"
-                  x-text="g.name"></h3>
-            </template>
+            <div>
+              <template x-if="!edit[g.id]">
+                <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-100"
+                    x-text="g.name"></h3>
+              </template>
 
-            <template x-if="edit[g.id]">
-              <input x-model="editName[g.id]"
-                class="rounded-lg border border-gray-300 dark:border-gray-600
-                       bg-white dark:bg-fieldDark px-3 py-1 text-sm w-64" />
-            </template>
+              <template x-if="edit[g.id]">
+                <input x-model="editName[g.id]"
+                  class="rounded-lg border border-gray-300 dark:border-gray-600
+                         bg-white dark:bg-fieldDark px-3 py-2 text-sm w-72" />
+              </template>
+            </div>
 
-            <!-- Action Buttons -->
             <div class="flex items-center gap-2">
 
-              <!-- EDIT -->
               <button x-show="!edit[g.id]"
                       @click="startEdit(g)"
-                      class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                      title="Bearbeiten">
-                <i data-lucide="pencil" class="w-4 h-4 text-gray-700"></i>
+                      class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
               </button>
 
-              <!-- SAVE -->
               <button x-show="edit[g.id]"
                       @click="saveEdit(g)"
-                      class="p-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white transition"
-                      title="Speichern">
+                      class="p-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white transition">
                 <i data-lucide="check" class="w-4 h-4"></i>
-
               </button>
 
-              <!-- CANCEL -->
               <button x-show="edit[g.id]"
                       @click="cancelEdit(g)"
-                      class="p-2 rounded bg-gray-400 hover:bg-gray-500 text-white transition"
-                      title="Abbrechen">
+                      class="p-2 rounded bg-gray-400 hover:bg-gray-500 text-white transition">
                 <i data-lucide="x" class="w-4 h-4"></i>
-
               </button>
 
-              <!-- DELETE -->
               <button @click="deleteGroup(g.id)"
-                      class="p-2 rounded hover:bg-red-100 dark:hover:bg-red-900/30"
-                      title="Löschen">
+                      class="p-2 rounded hover:bg-red-100 dark:hover:bg-red-900/30">
                 <i data-lucide="trash" class="w-4 h-4 text-red-600"></i>
-
               </button>
 
             </div>
           </div>
 
-          <!-- Mitgliederbereich -->
-          <div class="space-y-3">
+          <!-- CONTENT GRID -->
+          <div class="grid md:grid-cols-2 gap-8">
 
-            <div class="font-medium text-sm text-gray-700 dark:text-gray-200">
-              Mitglieder
-            </div>
+            <!-- ================= MITGLIEDER ================= -->
+            <div class="space-y-4">
 
-            <!-- Member badges -->
-            <div class="flex flex-wrap gap-2 mb-2">
-              <template x-for="uid in g.members" :key="uid">
-                <span class="inline-flex items-center gap-2 rounded-full bg-primary/10
-                             text-primary px-3 py-1 text-sm">
-                  <span x-text="userName(uid)"></span>
+              <div class="flex items-center justify-between">
+                <div class="font-semibold text-sm">Mitglieder</div>
+                <span class="text-xs text-gray-400"
+                      x-text="g.members.length + ' Benutzer'"></span>
+              </div>
 
-                  <button @click="removeMember(g.id, uid)"
-                          class="rounded-full hover:bg-primary/20 p-0.5 transition"
-                          title="Entfernen">
-                    <i data-lucide="x" class="w-4 h-4"></i>
-                  </button>
-                </span>
-              </template>
-            </div>
+              <div class="flex flex-wrap gap-2 min-h-[40px]">
+                <template x-for="uid in g.members" :key="uid">
+                  <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-sm">
+                    <span x-text="userName(uid)"></span>
 
-            <!-- Benutzer hinzufügen -->
-            <div class="relative" @click.away="dropdown[g.id] = false">
+                    <button @click="removeMember(g.id, uid)"
+                            class="rounded-full hover:bg-primary/20 p-0.5 transition">
+                      <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                  </span>
+                </template>
+              </div>
 
-              <input type="text"
-                    placeholder="Benutzer suchen…"
-                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600
-                           bg-white dark:bg-fieldDark px-3 py-2"
-                    x-model="search[g.id]"
-                    @focus="openDropdown(g.id)"
-                    @input="filter(g.id)" />
+              <!-- Add Member -->
+              <div class="relative" @click.away="dropdown[g.id] = false">
+                <input type="text"
+                       placeholder="Benutzer hinzufügen…"
+                       class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-fieldDark px-3 py-2 text-sm"
+                       x-model="search[g.id]"
+                       @focus="openDropdown(g.id)"
+                       @input="filter(g.id)" />
 
-              <template x-if="dropdown[g.id]">
-                <ul class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border
-                             border-gray-300 dark:border-gray-600 bg-white dark:bg-fieldDark shadow">
-
-                  <template x-for="u in filtered[g.id]" :key="u.id">
-                    <li @click="addMember(g.id, u.id)"
-                        class="px-3 py-2 cursor-pointer hover:bg-primary/10 dark:hover:bg-primaryHover/20">
-                      <span x-text="u.mail + ' — ' + u.displayName"></span>
-                    </li>
-                  </template>
-
-                  <template x-if="filtered[g.id].length === 0">
-                    <li class="px-3 py-2 text-gray-500">Keine Treffer</li>
-                  </template>
-
-                </ul>
-              </template>
+                <template x-if="dropdown[g.id]">
+                  <ul class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-fieldDark shadow">
+                    <template x-for="u in filtered[g.id]" :key="u.id">
+                      <li @click="addMember(g.id, u.id)"
+                          class="px-3 py-2 cursor-pointer hover:bg-primary/10">
+                        <span x-text="u.mail + ' — ' + u.displayName"></span>
+                      </li>
+                    </template>
+                  </ul>
+                </template>
+              </div>
 
             </div>
+
+            <!-- ================= VERTEILER ================= -->
+            <div class="space-y-4">
+
+              <div class="flex items-center justify-between">
+                <div class="font-semibold text-sm">Verteiler (E-Mail)</div>
+                <span class="text-xs text-gray-400"
+                      x-text="(g.distributions || []).length + ' Adressen'"></span>
+              </div>
+
+              <div class="flex flex-wrap gap-2 min-h-[40px]">
+                <template x-for="mail in (g.distributions || [])" :key="mail">
+                  <span class="inline-flex items-center gap-2 rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-sm">
+                    <span x-text="mail"></span>
+
+                    <button @click="removeDistribution(g, mail)"
+                            class="rounded-full hover:bg-emerald-200 p-0.5 transition">
+                      <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                  </span>
+                </template>
+              </div>
+
+              <!-- Add Mail -->
+              <div class="flex gap-2">
+                <input type="email"
+                       placeholder="Neue Verteiler-Mail…"
+                       x-model="distributionInput[g.id]"
+                       @keydown.enter.prevent="addDistribution(g)"
+                       class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-fieldDark px-3 py-2 text-sm" />
+
+                <button @click="addDistribution(g)"
+                        class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-3 py-2 transition">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  Hinzufügen
+                </button>
+              </div>
+
+            </div>
+
           </div>
 
         </li>
@@ -713,6 +799,8 @@
 
   </div>
 </section>
+
+
 
 <!-- Ticket Overview -->
 <section x-show="active==='ticket_overview'" x-cloak
@@ -732,8 +820,7 @@
 
     <!-- Info -->
     <div class="rounded-md border border-blue-300/60 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 px-4 py-3 text-sm">
-      Diese Liste steuert, welche Benutzer in der Ticket-Übersicht berücksichtigt werden.
-      Änderungen werden direkt gespeichert.
+      Diese Liste steuert, welche Benutzer in der Ticket-Übersicht berücksichtigt werden. Admins haben automatisch Zugriff!
     </div>
 
     <!-- Member badges -->
@@ -862,6 +949,84 @@
   </div>
 </section>
 
+
+    <!-- Personalnummer -->
+<!-- Personalnummer -->
+<section x-show="active==='personalnummer'" x-cloak
+  class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-cardDark"
+  x-data="PersonalnummerAdmin()">
+
+  <div class="border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <i data-lucide="rotate-ccw" class="w-5 h-5 text-primary"></i>
+      <h2 class="text-lg font-semibold">Personalnummer zurücksetzen</h2>
+    </div>
+    <span class="text-xs text-gray-500 dark:text-gray-400" x-text="statusText"></span>
+  </div>
+
+  <div class="p-5 space-y-6">
+
+    <!-- Warnbox -->
+    <div class="rounded-md border border-red-300/60 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 px-4 py-3 text-sm">
+      ⚠️ <strong>ACHTUNG:</strong> Diese Aktion setzt den globalen Personalnummerzähler zurück.
+      <br>
+      Dieser Vorgang kann nicht rückgängig gemacht werden.
+    </div>
+
+    <!-- Sicherheitsabfrage -->
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-gray-700 dark:text-gray-200">
+        Bitte zur Bestätigung <span class="font-mono font-bold">RESET</span> eingeben:
+      </label>
+
+      <input type="text"
+             x-model="confirmation"
+             placeholder="RESET"
+             class="w-full max-w-sm rounded-lg border border-gray-300 dark:border-gray-600
+                    bg-white dark:bg-fieldDark px-3 py-2
+                    focus:outline-none focus:ring-2 focus:ring-red-500" />
+
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        Der Button wird erst aktiv, wenn exakt <span class="font-mono">RESET</span> eingegeben wurde.
+      </p>
+    </div>
+
+    <!-- Action Button -->
+    <button type="button"
+            @click="reset()"
+            class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="loading || confirmation !== 'RESET'">
+      <i data-lucide="trash-2" class="w-4 h-4"></i>
+      Personalnummer global zurücksetzen
+    </button>
+
+    <!-- Statusanzeige -->
+    <template x-if="resultState !== 'idle'">
+      <div
+        class="rounded-md px-4 py-3 text-sm border"
+        :class="resultState === 'ok'
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300/60 text-emerald-900 dark:text-emerald-100'
+          : 'bg-red-50 dark:bg-red-900/20 border-red-300/60 text-red-900 dark:text-red-100'">
+        <div class="flex items-start gap-2">
+          <span x-show="resultState === 'ok'">✅</span>
+          <span x-show="resultState === 'error'">❌</span>
+          <div>
+            <div class="font-medium" x-text="resultTitle"></div>
+            <div class="mt-1" x-text="resultMessage"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Raw JSON -->
+    <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-fieldDark">
+      <div class="text-sm font-medium mb-1">Antwort (raw)</div>
+      <pre class="text-xs whitespace-pre-wrap break-words nice-scrollbar max-h-56"
+           x-text="lastResult || '—'"></pre>
+    </div>
+
+  </div>
+</section>
 
 
 
@@ -1213,68 +1378,66 @@ function TicketOverviewEditor() {
 <script>
 function PermissionsEditor() {
   return {
-    users: [],
-    types: [],               // kommt aus Backend (/api/admin/ticket-types)
 
-    selected: {},            // { ticketType: [userObj, ...] }
-    original: {},            // { ticketType: [userId, ...] }
+    users: [],
+    types: [],
+
+    selected: {},     // { ticketType: [userObj, ...] }
 
     search: {},
     filtered: {},
     dropdown: {},
 
+    saving: false,
+
     /* ================= INIT ================= */
     async init() {
-      // Users laden
-      const ures = await fetch("/api/admin/users", { credentials: "same-origin" });
-      const udata = await ures.json();
-      this.users = udata.users || [];
+      await this.loadUsers();
+      await this.loadTypes();
+      await this.loadSaved();
 
-      // Tickettypen laden
-      const tres = await fetch("/api/admin/ticket-types", { credentials: "same-origin" });
-      this.types = await tres.json(); // [{ key, label }]
+      this.$nextTick(() => {
+        if (window.lucide) lucide.createIcons();
+      });
+    },
 
-      // State initialisieren
+    async loadUsers() {
+      const res = await fetch("/api/admin/users", { credentials: "same-origin" });
+      const data = await res.json();
+      this.users = data.users || [];
+    },
+
+    async loadTypes() {
+      const res = await fetch("/api/admin/ticket-types", { credentials: "same-origin" });
+      this.types = await res.json();
+
       this.types.forEach(t => {
         this.selected[t.key] = [];
-        this.original[t.key] = [];
         this.search[t.key] = "";
         this.filtered[t.key] = this.users;
         this.dropdown[t.key] = false;
       });
-
-      await this.loadSaved();
-
-      if (window.lucide) lucide.createIcons();
     },
 
-    /* ================= LOAD ================= */
     async loadSaved() {
       const res = await fetch("/api/admin/ticket-permissions", {
         credentials: "same-origin"
       });
+
       const data = await res.json();
 
       for (const t of this.types) {
         const ids = Array.isArray(data[t.key]) ? data[t.key] : [];
-
         this.selected[t.key] = this.users.filter(u => ids.includes(u.id));
-        this.original[t.key] = [...ids]; // Originalzustand merken
       }
     },
 
-    /* ================= CHANGE DETECTION ================= */
-    hasChanges() {
-      return this.types.some(t => {
-        const orig = (this.original[t.key] || []).slice().sort().join(",");
-        const curr = this.selected[t.key].map(u => u.id).slice().sort().join(",");
-        return orig !== curr;
-      });
-    },
-
     /* ================= SAVE ================= */
+
     async savePermissions() {
-      if (!this.hasChanges()) return;
+
+      if (this.saving) return;
+      this.saving = true;
 
       const payload = {};
       for (const t of this.types) {
@@ -1290,20 +1453,18 @@ function PermissionsEditor() {
 
       if (!res.ok) {
         toast("Fehler beim Speichern!", false);
-        return;
+      } else {
+        toast("Automatisch gespeichert ✅", true);
       }
 
-      // Originalzustand aktualisieren
-      for (const t of this.types) {
-        this.original[t.key] = payload[t.key].slice();
-      }
-
-      toast("Berechtigungen gespeichert ✅", true);
+      this.saving = false;
     },
 
-    /* ================= UI HELPERS ================= */
+    /* ================= UI ================= */
+
     filter(key) {
       const q = this.search[key].toLowerCase().trim();
+
       this.filtered[key] = q
         ? this.users.filter(u =>
             (u.displayName || "").toLowerCase().includes(q) ||
@@ -1312,29 +1473,104 @@ function PermissionsEditor() {
         : this.users;
     },
 
-    toggleUser(key, u) {
-      const arr = this.selected[key];
-      const idx = arr.findIndex(x => x.id === u.id);
+    async toggleUser(key, user) {
 
-      if (idx >= 0) arr.splice(idx, 1);
-      else arr.push(u);
+      const arr = this.selected[key];
+      const idx = arr.findIndex(x => x.id === user.id);
+
+      if (idx >= 0) {
+        arr.splice(idx, 1);
+      } else {
+        arr.push(user);
+      }
 
       this.search[key] = "";
       this.dropdown[key] = false;
       this.filtered[key] = this.users;
+
+      await this.savePermissions();
+
+      this.$nextTick(() => {
+        if (window.lucide) lucide.createIcons();
+      });
     },
 
-    removeUser(key, id) {
+    async removeUser(key, id) {
       this.selected[key] = this.selected[key].filter(u => u.id !== id);
+
+      await this.savePermissions();
+
+      this.$nextTick(() => {
+        if (window.lucide) lucide.createIcons();
+      });
+    }
+
+  };
+}
+</script>
+
+
+
+
+<script>
+function PersonalnummerAdmin() {
+  return {
+    loading: false,
+    confirmation: "",
+    statusText: "bereit",
+    resultState: "idle",
+    resultTitle: "",
+    resultMessage: "",
+    lastResult: "",
+
+    async reset() {
+      if (this.confirmation !== "RESET") return;
+
+      this.loading = true;
+      this.statusText = "setze zurück …";
+      this.resultState = "idle";
+      this.lastResult = "";
+
+      try {
+        const res = await fetch("/api/personalnummer/reset", {
+          method: "POST",
+          credentials: "same-origin"
+        });
+
+        const json = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(json?.detail || "Fehler beim Zurücksetzen");
+        }
+
+        this.resultState = "ok";
+        this.resultTitle = "Zurücksetzen erfolgreich";
+        this.resultMessage = json?.message || "Personalnummer wurde zurückgesetzt.";
+        this.lastResult = JSON.stringify(json, null, 2);
+        this.statusText = "OK";
+        this.confirmation = "";
+        toast("Personalnummer zurückgesetzt ✅", true);
+
+      } catch (e) {
+        this.resultState = "error";
+        this.resultTitle = "Fehler";
+        this.resultMessage = String(e?.message || e);
+        this.lastResult = this.resultMessage;
+        this.statusText = "Fehler";
+        toast(this.resultMessage, false);
+      } finally {
+        this.loading = false;
+        if (window.lucide) lucide.createIcons();
+      }
     }
   }
 }
 </script>
 
-
 <script>
 function GroupsEditor() {
   return {
+
     newGroupName: "",
     groups: [],
     users: [],
@@ -1346,66 +1582,94 @@ function GroupsEditor() {
     edit: {},
     editName: {},
 
+    distributionInput: {},
+
     async init() {
       await this.loadUsers();
       await this.loadGroups();
     },
 
-    // USERS ---------------------------------------------------
     async loadUsers() {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { credentials: "same-origin" });
       const json = await res.json();
       this.users = json.users || [];
     },
 
     userName(id) {
       const u = this.users.find(u => u.id === id);
-      return u ? u.displayName : id;
+      return u ? (u.displayName || u.mail || id) : id;
     },
 
-    // GROUPS ---------------------------------------------------
     async loadGroups() {
-      const res = await fetch("/api/groups");
+      const res = await fetch("/api/groups", { credentials: "same-origin" });
       this.groups = await res.json();
 
       this.groups.forEach(g => {
+        if (!g.distributions) g.distributions = [];
+
         this.search[g.id] = "";
         this.dropdown[g.id] = false;
         this.filtered[g.id] = this.users;
 
         this.edit[g.id] = false;
         this.editName[g.id] = g.name;
+        this.distributionInput[g.id] = "";
       });
 
-      // FIX: Icons nach DOM-Update generieren
       this.$nextTick(() => {
         if (window.lucide) lucide.createIcons();
       });
     },
 
-    // CREATE GROUP ---------------------------------------------
     async createGroup() {
       if (!this.newGroupName.trim()) return;
 
       const res = await fetch("/api/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: this.newGroupName }),
-        credentials: "same-origin"
+        credentials: "same-origin",
+        body: JSON.stringify({
+          name: this.newGroupName,
+          distributions: []
+        })
       });
 
-      const json = await res.json();
-      if (!res.ok) return toast(json.detail || "Fehler", false);
+      if (!res.ok) {
+        const json = await res.json();
+        return toast(json.detail || "Fehler", false);
+      }
 
       this.newGroupName = "";
       await this.loadGroups();
       toast("Gruppe erstellt", true);
     },
 
-    // EDIT GROUP NAME -----------------------------------------
+    async saveGroup(g) {
+      const res = await fetch(`/api/groups/${g.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          name: g.name,
+          members: g.members,
+          distributions: g.distributions || []
+        })
+      });
+
+      return res.ok;
+    },
+
     startEdit(g) {
       this.edit[g.id] = true;
-      this.editName[g.id] = g.name;
+    },
+
+    async saveEdit(g) {
+      g.name = this.editName[g.id];
+      const ok = await this.saveGroup(g);
+      if (!ok) return toast("Fehler beim Speichern", false);
+
+      this.edit[g.id] = false;
+      toast("Gespeichert", true);
     },
 
     cancelEdit(g) {
@@ -1413,28 +1677,6 @@ function GroupsEditor() {
       this.editName[g.id] = g.name;
     },
 
-    async saveEdit(g) {
-      const payload = {
-        name: this.editName[g.id],
-        members: g.members
-      };
-
-      const res = await fetch(`/api/groups/${g.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        credentials: "same-origin"
-      });
-
-      const json = await res.json();
-      if (!res.ok) return toast(json.detail || "Fehler beim Speichern", false);
-
-      this.edit[g.id] = false;
-      await this.loadGroups();
-      toast("Gespeichert", true);
-    },
-
-    // DELETE GROUP --------------------------------------------
     async deleteGroup(id) {
       if (!confirm("Gruppe löschen?")) return;
 
@@ -1443,22 +1685,20 @@ function GroupsEditor() {
         credentials: "same-origin"
       });
 
-      const json = await res.json();
-      if (!res.ok) return toast(json.detail || "Fehler beim Löschen", false);
+      if (!res.ok) return toast("Fehler beim Löschen", false);
 
       await this.loadGroups();
       toast("Gelöscht", true);
     },
 
-    // MEMBERS --------------------------------------------------
-    openDropdown(group_id) {
-      this.dropdown[group_id] = true;
-      this.filtered[group_id] = this.users;
+    openDropdown(id) {
+      this.dropdown[id] = true;
+      this.filtered[id] = this.users;
     },
 
-    filter(group_id) {
-      const q = this.search[group_id].toLowerCase().trim();
-      this.filtered[group_id] = q
+    filter(id) {
+      const q = this.search[id].toLowerCase();
+      this.filtered[id] = q
         ? this.users.filter(u =>
             (u.displayName || "").toLowerCase().includes(q) ||
             (u.mail || "").toLowerCase().includes(q)
@@ -1470,15 +1710,12 @@ function GroupsEditor() {
       const res = await fetch(`/api/groups/${group_id}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id }),
-        credentials: "same-origin"
+        credentials: "same-origin",
+        body: JSON.stringify({ user_id })
       });
 
-      const json = await res.json();
-      if (!res.ok) return toast(json.detail || "Fehler beim Hinzufügen", false);
+      if (!res.ok) return toast("Fehler beim Hinzufügen", false);
 
-      this.dropdown[group_id] = false;
-      this.search[group_id] = "";
       await this.loadGroups();
     },
 
@@ -1488,18 +1725,57 @@ function GroupsEditor() {
         credentials: "same-origin"
       });
 
-      const json = await res.json();
-      if (!res.ok) return toast(json.detail || "Fehler beim Entfernen", false);
+      if (!res.ok) return toast("Fehler beim Entfernen", false);
 
       await this.loadGroups();
+    },
+
+    validateEmail(mail) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail);
+    },
+
+    async addDistribution(g) {
+      const mail = (this.distributionInput[g.id] || "").trim().toLowerCase();
+      if (!mail) return;
+      if (!this.validateEmail(mail)) return toast("Ungültige E-Mail", false);
+      if (g.distributions.includes(mail)) return toast("Existiert bereits", false);
+
+      g.distributions.push(mail);
+      this.distributionInput[g.id] = "";
+
+      const ok = await this.saveGroup(g);
+      if (!ok) {
+        g.distributions = g.distributions.filter(m => m !== mail);
+        return toast("Speichern fehlgeschlagen", false);
+      }
+
+      toast("Verteiler gespeichert ✅", true);
+
+      this.$nextTick(() => {
+        if (window.lucide) lucide.createIcons();
+      });
+    },
+
+    async removeDistribution(g, mail) {
+      const original = [...g.distributions];
+      g.distributions = g.distributions.filter(m => m !== mail);
+
+      const ok = await this.saveGroup(g);
+      if (!ok) {
+        g.distributions = original;
+        return toast("Fehler beim Entfernen", false);
+      }
+
+      toast("Entfernt ✅", true);
+
+      this.$nextTick(() => {
+        if (window.lucide) lucide.createIcons();
+      });
     }
+
   };
 }
 </script>
-
-
-
-
 
 
 {% endblock %}

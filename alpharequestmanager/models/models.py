@@ -53,9 +53,6 @@ class Ticket:
     accountable_id: Optional[str] = None
     accountable_name: Optional[str] = None
 
-    supervisor_id: Optional[str] = None
-    supervisor_name: Optional[str] = None
-
     assignee_group_id: Optional[str] = None
     assignee_group_name: Optional[str] = None
 
@@ -121,8 +118,6 @@ class Ticket:
             accountable_id=row.get("accountable_id"),
             accountable_name=row.get("accountable_name"),
 
-            supervisor_id=row.get("supervisor_id"),
-            supervisor_name=row.get("supervisor_name"),
 
             assignee_group_id=row.get("assignee_group_id"),
             assignee_group_name=row.get("assignee_group_name"),
@@ -160,7 +155,6 @@ class Ticket:
           {
             timestamp: str,
             assignee?: {id, name},
-            supervisor?: {id, name},
             group?: {id, name},
             action?: str
           }

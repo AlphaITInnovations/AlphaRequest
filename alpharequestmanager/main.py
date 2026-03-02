@@ -1,8 +1,8 @@
 import asyncio
 import sys
+import uvicorn
 from pathlib import Path
 from typing import cast
-import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates

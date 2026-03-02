@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pathlib
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union, Set
 import base64
 import mimetypes
 import os
@@ -12,7 +12,10 @@ import os
 import requests
 from fastapi import Request, Path
 
+from alpharequestmanager.database.database import get_groups
+from alpharequestmanager.models.models import TicketPriority, TicketType, Ticket
 from alpharequestmanager.services.microsoft_auth import acquire_app_token
+from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.utils.mail_templates import render_corporate_email
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
@@ -283,19 +286,131 @@ def send_test_mail(to: str):
         attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
     )
 
-"""
+def send_newrequest_mail(to: str, prio: TicketPriority, titel: str, ttype: TicketType, ticketid):
+
+    ticket_type_labels = {
+        TicketType.hardware: "Hardware Bestellung",
+        TicketType.niederlassung_anmelden: "Onboarding Niederlassung",
+        TicketType.niederlassung_schliessen: "Offboarding Niederlassung",
+        TicketType.niederlassung_umzug: "Umzug Niederlassung",
+        TicketType.zugang_beantragen: "Onboarding Mitarbeiter:innen",
+        TicketType.zugang_sperren: "Offboarding Mitarbeiter:innen",
+    }
+
+    priority_labels = {
+        TicketPriority.low: "Niedrig",
+        TicketPriority.medium: "Mittel",
+        TicketPriority.high: "Hoch",
+        TicketPriority.critical: "Kritisch",
+    }
+
+    readable_type = ticket_type_labels.get(ttype, ttype.value)
+    readable_prio = priority_labels.get(prio, prio.value)
+
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-        subject="AlphaRequest Auftrags Update",
+        subject=f"Neuer Auftrag #{ticketid} in AlphaRequest",
         body=render_corporate_email(
-            subject="AlphaRequest Auftrags Update",
-            headline="Auftrag #52135 (hier klicken)",
-            intro="Hallo Marco,\n\n einer deiner Aufträge wurde geupdatet.\n",
+            subject=titel,
+            headline="AlphaRequest (hier klicken)",
+            intro=(
+                f"Hallo,\n\n"
+                f"Ihnen wurde ein neuer Auftrag „{readable_type}“ "
+                f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
+                f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
+            ),
             info_box_url="https://alpharequest.dom.local/dashboard",
-            content="• Feld1: Platzhalter\n• Feld2: Platzhalter\n",
+            content="",
         ),
-        to_recipients=["marco.schneider@alpha-it-innovations.org"],
+        to_recipients=[to],
         body_type="HTML",
-        attachments=[inline_attachment_from_path("../static/logo.png", content_id="alpha_logo")],
+        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
     )
-"""
+
+def send_mail_to_fachabteilung(to: str, prio: TicketPriority, titel: str, ttype: TicketType, ticketid):
+    ticket_type_labels = {
+        TicketType.hardware: "Hardware Bestellung",
+        TicketType.niederlassung_anmelden: "Onboarding Niederlassung",
+        TicketType.niederlassung_schliessen: "Offboarding Niederlassung",
+        TicketType.niederlassung_umzug: "Umzug Niederlassung",
+        TicketType.zugang_beantragen: "Onboarding Mitarbeiter:innen",
+        TicketType.zugang_sperren: "Offboarding Mitarbeiter:innen",
+    }
+
+    priority_labels = {
+        TicketPriority.low: "Niedrig",
+        TicketPriority.medium: "Mittel",
+        TicketPriority.high: "Hoch",
+        TicketPriority.critical: "Kritisch",
+    }
+
+    readable_type = ticket_type_labels.get(ttype, ttype.value)
+    readable_prio = priority_labels.get(prio, prio.value)
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
+        subject=f"Neuer Fachabteilungsauftrag #{ticketid} in AlphaRequest",
+        body=render_corporate_email(
+            subject=titel,
+            headline="AlphaRequest (hier klicken)",
+            intro=(
+                f"Hallo,\n\n"
+                f"Ihrer Fachabteilung wurde ein neuer Auftrag „{readable_type}“ "
+                f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
+                f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
+            ),
+            info_box_url="https://alpharequest.dom.local/dashboard",
+            content="",
+        ),
+        to_recipients=[to],
+        body_type="HTML",
+        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
+    )
+
+
+
+def send_mail_to_all_fachabteilung(workflow: dict, ticket: Ticket):
+    """
+    Sammelt alle Verteiler-Mailadressen der betroffenen
+    Fachabteilungen und sendet eine Mail.
+    """
+
+    if not workflow or "departments" not in workflow:
+        logger.warning("Workflow enthält keine Departments")
+        return
+
+    department_ids = workflow["departments"].keys()
+
+    groups = get_groups()
+
+    # Alle Verteiler sammeln (unique)
+    recipients: Set[str] = set()
+
+    for group in groups:
+        if group.get("id") in department_ids:
+            distributions = group.get("distributions", [])
+            if isinstance(distributions, list):
+                for mail in distributions:
+                    if mail:
+                        recipients.add(mail.strip().lower())
+
+    if not recipients:
+        logger.warning(
+            "Keine Verteiler-Mailadressen für Ticket %s gefunden",
+            ticket.id,
+        )
+        return
+
+    logger.info(
+        "Sende Ticket %s an Verteiler: %s",
+        ticket.id,
+        list(recipients),
+    )
+
+    for mail in recipients:
+        send_mail_to_fachabteilung(
+            to=mail,
+            prio=ticket.priority,
+            titel=ticket.title,
+            ttype=ticket.ticket_type,
+            ticketid=ticket.id,
+        )
