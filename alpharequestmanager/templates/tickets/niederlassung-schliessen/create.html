@@ -4,8 +4,8 @@
 {% set alpine_component = "niederlassungSchliessenPhase1Form()" %}
 
 {% block hidden_fields %}
-  <input type="hidden" name="ticket_type" value="niederlassung-schliessen">
-  <input type="hidden" name="description" x-ref="description">
+<input type="hidden" name="ticket_type" value="niederlassung-schliessen">
+<input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -20,25 +20,27 @@
   {% include "tickets/partials/_ticket_actions.html" %}
 {% endblock %}
 
+
 {% block extra_js %}
 <script>
 function niederlassungSchliessenPhase1Form() {
   return {
-    /* ===============================
+
+    /* =================================================
        BASE FORM
-    =============================== */
+    ================================================= */
     ...baseForm(),
 
-    /* ===============================
+    /* =================================================
        MODE
-    =============================== */
+    ================================================= */
     phase: "create",
     isCreate: true,
-    modalOpen: false,
+    confirmCreateOpen: false,
 
-    /* ===============================
+    /* =================================================
        DATA
-    =============================== */
+    ================================================= */
 
     /* -------- PERSONAL / HR -------- */
     p: {
@@ -61,60 +63,82 @@ function niederlassungSchliessenPhase1Form() {
       return_date: ""
     },
 
-    /* ===============================
+    /* =================================================
        VALIDATION RULES
-       (🔥 NUR PERSONALABTEILUNG 🔥)
-    =============================== */
+       (PHASE 1)
+    ================================================= */
     rules: {
+
       location: { required: true },
       address: { required: true },
       closing_date: { required: true },
 
       /* WORKFLOW */
-      accountable_id: { required: true },
-      supervisor_id: { required: true }
+      accountable_id: { required: true }
+
     },
 
-    /* ===============================
+
+    /* =================================================
        VALUE RESOLVER
-    =============================== */
+    ================================================= */
     getValue(field) {
-      if (field in this.p) return this.p[field];
-      if (field in this.it) return this.it[field];
-      if (field in this.f) return this.f[field];
 
-      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+      /* DOM FIRST */
+      const dom = document.querySelector(`[name="${field}"]`)?.value
+      if (dom !== undefined && dom !== "") return dom
+
+      if (field in this.p) return this.p[field]
+      if (field in this.it) return this.it[field]
+      if (field in this.f) return this.f[field]
+
+      return ""
     },
 
-    /* ===============================
+
+    /* =================================================
        INIT
-    =============================== */
+    ================================================= */
     init() {
-      this.validationTriggered = false;
+      this.validationTriggered = false
     },
 
-    /* ===============================
+
+    /* =================================================
        CREATE FLOW
-    =============================== */
-    openAssigneeModal() {
-      this.validationTriggered = false;
+    ================================================= */
+
+    openCreateConfirm() {
+
+      this.validationTriggered = false
 
       this.$nextTick(() => {
-        if (!this.validateOrScroll()) return;
-        this.modalOpen = true;
-      });
+
+        if (!this.validateOrScroll()) return
+
+        this.confirmCreateOpen = true
+
+      })
+
     },
 
-    chooseAssignee(type) {
-      const id = document.querySelector(`[name="${type}_id"]`)?.value;
-      const name = document.querySelector(`[name="${type}_name"]`)?.value;
 
-      this.$refs.assigneeId.value = id;
-      this.$refs.assigneeName.value = name;
+    confirmCreate() {
 
-      /* ===============================
-         DESCRIPTION SERIALISIEREN
-      =============================== */
+      /* Verantwortlichen setzen */
+
+      const accountableId =
+        document.querySelector('[name="accountable_id"]')?.value || ""
+
+      const accountableName =
+        document.querySelector('[name="accountable_name"]')?.value || ""
+
+      this.$refs.assigneeId.value = accountableId
+      this.$refs.assigneeName.value = accountableName
+
+
+      /* DESCRIPTION SERIALISIEREN */
+
       this.$refs.description.value = JSON.stringify(
         {
           personal: this.p,
@@ -123,12 +147,19 @@ function niederlassungSchliessenPhase1Form() {
         },
         null,
         2
-      );
+      )
 
-      this.modalOpen = false;
-      this.$el.submit();
+
+      this.confirmCreateOpen = false
+
+      const form = this.$el.closest("form")
+      if (!form) return
+
+      form.submit()
+
     }
-  };
+
+  }
 }
 </script>
 {% endblock %}

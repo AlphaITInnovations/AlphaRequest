@@ -1,6 +1,5 @@
 TODO Formulare:
 - Überall phase1 und phase2 rules richtig definieren
-- wann mail gesendet -> bei neues ticket zugeordnet
 - monitoring metrics
 
 
@@ -26,6 +25,7 @@ zugang beantragen:
 
 Zugang sperren:
     abfindungsvereinbarung ja/nein
+
     termin mit christine
      abwesenheitsnotiz template funktioniert nicht
      fuhrpark ja muss in die basisdaten
@@ -38,11 +38,8 @@ niederlassung-anmelden:
 
 hardwarebesetllung
     handy und sim aufteilen
-    Ticket in Ninja
+    alle html aufräumen und gerade ziehen für sonderfall
 
-Mail:
- An fachabteilungsverteiler
- Verteiler in Webinterface konfigurierbar
 
 
 

@@ -1,9 +1,10 @@
 <section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
 
   <!-- ================================================= -->
-  <!-- A. MIETE (ALT + NEU) -->
+  <!-- A. MIETE (ALT + NEU)  → Phase 1 -->
   <!-- ================================================= -->
   <div class="space-y-6">
+
     <h2 class="text-xl font-semibold text-primary">
       Miete
     </h2>
@@ -38,6 +39,7 @@
 
         <div class="md:col-span-2">
           <label>Mietvertrag (alt)</label>
+
           <select
             x-model="miete_alt.lease_action"
             :class="inputClass('alt_lease_action', miete_alt.lease_action)"
@@ -60,22 +62,25 @@
 
           <template x-if="miete_alt.lease_action === 'keep'">
             <div class="mt-4">
-              <label>Begründung (warum bleibt der Mietvertrag bestehen?)</label>
+              <label>Begründung</label>
               <textarea
                 x-model="miete_alt.lease_keep_reason"
                 :class="inputClass('alt_lease_keep_reason', miete_alt.lease_keep_reason)"
                 class="h-24"
-                placeholder="z. B. andere Firma/Team/Standort übernimmt die Fläche …"
+                placeholder="z. B. andere Firma übernimmt die Fläche"
               ></textarea>
             </div>
           </template>
+
         </div>
 
       </div>
     </div>
 
+
     <!-- ================= NEU ================= -->
     <div class="pt-6 border-t border-gray-200 dark:border-gray-700">
+
       <h3 class="font-semibold mb-4">Neu (neue Niederlassung)</h3>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -102,9 +107,8 @@
           </select>
         </div>
 
-        <!-- Klingel / Eingang sichtbar -->
         <div>
-          <label>Firma bereits an der Klingel / am Eingang sichtbar?</label>
+          <label>Firma an Klingel / Eingang sichtbar?</label>
           <select
             x-model="miete_neu.sign_visible"
             :class="inputClass('new_sign_visible', miete_neu.sign_visible)"
@@ -116,7 +120,7 @@
 
           <template x-if="miete_neu.sign_visible === 'Nein'">
             <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
-              📌 Bitte Zettel oder ähnliches an Klingel / Eingang anbringen.
+              📌 Bitte Zettel an Klingel / Eingang anbringen
             </p>
           </template>
         </div>
@@ -133,32 +137,35 @@
           </select>
         </div>
 
+{% set miete_neu_desc = description.miete_neu if description and description.miete_neu is defined else {} %}
+
 <!-- Vorgesetzter -->
 <div :class="shellClass('location_supervisor_id', getValue('location_supervisor_id'))">
-  {% set label = "Vorgesetzter der Niederlassung" %}
-  {% set field_id = "location_supervisor_id" %}
-  {% set field_name = "location_supervisor_name" %}
 
-  {% set initial_id = description.miete_neu.location_supervisor_id
-      if description and description.miete_neu is defined else "" %}
-  {% set initial_name = description.miete_neu.location_supervisor_name
-      if description and description.miete_neu is defined else "" %}
+{% set label = "Vorgesetzter der Niederlassung" %}
+{% set field_id = "location_supervisor_id" %}
+{% set field_name = "location_supervisor_name" %}
 
-  {% include "components/user-dropdown.html" %}
+{% set initial_id = miete_neu_desc.location_supervisor_id if miete_neu_desc.location_supervisor_id is defined else "" %}
+{% set initial_name = miete_neu_desc.location_supervisor_name if miete_neu_desc.location_supervisor_name is defined else "" %}
+
+{% include "components/user-dropdown.html" %}
+
 </div>
+
 
 <!-- Ansprechpartner -->
 <div :class="shellClass('contact_person_id', getValue('contact_person_id'))">
-  {% set label = "Ansprechpartner für Rückfragen" %}
-  {% set field_id = "contact_person_id" %}
-  {% set field_name = "contact_person_name" %}
 
-  {% set initial_id = description.miete_neu.contact_person_id
-      if description and description.miete_neu is defined else "" %}
-  {% set initial_name = description.miete_neu.contact_person_name
-      if description and description.miete_neu is defined else "" %}
+{% set label = "Ansprechpartner für Rückfragen" %}
+{% set field_id = "contact_person_id" %}
+{% set field_name = "contact_person_name" %}
 
-  {% include "components/user-dropdown.html" %}
+{% set initial_id = miete_neu_desc.contact_person_id if miete_neu_desc.contact_person_id is defined else "" %}
+{% set initial_name = miete_neu_desc.contact_person_name if miete_neu_desc.contact_person_name is defined else "" %}
+
+{% include "components/user-dropdown.html" %}
+
 </div>
 
 
@@ -188,7 +195,6 @@
             x-model="miete_neu.address"
             :class="inputClass('new_address', miete_neu.address)"
             class="h-24"
-            placeholder="Straße, PLZ Ort"
           ></textarea>
         </div>
 
@@ -197,208 +203,142 @@
 
   </div>
 
+
   <!-- ================================================= -->
-  <!-- B. IT (ALT + NEU) -->
+  <!-- B. IT → Phase 2 -->
   <!-- ================================================= -->
-  <div class="space-y-6">
+  <div class="space-y-6" x-show="!isCreate" x-cloak>
+
     <h2 class="text-xl font-semibold text-primary">
       IT
     </h2>
 
-    <!-- ================= ALT ================= -->
+    <!-- ALT -->
     <div>
-      <h3 class="font-semibold mb-4">Alt</h3>
 
-<!-- ================= ALT: Wichtige Hinweise nur bei Kündigung ================= -->
-<template x-if="miete_alt.lease_action === 'cancel'">
-  <div class="rounded-xl border border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 p-5">
-    <div class="text-sm text-red-800 dark:text-red-200">
-      <div class="font-semibold mb-3">⚠️ Wichtige Hinweise</div>
+  <h3 class="font-semibold mb-4">Alt</h3>
 
-      <div class="space-y-3">
+  <template x-if="miete_alt.lease_action === 'cancel'">
+    <div class="rounded-xl border border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 p-5">
 
-        <label class="flex items-start gap-3">
-          <input
-            type="checkbox"
-            x-model="it_alt.confirm_dsl_cancel"
-            :class="inputClass('confirm_dsl_cancel', it_alt.confirm_dsl_cancel)"
-            class="mt-1 h-4 w-4 shrink-0"
-          >
-          <span class="leading-snug">
-            <strong>Die DSL/Internetleitung wird gekündigt.</strong>
-          </span>
-        </label>
+      <div class="text-sm text-red-800 dark:text-red-200">
 
-        <label class="flex items-start gap-3">
-          <input
-            type="checkbox"
-            x-model="it_alt.confirm_landline_cancel"
-            :class="inputClass('confirm_landline_cancel', it_alt.confirm_landline_cancel)"
-            class="mt-1 h-4 w-4 shrink-0"
-          >
-          <span class="leading-snug">
-            <strong>Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!</strong>
-          </span>
-        </label>
+        <div class="font-semibold mb-3">
+          ⚠️ Wichtige Hinweise
+        </div>
+
+        <div class="space-y-3">
+
+          <label class="flex items-start gap-3">
+
+            <input
+              type="checkbox"
+              x-model="it_alt.confirm_dsl_cancel"
+              :class="inputClass('confirm_dsl_cancel', it_alt.confirm_dsl_cancel)"
+              class="mt-1 h-4 w-4 shrink-0"
+            >
+
+            <span class="leading-snug">
+              <strong>Die DSL/Internetleitung wird gekündigt.</strong>
+            </span>
+
+          </label>
+
+
+          <label class="flex items-start gap-3">
+
+            <input
+              type="checkbox"
+              x-model="it_alt.confirm_landline_cancel"
+              :class="inputClass('confirm_landline_cancel', it_alt.confirm_landline_cancel)"
+              class="mt-1 h-4 w-4 shrink-0"
+            >
+
+            <span class="leading-snug">
+              <strong>Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!</strong>
+            </span>
+
+          </label>
+
+        </div>
 
       </div>
+
     </div>
-  </div>
-</template>
+  </template>
+
+</div>
 
 
-      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label>Was geschieht mit Netzwerkhardware?</label>
-          <select
-            x-model="it_alt.network_hw_action"
-            :class="inputClass('alt_network_hw_action', it_alt.network_hw_action)"
-          >
-            <option value="">Bitte wählen</option>
-            <option value="take">Wird mitgenommen</option>
-            <option value="other">Anders</option>
-          </select>
-        </div>
+    <!-- NEU -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        <template x-if="it_alt.network_hw_action === 'other'">
-          <div class="md:col-span-2">
-            <label>Bitte beschreiben</label>
-            <textarea
-              x-model="it_alt.network_hw_other"
-              :class="inputClass('alt_network_hw_other', it_alt.network_hw_other)"
-              class="h-20"
-              placeholder="z. B. bleibt vor Ort / Entsorgung / Übergabe an Vermieter …"
-            ></textarea>
-          </div>
-        </template>
+      <div>
+        <label>Serverschrank vorhanden?</label>
+        <select
+          x-model="it_neu.server_rack"
+          :class="inputClass('new_server_rack', it_neu.server_rack)"
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
       </div>
-    </div>
 
-    <!-- ================= NEU ================= -->
-    <div class="pt-6 border-t border-gray-200 dark:border-gray-700">
-      <h3 class="font-semibold mb-4">Neu</h3>
+<div>
+  <label>Netzwerkverkabelung</label>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <input
+    x-model="it_neu.network_cabling"
+    :class="inputClass('new_network_cabling', it_neu.network_cabling)"
+    placeholder="z. B. Cat6, Cat7, Cat7a"
+  >
 
-        <div>
-          <label>Ist ein Serverschrank vorhanden?</label>
-          <select
-            x-model="it_neu.server_rack"
-            :class="inputClass('new_server_rack', it_neu.server_rack)"
-          >
-            <option value="">–</option>
-            <option>Ja</option>
-            <option>Nein</option>
-          </select>
-        </div>
+</div>
 
-        <div>
-          <label>Netzwerkverkabelung im Objekt (z. B. Cat 6 / Cat 7)</label>
-          <input
-            type="text"
-            x-model="it_neu.network_cabling"
-            :class="inputClass('new_network_cabling', it_neu.network_cabling)"
-            placeholder="z. B. Cat 6, Cat 7"
-          >
-        </div>
+      <div>
+        <label>DSL / Glasfaser Dose vorhanden?</label>
+        <select
+          x-model="it_neu.line_installed"
+          :class="inputClass('new_line_installed', it_neu.line_installed)"
+              placeholder="z. B. Cat6, Cat7, Cat7a"
 
-        <div>
-          <label>Ist im Büro bereits eine DSL- oder Glasfaser-Dose installiert?</label>
-          <select
-            x-model="it_neu.line_installed"
-            :class="inputClass('new_line_installed', it_neu.line_installed)"
-          >
-            <option value="">–</option>
-            <option>Ja</option>
-            <option>Nein</option>
-          </select>
-        </div>
-
-        <!-- Wenn JA: Art + Ort -->
-        <template x-if="it_neu.line_installed === 'Ja'">
-          <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label>Welche Art / Anschluss?</label>
-              <select
-                x-model="it_neu.line_type"
-                :class="inputClass('new_line_type', it_neu.line_type)"
-              >
-                <option value="">Bitte wählen</option>
-                <option>DSL</option>
-                <option>Glasfaser</option>
-              </select>
-            </div>
-
-            <div class="md:col-span-2">
-              <label>Wo befindet sie sich?</label>
-              <textarea
-                x-model="it_neu.line_location"
-                :class="inputClass('new_line_location', it_neu.line_location)"
-                class="h-20"
-                placeholder="z. B. Glasfaser-Dose im Technikraum EG, linke Wand"
-              ></textarea>
-            </div>
-          </div>
-        </template>
-
-        <!-- Wenn NEIN: Vermieter beauftragen + Vermieter-Daten -->
-        <template x-if="it_neu.line_installed === 'Nein'">
-          <div class="md:col-span-2 space-y-4">
-            <div class="rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm">
-              <strong>📌 Hinweis:</strong>
-              Vermieter mit der Installation/Beauftragung beauftragen.
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label>Vermieter – Name</label>
-                <input
-                  x-model="it_neu.landlord_name"
-                  :class="inputClass('new_landlord_name', it_neu.landlord_name)"
-                  placeholder="Name des Vermieters / der Verwaltung"
-                >
-              </div>
-
-              <div>
-                <label>Vermieter – Kontaktdaten (Telefon oder E-Mail)</label>
-                <input
-                  x-model="it_neu.landlord_contact"
-                  :class="inputClass('new_landlord_contact', it_neu.landlord_contact)"
-                  placeholder="z. B. 01234 56789 oder vermieter@firma.de"
-                >
-              </div>
-            </div>
-          </div>
-        </template>
-
+        >
+          <option value="">–</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
       </div>
+
     </div>
 
   </div>
 
+
   <!-- ================================================= -->
-  <!-- C. MARKETING -->
+  <!-- C. MARKETING → Phase 3 -->
   <!-- ================================================= -->
-  <div class="space-y-6">
+  <div class="space-y-6" x-show="!isCreate" x-cloak>
+
     <h2 class="text-xl font-semibold text-primary">
       Marketing
     </h2>
 
-    <div>
-      <label>Öffnungszeiten der Niederlassung (für Webseite)</label>
-      <textarea
-        x-model="m.opening_hours"
-        :class="inputClass('opening_hours', m.opening_hours)"
-        class="h-24"
-        placeholder="z. B. Mo–Fr 08:00–17:00"
-      ></textarea>
-    </div>
+    <textarea
+      x-model="m.opening_hours"
+      :class="inputClass('opening_hours', m.opening_hours)"
+      class="h-24"
+      placeholder="z. B. Mo–Fr 08:00–17:00"
+    ></textarea>
+
   </div>
 
+
   <!-- ================================================= -->
-  <!-- D. FUHRPARK -->
+  <!-- D. FUHRPARK → Phase 3 -->
   <!-- ================================================= -->
-  <div class="space-y-6">
+  <div class="space-y-6" x-show="!isCreate" x-cloak>
+
     <h2 class="text-xl font-semibold text-primary">
       Fuhrpark
     </h2>
@@ -406,7 +346,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
       <div>
-        <label>Werden Poolfahrzeuge benötigt?</label>
+        <label>Poolfahrzeuge benötigt?</label>
         <select
           x-model="f.pool_cars"
           :class="inputClass('pool_cars', f.pool_cars)"
@@ -418,17 +358,20 @@
       </div>
 
       <template x-if="f.pool_cars === 'Ja'">
+
         <div>
-          <label>Wenn ja: für welches Datum?</label>
+          <label>Benötigt ab</label>
           <input
             type="date"
             x-model="f.pool_cars_from"
             :class="inputClass('pool_cars_from', f.pool_cars_from)"
           >
         </div>
+
       </template>
 
     </div>
+
   </div>
 
 </section>

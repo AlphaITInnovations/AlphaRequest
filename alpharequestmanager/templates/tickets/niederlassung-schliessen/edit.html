@@ -5,7 +5,7 @@
 {% set alpine_component = "niederlassungSchliessenEditForm()" %}
 
 {% block hidden_fields %}
-  <input type="hidden" name="description" x-ref="description">
+<input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -20,31 +20,35 @@
   {% include "tickets/partials/_ticket_actions.html" %}
 {% endblock %}
 
+
 {% block extra_js %}
 <script>
 function niederlassungSchliessenEditForm() {
   return {
-    /* ===============================
+
+    /* =================================================
        BASE FORM
-    =============================== */
+    ================================================= */
     ...baseForm(),
 
-    /* ===============================
+    /* =================================================
        MODE
-    =============================== */
+    ================================================= */
     phase: "edit",
     isCreate: false,
 
-    /* ===============================
-       ASSIGN / WEITERGEBEN
-    =============================== */
+    confirmCompleteOpen: false,
+    pendingAction: null,
+    pendingEvent: null,
+
     openAssignModal: false,
     assigneeMode: "accountable",
     currentAssigneeName: "{{ ticket.assignee_name }}",
 
-    /* ===============================
+
+    /* =================================================
        DATA (PREFILL)
-    =============================== */
+    ================================================= */
 
     /* -------- PERSONAL / HR -------- */
     p: {
@@ -70,11 +74,12 @@ function niederlassungSchliessenEditForm() {
       ...{{ description.fuhrpark | default({}) | tojson | safe }}
     },
 
-    /* ===============================
+
+    /* =================================================
        VALIDATION RULES
-       (🔥 ALLES PFLICHT 🔥)
-    =============================== */
+    ================================================= */
     rules: {
+
       /* PERSONAL */
       location: { required: true },
       address: { required: true },
@@ -82,17 +87,19 @@ function niederlassungSchliessenEditForm() {
 
       /* IT */
       hardware_action: { required: true },
+
       transfer_target: {
         requiredIf() {
           return this.it.hardware_action === "transfer_branch";
         }
       },
-    confirm_dsl_cancel: { required: true },
-    confirm_landline_cancel: { required: true },
 
+      confirm_dsl_cancel: { required: true },
+      confirm_landline_cancel: { required: true },
 
       /* FUHRPARK */
       pool_cars: { required: true },
+
       return_date: {
         requiredIf() {
           return this.f.pool_cars === "Ja";
@@ -100,40 +107,47 @@ function niederlassungSchliessenEditForm() {
       },
 
       /* WORKFLOW */
-      accountable_id: { required: true },
-      supervisor_id: { required: true }
+      accountable_id: { required: true }
+
     },
 
-    /* ===============================
+
+    /* =================================================
        VALUE RESOLVER
-    =============================== */
+    ================================================= */
     getValue(field) {
-      if (field in this.p) return this.p[field];
-      if (field in this.it) return this.it[field];
-      if (field in this.f) return this.f[field];
 
-      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+      /* DOM FIRST */
+      const dom = document.querySelector(`[name="${field}"]`)?.value
+      if (dom !== undefined && dom !== "") return dom
+
+      if (field in this.p) return this.p[field]
+      if (field in this.it) return this.it[field]
+      if (field in this.f) return this.f[field]
+
+      return ""
     },
 
-    /* ===============================
+
+    /* =================================================
        INIT
-    =============================== */
+    ================================================= */
     init() {
-      /* ASSIGNEE PRESET */
-      this.$nextTick(() => {
-        this.$refs.assigneeId.value = "{{ ticket.assignee_id }}";
-        this.$refs.assigneeName.value = "{{ ticket.assignee_name }}";
-      });
 
-      /* INITIAL DESCRIPTION SYNC */
-      this.updateDescription();
-      this.validationTriggered = false;
+      this.$refs.assigneeId.value = "{{ ticket.assignee_id }}"
+      this.$refs.assigneeName.value = "{{ ticket.assignee_name }}"
+
+      this.updateDescription()
+      this.validationTriggered = false
+
     },
 
-    /* ===============================
+
+    /* =================================================
        DESCRIPTION SYNC
-    =============================== */
+    ================================================= */
     updateDescription() {
+
       this.$refs.description.value = JSON.stringify(
         {
           personal: this.p,
@@ -142,70 +156,90 @@ function niederlassungSchliessenEditForm() {
         },
         null,
         2
-      );
+      )
+
     },
 
-    /* ===============================
-       SUBMIT
-    =============================== */
-    submitEdit(action = "save", event) {
-      if (action === "complete") {
-        if (!this.validateOrScroll()) return;
 
-        const ok = confirm(
-          "Wollen Sie den Auftrag wirklich abschließen?\n\n" +
-          "Eine Bearbeitung ist danach nicht mehr möglich."
-        );
-        if (!ok) return;
+    /* =================================================
+       SUBMIT
+    ================================================= */
+    submitEdit(action = "save", event) {
+
+      if (action === "complete") {
+
+        if (!this.validateOrScroll()) return
+
+        this.pendingAction = action
+        this.pendingEvent = event
+
+        this.confirmCompleteOpen = true
+        return
       }
 
-      this.updateDescription();
+      this.performSubmit(action, event)
 
-      const form = event.target.closest("form");
-      if (!form) return;
-
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "action";
-      input.value = action;
-      form.appendChild(input);
-
-      form.submit();
     },
 
-    /* ===============================
+
+    performSubmit(action = "save", event = null) {
+
+      this.updateDescription()
+
+      const form = event
+        ? event.target.closest("form")
+        : this.pendingEvent?.target.closest("form")
+
+      if (!form) return
+
+      const input = document.createElement("input")
+      input.type = "hidden"
+      input.name = "action"
+      input.value = action
+
+      form.appendChild(input)
+
+      form.submit()
+
+    },
+
+
+    /* =================================================
        WEITERGEBEN
-    =============================== */
+    ================================================= */
     applyAssignee() {
-      let id = null;
-      let name = null;
+
+      let id = null
+      let name = null
 
       if (this.assigneeMode === "accountable") {
-        id = document.querySelector('[name="accountable_id"]')?.value;
-        name = document.querySelector('[name="accountable_name"]')?.value;
+        id = document.querySelector('[name="accountable_id"]')?.value
+        name = document.querySelector('[name="accountable_name"]')?.value
       }
 
       if (this.assigneeMode === "supervisor") {
-        id = document.querySelector('[name="supervisor_id"]')?.value;
-        name = document.querySelector('[name="supervisor_name"]')?.value;
+        id = document.querySelector('[name="supervisor_id"]')?.value
+        name = document.querySelector('[name="supervisor_name"]')?.value
       }
 
       if (this.assigneeMode === "custom") {
-        id = document.querySelector('[name="custom_assignee_id"]')?.value;
-        name = document.querySelector('[name="custom_assignee_name"]')?.value;
+        id = document.querySelector('[name="custom_assignee_id"]')?.value
+        name = document.querySelector('[name="custom_assignee_name"]')?.value
       }
 
       if (!id) {
-        alert("Bitte Bearbeiter auswählen");
-        return;
+        alert("Bitte Bearbeiter auswählen")
+        return
       }
 
-      this.$refs.assigneeId.value = id;
-      this.$refs.assigneeName.value = name;
-      this.currentAssigneeName = name;
-      this.openAssignModal = false;
+      this.$refs.assigneeId.value = id
+      this.$refs.assigneeName.value = name
+      this.currentAssigneeName = name
+      this.openAssignModal = false
+
     }
-  };
+
+  }
 }
 </script>
 {% endblock %}

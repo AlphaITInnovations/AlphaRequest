@@ -1,41 +1,35 @@
 <!DOCTYPE html>
 <html lang="de"
-      x-data="{ open: true, mobileOpen: false }"
-      x-bind:class="{ 'dark': $store.theme.darkMode, 'overflow-hidden': $store.modal.active || mobileOpen }">
+      x-data="{ open: true }"
+      :class="{ 'dark': $store.theme.dark }">
+
 <head>
   <meta charset="utf-8">
   <title>{% block title %}AlphaRequestManager{% endblock %}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
-
-  <!-- FOUC-Fix: Dark Mode gleich beim Laden anwenden -->
+  <!-- Prevent FOUC -->
   <script>
-    (function () {
-      try {
-        var t = localStorage.getItem('theme');
-        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (t === 'dark' || (!t || t === 'system') && prefersDark) {
-          document.documentElement.classList.add('dark');
-        }
-      } catch (e) {}
-    })();
+    if (localStorage.getItem('theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
   </script>
 
-  <!-- Schrift: Inter -->
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-<link rel="icon" type="image/png" href="{{ url_for('static', path='favicon.png') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="{{ url_for('static', path='favicon.png') }}">
 
-  <!-- Tailwind & Alpine.js -->
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script defer src="https://unpkg.com/@alpinejs/focus@3.x.x/dist/cdn.min.js"></script>
 
+  <!-- Alpine -->
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-  <!-- Icons: Lucide -->
+  <!-- Lucide -->
   <script defer src="https://unpkg.com/lucide@0.454.0"></script>
   <script>
-    window.addEventListener('DOMContentLoaded', () => lucide.createIcons());
+    document.addEventListener("DOMContentLoaded", () => lucide.createIcons());
   </script>
 
   <!-- Tailwind Config -->
@@ -48,385 +42,261 @@
           colors: {
             sidebar: '#3EAAB8',
             sidebarHover: '#32919E',
-            header: '#FFFFFF',
-            headerDark: '#1E2327',
-            content: '#F3F4F6',
-            contentDark: '#0B1014', /* schöner dunkler Hintergrund */
             primary: '#3EAAB8',
             primaryHover: '#2B7D89',
-            muted: '#6B7280',
-            danger: '#EF4444',
-            cardDark: '#1B2026',   /* Kartenfarbe Darkmode */
-            fieldDark: '#242A31'   /* Inputfarbe Darkmode */
-          },
-          boxShadow: {
-            'elevated': '0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.08)'
+            cardDark: '#161C22'
           }
         }
       }
-    };
+    }
   </script>
 
-  <!-- Alpine Stores: Theme & Modal -->
-<!-- Alpine Stores: Theme & Modal -->
-<script>
-  document.addEventListener('alpine:init', () => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-
-    // ▸ THEME-STORE: unverändert zu deinem Original (damit Toggle & Farben wieder sauber laufen)
-    Alpine.store('theme', {
-      mode: 'system',
-      darkMode: false,
-      _lastManual: localStorage.getItem('theme_manual') || 'light',
-      init() {
-        const saved = localStorage.getItem('theme');
-        this.mode = saved || 'system';
-        const handler = (e) => { if (this.mode === 'system') this.apply(e.matches); };
-        media.addEventListener ? media.addEventListener('change', handler) : media.addListener(handler);
-        this.apply(media.matches);
-      },
-      apply(prefersDarkNow) {
-        const prefers = typeof prefersDarkNow === 'boolean' ? prefersDarkNow : media.matches;
-        this.darkMode = this.mode === 'system' ? prefers : this.mode === 'dark';
-      },
-      toggleSystem() {
-        if (this.mode === 'system') {
-          this.setMode(this._lastManual);
-        } else {
-          this._lastManual = this.mode;
-          localStorage.setItem('theme_manual', this._lastManual);
-          this.setMode('system');
-        }
-      },
-      setMode(mode) {
-        this.mode = mode;
-        localStorage.setItem('theme', mode);
-        this.apply();
-      },
-      enable()  { this._lastManual = 'dark';  localStorage.setItem('theme_manual','dark');  this.setMode('dark'); },
-      disable() { this._lastManual = 'light'; localStorage.setItem('theme_manual','light'); this.setMode('light'); }
-    });
-
-    // ▸ MODAL-STORE: erweitert, damit detail-*.html & dashboard openDetail() funktionieren
-    Alpine.store('modal', {
-      active: false,
-      id: null,
-      data: null,
-      open(id, data = null) {
-        this.id = id;
-        this.data = data;
-        this.active = true;
-        document.documentElement.classList.add('overflow-hidden');
-      },
-      close() {
-        this.active = false;
-        this.id = null;
-        this.data = null;
-        document.documentElement.classList.remove('overflow-hidden');
-      },
-      is(id) {
-        return this.active && this.id === id;
-      }
-    });
-  });
-</script>
-
-
-  <!-- Globale Styles -->
   <style>
-    [x-cloak]{ display:none !important; }
-    html, body { height: 100%; margin: 0; padding: 0; }
-    @media (prefers-reduced-motion: reduce){ *{ animation:none!important; transition:none!important } }
+  [x-cloak]{ display:none !important; }
 
-    /* === Farb-Token für Light/Dark === */
-    :root{
-      --bg:            #F3F4F6;
-      --text:          #0F172A;
-      --card-bg:       #FFFFFF;
-      --field-bg:      #FFFFFF;
-      --border:        #E5E7EB;
-      --muted:         #6B7280;
-      --ring:          0 0 0 4px rgba(62,170,184,.25);
-    }
-    .dark{
-      --bg:            #0E1318;      /* weniger hart als 0B1014 */
-      --text:          #E6E8EB;      /* minimal wärmer */
-      --card-bg:       #161C22;      /* klarer Layer */
-      --field-bg:      #1B2229;
-      --border:        rgba(255,255,255,0.08); /* statt Grau */
-      --muted:         #A1A6AE;
-    }
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    scrollbar-gutter: stable;
+  }
 
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none!important; transition:none!important }
+  }
 
-    /* === Utility-Klassen === */
-    .modal-panel{
-      background-color: var(--card-bg);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 0.75rem;
-      box-shadow: 0 20px 50px -20px rgba(0,0,0,.35);
-    }
-    .card{
-      background-color: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 0.75rem;
-      box-shadow:
-        0 1px 0 rgba(255,255,255,0.04),
-        0 8px 24px rgba(0,0,0,0.35);
-    }
+  /* ================= DESIGN TOKENS ================= */
 
-    .card--pad{ padding: 1rem; }
-    .field{
-      background-color: var(--field-bg);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: .6rem;
-      padding: .55rem .75rem;
-      transition: background-color .15s ease, box-shadow .15s ease;
-    }
-    .field:focus{
-      outline: none;
-      box-shadow:
-        0 0 0 1px rgba(62,170,184,.35),
-        0 0 0 4px rgba(62,170,184,.18);
-      border-color: transparent;
-    }
+  :root{
+    --bg:        #F3F4F6;
+    --text:      #0F172A;
+    --card-bg:   #FFFFFF;
+    --field-bg:  #FFFFFF;
+    --border:    #E5E7EB;
+    --muted:     #6B7280;
+    --ring:      0 0 0 4px rgba(62,170,184,.25);
+  }
 
+  .dark{
+    --bg:        #0E1318;
+    --text:      #E6E8EB;
+    --card-bg:   #161C22;
+    --field-bg:  #1B2229;
+    --border:    rgba(255,255,255,0.08);
+    --muted:     #A1A6AE;
+  }
 
-    body{ background: var(--bg); color: var(--text); }
-  </style>
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    transition: background-color .2s ease, color .2s ease;
+  }
+
+  /* ================= COMPONENTS ================= */
+
+  .card{
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.04),
+      0 8px 24px rgba(0,0,0,0.06);
+    transition: background-color .2s ease, border-color .2s ease;
+  }
+
+  .card--pad{ padding: 1.5rem; }
+
+  .field{
+    background-color: var(--field-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: .6rem;
+    padding: .6rem .75rem;
+    transition: background-color .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+
+  .field::placeholder{
+    color: var(--muted);
+  }
+
+  .field:focus{
+    outline: none;
+    box-shadow: var(--ring);
+    border-color: transparent;
+  }
+
+  .modal-panel{
+    background-color: var(--card-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    box-shadow: 0 20px 50px -20px rgba(0,0,0,.35);
+  }
+
+  .muted{
+    color: var(--muted);
+  }
+</style>
+
+  <!-- 2-State Darkmode -->
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('theme', {
+        dark: localStorage.getItem('theme') === 'dark',
+        toggle() {
+          this.dark = !this.dark;
+          localStorage.setItem('theme', this.dark ? 'dark' : 'light');
+          document.documentElement.classList.toggle('dark', this.dark);
+        }
+      });
+    });
+
+  </script>
 
   {% block head %}{% endblock %}
 </head>
-<script>
-    window.TicketTypes = {{ TicketTypes | tojson }};
-</script>
 
+<body class="flex min-h-screen bg-gray-100 dark:bg-[#0E1318] font-sans text-gray-900 dark:text-gray-100">
 
-<body class="flex h-screen bg-content dark:bg-contentDark text-gray-900 dark:text-gray-100 font-sans">
+{% set is_dash  = request.url.path=='/dashboard' %}
+{% set is_tix   = request.url.path=='/ticket-overview' %}
+{% set is_set   = request.url.path.startswith('/settings') %}
 
-  <!-- Skip Link -->
-  <a href="#main"
-     class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 bg-white dark:bg-gray-900 text-sm px-3 py-1 rounded shadow z-50">
-    Zum Inhalt springen
-  </a>
+<!-- ================= SIDEBAR ================= -->
+<aside
+  :class="open ? 'w-72' : 'w-20'"
+  class="hidden md:flex m-4 flex-col transition-all duration-300
+         bg-sidebar text-white rounded-2xl shadow-xl">
 
-  <!-- Sidebar -->
-  <aside
-    :class="open ? 'w-72' : 'w-24'"
-    class="hidden md:flex h-[calc(100vh-1.5rem)] m-3 flex-col flex-shrink-0 transition-all duration-300 ease-in-out
-           bg-sidebar/95 dark:bg-[#2D8E9A] text-white rounded-2xl shadow-elevated ring-1 ring-white/10 overflow-hidden"
-    role="complementary" aria-label="Seitenleiste Navigation">
+  <!-- Collapse Button -->
+<!-- Brand -->
+<div class="flex items-center justify-between px-5 py-5 border-b border-white/15">
 
-    <!-- Brand -->
-    <div class="flex items-center gap-3 px-4 py-4 border-b border-white/10">
-      <button
-        @click="open = !open"
-        class="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition"
-        :aria-expanded="open.toString()"
-        aria-controls="sidebar-nav-desktop"
-        title="Sidebar ein-/ausklappen">
-        <i data-lucide="chevrons-left-right" class="w-5 h-5"></i>
-      </button>
-      <span x-show="open" x-cloak class="text-2xl font-bold tracking-tight whitespace-nowrap">AlphaRequest</span>
-    </div>
+  <span x-show="open"
+        class="text-lg font-semibold tracking-tight">
+    AlphaRequest
+  </span>
 
-    <!-- Nav -->
-    <nav id="sidebar-nav-desktop" class="flex-1 px-3 py-3 space-y-1">
-      {% set is_dash  = request.url.path=='/dashboard' %}
-      {% set is_tix   = request.url.path=='/ticket-overview' %}
-      {% set is_set   = request.url.path.startswith('/settings') %}
+  <button @click="open=!open"
+          class="p-2 rounded-lg hover:bg-white/15 transition">
+    <i data-lucide="panel-left" class="w-4 h-4"></i>
+  </button>
 
-      <!-- Dashboard -->
-      <a href="/dashboard"
-         aria-current="{{ 'page' if is_dash else 'false' }}"
-         class="group relative flex items-center gap-3 px-3 py-2 rounded-xl transition
-                hover:bg-white/10 {{ 'bg-white/15' if is_dash else '' }}">
-        <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Übersicht</span>
-      </a>
+</div>
 
-    {# Tickets: Admin ODER Overview-Gruppe #}
+  <!-- Navigation -->
+  <nav class="flex-1 px-3 py-6 space-y-1 text-sm">
+
+    <a href="/dashboard"
+       class="relative flex items-center gap-3 px-4 py-2.5 rounded-lg
+              transition {{ 'bg-white/15 font-semibold' if is_dash else 'hover:bg-white/10' }}">
+      {% if is_dash %}
+      <div class="absolute left-0 top-2 bottom-2 w-1 bg-white/80 rounded-r"></div>
+      {% endif %}
+      <i data-lucide="layout-dashboard" class="w-4 h-4 opacity-90"></i>
+      <span x-show="open">Übersicht</span>
+    </a>
+
     {% if is_admin or is_overview_group %}
     <a href="/ticket-overview"
-       aria-current="{{ 'page' if is_tix else 'false' }}"
-       class="group relative flex items-center gap-3 px-3 py-2 rounded-xl transition
-              hover:bg-white/10 {{ 'bg-white/15' if is_tix else '' }}">
-      <i data-lucide="ticket" class="w-5 h-5"></i>
-      <span x-show="open" x-cloak class="text-sm font-medium">Tickets</span>
+       class="relative flex items-center gap-3 px-4 py-2.5 rounded-lg
+              transition {{ 'bg-white/15 font-semibold' if is_tix else 'hover:bg-white/10' }}">
+      {% if is_tix %}
+      <div class="absolute left-0 top-2 bottom-2 w-1 bg-white/80 rounded-r"></div>
+      {% endif %}
+      <i data-lucide="ticket" class="w-4 h-4 opacity-90"></i>
+      <span x-show="open">Tickets</span>
     </a>
     {% endif %}
 
-
-      {% if is_admin %}
-
-      <!-- Admin · Settings -->
-      <a href="/settings"
-         aria-current="{{ 'page' if is_set else 'false' }}"
-         class="group relative flex items-center gap-3 px-3 py-2 rounded-xl transition
-                hover:bg-white/10 {{ 'bg-white/15' if is_set else '' }}">
-        <i data-lucide="settings" class="w-5 h-5"></i>
-        <span x-show="open" x-cloak class="text-sm font-medium">Admin · Settings</span>
-      </a>
+    {% if is_admin %}
+    <a href="/settings"
+       class="relative flex items-center gap-3 px-4 py-2.5 rounded-lg
+              transition {{ 'bg-white/15 font-semibold' if is_set else 'hover:bg-white/10' }}">
+      {% if is_set %}
+      <div class="absolute left-0 top-2 bottom-2 w-1 bg-white/80 rounded-r"></div>
       {% endif %}
-    </nav>
-  </aside>
+      <i data-lucide="settings" class="w-4 h-4 opacity-90"></i>
+      <span x-show="open">Admin · Settings</span>
+    </a>
+    {% endif %}
+  </nav>
 
-  <!-- Mobile Sidebar -->
-  <div class="md:hidden">
-    <div x-show="mobileOpen" x-cloak
-         @click="mobileOpen = false"
-         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"></div>
-    <aside x-show="mobileOpen" x-cloak
-           class="fixed inset-y-0 left-0 w-80 bg-sidebar/95 dark:bg-[#2D8E9A] text-white z-50 shadow-2xl
-                  rounded-r-2xl ring-1 ring-white/10 overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-4 border-b border-white/10">
-        <span class="text-xl font-bold">AlphaRequest</span>
-        <button @click="mobileOpen = false" class="p-2 rounded-lg bg-white/10 hover:bg-white/20">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-      <nav class="px-3 py-3 space-y-1">
-        <a href="/dashboard" class="group flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10">
-          <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-          <span class="text-sm font-medium">Übersicht</span>
-        </a>
-        {% if is_admin %}
-        <a href="/pruefung" class="group flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10">
-          <i data-lucide="ticket" class="w-5 h-5"></i>
-          <span class="text-sm font-medium">Tickets</span>
-        </a>
-        <a href="/settings" class="group flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10">
-          <i data-lucide="settings" class="w-5 h-5"></i>
-          <span class="text-sm font-medium">Admin · Settings</span>
-        </a>
+  <!-- Footer -->
+  <div class="px-4 py-4 border-t border-white/15">
+    <a href="/logout"
+       class="flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/10 transition text-sm">
+      <i data-lucide="log-out" class="w-4 h-4 opacity-90"></i>
+      <span x-show="open">Logout</span>
+    </a>
+  </div>
+</aside>
+
+
+<!-- ================= MAIN ================= -->
+<div class="flex-1 flex flex-col min-w-0">
+
+  <!-- Topbar -->
+  <header class="m-4 mb-0 px-8 py-5 rounded-2xl
+                 bg-white dark:bg-cardDark
+                 border border-gray-200 dark:border-white/5
+                 shadow-sm flex justify-between items-center">
+
+    <!-- Left: Logo + Current Page -->
+    <div class="flex items-center gap-4">
+
+      <img src="{{ url_for('static', path='logo.png') }}"
+           alt="AlphaRequest Logo"
+           class="h-8 object-contain">
+
+      <div class="h-6 w-px bg-gray-200 dark:bg-white/10"></div>
+
+      <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
+        {% if is_dash %}
+          Übersicht
+        {% elif is_tix %}
+          Tickets
+        {% elif is_set %}
+          Admin · Settings
+        {% else %}
+          AlphaRequest
         {% endif %}
-        <a href="/logout" class="group flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10">
-          <i data-lucide="log-out" class="w-5 h-5"></i>
-          <span class="text-sm font-medium">Logout</span>
-        </a>
-      </nav>
-    </aside>
-  </div>
+      </div>
+    </div>
 
-  <!-- Main Column -->
-  <div class="flex-1 flex flex-col">
+    <!-- Right -->
+    <div class="flex items-center gap-3">
 
-    <!-- Topbar -->
-    <header class="mx-3 mt-3 rounded-2xl px-6 py-4 bg-header dark:bg-headerDark border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between">
-      <button @click="mobileOpen = true"
-              class="md:hidden p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-              aria-label="Mobile Navigation öffnen">
-        <i data-lucide="menu" class="w-6 h-6 text-primary"></i>
+      <button @click="$store.theme.toggle()"
+              class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition"
+              aria-label="Dark Mode umschalten">
+
+        <i x-show="!$store.theme.dark"
+           data-lucide="moon"
+           class="w-6 h-6 text-primary"></i>
+
+        <i x-show="$store.theme.dark"
+           data-lucide="sun"
+           class="w-6 h-6 text-primary"></i>
       </button>
-      <div class="text-sm text-muted"></div>
-      <div class="flex items-center gap-2">
-        <button @click="$store.theme.toggleSystem()" class="p-2 rounded-lg hover:bg-primaryHover/20 transition" aria-label="Theme umschalten">
-          <i :data-lucide="'moon'" class="w-6 h-6 text-primary"></i>
-        </button>
-        <button @click="$dispatch('open-profile')" aria-label="Profil öffnen" class="p-2 rounded-lg hover:bg-primaryHover/20 transition">
-          <i data-lucide="user" class="w-6 h-6 text-primary"></i>
-        </button>
-        <button @click="$dispatch('open-settings')" aria-label="Einstellungen öffnen" class="p-2 rounded-lg hover:bg-primaryHover/20 transition">
-          <i data-lucide="settings" class="w-6 h-6 text-primary"></i>
-        </button>
-        <a href="/logout" class="p-2 rounded-lg hover:bg-primaryHover/20 transition" aria-label="Logout">
-          <i data-lucide="log-out" class="w-6 h-6 text-primary"></i>
-        </a>
-      </div>
-    </header>
 
-    <!-- Main Content -->
-    <main id="main" class="flex-1 overflow-auto m-3">
-      <div class="rounded-2xl bg-header dark:bg-cardDark border border-gray-200 dark:border-gray-700 p-6">
-        {% block content %}{% endblock %}
-      </div>
-    </main>
-  </div>
+      <a href="/logout"
+         class="px-4 py-2 rounded-lg bg-primary text-white
+                hover:bg-primaryHover transition text-sm font-medium">
+        Abmelden
+      </a>
+    </div>
+  </header>
 
-  <!-- Modals -->
-  {% include "partials/profile_modal.html" %}
-  {% include "partials/settings_modal.html" %}
+  <!-- Content -->
+  <main class="flex-1 overflow-auto m-4">
+    <div class="card p-8">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
 
-  <!-- Session Timeout -->
-  <script>
-    (function () {
-      const timeout = {{ SESSION_TIMEOUT }} * 1000;
-      if (!timeout) return;
-      let timer = setTimeout(redirect, timeout);
-      function reset() {
-        clearTimeout(timer);
-        timer = setTimeout(redirect, timeout);
-      }
-      function redirect() { window.location.href = '/login'; }
-      ['click','mousemove','keydown','scroll','touchstart'].forEach(evt => {
-        document.addEventListener(evt, reset, { passive: true });
-      });
-    })();
-  </script>
+</div>
+
 </body>
 </html>
-    <script>
-document.addEventListener("alpine:init", () => {
-  Alpine.data("userDropdown", (config) => ({
-    search: "",
-    open: false,
-
-    selectedId: "",
-    selectedName: "",
-
-    fieldId: config.fieldId,
-    fieldName: config.fieldName,
-
-    users: [],
-    filtered: [],
-
-    async init() {
-      const res = await fetch("/api/admin/users", {
-        credentials: "same-origin"
-      });
-      const json = await res.json();
-
-      this.users = (json.users || []).map(u => ({
-        id: u.id,
-        display: u.displayName
-      }));
-
-      this.filtered = this.users;
-
-      if (config.initialId && config.initialName) {
-        this.selectedId = config.initialId;
-        this.selectedName = config.initialName;
-        this.search = config.initialName;
-      }
-    },
-
-    filter() {
-      const q = this.search.toLowerCase().trim();
-      this.filtered = q
-        ? this.users.filter(u =>
-            u.display.toLowerCase().includes(q)
-          )
-        : this.users;
-    },
-
-    select(u) {
-      this.selectedId = u.id;
-      this.selectedName = u.display;
-      this.search = u.display;
-      this.open = false;
-
-      // 🔥 Custom Event mit Payload
-      this.$dispatch("user-selected", {
-        fieldId: this.fieldId,
-        id: u.id,
-        name: u.display
-      });
-    },
-
-    close() {
-      this.open = false;
-    }
-  }));
-});
-</script>

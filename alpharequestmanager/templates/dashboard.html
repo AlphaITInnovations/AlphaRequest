@@ -6,7 +6,6 @@
 document.addEventListener("alpine:init", () => {
   Alpine.data("dashboardManager", () => ({
 
-    /* ================= DATA ================= */
     orders: {{ orders | tojson }},
     departmentRequests: {{ department_requests | tojson }},
     userName: "{{ user.displayName }}",
@@ -21,7 +20,6 @@ document.addEventListener("alpine:init", () => {
       { key: "niederlassung-schliessen", icon: "❌", label: "Niederlassung schließen" }
     ],
 
-    /* ================= FILTER ================= */
     filter: {
       search: "",
       status: "all",
@@ -29,7 +27,30 @@ document.addEventListener("alpine:init", () => {
       department: "all"
     },
 
+    /* ================= KPI ================= */
+    kpis() {
+      return {
+        myInProgress: this.orders.filter(o => o.status === "in_progress").length,
+
+        departmentTotal: this.departmentRequests.reduce(
+          (sum, dept) => sum + dept.tickets.length,
+          0
+        )
+      };
+    },
+    filterMyInProgress() {
+      this.filter.status = "in_progress";
+    },
+
+    filterDepartment() {
+      this.filter.department = "all";
+    },
+    setStatusFilter(status) {
+      this.filter.status = status;
+    },
+
     /* ================= HELPERS ================= */
+
     canCreate(key) {
       return this.allowedTypes.includes(key);
     },
@@ -60,48 +81,19 @@ document.addEventListener("alpine:init", () => {
     },
 
     filteredDepartments() {
-      if (this.filter.department === "all") {
-        return this.departmentRequests;
-      }
+      if (this.filter.department === "all") return this.departmentRequests;
       return this.departmentRequests.filter(
         d => d.group_id === this.filter.department
       );
     },
 
-    statusLabel(s) {
+    statusColor(status) {
       return {
-        in_progress: "In Bearbeitung",
-        in_request: "Zu bearbeiten",
-        approved: "Erledigt",
-        rejected: "Abgelehnt"
-      }[s] || s;
-    },
-
-    statusBadge(s) {
-      return {
-        in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300",
-        in_request: "bg-primary/20 text-primary",
-        approved: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300",
-        rejected: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300"
-      }[s];
-    },
-
-    priorityIcon(p) {
-      return {
-        low: "🟢",
-        medium: "🟡",
-        high: "🟠",
-        critical: "🔴"
-      }[p] || "⚪";
-    },
-
-    priorityLabel(p) {
-      return {
-        low: "Niedrig",
-        medium: "Mittel",
-        high: "Hoch",
-        critical: "Kritisch"
-      }[p] || p;
+        in_progress: "text-yellow-500",
+        in_request: "text-primary",
+        approved: "text-green-500",
+        rejected: "text-red-500"
+      }[status] || "";
     }
 
   }));
@@ -110,162 +102,209 @@ document.addEventListener("alpine:init", () => {
 {% endblock %}
 
 {% block content %}
-<div x-data="dashboardManager()" class="min-h-[80vh] space-y-6">
+<div x-data="dashboardManager()" class="space-y-10">
 
-<!-- ================= HEADER ================= -->
-<div class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6">
-  <h1 class="text-2xl font-bold">
-    Willkommen, <span x-text="userName"></span> 👋
-  </h1>
-</div>
+  <!-- ================= HEADER ================= -->
+  <div>
+    <h1 class="text-2xl font-semibold">
+      Willkommen zurück,
+      <span class="text-primary" x-text="userName"></span>
+        👋
+    </h1>
+    <p class="muted mt-1 text-sm">
+      Hier ist deine aktuelle Übersicht.
+    </p>
+  </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
 
-<!-- ================= SIDEBAR ================= -->
-<aside class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6 space-y-4 lg:sticky lg:top-6">
+  <!-- ================= GRID ================= -->
+  <div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-10">
 
-  <h2 class="text-lg font-semibold text-primary">
-    Neuer Auftrag
-  </h2>
+<!-- ================= AUFTRAGSTYPEN ================= -->
+<aside class="card card--pad space-y-5 h-fit sticky top-6">
 
-  <template x-for="t in ticketTypes" :key="t.key">
-    <template x-if="canCreate(t.key)">
-      <button
-        @click="openNew(t.key)"
-        class="w-full flex items-center gap-4 px-5 py-3 rounded-xl
-               bg-primary text-white font-medium
-               shadow hover:shadow-lg transition"
-      >
-        <span class="text-xl" x-text="t.icon"></span>
-        <span class="truncate" x-text="t.label"></span>
-      </button>
+  <div class="flex items-center justify-between">
+    <h2 class="text-lg font-semibold text-primary">
+      Neuer Auftrag
+    </h2>
+
+  </div>
+
+  <div class="space-y-3">
+
+    <template x-for="t in ticketTypes" :key="t.key">
+      <template x-if="canCreate(t.key)">
+        <button
+          @click="openNew(t.key)"
+          class="w-full flex items-center gap-4 px-5 py-3 rounded-xl
+                 bg-primary text-white font-medium
+                 hover:bg-primaryHover
+                 transition-all duration-200"
+        >
+          <span class="text-lg" x-text="t.icon"></span>
+          <span class="truncate text-sm" x-text="t.label"></span>
+        </button>
+      </template>
     </template>
-  </template>
+
+  </div>
 
 </aside>
 
-<!-- ================= CONTENT ================= -->
-<section class="space-y-6">
+    <!-- ================= CONTENT ================= -->
+    <section class="space-y-10">
 
-<!-- ================= DEINE AUFTRÄGE ================= -->
-<div class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6
-            dark:shadow-[0_0_0_1px_rgba(62,170,184,0.08)]">
+      <!-- ================= DEINE AUFTRÄGE ================= -->
+      <div class="card card--pad space-y-6">
 
-  <h2 class="text-xl font-semibold text-primary mb-4">
-    Deine Aufträge
-  </h2>
-
-  <!-- FILTER -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-    <input class="field" placeholder="Auftrag suchen…" x-model="filter.search">
-    <select class="field" x-model="filter.status">
-      <option value="all">Alle Status</option>
-      <option value="in_request">Zu bearbeiten</option>
-      <option value="in_progress">In Bearbeitung</option>
-      <option value="approved">Erledigt</option>
-    </select>
-    <select class="field" x-model="filter.priority">
-      <option value="all">Alle Prioritäten</option>
-      <option value="low">Niedrig</option>
-      <option value="medium">Mittel</option>
-      <option value="high">Hoch</option>
-      <option value="critical">Kritisch</option>
-    </select>
-  </div>
-
-  <ul class="space-y-4 max-h-[460px] overflow-auto pr-1">
-    <template x-for="o in filteredOrders()" :key="o.id">
-      <li
-        @click="openUserTicket(o)"
-        class="relative p-5 rounded-xl cursor-pointer
-               bg-gray-50 dark:bg-fieldDark
-               shadow hover:shadow-xl transition"
-      >
-        <div class="flex justify-between gap-4">
-          <div class="min-w-0">
-            <div class="font-semibold truncate" x-text="o.type"></div>
-            <div class="text-sm text-muted" x-text="o.date"></div>
-          </div>
-
-          <div class="flex flex-col items-end gap-2 shrink-0">
-            <span class="px-3 py-1 rounded-md text-xs font-semibold"
-                  :class="statusBadge(o.status)"
-                  x-text="statusLabel(o.status)"></span>
-
-            <span class="text-xs font-medium">
-              <span x-text="priorityIcon(o.priority)"></span>
-              <span x-text="priorityLabel(o.priority)"></span>
-            </span>
-          </div>
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-semibold text-primary">
+            Deine Aufträge
+          </h2>
+          <span class="muted text-sm"
+                x-text="filteredOrders().length + ' Einträge'"></span>
         </div>
-      </li>
-    </template>
-  </ul>
-</div>
 
-<!-- ================= FACHABTEILUNGEN ================= -->
-<div class="bg-white dark:bg-cardDark rounded-xl shadow-elevated p-6
-            dark:shadow-[0_0_0_1px_rgba(62,170,184,0.08)]">
+        <!-- FILTER -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <input class="field" placeholder="Suchen…"
+                 x-model="filter.search">
+          <select class="field" x-model="filter.status">
+            <option value="all">Alle Status</option>
+            <option value="in_request">Zu bearbeiten</option>
+            <option value="in_progress">In Bearbeitung</option>
+            <option value="approved">Erledigt</option>
+          </select>
+          <select class="field" x-model="filter.priority">
+            <option value="all">Alle Prioritäten</option>
+            <option value="low">Niedrig</option>
+            <option value="medium">Mittel</option>
+            <option value="high">Hoch</option>
+            <option value="critical">Kritisch</option>
+          </select>
+        </div>
 
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-xl font-semibold text-primary">
-      Fachabteilungen · Deine Aufgaben
-    </h2>
+        <!-- LISTE -->
+        <ul class="space-y-4 max-h-[480px] overflow-auto pr-1">
+          <template x-for="o in filteredOrders()" :key="o.id">
+            <li @click="openUserTicket(o)"
+                class="p-5 rounded-xl cursor-pointer
+                       border border-[var(--border)]
+                       hover:border-primary/40
+                       hover:shadow-sm
+                       transition-all duration-200">
 
-    <select class="field w-56" x-model="filter.department">
-      <option value="all">Alle Fachabteilungen</option>
-      <template x-for="d in departmentRequests" :key="d.group_id">
-        <option :value="d.group_id" x-text="d.group_name"></option>
-      </template>
-    </select>
-  </div>
+              <div class="flex justify-between">
+                <div>
+                  <div class="font-semibold"
+                       x-text="o.type"></div>
+                  <div class="muted text-sm"
+                       x-text="o.date"></div>
+                </div>
 
-  <template x-for="dept in filteredDepartments()" :key="dept.group_id">
-    <section class="mb-6 rounded-xl p-4
-                    bg-gray-50 dark:bg-fieldDark
-                    shadow-inner">
+                <div class="text-right text-sm">
+                  <div :class="statusColor(o.status)"
+                       x-text="o.status"></div>
+                  <div class="muted"
+                       x-text="o.priority"></div>
+                </div>
+              </div>
 
-      <div class="flex items-center justify-between mb-3"
-           x-data="{ open: true }">
-
-        <h3 class="font-semibold flex items-center gap-2 cursor-pointer"
-            @click="open = !open">
-          🏢 <span x-text="dept.group_name"></span>
-        </h3>
-
-        <span class="text-xs px-3 py-1 rounded-full bg-primary/20 text-primary font-semibold">
-          <span x-text="dept.tickets.length"></span>
-        </span>
+            </li>
+          </template>
+        </ul>
       </div>
 
-      <ul x-show="dept.tickets.length > 0" class="space-y-3">
-        <template x-for="t in dept.tickets" :key="t.id">
-          <li
-            @click="openGroupTicket(t, dept.group_id)"
-            class="p-4 rounded-xl cursor-pointer
-                   bg-white dark:bg-cardDark
-                   shadow hover:shadow-lg transition"
-          >
-            <div class="font-semibold truncate" x-text="t.title"></div>
-            <div class="text-sm text-muted">
-              <span x-text="t.type_key"></span> •
-              <span x-text="t.created_at"></span>
-            </div>
-          </li>
-        </template>
-      </ul>
+      <!-- ================= FACHABTEILUNGEN ================= -->
+      <div class="card card--pad space-y-6">
 
-      <div x-show="dept.tickets.length === 0"
-           class="text-sm text-muted italic mt-2">
-        Keine offenen Aufgaben für diese Fachabteilung.
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-semibold text-primary">
+            Fachabteilungen · Deine Aufgaben
+          </h2>
+
+          <select class="field w-64"
+                  x-model="filter.department">
+            <option value="all">Alle Fachabteilungen</option>
+            <template x-for="d in departmentRequests"
+                      :key="d.group_id">
+              <option :value="d.group_id"
+                      x-text="d.group_name"></option>
+            </template>
+          </select>
+        </div>
+
+        <template x-for="dept in filteredDepartments()"
+                  :key="dept.group_id">
+
+          <div x-data="{ open: true }"
+               class="border border-[var(--border)]
+                      rounded-xl overflow-hidden">
+
+            <!-- HEADER -->
+            <button @click="open=!open"
+                    class="w-full flex justify-between items-center
+                           px-5 py-4
+                           bg-[var(--field-bg)]
+                           hover:bg-primary/5
+                           transition">
+
+              <div class="flex items-center gap-3 font-medium">
+                <span class="text-primary">🏢</span>
+                <span x-text="dept.group_name"></span>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <span class="text-xs px-3 py-1 rounded-full
+                             bg-primary/15 text-primary font-semibold"
+                      x-text="dept.tickets.length"></span>
+
+                <span x-text="open ? '−' : '+'"
+                      class="text-lg text-primary"></span>
+              </div>
+
+            </button>
+
+            <!-- BODY -->
+            <div x-show="open"
+                 x-transition
+                 class="p-5 space-y-3">
+
+              <template x-for="t in dept.tickets"
+                        :key="t.id">
+                <div @click="openGroupTicket(t, dept.group_id)"
+                     class="p-4 rounded-lg cursor-pointer
+                            border border-[var(--border)]
+                            hover:border-primary/40
+                            hover:shadow-sm
+                            transition">
+
+                  <div class="font-semibold truncate"
+                       x-text="t.title"></div>
+
+                  <div class="muted text-sm">
+                    <span x-text="t.type_key"></span>
+                    ·
+                    <span x-text="t.created_at"></span>
+                  </div>
+                </div>
+              </template>
+
+              <div x-show="dept.tickets.length === 0"
+                   class="muted italic text-sm">
+                Keine offenen Aufgaben.
+              </div>
+
+            </div>
+
+          </div>
+
+        </template>
+
       </div>
 
     </section>
-  </template>
 
-</div>
-
-</section>
-</div>
+  </div>
 </div>
 {% endblock %}

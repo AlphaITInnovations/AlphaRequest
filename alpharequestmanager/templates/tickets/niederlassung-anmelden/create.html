@@ -24,6 +24,7 @@
 <script>
 function niederlassungAnmeldenPhase1Form() {
   return {
+
     /* =================================================
        BASE FORM
     ================================================= */
@@ -35,13 +36,14 @@ function niederlassungAnmeldenPhase1Form() {
     phase: "create",
     isCreate: true,
     modalOpen: false,
+    confirmCreateOpen: false,
 
     /* =================================================
        DATA
     ================================================= */
     companies: [],
 
-    /* ----------------- MIETE ------------------ */
+    /* ---------------- MIETE ---------------- */
     miete: {
       location: "",
       company: "",
@@ -49,41 +51,44 @@ function niederlassungAnmeldenPhase1Form() {
       cost_center: "",
       start_date: "",
       address: "",
+      sign_visible: "",
+
       location_supervisor_id: "",
       location_supervisor_name: "",
+
       contact_person_id: "",
-      contact_person_name: "",
-      sign_visible: ""
+      contact_person_name: ""
     },
 
-    /* ----------------- IT ------------------ */
+    /* ---------------- IT ---------------- */
     it: {
       server_rack: "",
       network_cabling: "",
+
       line_installed: "",
       line_type: "",
       line_location: "",
+
       landlord_name: "",
       landlord_contact: ""
     },
 
-    /* ----------------- MARKETING ------------------ */
+    /* ---------------- MARKETING ---------------- */
     m: {
       opening_hours: ""
     },
 
-    /* ----------------- FUHRPARK ------------------ */
+    /* ---------------- FUHRPARK ---------------- */
     f: {
       pool_cars: "",
       pool_cars_from: ""
     },
 
-
     /* =================================================
        VALIDATION RULES
-       (🔥 NUR MIETE 🔥)
     ================================================= */
     rules: {
+
       /* MIETE */
       location: { required: true },
       company: { required: true },
@@ -91,40 +96,45 @@ function niederlassungAnmeldenPhase1Form() {
       cost_center: { required: true },
       start_date: { required: true },
       address: { required: true },
-      location_supervisor_id: { required: true },
-      contact_person_id: { required: true },
       sign_visible: { required: true },
 
+      location_supervisor_id: { required: true },
+      contact_person_id: { required: true },
+
       /* WORKFLOW */
-      accountable_id: { required: true },
-      supervisor_id: { required: true }
+      accountable_id: { required: true }
     },
 
     /* =================================================
-       VALUE RESOLVER (für baseForm)
+       VALUE RESOLVER
+       (gleich wie beim funktionierenden Formular)
     ================================================= */
     getValue(field) {
-      // MIETE
-      if (field in this.miete) return this.miete[field];
 
-      // IT
-      if (field in this.it) return this.it[field];
+      /* 1️⃣ DOM FIRST */
+      const dom = document.querySelector(`[name="${field}"]`)?.value;
+      if (dom !== undefined && dom !== "") return dom;
 
-      // MARKETING
-      if (field in this.m) return this.m[field];
+      /* 2️⃣ MIETE */
+      if (this.miete && field in this.miete) return this.miete[field];
 
-      // FUHRPARK
-      if (field in this.f) return this.f[field];
+      /* 3️⃣ IT */
+      if (this.it && field in this.it) return this.it[field];
 
-      // FALLBACK
-      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+      /* 4️⃣ MARKETING */
+      if (this.m && field in this.m) return this.m[field];
+
+      /* 5️⃣ FUHRPARK */
+      if (this.f && field in this.f) return this.f[field];
+
+      return "";
     },
 
     /* =================================================
        INIT
     ================================================= */
     async init() {
-      /* COMPANIES */
+
       try {
         const res = await fetch("/api/companies");
         const data = await res.json();
@@ -133,44 +143,61 @@ function niederlassungAnmeldenPhase1Form() {
         this.companies = [];
       }
 
-      /* USER-DROPDOWN EVENTS */
-      this.$el.addEventListener("user-selected", (e) => {
-        const { fieldId, id, name } = e.detail;
-
-        if (fieldId === "location_supervisor_id") {
-          this.miete.location_supervisor_id = id;
-          this.miete.location_supervisor_name = name;
-        }
-
-        if (fieldId === "contact_person_id") {
-          this.miete.contact_person_id = id;
-          this.miete.contact_person_name = name;
-        }
-      });
     },
 
     /* =================================================
        CREATE FLOW
     ================================================= */
-    openAssigneeModal() {
+
+    openCreateConfirm() {
+
       this.validationTriggered = false;
 
       this.$nextTick(() => {
+
         if (!this.validateOrScroll()) return;
-        this.modalOpen = true;
+
+        this.confirmCreateOpen = true;
+
       });
+
     },
 
-    chooseAssignee(type) {
-      const id = document.querySelector(`[name="${type}_id"]`)?.value;
-      const name = document.querySelector(`[name="${type}_name"]`)?.value;
-
-      this.$refs.assigneeId.value = id;
-      this.$refs.assigneeName.value = name;
+    confirmCreate() {
 
       /* ===============================
-         DESCRIPTION SERIALISIEREN
+         Verantwortlichen setzen
       =============================== */
+
+      const accountableId =
+        document.querySelector('[name="accountable_id"]')?.value || "";
+
+      const accountableName =
+        document.querySelector('[name="accountable_name"]')?.value || "";
+
+      this.$refs.assigneeId.value = accountableId;
+      this.$refs.assigneeName.value = accountableName;
+
+      /* ===============================
+         Dropdown Sync
+      =============================== */
+
+      this.miete.location_supervisor_id =
+        document.querySelector('[name="location_supervisor_id"]')?.value || "";
+
+      this.miete.location_supervisor_name =
+        document.querySelector('[name="location_supervisor_name"]')?.value || "";
+
+      this.miete.contact_person_id =
+        document.querySelector('[name="contact_person_id"]')?.value || "";
+
+      this.miete.contact_person_name =
+        document.querySelector('[name="contact_person_name"]')?.value || "";
+
+      /* ===============================
+         JSON SERIALISIEREN
+      =============================== */
+
       this.$refs.description.value = JSON.stringify(
         {
           miete: this.miete,
@@ -182,9 +209,19 @@ function niederlassungAnmeldenPhase1Form() {
         2
       );
 
-      this.modalOpen = false;
-      this.$el.submit();
+      this.confirmCreateOpen = false;
+
+      /* ===============================
+         FORM SUBMIT
+      =============================== */
+
+      const form = this.$el.closest("form");
+      if (!form) return;
+
+      form.submit();
+
     }
+
   };
 }
 </script>

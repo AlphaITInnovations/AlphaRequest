@@ -264,20 +264,32 @@
         <span class="font-medium">Webcam</span>
       </label>
 
-      <!-- Handy -->
-      <label
-        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
-               transition hover:bg-gray-50 dark:hover:bg-gray-700"
-        :class="data.artikel.HandyUndSim
-          ? 'ring-2 ring-primary border-primary'
-          : 'border-gray-300 dark:border-gray-600'"
-        @mouseenter="hover('HandyUndSim')"
-        @mouseleave="hover(null)"
-      >
-        <input type="checkbox" class="hidden" x-model="data.artikel.HandyUndSim">
-        <span class="text-lg">📱</span>
-        <span class="font-medium">Handy & SIM</span>
-      </label>
+<label
+  class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+         transition hover:bg-gray-50 dark:hover:bg-gray-700"
+  :class="data.artikel.Handy
+    ? 'ring-2 ring-primary border-primary'
+    : 'border-gray-300 dark:border-gray-600'"
+  @mouseenter="hover('Handy')"
+  @mouseleave="hover(null)"
+>
+  <input type="checkbox" class="hidden" x-model="data.artikel.Handy">
+  <span class="text-lg">📱</span>
+  <span class="font-medium">Handy</span>
+</label>
+        <label
+  class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+         transition hover:bg-gray-50 dark:hover:bg-gray-700"
+  :class="data.artikel.SIM
+    ? 'ring-2 ring-primary border-primary'
+    : 'border-gray-300 dark:border-gray-600'"
+  @mouseenter="hover('SIM')"
+  @mouseleave="hover(null)"
+>
+  <input type="checkbox" class="hidden" x-model="data.artikel.SIM">
+  <span class="text-lg">📶</span>
+  <span class="font-medium">SIM-Karte</span>
+</label>
 
     </div>
   </div>
@@ -531,21 +543,32 @@
         <span>Webcam</span>
       </label>
 
-      <!-- Handy -->
-      <label
-        class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
-               transition hover:bg-gray-50 dark:hover:bg-gray-700"
-        :class="data.artikel.HandyUndSim
-          ? 'ring-2 ring-primary border-primary'
-          : 'border-gray-300 dark:border-gray-600'"
-        @mouseenter="hover('HandyUndSim')"
-        @mouseleave="hover(null)"
-      >
-        <input type="checkbox" class="hidden" x-model="data.artikel.HandyUndSim">
-        <span>📱</span>
-        <span>Handy & SIM</span>
-      </label>
-
+<label
+  class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+         transition hover:bg-gray-50 dark:hover:bg-gray-700"
+  :class="data.artikel.Handy
+    ? 'ring-2 ring-primary border-primary'
+    : 'border-gray-300 dark:border-gray-600'"
+  @mouseenter="hover('Handy')"
+  @mouseleave="hover(null)"
+>
+  <input type="checkbox" class="hidden" x-model="data.artikel.Handy">
+  <span class="text-lg">📱</span>
+  <span class="font-medium">Handy</span>
+</label>
+<label
+  class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+         transition hover:bg-gray-50 dark:hover:bg-gray-700"
+  :class="data.artikel.SIM
+    ? 'ring-2 ring-primary border-primary'
+    : 'border-gray-300 dark:border-gray-600'"
+  @mouseenter="hover('SIM')"
+  @mouseleave="hover(null)"
+>
+  <input type="checkbox" class="hidden" x-model="data.artikel.SIM">
+  <span class="text-lg">📶</span>
+  <span class="font-medium">SIM-Karte</span>
+</label>
     </div>
   </div>
 

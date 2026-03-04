@@ -1,9 +1,10 @@
 <section class="flex-1 space-y-12">
 
   <!-- ================================================= -->
-  <!-- A. PERSONAL / HR -->
+  <!-- A. PERSONAL / HR (PHASE 1) -->
   <!-- ================================================= -->
   <div class="space-y-6">
+
     <h2 class="text-xl font-semibold text-primary">
       Personalabteilung
     </h2>
@@ -15,8 +16,7 @@
         <input
           x-model="p.location"
           :class="inputClass('location', p.location)"
-          placeholder="z. B. Nürnberg Nord"
-        >
+          placeholder="z. B. Nürnberg Nord">
       </div>
 
       <div class="md:col-span-2">
@@ -25,8 +25,7 @@
           x-model="p.address"
           :class="inputClass('address', p.address)"
           class="h-24"
-          placeholder="Straße, PLZ Ort"
-        ></textarea>
+          placeholder="Straße, PLZ Ort"></textarea>
       </div>
 
       <div>
@@ -34,123 +33,152 @@
         <input
           type="date"
           x-model="p.closing_date"
-          :class="inputClass('closing_date', p.closing_date)"
-        >
+          :class="inputClass('closing_date', p.closing_date)">
       </div>
 
     </div>
+
   </div>
 
+
+
   <!-- ================================================= -->
-  <!-- B. IT -->
+  <!-- PHASE 2 / 3 -->
   <!-- ================================================= -->
-  <div class="space-y-6">
-    <h2 class="text-xl font-semibold text-primary">
-      IT
-    </h2>
-
-    <!-- ================= WICHTIGE HINWEISE + BESTÄTIGUNG ================= -->
-<!-- ================= WICHTIGE HINWEISE + BESTÄTIGUNG ================= -->
-<div class="rounded-xl border border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 p-5">
-  <div class="text-sm text-red-800 dark:text-red-200">
-    <div class="font-semibold mb-3">⚠️ Wichtige Hinweise</div>
-
-    <div class="space-y-3">
-
-      <label class="flex items-start gap-3">
-        <input
-          type="checkbox"
-          x-model="it.confirm_dsl_cancel"
-          :class="inputClass('confirm_dsl_cancel', it.confirm_dsl_cancel)"
-          class="mt-1 h-4 w-4 shrink-0"
-        >
-        <span class="leading-snug">
-          <strong>Die DSL/Internetleitung wird gekündigt.</strong>
-        </span>
-      </label>
-
-      <label class="flex items-start gap-3">
-        <input
-          type="checkbox"
-          x-model="it.confirm_landline_cancel"
-          :class="inputClass('confirm_landline_cancel', it.confirm_landline_cancel)"
-          class="mt-1 h-4 w-4 shrink-0"
-        >
-        <span class="leading-snug">
-          <strong>Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!</strong>
-        </span>
-      </label>
-
-    </div>
-  </div>
-</div>
+  <div x-show="!isCreate" x-cloak class="space-y-12">
 
 
+    <!-- ================================================= -->
+    <!-- B. IT -->
+    <!-- ================================================= -->
+    <div class="space-y-6">
 
+      <h2 class="text-xl font-semibold text-primary">
+        IT
+      </h2>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Hinweise -->
+      <div class="rounded-xl border border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 p-5">
 
-      <div>
-        <label>Was geschieht mit der Hardware vor Ort?</label>
-        <select
-          x-model="it.hardware_action"
-          :class="inputClass('hardware_action', it.hardware_action)"
-        >
-          <option value="">Bitte wählen</option>
-          <option value="return_it">Wird an die IT gesendet</option>
-          <option value="transfer_branch">Wird in eine andere Niederlassung transferiert</option>
-        </select>
-      </div>
+        <div class="text-sm text-red-800 dark:text-red-200">
 
-      <template x-if="it.hardware_action === 'transfer_branch'">
-        <div class="md:col-span-2">
-          <label>Welche Niederlassung?</label>
-          <textarea
-            x-model="it.transfer_target"
-            :class="inputClass('transfer_target', it.transfer_target)"
-            class="h-20"
-            placeholder="Adresse der Ziel-Niederlassung"
-          ></textarea>
+          <div class="font-semibold mb-3">
+            ⚠️ Wichtige Hinweise
+          </div>
+
+          <div class="space-y-3">
+
+            <label class="flex items-start gap-3">
+
+              <input
+                type="checkbox"
+                x-model="it.confirm_dsl_cancel"
+                :class="inputClass('confirm_dsl_cancel', it.confirm_dsl_cancel)"
+                class="mt-1 h-4 w-4 shrink-0">
+
+              <span class="leading-snug">
+                <strong>Die DSL/Internetleitung wird gekündigt.</strong>
+              </span>
+
+            </label>
+
+            <label class="flex items-start gap-3">
+
+              <input
+                type="checkbox"
+                x-model="it.confirm_landline_cancel"
+                :class="inputClass('confirm_landline_cancel', it.confirm_landline_cancel)"
+                class="mt-1 h-4 w-4 shrink-0">
+
+              <span class="leading-snug">
+                <strong>Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!</strong>
+              </span>
+
+            </label>
+
+          </div>
+
         </div>
-      </template>
 
-    </div>
-  </div>
-
-  <!-- ================================================= -->
-  <!-- C. FUHRPARK -->
-  <!-- ================================================= -->
-  <div class="space-y-6">
-    <h2 class="text-xl font-semibold text-primary">
-      Fuhrpark
-    </h2>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-      <div>
-        <label>Sind Poolfahrzeuge vor Ort?</label>
-        <select
-          x-model="f.pool_cars"
-          :class="inputClass('pool_cars', f.pool_cars)"
-        >
-          <option value="">–</option>
-          <option>Ja</option>
-          <option>Nein</option>
-        </select>
       </div>
 
-      <template x-if="f.pool_cars === 'Ja'">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
         <div>
-          <label>Rückgabedatum</label>
-          <input
-            type="date"
-            x-model="f.return_date"
-            :class="inputClass('return_date', f.return_date)"
-          >
+          <label>Was geschieht mit der Hardware vor Ort?</label>
+          <select
+            x-model="it.hardware_action"
+            :class="inputClass('hardware_action', it.hardware_action)">
+            <option value="">Bitte wählen</option>
+            <option value="return_it">Wird an die IT gesendet</option>
+            <option value="transfer_branch">Wird in eine andere Niederlassung transferiert</option>
+          </select>
         </div>
-      </template>
+
+        <template x-if="it.hardware_action === 'transfer_branch'">
+
+          <div class="md:col-span-2">
+
+            <label>Welche Niederlassung?</label>
+
+            <textarea
+              x-model="it.transfer_target"
+              :class="inputClass('transfer_target', it.transfer_target)"
+              class="h-20"
+              placeholder="Adresse der Ziel-Niederlassung"></textarea>
+
+          </div>
+
+        </template>
+
+      </div>
 
     </div>
+
+
+
+    <!-- ================================================= -->
+    <!-- C. FUHRPARK -->
+    <!-- ================================================= -->
+    <div class="space-y-6">
+
+      <h2 class="text-xl font-semibold text-primary">
+        Fuhrpark
+      </h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <div>
+          <label>Sind Poolfahrzeuge vor Ort?</label>
+          <select
+            x-model="f.pool_cars"
+            :class="inputClass('pool_cars', f.pool_cars)">
+            <option value="">–</option>
+            <option>Ja</option>
+            <option>Nein</option>
+          </select>
+        </div>
+
+        <template x-if="f.pool_cars === 'Ja'">
+
+          <div>
+
+            <label>Rückgabedatum</label>
+
+            <input
+              type="date"
+              x-model="f.return_date"
+              :class="inputClass('return_date', f.return_date)">
+
+          </div>
+
+        </template>
+
+      </div>
+
+    </div>
+
   </div>
 
 </section>

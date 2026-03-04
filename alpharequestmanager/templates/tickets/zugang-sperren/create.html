@@ -4,8 +4,8 @@
 {% set alpine_component = "zugangsperrenPhase1Form()" %}
 
 {% block hidden_fields %}
-  <input type="hidden" name="ticket_type" value="zugang-sperren">
-  <input type="hidden" name="description" x-ref="description">
+<input type="hidden" name="ticket_type" value="zugang-sperren">
+<input type="hidden" name="description" x-ref="description">
 {% endblock %}
 
 {% block ticket_details %}
@@ -21,9 +21,11 @@
 {% endblock %}
 
 {% block extra_js %}
+
 <script>
 function zugangsperrenPhase1Form() {
   return {
+
     /* =================================================
        BASE FORM
     ================================================= */
@@ -34,35 +36,34 @@ function zugangsperrenPhase1Form() {
     ================================================= */
     phase: "create",
     isCreate: true,
-    modalOpen: false,
+    confirmCreateOpen: false,
 
     /* =================================================
        DATA
     ================================================= */
     companies: [],
 
-    /* ----------------- PERSONAL ------------------ */
+    /* ---------------- BASISDATEN ---------------- */
     p: {
       first_name: "",
       last_name: "",
       cost_center: "",
       contract_company: "",
-      exit_date: ""
+      exit_date: "",
+      severance_agreement: ""
     },
 
-    /* ----------------- IT (PLATZHALTER) ------------------ */
+    /* ---------------- IT ---------------- */
     it: {
       mail_forwarding: "",
       mail_forward_to: "",
-
       mailbox_access: "",
       mailbox_access_for: "",
-
       auto_reply: "",
       auto_reply_text: ""
     },
 
-    /* ----------------- FUHRPARK ------------------ */
+    /* ---------------- FUHRPARK ---------------- */
     f: {
       car: "",
       car_return_date: ""
@@ -70,35 +71,76 @@ function zugangsperrenPhase1Form() {
 
     /* =================================================
        VALIDATION RULES
-       (nur Personalabteilung)
     ================================================= */
     rules: {
+
+      /* BASISDATEN */
       first_name: { required: true },
       last_name: { required: true },
       cost_center: { required: true },
       contract_company: { required: true },
       exit_date: { required: true },
+      severance_agreement: { required: true },
 
-      /* Ticket-Workflow */
-      accountable_id: { required: true },
-      supervisor_id: { required: true }
+      /* IT CONDITIONALS */
+
+      mail_forward_to: {
+        requiredIf() {
+          return this.it.mail_forwarding === "Ja";
+        }
+      },
+
+      mailbox_access_for: {
+        requiredIf() {
+          return this.it.mailbox_access === "Ja";
+        }
+      },
+
+      auto_reply_text: {
+        requiredIf() {
+          return this.it.auto_reply === "Ja";
+        }
+      },
+
+      /* FUHRPARK */
+
+      car_return_date: {
+        requiredIf() {
+          return this.f.car === "Ja";
+        }
+      },
+
+      /* WORKFLOW */
+      accountable_id: { required: true }
+
     },
 
     /* =================================================
-       VALUE RESOLVER (für baseForm)
+       VALUE RESOLVER
     ================================================= */
     getValue(field) {
-      if (field in this.p) return this.p[field];
-      if (field in this.it) return this.it[field];
-      if (field in this.f) return this.f[field];
 
-      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+      /* 1️⃣ DOM FIRST */
+      const dom = document.querySelector(`[name="${field}"]`)?.value;
+      if (dom !== undefined && dom !== "") return dom;
+
+      /* 2️⃣ PERSONAL */
+      if (this.p && field in this.p) return this.p[field];
+
+      /* 3️⃣ IT */
+      if (this.it && field in this.it) return this.it[field];
+
+      /* 4️⃣ FUHRPARK */
+      if (this.f && field in this.f) return this.f[field];
+
+      return "";
     },
 
     /* =================================================
        INIT
     ================================================= */
     async init() {
+
       try {
         const res = await fetch("/api/companies");
         const data = await res.json();
@@ -106,30 +148,46 @@ function zugangsperrenPhase1Form() {
       } catch {
         this.companies = [];
       }
+
     },
 
     /* =================================================
        CREATE FLOW
     ================================================= */
-    openAssigneeModal() {
+
+    openCreateConfirm() {
+
       this.validationTriggered = false;
 
       this.$nextTick(() => {
+
         if (!this.validateOrScroll()) return;
-        this.modalOpen = true;
+
+        this.confirmCreateOpen = true;
+
       });
+
     },
 
-    chooseAssignee(type) {
-      const id = document.querySelector(`[name="${type}_id"]`)?.value;
-      const name = document.querySelector(`[name="${type}_name"]`)?.value;
-
-      this.$refs.assigneeId.value = id;
-      this.$refs.assigneeName.value = name;
+    confirmCreate() {
 
       /* ===============================
-         DESCRIPTION SERIALISIEREN
+         Verantwortlichen setzen
       =============================== */
+
+      const accountableId =
+        document.querySelector('[name="accountable_id"]')?.value || "";
+
+      const accountableName =
+        document.querySelector('[name="accountable_name"]')?.value || "";
+
+      this.$refs.assigneeId.value = accountableId;
+      this.$refs.assigneeName.value = accountableName;
+
+      /* ===============================
+         JSON SERIALISIEREN
+      =============================== */
+
       this.$refs.description.value = JSON.stringify(
         {
           personal: this.p,
@@ -140,10 +198,21 @@ function zugangsperrenPhase1Form() {
         2
       );
 
-      this.modalOpen = false;
-      this.$el.submit();
+      this.confirmCreateOpen = false;
+
+      /* ===============================
+         FORM SUBMIT
+      =============================== */
+
+      const form = this.$el.closest("form");
+      if (!form) return;
+
+      form.submit();
+
     }
+
   };
 }
 </script>
+
 {% endblock %}

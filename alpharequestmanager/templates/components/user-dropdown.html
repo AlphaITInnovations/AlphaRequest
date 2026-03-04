@@ -1,55 +1,119 @@
 {# ================= CONFIG ================= #}
 {% set label = label if label is defined else "Benutzer" %}
-{% set info_text = info_text if info_text is defined else "" %}
 {% set field_id = field_id if field_id is defined else "assignee_id" %}
 {% set field_name = field_name if field_name is defined else "assignee_name" %}
 {% set initial_id = initial_id if initial_id is defined else "" %}
 {% set initial_name = initial_name if initial_name is defined else "" %}
 
 <div
-  x-data="userDropdown({
-    fieldId: '{{ field_id }}',
-    fieldName: '{{ field_name }}',
-    initialId: '{{ initial_id }}',
-    initialName: '{{ initial_name }}'
-  })"
+  x-data="{
+    open: false,
+    loading: false,
+    search: '{{ initial_name }}',
+    users: [],
+    filtered: [],
+    selectedId: '{{ initial_id }}',
+    selectedName: '{{ initial_name }}',
+    activeIndex: -1,
+    debounceTimer: null,
+
+    async init() {
+      this.loading = true;
+
+      try {
+        const res = await fetch('/api/admin/users', {
+          credentials: 'same-origin'
+        });
+
+        const data = await res.json();
+
+        this.users = (data.users || []).map(u => ({
+          id: u.id,
+          display: u.displayName
+        }));
+
+        this.filtered = this.users;
+
+      } catch (e) {
+        console.error('User fetch failed', e);
+      }
+
+      this.loading = false;
+    },
+
+    openDropdown() {
+      this.open = true;
+      this.filter();
+    },
+
+    close() {
+      this.open = false;
+      this.activeIndex = -1;
+    },
+
+    filter() {
+      clearTimeout(this.debounceTimer);
+
+      this.debounceTimer = setTimeout(() => {
+        const q = this.search.toLowerCase().trim();
+
+        this.filtered = q
+          ? this.users.filter(u =>
+              u.display.toLowerCase().includes(q)
+            )
+          : this.users;
+
+        this.activeIndex = -1;
+      }, 150);
+    },
+
+    move(step) {
+      if (!this.open || this.filtered.length === 0) return;
+
+      this.activeIndex += step;
+
+      if (this.activeIndex < 0)
+        this.activeIndex = this.filtered.length - 1;
+
+      if (this.activeIndex >= this.filtered.length)
+        this.activeIndex = 0;
+    },
+
+    confirm() {
+      if (this.activeIndex >= 0) {
+        this.select(this.filtered[this.activeIndex]);
+      }
+    },
+
+    select(user) {
+      this.selectedId = user.id;
+      this.selectedName = user.display;
+      this.search = user.display;
+      this.close();
+    }
+  }"
+  x-init="init()"
   class="relative mt-4"
   @click.outside="close()"
 >
 
   <!-- LABEL -->
-  <label class="font-medium flex items-center gap-2">
-    <span>{{ label }}</span>
-
-    {% if info_text %}
-    <span class="relative group cursor-help">
-      <svg xmlns="http://www.w3.org/2000/svg"
-           class="w-4 h-4 text-gray-400 hover:text-primary"
-           fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
-      </svg>
-
-      <span
-        class="absolute left-1/2 -translate-x-1/2 top-6
-               whitespace-nowrap px-3 py-1.5 rounded
-               bg-gray-900 text-white text-xs
-               opacity-0 group-hover:opacity-100
-               transition pointer-events-none z-50">
-        {{ info_text }}
-      </span>
-    </span>
-    {% endif %}
+  <label class="block font-medium mb-1">
+    {{ label }}
   </label>
 
-  <!-- SEARCH INPUT -->
+  <!-- INPUT -->
   <input
     type="text"
     x-model="search"
-    @focus="open = true; filter()"
+    @focus="openDropdown()"
     @input="filter()"
+    @keydown.arrow-down.prevent="move(1)"
+    @keydown.arrow-up.prevent="move(-1)"
+    @keydown.enter.prevent="confirm()"
+    @keydown.escape="close()"
     placeholder="Mitarbeiter:in auswählen…"
-    class="input mt-1 cursor-pointer"
+    class="field w-full"
     autocomplete="off"
   >
 
@@ -57,25 +121,38 @@
   <div
     x-show="open"
     x-transition
-    @click.stop
-    class="absolute z-30 w-full mt-1 max-h-56 overflow-auto
-           bg-white dark:bg-gray-800 border rounded shadow text-sm"
+    class="absolute z-50 w-full mt-2 card max-h-64 overflow-auto text-sm"
   >
-    <template x-for="u in filtered" :key="u.id">
+
+    <!-- Loading -->
+    <div x-show="loading"
+         class="px-4 py-3 muted italic">
+      Lade Benutzer…
+    </div>
+
+    <!-- Results -->
+    <template x-for="(u, index) in filtered" :key="u.id">
       <div
         @click="select(u)"
-        class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+        :class="{
+          'bg-primary/15 text-primary': activeIndex === index,
+          'font-medium': selectedId === u.id
+        }"
+        class="px-4 py-2 cursor-pointer transition hover:bg-primary/10"
         x-text="u.display"
       ></div>
     </template>
 
-    <div x-show="filtered.length === 0"
-         class="px-3 py-2 text-gray-500">
+    <!-- Empty -->
+    <div x-show="!loading && filtered.length === 0"
+         class="px-4 py-3 muted italic">
       Keine Treffer
     </div>
+
   </div>
 
-  <!-- 🔑 SINGLE SOURCE OF TRUTH -->
-  <input type="hidden" :name="fieldId" :value="selectedId">
-  <input type="hidden" :name="fieldName" :value="selectedName">
+  <!-- Hidden Fields -->
+  <input type="hidden" name="{{ field_id }}" :value="selectedId">
+  <input type="hidden" name="{{ field_name }}" :value="selectedName">
+
 </div>

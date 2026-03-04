@@ -1,236 +1,249 @@
-<section class="flex-1 bg-white dark:bg-gray-800 border rounded-xl shadow p-8 space-y-12">
+<section class="flex-1 space-y-12">
 
   <!-- ================================================= -->
-  <!-- A. PERSONAL -->
+  <!-- A. BASISDATEN (PHASE 1) -->
   <!-- ================================================= -->
   <div>
+
     <h2 class="text-xl font-semibold text-primary mb-4">
-      Personalabteilung
+      Basisdaten
     </h2>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
+      <!-- Vorname -->
       <div>
         <label>Vorname</label>
         <input
-          name="first_name"
           x-model="p.first_name"
-          :class="inputClass('first_name', p.first_name)"
-        >
+          :class="inputClass('first_name', p.first_name)">
       </div>
 
+      <!-- Nachname -->
       <div>
         <label>Nachname</label>
         <input
-          name="last_name"
           x-model="p.last_name"
-          :class="inputClass('last_name', p.last_name)"
-        >
+          :class="inputClass('last_name', p.last_name)">
       </div>
 
+      <!-- Kostenstelle -->
       <div>
         <label>Kostenstelle</label>
         <input
-          name="cost_center"
           type="text"
           inputmode="numeric"
           x-model="p.cost_center"
           @input="p.cost_center = ($event.target.value || '').replace(/\D/g,'')"
-          :class="inputClass('cost_center', p.cost_center)"
-        >
+          :class="inputClass('cost_center', p.cost_center)">
       </div>
 
-    <div>
-      <label>Firma lt. Arbeitsvertrag</label>
-      <select
-        x-model="p.contract_company"
-        :class="inputClass('contract_company', p.contract_company)"
-      >
-        <option value="">Bitte wählen</option>
-        <template x-for="company in companies" :key="company">
-          <option :value="company" x-text="company"></option>
-        </template>
-      </select>
-    </div>
+      <!-- Firma -->
+      <div>
+        <label>Firma lt. Arbeitsvertrag</label>
+        <select
+          x-model="p.contract_company"
+          :class="inputClass('contract_company', p.contract_company)">
+          <option value="">Bitte wählen</option>
+          <template x-for="company in companies" :key="company">
+            <option :value="company" x-text="company"></option>
+          </template>
+        </select>
+      </div>
 
-
-
+      <!-- Austrittsdatum -->
       <div>
         <label>Austrittsdatum</label>
         <input
-          name="exit_date"
           type="date"
           x-model="p.exit_date"
-          :class="inputClass('exit_date', p.exit_date)"
-        >
+          :class="inputClass('exit_date', p.exit_date)">
+      </div>
+
+      <!-- Abfindungsvereinbarung -->
+      <div>
+        <label>Abfindungsvereinbarung</label>
+        <select
+          x-model="p.severance_agreement"
+          :class="inputClass('severance_agreement', p.severance_agreement)">
+          <option value="">Bitte wählen</option>
+          <option>Ja</option>
+          <option>Nein</option>
+        </select>
       </div>
 
     </div>
+
   </div>
 
+
   <!-- ================================================= -->
-  <!-- B. IT -->
+  <!-- PHASE 2 / 3 -->
   <!-- ================================================= -->
-  <div>
-    <h2 class="text-xl font-semibold text-primary mb-4">
-      IT
-    </h2>
+  <div x-show="!isCreate" x-cloak class="space-y-12">
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- ================================================= -->
+    <!-- B. IT -->
+    <!-- ================================================= -->
+    <div>
 
-      <!-- ================= MAILWEITERLEITUNG ================= -->
-      <div>
-        <label>Mailweiterleitung?</label>
-        <select
-          name="mail_forwarding"
-          x-model="it.mail_forwarding"
-          :class="inputClass('mail_forwarding', it.mail_forwarding)"
-        >
-          <option value="">–</option>
-          <option>Ja</option>
-          <option>Nein</option>
-        </select>
+      <h2 class="text-xl font-semibold text-primary mb-4">
+        IT
+      </h2>
 
-        <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
-          ⏱ <strong>Maximal 30 Tage.</strong><br>
-          Weiterleitung erfolgt ausschließlich an <strong>eine</strong> Person.
-        </p>
-      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-      <template x-if="it.mail_forwarding === 'Ja'">
+        <!-- MAILWEITERLEITUNG -->
         <div>
-          <label>Weiterleiten an (eine Person)</label>
-          <input
-            name="mail_forward_to"
-            x-model="it.mail_forward_to"
-            :class="inputClass('mail_forward_to', it.mail_forward_to)"
-            placeholder="z. B. vorname.nachname@firma.de"
-          >
+          <label>Mailweiterleitung?</label>
+          <select
+            x-model="it.mail_forwarding"
+            :class="inputClass('mail_forwarding', it.mail_forwarding)">
+            <option value="">–</option>
+            <option>Ja</option>
+            <option>Nein</option>
+          </select>
+
+          <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
+            ⏱ <strong>Maximal 30 Tage.</strong><br>
+            Weiterleitung erfolgt ausschließlich an <strong>eine</strong> Person.
+          </p>
         </div>
-      </template>
 
-      <!-- ================= POSTFACHZUGRIFF ================= -->
-      <div>
-        <label>Postfachzugriff gewähren?</label>
-        <select
-          name="mailbox_access"
-          x-model="it.mailbox_access"
-          :class="inputClass('mailbox_access', it.mailbox_access)"
-        >
-          <option value="">–</option>
-          <option>Ja</option>
-          <option>Nein</option>
-        </select>
+        <template x-if="it.mail_forwarding === 'Ja'">
+          <div>
+            <label>Weiterleiten an (eine Person)</label>
+            <input
+              x-model="it.mail_forward_to"
+              :class="inputClass('mail_forward_to', it.mail_forward_to)"
+              placeholder="z. B. vorname.nachname@firma.de">
+          </div>
+        </template>
 
-        <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
-          ⏱ <strong>Maximal 30 Tage.</strong><br>
-          Zugriff kann an <strong>mehrere Personen</strong> vergeben werden.
-        </p>
+
+        <!-- POSTFACHZUGRIFF -->
+        <div>
+          <label>Postfachzugriff gewähren?</label>
+          <select
+            x-model="it.mailbox_access"
+            :class="inputClass('mailbox_access', it.mailbox_access)">
+            <option value="">–</option>
+            <option>Ja</option>
+            <option>Nein</option>
+          </select>
+
+          <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
+            ⏱ <strong>Maximal 30 Tage.</strong><br>
+            Zugriff kann an <strong>mehrere Personen</strong> vergeben werden.
+          </p>
+        </div>
+
+        <template x-if="it.mailbox_access === 'Ja'">
+          <div class="md:col-span-2">
+            <label>Zugriff für (mehrere Personen möglich)</label>
+            <textarea
+              x-model="it.mailbox_access_for"
+              :class="inputClass('mailbox_access_for', it.mailbox_access_for)"
+              class="h-24"
+              placeholder="Eine Person pro Zeile oder komma-getrennt"></textarea>
+          </div>
+        </template>
+
       </div>
 
-      <template x-if="it.mailbox_access === 'Ja'">
-        <div class="md:col-span-2">
-          <label>Zugriff für (mehrere Personen möglich)</label>
-          <textarea
-            name="mailbox_access_for"
-            x-model="it.mailbox_access_for"
-            :class="inputClass('mailbox_access_for', it.mailbox_access_for)"
-            class="h-24"
-            placeholder="Eine Person pro Zeile oder komma-getrennt"
-          ></textarea>
-        </div>
-      </template>
 
-    </div>
-
-    <!-- ================= SICHERHEITS-HINWEIS ================= -->
-    <div
-      class="mt-6 rounded-lg border border-amber-300 dark:border-amber-600
-             bg-amber-50 dark:bg-amber-900/20 p-4 text-sm"
-    >
-      <strong>📌 Wichtiger Hinweis:</strong><br>
-      Postfächer werden weiterhin gesichert.<br>
-      <strong>Neue E-Mails werden jedoch nicht mehr zugestellt.</strong>
-    </div>
-
-    <!-- ================= ABWESENHEITSNOTIZ ================= -->
-    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-
-      <div>
-        <label>Abwesenheitsnotiz aktivieren?</label>
-        <select
-          name="auto_reply"
-          x-model="it.auto_reply"
-          :class="inputClass('auto_reply', it.auto_reply)"
-        >
-          <option value="">–</option>
-          <option>Ja</option>
-          <option>Nein</option>
-        </select>
+      <!-- HINWEIS -->
+      <div
+        class="mt-6 rounded-lg border border-amber-300 dark:border-amber-600
+               bg-amber-50 dark:bg-amber-900/20 p-4 text-sm">
+        <strong>📌 Wichtiger Hinweis:</strong><br>
+        Postfächer werden weiterhin gesichert.<br>
+        <strong>Neue E-Mails werden jedoch nicht mehr zugestellt.</strong>
       </div>
 
-      <!-- Text NUR bei aktivierter Abwesenheitsnotiz -->
-      <template x-if="it.auto_reply === 'Ja'">
-        <div class="md:col-span-2">
-          <label>Text der Abwesenheitsnotiz</label>
-          <textarea
-            name="auto_reply_text"
-            x-model="it.auto_reply_text"
-            :class="inputClass('auto_reply_text', it.auto_reply_text)"
-            class="h-32"
-          >Vielen Dank für Ihre Nachricht.
+
+      <!-- ABWESENHEITSNOTIZ -->
+      <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <div>
+          <label>Abwesenheitsnotiz aktivieren?</label>
+          <select
+            x-model="it.auto_reply"
+            :class="inputClass('auto_reply', it.auto_reply)">
+            <option value="">–</option>
+            <option>Ja</option>
+            <option>Nein</option>
+          </select>
+        </div>
+
+        <template x-if="it.auto_reply === 'Ja'">
+          <div class="md:col-span-2">
+
+            <label>Text der Abwesenheitsnotiz</label>
+
+            <textarea
+              x-model="it.auto_reply_text"
+              :class="inputClass('auto_reply_text', it.auto_reply_text)"
+              class="h-32">
+
+Vielen Dank für Ihre Nachricht.
 
 Die E-Mail-Adresse von &lt;Name&gt; ist nicht mehr aktiv.
 
-Bitte wenden Sie sich an &lt;Ersatzmailadresse&gt;.</textarea>
+Bitte wenden Sie sich an &lt;Ersatzmailadresse&gt;.
 
-          <p class="mt-1 text-xs text-gray-500">
-            Platzhalter bitte prüfen und ggf. anpassen:
-            <code>&lt;Name&gt;</code>,
-            <code>&lt;Ersatzmailadresse&gt;</code>
-          </p>
-        </div>
-      </template>
+</textarea>
 
-    </div>
-  </div>
+            <p class="mt-1 text-xs text-gray-500">
+              Platzhalter prüfen:
+              <code>&lt;Name&gt;</code>,
+              <code>&lt;Ersatzmailadresse&gt;</code>
+            </p>
 
-  <!-- ================================================= -->
-  <!-- C. FUHRPARK -->
-  <!-- ================================================= -->
-  <div>
-    <h2 class="text-xl font-semibold text-primary mb-4">
-      Fuhrpark
-    </h2>
+          </div>
+        </template>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-      <div>
-        <label>Dienstwagen vorhanden?</label>
-        <select
-          name="car"
-          x-model="f.car"
-          :class="inputClass('car', f.car)"
-        >
-          <option value="">–</option>
-          <option>Ja</option>
-          <option>Nein</option>
-        </select>
       </div>
 
-      <template x-if="f.car === 'Ja'">
+    </div>
+
+
+    <!-- ================================================= -->
+    <!-- C. FUHRPARK -->
+    <!-- ================================================= -->
+    <div>
+
+      <h2 class="text-xl font-semibold text-primary mb-4">
+        Fuhrpark
+      </h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
         <div>
-          <label>Rückgabedatum</label>
-          <input
-            name="car_return_date"
-            type="date"
-            x-model="f.car_return_date"
-            :class="inputClass('car_return_date', f.car_return_date)"
-          >
+          <label>Dienstwagen vorhanden?</label>
+          <select
+            x-model="f.car"
+            :class="inputClass('car', f.car)">
+            <option value="">–</option>
+            <option>Ja</option>
+            <option>Nein</option>
+          </select>
         </div>
-      </template>
+
+        <template x-if="f.car === 'Ja'">
+          <div>
+            <label>Rückgabedatum</label>
+            <input
+              type="date"
+              x-model="f.car_return_date"
+              :class="inputClass('car_return_date', f.car_return_date)">
+          </div>
+        </template>
+
+      </div>
 
     </div>
+
   </div>
 
 </section>
