@@ -1,6 +1,62 @@
-TODO Formulare:
-- Überall phase1 und phase2 rules richtig definieren
+TODO:
 - monitoring metrics
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 zugang beantragen:
