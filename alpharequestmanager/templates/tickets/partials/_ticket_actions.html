@@ -86,7 +86,7 @@
 
             <button
               type="button"
-              @click="confirmDepartmentDoneOpen = true"
+              @click="$dispatch('open-department-done')"
               class="px-6 py-2 rounded-md bg-emerald-600 text-white font-medium hover:opacity-90 transition"
             >
               ✔ Ausgeführt
@@ -163,51 +163,56 @@
   </div>
 </div>
 {% endif %}
-
 {% if phase == "view" and department_id is defined %}
 <div
-  x-show="confirmDepartmentDoneOpen"
-  x-cloak
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+  x-data="{ open:false }"
+  x-on:open-department-done.window="open=true"
 >
-  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
 
-    <h3 class="text-lg font-semibold">
-      Auftrag als ausgeführt markieren
-    </h3>
+  <div
+    x-show="open"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+  >
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
 
-    <p class="text-sm text-gray-600 dark:text-gray-300">
-      Wurde der Auftrag wirklich ausgeführt?
-      <br><br>
-      Danach kann die Fachabteilung den Auftrag nicht mehr bearbeiten.
-    </p>
+      <h3 class="text-lg font-semibold">
+        Auftrag als ausgeführt markieren
+      </h3>
 
-    <div class="flex justify-end gap-3 pt-4">
+      <p class="text-sm text-gray-600 dark:text-gray-300">
+        Wurde der Auftrag wirklich ausgeführt?
+        <br><br>
+        Danach kann die Fachabteilung den Auftrag nicht mehr bearbeiten.
+      </p>
 
-      <button
-        type="button"
-        @click="confirmDepartmentDoneOpen = false"
-        class="px-4 py-2 rounded-md border dark:border-gray-600
-               bg-gray-100 dark:bg-gray-700
-               hover:bg-gray-200 dark:hover:bg-gray-600 transition"
-      >
-        Abbrechen
-      </button>
+      <div class="flex justify-end gap-3 pt-4">
 
-      <button
-        type="button"
-        @click="performDepartmentComplete()"
-        class="px-4 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition"
-      >
-        Ausgeführt bestätigen
-      </button>
+        <button
+          type="button"
+          @click="open=false"
+          class="px-4 py-2 rounded-md border dark:border-gray-600
+                 bg-gray-100 dark:bg-gray-700
+                 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+        >
+          Abbrechen
+        </button>
+
+        <button
+          type="button"
+          @click="performDepartmentComplete()"
+          class="px-4 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition"
+        >
+          Ausgeführt bestätigen
+        </button>
+
+      </div>
 
     </div>
-
   </div>
+
 </div>
 {% endif %}
-
 {# =========================================================
    COMPLETE CONFIRM MODAL (EDIT)
 ========================================================= #}
@@ -259,13 +264,7 @@
 <!-- ================= VIEW: Department "done" Script ================= -->
 {% if phase == "view" and department_id is defined %}
 <script>
-async function completeDepartment() {
-  const confirmed = confirm(
-    "Wurde der Auftrag wirklich ausgeführt?\n\n" +
-    "Dieser kann danach nicht mehr bearbeitet werden."
-  );
-
-  if (!confirmed) return;
+async function performDepartmentComplete() {
 
   const response = await fetch(
     "/tickets/{{ ticket.id }}/departments/{{ department_id }}/status",
