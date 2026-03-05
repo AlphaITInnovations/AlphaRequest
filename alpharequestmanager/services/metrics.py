@@ -1,195 +1,283 @@
-# metrics.py
 import os
-import threading
 import time
-from typing import Dict
 import base64
+import threading
+from typing import Dict
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+
 from prometheus_client import (
     CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
+    Summary,
     generate_latest,
     CONTENT_TYPE_LATEST,
+    ProcessCollector,
+    PlatformCollector,
+    GCCollector,
 )
 
 # ---------------------------------------------------------
-# ACTIVATE METRICS ONLY IF ENABLE_METRICS=true
+# CONFIG
 # ---------------------------------------------------------
+
 ENABLE_METRICS = os.getenv("ENABLE_METRICS", "false").lower() == "true"
 
-# ---------------------------------------------------------
-# PROMETHEUS REGISTRY
-# ---------------------------------------------------------
-registry = CollectorRegistry()
+METRICS_USERNAME = os.getenv("METRICS_USERNAME")
+METRICS_PASSWORD = os.getenv("METRICS_PASSWORD")
 
 # ---------------------------------------------------------
-# TECHNICAL METRICS
+# REGISTRY
 # ---------------------------------------------------------
+
+registry = CollectorRegistry()
+
+# Default runtime collectors
+ProcessCollector(registry=registry)
+PlatformCollector(registry=registry)
+GCCollector(registry=registry)
+
+# ---------------------------------------------------------
+# HTTP METRICS
+# ---------------------------------------------------------
+
 http_requests_total = Counter(
     "http_requests_total",
     "Total HTTP requests",
-    ["method", "path", "status_code"],
+    ["method", "route", "status"],
     registry=registry,
 )
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds",
-    "HTTP request duration in seconds",
-    ["method", "path", "status_code"],
+    "HTTP request latency",
+    ["method", "route"],
+    buckets=(
+        0.005,
+        0.01,
+        0.025,
+        0.05,
+        0.1,
+        0.25,
+        0.5,
+        1,
+        2.5,
+        5,
+        10,
+    ),
     registry=registry,
 )
 
 http_requests_in_progress = Gauge(
     "http_requests_in_progress",
-    "In-progress HTTP requests",
-    ["method", "path"],
+    "Active HTTP requests",
+    ["method", "route"],
     registry=registry,
 )
 
 http_exceptions_total = Counter(
     "http_exceptions_total",
-    "Total exceptions during request handling",
-    ["path", "exception"],
+    "Total uncaught exceptions",
+    ["route", "exception"],
     registry=registry,
 )
 
 # ---------------------------------------------------------
-# BUSINESS METRICS (Ticketsystem)
+# AUTH METRICS
 # ---------------------------------------------------------
+
+auth_logins_total = Counter(
+    "auth_logins_total",
+    "Total login attempts",
+    ["result", "provider"],
+    registry=registry,
+)
+
+auth_sessions_active = Gauge(
+    "auth_sessions_active",
+    "Active authenticated sessions",
+    registry=registry,
+)
+
+auth_login_failures_total = Counter(
+    "auth_login_failures_total",
+    "Login failures",
+    ["reason"],
+    registry=registry,
+)
+
+# ---------------------------------------------------------
+# TICKET LIFECYCLE METRICS
+# ---------------------------------------------------------
+
 tickets_created_total = Counter(
     "tickets_created_total",
-    "Total created tickets",
-    ["type", "domain", "company"],
-    registry=registry,
-)
-tickets_total = Gauge(
-    "tickets_total",
-    "Total number of tickets in the system",
+    "Total tickets created",
+    ["type"],
     registry=registry,
 )
 
-tickets_status_total = Gauge(
-    "tickets_status_total",
-    "Number of tickets per status",
+tickets_closed_total = Counter(
+    "tickets_closed_total",
+    "Total tickets closed",
+    ["type", "status"],
+    registry=registry,
+)
+
+tickets_current = Gauge(
+    "tickets_current",
+    "Current number of tickets",
     ["status"],
     registry=registry,
 )
 
 tickets_by_type = Gauge(
     "tickets_by_type",
-    "Number of tickets per type",
+    "Tickets grouped by type",
     ["type"],
     registry=registry,
 )
 
-tickets_by_company = Gauge(
-    "tickets_by_company",
-    "Number of tickets per company",
-    ["company"],
+tickets_open = Gauge(
+    "tickets_open",
+    "Open tickets",
+    ["type"],
     registry=registry,
 )
 
-tickets_by_domain = Gauge(
-    "tickets_by_domain",
-    "Number of tickets per email domain",
-    ["domain"],
-    registry=registry,
-)
-
-tickets_open_total = Gauge(
-    "tickets_open_total",
-    "Total currently open tickets",
-    ["type", "company"],
-    registry=registry,
-)
-
-# ---------------------------------------------------------
-# EXTENDED METRICS
-# ---------------------------------------------------------
-login_failures_total = Counter(
-    "login_failures_total",
-    "Login failures during authentication",
-    ["reason"],
-    registry=registry,
-)
-
-active_users_total = Gauge(
-    "active_users_total",
-    "Number of currently active users",
+ticket_resolution_seconds = Histogram(
+    "ticket_resolution_seconds",
+    "Ticket resolution time",
+    ["type"],
+    buckets=(
+        60,
+        300,
+        600,
+        1800,
+        3600,
+        7200,
+        14400,
+        28800,
+        86400,
+    ),
     registry=registry,
 )
 
 # ---------------------------------------------------------
-# INTERNAL STATE
+# SYSTEM LOAD METRICS
 # ---------------------------------------------------------
-_active_sessions_lock = threading.Lock()
-_active_sessions: Dict[str, float] = {}  # sid → last_activity_ts
 
-SESSION_TIMEOUT = 3600  # overwritten when init_metrics() called
+background_jobs_running = Gauge(
+    "background_jobs_running",
+    "Background jobs currently running",
+    registry=registry,
+)
+
+background_jobs_total = Counter(
+    "background_jobs_total",
+    "Background jobs executed",
+    ["result"],
+    registry=registry,
+)
+
+# ---------------------------------------------------------
+# INTERNAL SESSION TRACKING
+# ---------------------------------------------------------
+
+SESSION_TIMEOUT = 3600
 TICKET_MANAGER = None
 
+_sessions: Dict[str, float] = {}
+_sessions_lock = threading.Lock()
 
 # ---------------------------------------------------------
-# PATH NORMALIZER
+# ROUTE NORMALIZATION
 # ---------------------------------------------------------
+
+
 def normalize_path(path: str) -> str:
-    # Normalizes dynamic routes like /tickets/123/delete → /tickets/:id/delete
-    parts = path.rstrip("/").split("/")
-    norm = []
+    """
+    Prevent high cardinality in Prometheus labels.
+    """
+
+    parts = path.strip("/").split("/")
+    normalized = []
+
     for p in parts:
         if p.isdigit():
-            norm.append(":id")
+            normalized.append(":id")
         else:
-            norm.append(p)
-    return "/".join(norm)
+            normalized.append(p)
+
+    return "/" + "/".join(normalized)
 
 
 # ---------------------------------------------------------
-# REQUEST MIDDLEWARE
+# MIDDLEWARE
 # ---------------------------------------------------------
+
+
 class MetricsMiddleware(BaseHTTPMiddleware):
+
     async def dispatch(self, request: Request, call_next):
+
         if not ENABLE_METRICS:
             return await call_next(request)
 
         method = request.method
-        path = normalize_path(request.url.path)
-        http_requests_in_progress.labels(method=method, path=path).inc()
+        route = normalize_path(request.url.path)
 
-        start_time = time.perf_counter()
+        http_requests_in_progress.labels(method=method, route=route).inc()
+
+        start = time.perf_counter()
         status = "500"
 
         try:
+
             response: Response = await call_next(request)
             status = str(response.status_code)
             return response
-        except Exception as exc:
-            http_exceptions_total.labels(path=path, exception=exc.__class__.__name__).inc()
-            raise
-        finally:
-            elapsed = time.perf_counter() - start_time
-            http_request_duration_seconds.labels(
-                method=method, path=path, status_code=status
-            ).observe(elapsed)
 
-            http_requests_total.labels(
-                method=method, path=path, status_code=status
+        except Exception as exc:
+
+            http_exceptions_total.labels(
+                route=route,
+                exception=exc.__class__.__name__,
             ).inc()
 
-            http_requests_in_progress.labels(method=method, path=path).dec()
+            raise
+
+        finally:
+
+            duration = time.perf_counter() - start
+
+            http_requests_total.labels(
+                method=method,
+                route=route,
+                status=status,
+            ).inc()
+
+            http_request_duration_seconds.labels(
+                method=method,
+                route=route,
+            ).observe(duration)
+
+            http_requests_in_progress.labels(
+                method=method,
+                route=route,
+            ).dec()
 
 
 # ---------------------------------------------------------
-# ACTIVE USER TRACKING (HYBRID)
+# SESSION TRACKING
 # ---------------------------------------------------------
+
+
 def record_login_success(request: Request):
-    """
-    Called in server.py after successful login.
-    """
+
     if not ENABLE_METRICS:
         return
 
@@ -197,201 +285,204 @@ def record_login_success(request: Request):
     if not sid:
         return
 
-    ts = int(time.time())
+    with _sessions_lock:
+        _sessions[sid] = time.time()
 
-    with _active_sessions_lock:
-        _active_sessions[sid] = ts
+    auth_logins_total.labels(
+        result="success",
+        provider="oauth",
+    ).inc()
 
-    _update_active_users()
+    _update_active_sessions()
+
+
+def record_login_failure(reason: str):
+
+    if not ENABLE_METRICS:
+        return
+
+    auth_login_failures_total.labels(reason=reason).inc()
+
+    auth_logins_total.labels(
+        result="failure",
+        provider="oauth",
+    ).inc()
 
 
 def record_logout(request: Request):
-    """
-    Called when user logs out.
-    """
+
     if not ENABLE_METRICS:
         return
 
     sid = request.session.get("sid")
+
     if not sid:
         return
 
-    with _active_sessions_lock:
-        _active_sessions.pop(sid, None)
+    with _sessions_lock:
+        _sessions.pop(sid, None)
 
-    _update_active_users()
-
-def record_login_failure(reason: str):
-    """
-    Increments the login_failures_total counter.
-    Called whenever authentication fails (OAuth, token exchange, etc.).
-    """
-    if not ENABLE_METRICS:
-        return
-    login_failures_total.labels(reason=reason).inc()
+    _update_active_sessions()
 
 
 def update_last_activity(request: Request):
-    """
-    Called on every request by server.py (already in get_current_user).
-    """
+
     if not ENABLE_METRICS:
         return
 
     sid = request.session.get("sid")
+
     if not sid:
         return
 
-    with _active_sessions_lock:
-        _active_sessions[sid] = int(time.time())
+    with _sessions_lock:
+        _sessions[sid] = time.time()
 
 
 def _cleanup_sessions():
+
     now = time.time()
-    timeout_limit = now - SESSION_TIMEOUT
+    timeout = now - SESSION_TIMEOUT
 
-    with _active_sessions_lock:
-        to_remove = [sid for sid, ts in _active_sessions.items() if ts < timeout_limit]
-        for sid in to_remove:
-            _active_sessions.pop(sid, None)
+    with _sessions_lock:
 
-    _update_active_users()
+        expired = [
+            sid
+            for sid, ts in _sessions.items()
+            if ts < timeout
+        ]
+
+        for sid in expired:
+            _sessions.pop(sid, None)
+
+    _update_active_sessions()
 
 
-def _update_active_users():
-    with _active_sessions_lock:
-        active_users_total.set(len(_active_sessions))
+def _update_active_sessions():
+
+    with _sessions_lock:
+        auth_sessions_active.set(len(_sessions))
 
 
 # ---------------------------------------------------------
 # BUSINESS METRICS COLLECTOR
 # ---------------------------------------------------------
-def _collect_business_metrics():
+
+
+def _collect_ticket_metrics():
+
     if not ENABLE_METRICS or TICKET_MANAGER is None:
         return
 
-    from alpharequestmanager.models.models import RequestStatus
-    import json
-
     tickets = TICKET_MANAGER.list_all()
 
-    status_count: dict[str, int] = {}
-    type_count: dict[str, int] = {}
-    company_count: dict[str, int] = {}
-    domain_count: dict[str, int] = {}
-    open_count: dict[tuple[str, str], int] = {}
+    status_count: Dict[str, int] = {}
+    type_count: Dict[str, int] = {}
 
     for t in tickets:
-        # Status
-        st = getattr(t.status, "value", None) or "unknown"
-        status_count[st] = status_count.get(st, 0) + 1
 
-        # Type
-        ttype = t.title or "Unbekannt"
+        status = getattr(t.status, "value", "unknown")
+        status_count[status] = status_count.get(status, 0) + 1
+
+        ttype = getattr(t, "title", "unknown")
         type_count[ttype] = type_count.get(ttype, 0) + 1
 
-        # Owner info
-        info = json.loads(t.owner_info) if t.owner_info else {}
-        email = (info.get("email") or "").strip()
-        domain = email.split("@", 1)[1] if "@" in email else ""
-        company = info.get("company") or ""
+    total = sum(status_count.values())
 
-        company_count[company] = company_count.get(company, 0) + 1
-        domain_count[domain] = domain_count.get(domain, 0) + 1
+    for status, count in status_count.items():
+        tickets_current.labels(status=status).set(count)
 
-        # Open tickets (pending)
-        if st == RequestStatus.in_progress.value:
-            key = (ttype, company)
-            open_count[key] = open_count.get(key, 0) + 1
+    for ttype, count in type_count.items():
+        tickets_by_type.labels(type=ttype).set(count)
 
-    # ---- Gauges setzen ----
+    open_count = status_count.get("pending", 0) + status_count.get("in_progress", 0)
 
-    # Tickets total
-    tickets_total.set(sum(status_count.values()))
-
-    # Status explizit setzen (auch 0, damit nichts „hängen bleibt“)
-    for st in ["pending", "approved", "rejected"]:
-        tickets_status_total.labels(status=st).set(status_count.get(st, 0))
-
-    # Typen
-    for ttype, val in type_count.items():
-        tickets_by_type.labels(type=ttype).set(val)
-
-    # Companies
-    for company, val in company_count.items():
-        tickets_by_company.labels(company=company).set(val)
-
-    # Domains
-    for domain, val in domain_count.items():
-        tickets_by_domain.labels(domain=domain).set(val)
-
-    # Open tickets
-    for (ttype, company), val in open_count.items():
-        tickets_open_total.labels(type=ttype, company=company).set(val)
-
+    tickets_open.labels(type="all").set(open_count)
 
 
 # ---------------------------------------------------------
-# BACKGROUND THREAD
+# BACKGROUND COLLECTOR
 # ---------------------------------------------------------
+
+
 def _collector_thread():
+
     while True:
+
         time.sleep(10)
-        _cleanup_sessions()
-        _collect_business_metrics()
+
+        try:
+            _cleanup_sessions()
+            _collect_ticket_metrics()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------
-# /metrics ENDPOINT
+# METRICS AUTH
 # ---------------------------------------------------------
+
+
 def _check_basic_auth(request: Request) -> bool:
-    username = os.getenv("METRICS_USERNAME")
-    password = os.getenv("METRICS_PASSWORD")
 
-    # kein Auth gewünscht
-    if not username or not password:
+    if not METRICS_USERNAME or not METRICS_PASSWORD:
         return True
 
     auth = request.headers.get("Authorization")
+
     if not auth or not auth.startswith("Basic "):
         return False
 
     encoded = auth.split(" ", 1)[1]
-    decoded = base64.b64decode(encoded).decode("utf-8")
+
+    try:
+        decoded = base64.b64decode(encoded).decode()
+    except Exception:
+        return False
 
     if ":" not in decoded:
         return False
 
     user, pwd = decoded.split(":", 1)
 
-    return user == username and pwd == password
+    return user == METRICS_USERNAME and pwd == METRICS_PASSWORD
 
+
+# ---------------------------------------------------------
+# /metrics ENDPOINT
+# ---------------------------------------------------------
 
 
 async def metrics_endpoint(request: Request):
+
     if not ENABLE_METRICS:
         return Response(status_code=404)
 
     if not _check_basic_auth(request):
+
         return Response(
             status_code=401,
-            headers={"WWW-Authenticate": "Basic realm=\"Metrics\""},
+            headers={"WWW-Authenticate": "Basic"},
             content="Unauthorized",
         )
 
     data = generate_latest(registry)
-    return Response(content=data, media_type=CONTENT_TYPE_LATEST)
 
+    return Response(
+        content=data,
+        media_type=CONTENT_TYPE_LATEST,
+    )
 
 
 # ---------------------------------------------------------
-# INITIALIZATION (called from server.py)
+# INITIALIZATION
 # ---------------------------------------------------------
+
+
 def init_metrics(app, session_timeout: int, ticket_manager):
-    """
-    Call in server.py AFTER FastAPI instance creation.
-    """
-    global SESSION_TIMEOUT, TICKET_MANAGER
+
+    global SESSION_TIMEOUT
+    global TICKET_MANAGER
 
     if not ENABLE_METRICS:
         return
@@ -399,29 +490,19 @@ def init_metrics(app, session_timeout: int, ticket_manager):
     SESSION_TIMEOUT = session_timeout
     TICKET_MANAGER = ticket_manager
 
-    # Middleware
     app.add_middleware(MetricsMiddleware)
 
-    # Endpoint
-    app.add_api_route("/metrics", metrics_endpoint, methods=["GET"])
-    active_users_total.set(0)
+    app.add_api_route(
+        "/metrics",
+        metrics_endpoint,
+        methods=["GET"],
+    )
 
-    # Initialize statuses
-    for st in ["pending", "approved", "rejected"]:
-        tickets_status_total.labels(status=st).set(0)
+    auth_sessions_active.set(0)
 
-    # Initialize counters for "known labels"
-    login_failures_total.labels(reason="auth_callback_exception").inc(0)
-    login_failures_total.labels(reason="invalid_credentials").inc(0)
-    login_failures_total.labels(reason="token_exchange_failed").inc(0)
+    thread = threading.Thread(
+        target=_collector_thread,
+        daemon=True,
+    )
 
-    # A default domain/company/type can be bootstrapped as empty
-    tickets_by_type.labels(type="none").set(0)
-    tickets_by_company.labels(company="none").set(0)
-    tickets_by_domain.labels(domain="none").set(0)
-    tickets_open_total.labels(type="none", company="none").set(0)
-    # Background thread
-    thread = threading.Thread(target=_collector_thread, daemon=True)
     thread.start()
-
-
