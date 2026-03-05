@@ -12,7 +12,7 @@ from alpharequestmanager.core.session import (
     approx_cookie_size_bytes,
     TOKENS,
 )
-from alpharequestmanager.services.metrics import (
+from alpharequestmanager.metrics.auth_metrics import (
     record_login_success,
     record_login_failure,
     record_logout,

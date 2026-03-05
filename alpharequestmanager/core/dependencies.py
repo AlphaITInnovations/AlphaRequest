@@ -5,7 +5,7 @@ import time
 from fastapi import Request, HTTPException, status
 from alpharequestmanager.utils.config import config
 from alpharequestmanager.utils.logger import logger
-from alpharequestmanager.services.metrics import update_last_activity
+from alpharequestmanager.metrics.auth_metrics import update_last_activity
 # Min-interval to reduce Set-Cookie churn
 SAFE_UPDATE_INTERVAL = 60  # seconds
 

@@ -25,7 +25,7 @@ from alpharequestmanager.core.app_lifespan import lifespan
 from alpharequestmanager.core.session import setup_session
 from alpharequestmanager.database import database as db
 from alpharequestmanager.models.models import TicketType
-from alpharequestmanager.services.metrics import init_metrics
+from alpharequestmanager.metrics.metrics import init_metrics
 from alpharequestmanager.services.personalnummer_generator import init_personalnummer
 from alpharequestmanager.services.ticket_permissions import init_ticket_permissions
 from alpharequestmanager.services.ticket_service import TicketService
