@@ -14,7 +14,6 @@ from alpharequestmanager.core.session import (
 )
 from alpharequestmanager.metrics.auth_metrics import (
     record_login_success,
-    record_login_failure,
     record_logout,
 )
 from alpharequestmanager.utils.logger import logger
@@ -131,7 +130,6 @@ async def auth_callback(request: Request):
 
     except Exception as e:
         logger.exception("Login fehlgeschlagen")
-        record_login_failure("auth_callback_failed")
         return request.app.templates.TemplateResponse(
             "login.html",
             {"request": request, "error": str(e)},
