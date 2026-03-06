@@ -10,16 +10,15 @@ from prometheus_client import Counter, Gauge, Histogram
 # METRICS
 # ---------------------------------------------------------
 
-auth_logins_total = Counter(
-    "auth_logins_total",
+auth_login_attempts_total = Counter(
+    "auth_login_attempts_total",
     "Total login attempts",
-    ["result", "provider"],
 )
 
-auth_login_failures_total = Counter(
-    "auth_login_failures_total",
-    "Login failures",
-    ["reason"],
+auth_logins_success_total = Counter(
+    "auth_logins_success_total",
+    "Successful logins",
+    ["provider"],
 )
 
 auth_sessions_active = Gauge(
@@ -46,6 +45,17 @@ SESSION_TIMEOUT = 3600
 
 
 # ---------------------------------------------------------
+# LOGIN ATTEMPT
+# ---------------------------------------------------------
+
+def record_login_attempt():
+    """
+    Called before redirecting to Microsoft login.
+    """
+    auth_login_attempts_total.inc()
+
+
+# ---------------------------------------------------------
 # LOGIN SUCCESS
 # ---------------------------------------------------------
 
@@ -65,26 +75,11 @@ def record_login_success(request: Request):
             "last_activity": now,
         }
 
-    auth_logins_total.labels(
-        result="success",
+    auth_logins_success_total.labels(
         provider="oauth"
     ).inc()
 
     auth_sessions_active.set(len(_sessions))
-
-
-# ---------------------------------------------------------
-# LOGIN FAILURE
-# ---------------------------------------------------------
-
-def record_login_failure(reason: str):
-
-    auth_login_failures_total.labels(reason=reason).inc()
-
-    auth_logins_total.labels(
-        result="failure",
-        provider="oauth"
-    ).inc()
 
 
 # ---------------------------------------------------------

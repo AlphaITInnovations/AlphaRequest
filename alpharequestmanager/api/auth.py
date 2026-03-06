@@ -19,7 +19,7 @@ from alpharequestmanager.metrics.auth_metrics import (
 )
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.utils.config import config
-
+from alpharequestmanager.metrics.auth_metrics import record_login_attempt
 import time
 
 
@@ -39,9 +39,12 @@ async def login_page(request: Request):
 
 @router.get("/start-auth")
 async def start_auth(request: Request):
-    """OAuth Flow starten."""
+
+    record_login_attempt()
+
     if request.session.get("user"):
         return RedirectResponse("/dashboard", status_code=HTTP_302_FOUND)
+
     auth_url = initiate_auth_flow(request)
     return RedirectResponse(auth_url)
 
@@ -53,19 +56,6 @@ async def auth_callback(request: Request):
     User-Infos und rotiert SID.
     """
 
-    # Microsoft OAuth Error Handling
-    error = request.query_params.get("error")
-
-    if error:
-        record_login_failure(error)
-
-        return request.app.templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": request.query_params.get("error_description", "Login fehlgeschlagen"),
-            },
-        )
 
     try:
         logger.info("➡️ Session vor Token-Abruf: %s", dict(request.session))
