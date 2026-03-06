@@ -7,7 +7,6 @@ from alpharequestmanager.models.models import Ticket, RequestStatus, TicketPrior
 from alpharequestmanager.models import models
 from alpharequestmanager.database import database as db
 
-
 class TicketService:
     # ---------------------------------------------------------
     # Ticket ERSTELLEN
@@ -44,7 +43,6 @@ class TicketService:
             status=RequestStatus.in_progress.value,
             priority=priority.value,
         )
-
         # --- Initial Assignments (mit History!) ---
         self.assign_to_user(ticket_id, assignee_id, assignee_name)
         self.assign_accountable(ticket_id, accountable_id, accountable_name)
