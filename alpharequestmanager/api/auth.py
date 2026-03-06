@@ -52,6 +52,21 @@ async def auth_callback(request: Request):
     OAuth Callback – übernimmt Token-Abruf, erstellt Session,
     User-Infos und rotiert SID.
     """
+
+    # Microsoft OAuth Error Handling
+    error = request.query_params.get("error")
+
+    if error:
+        record_login_failure(error)
+
+        return request.app.templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "error": request.query_params.get("error_description", "Login fehlgeschlagen"),
+            },
+        )
+
     try:
         logger.info("➡️ Session vor Token-Abruf: %s", dict(request.session))
 
