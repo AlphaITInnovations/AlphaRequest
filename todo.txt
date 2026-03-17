@@ -1,45 +1,9 @@
 TODO:
-- monitoring metrics
-- metric totoal ticket number
+angemeldete benutzer name
+favicon geht im dokploy nicht
+auftragsübersicht verbessern
 
 
-
-zugang beantragen:
-    IT Systemdaten redundante felder entfernen Haupt-Kostenstelle, Eintrittsdatum, E-Mail-Signaturdaten
-    view.html ist die sturktur noch veraltet mit personalabteilung statt basisdaten etc
-
-
-    wenn eröffnung nur pflichtfelder von phase1 anzeigen (alle anderen nicht)
-    personalabteilung soll in bassisdaten umbenannt werden
-
-    timebutler nach oben in basisdaten
-    urlaubsanspruch im einstellungsjahr kann raus
-
-    feiertagsregelung kann raus, dafür bundesland bei niederlassung mit hin
-    arbeitszeit in studnen noch mit rein
-    hinweisfeld vorgesetzer (vertraglich vorgesetzer)
-
-    fahrzeugklasse ändern in fahrzeuggruppe 1-7 -> nach oben zu den basisdaten, also kompletter fuhrpark mit zu basisdaten (muss aber in der json sturktur trotzdem unter fuhrpark bleiben)
-    vorgesetzter timbutler umbenennen -> umbenennen: Wer soll den urlaub freigeben
-
-
-
-Zugang sperren:
-    abfindungsvereinbarung ja/nein
-
-    termin mit christine
-     abwesenheitsnotiz template funktioniert nicht
-     fuhrpark ja muss in die basisdaten
-     feld zugang sperren ab: Hinweis: ab dann kann sich der benutzer nicht mehr anmelden
-
-niederlassung-anmelden:
-    kostenstelle nicht in basisdaten
-    großer marco macht workflow visuell
-
-
-hardwarebesetllung
-    handy und sim aufteilen
-    alle html aufräumen und gerade ziehen für sonderfall
 
 
 

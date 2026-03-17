@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.status import HTTP_302_FOUND
 
+from alpharequestmanager.core.dependencies import get_current_user
 from alpharequestmanager.services.microsoft_auth import (
     initiate_auth_flow,
     acquire_token_by_auth_code,
