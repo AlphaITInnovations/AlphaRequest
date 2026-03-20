@@ -167,12 +167,12 @@ async function removeDistribution(g: Group, mail: string) {
 
 // ── App Users ──────────────────────────────────────────────────────────────────
 interface AppUser {
-  microsoft_id:      string
-  display_name:      string
-  email:             string
-  role:              string
-  permissions:       string[]
-  last_login:        string
+  microsoft_id:  string
+  display_name:  string
+  email:         string
+  role:          string
+  permissions:   string[]
+  last_login:    string
 }
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -182,17 +182,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   admin:   ['view', 'manage', 'admin'],
 }
 
-// Permissions die nicht aus der Rolle kommen → manuell gesetzt
 function extraPermissions(u: AppUser): string[] {
   const rolePerms = ROLE_PERMISSIONS[u.role] ?? []
   return u.permissions.filter(p => !rolePerms.includes(p))
 }
 
-const appUsers       = ref<AppUser[]>([])
-const userSearch     = ref('')
-const roleFilter     = ref('all')
-const expandedUser   = ref<string | null>(null)
-const newPermInput   = ref<Record<string, string>>({})
+const appUsers     = ref<AppUser[]>([])
+const userSearch   = ref('')
+const roleFilter   = ref('all')
+const expandedUser = ref<string | null>(null)
+const newPermInput = ref<Record<string, string>>({})
 
 const filteredAppUsers = computed(() => {
   let list = appUsers.value
@@ -242,6 +241,12 @@ async function removePermission(microsoftId: string, perm: string) {
 
 function toggleExpand(id: string) {
   expandedUser.value = expandedUser.value === id ? null : id
+}
+
+// ── Hilfsfunktion für ENV-Tabellen ─────────────────────────────────────────────
+function envVal(val: unknown): string {
+  if (val === null || val === undefined) return '—'
+  return String(val)
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -363,12 +368,11 @@ const navGroups = computed(() => {
 
         <div v-if="['general','microsoft','session'].includes(active)"
              class="rounded-xl border border-blue-200 dark:border-blue-500/30
-                    bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm
-                    text-blue-800 dark:text-blue-200">
+                    bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
           Diese Einstellungen werden über <strong>Umgebungsvariablen</strong> (.env) verwaltet und können hier nur eingesehen werden.
         </div>
 
-        <!-- Allgemein / Microsoft / Session – unverändert -->
+        <!-- Allgemein -->
         <section v-if="active === 'general'">
           <h2 class="section-title">Allgemein</h2>
           <div class="card-section" v-if="env">
@@ -379,14 +383,15 @@ const navGroups = computed(() => {
               <tbody class="divide-y divide-gray-100 dark:divide-white/[0.04]">
                 <tr v-for="(val, key) in env.general" :key="key">
                   <td class="py-2.5 pr-4 font-mono text-xs text-gray-500 dark:text-gray-400">{{ key }}</td>
-                  <td class="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">{{ envDesc(key) }}</td>
-                  <td class="py-2.5 text-sm font-medium text-gray-900 dark:text-white">{{ val.value }}</td>
+                  <td class="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">{{ envDesc(String(key)) }}</td>
+                  <td class="py-2.5 text-sm font-medium text-gray-900 dark:text-white">{{ envVal(val.value) }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </section>
 
+        <!-- Microsoft -->
         <section v-if="active === 'microsoft'">
           <h2 class="section-title">Microsoft OAuth</h2>
           <div class="card-section" v-if="env">
@@ -395,15 +400,15 @@ const navGroups = computed(() => {
                 <th class="pb-2 pr-4">Variable</th><th class="pb-2 pr-4">Beschreibung</th><th class="pb-2">Status</th>
               </tr></thead>
               <tbody class="divide-y divide-gray-100 dark:divide-white/[0.04]">
-                <tr v-for="(val, key) in env.microsoft" :key="key">
+                <tr v-for="(val, key) in env.microsoft" :key="String(key)">
                   <td class="py-2.5 pr-4 font-mono text-xs text-gray-500 dark:text-gray-400">{{ key }}</td>
-                  <td class="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">{{ envDesc(key) }}</td>
+                  <td class="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">{{ envDesc(String(key)) }}</td>
                   <td class="py-2.5">
                     <span v-if="val.sensitive" class="text-xs px-2 py-0.5 rounded-full font-medium"
                           :class="val.is_set ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/5'">
                       {{ val.is_set ? 'gesetzt' : '—' }}
                     </span>
-                    <span v-else class="text-sm font-medium text-gray-900 dark:text-white">{{ val.value }}</span>
+                    <span v-else class="text-sm font-medium text-gray-900 dark:text-white">{{ envVal(val.value) }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -411,6 +416,7 @@ const navGroups = computed(() => {
           </div>
         </section>
 
+        <!-- Session -->
         <section v-if="active === 'session'">
           <h2 class="section-title">Session & Security</h2>
           <div class="card-section" v-if="env">
@@ -419,15 +425,15 @@ const navGroups = computed(() => {
                 <th class="pb-2 pr-4">Variable</th><th class="pb-2 pr-4">Beschreibung</th><th class="pb-2">Status</th>
               </tr></thead>
               <tbody class="divide-y divide-gray-100 dark:divide-white/[0.04]">
-                <tr v-for="(val, key) in env.session" :key="key">
+                <tr v-for="(val, key) in env.session" :key="String(key)">
                   <td class="py-2.5 pr-4 font-mono text-xs text-gray-500 dark:text-gray-400">{{ key }}</td>
-                  <td class="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">{{ envDesc(key) }}</td>
+                  <td class="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">{{ envDesc(String(key)) }}</td>
                   <td class="py-2.5">
                     <span v-if="val.sensitive" class="text-xs px-2 py-0.5 rounded-full font-medium"
                           :class="val.is_set ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500'">
                       {{ val.is_set ? 'gesetzt' : '—' }}
                     </span>
-                    <span v-else class="text-sm font-medium text-gray-900 dark:text-white">{{ val.value }}</span>
+                    <span v-else class="text-sm font-medium text-gray-900 dark:text-white">{{ envVal(val.value) }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -435,7 +441,7 @@ const navGroups = computed(() => {
           </div>
         </section>
 
-        <!-- Firmen, Groups, Permissions – unverändert -->
+        <!-- Firmen -->
         <section v-if="active === 'companies'">
           <h2 class="section-title">Firmen</h2>
           <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20
@@ -458,6 +464,7 @@ const navGroups = computed(() => {
           </div>
         </section>
 
+        <!-- Permissions -->
         <section v-if="active === 'permissions'">
           <div class="flex items-center justify-between mb-4">
             <h2 class="section-title mb-0">Auftragstypen</h2>
@@ -492,6 +499,7 @@ const navGroups = computed(() => {
           </div>
         </section>
 
+        <!-- Gruppen -->
         <section v-if="active === 'groups'">
           <h2 class="section-title">Fachabteilungen</h2>
           <div class="card-section mb-4 flex gap-3">
@@ -565,8 +573,6 @@ const navGroups = computed(() => {
         <!-- Benutzer & Rollen -->
         <section v-if="active === 'app-users'">
           <h2 class="section-title">Benutzer & Rollen</h2>
-
-          <!-- Legende -->
           <div class="card-section mb-4 space-y-2">
             <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">Rollen & Permissions</p>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -588,8 +594,6 @@ const navGroups = computed(() => {
               </div>
             </div>
           </div>
-
-          <!-- Filter -->
           <div class="flex gap-3 mb-4">
             <input v-model="userSearch" placeholder="Name oder E-Mail suchen…" class="input flex-1" />
             <select v-model="roleFilter" class="input w-44">
@@ -600,8 +604,6 @@ const navGroups = computed(() => {
               <option value="admin">Admin</option>
             </select>
           </div>
-
-          <!-- User-Tabelle -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm overflow-hidden">
             <table class="w-full text-sm">
@@ -628,13 +630,11 @@ const navGroups = computed(() => {
                         <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="ROLE_CLASS[u.role] ?? ROLE_CLASS.none">
                           {{ ROLE_LABEL[u.role] ?? u.role }}
                         </span>
-                        <select
-                          :value="u.role"
-                          @change="setRole(u.microsoft_id, ($event.target as HTMLSelectElement).value)"
-                          class="text-xs rounded-lg border border-gray-200 dark:border-white/10
-                                 bg-white dark:bg-[#263040] text-gray-700 dark:text-gray-300
-                                 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#3EAAB8]/40"
-                        >
+                        <select :value="u.role"
+                                @change="setRole(u.microsoft_id, ($event.target as HTMLSelectElement).value)"
+                                class="text-xs rounded-lg border border-gray-200 dark:border-white/10
+                                       bg-white dark:bg-[#263040] text-gray-700 dark:text-gray-300
+                                       px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#3EAAB8]/40">
                           <option value="none">Kein Zugriff</option>
                           <option value="viewer">Viewer</option>
                           <option value="manager">Manager</option>
@@ -643,14 +643,12 @@ const navGroups = computed(() => {
                       </div>
                     </td>
                     <td class="px-5 py-3.5">
-                      <!-- Rollen-Permissions (read-only) -->
                       <div class="flex flex-wrap gap-1">
                         <span v-for="p in (ROLE_PERMISSIONS[u.role] ?? [])" :key="p"
                               class="text-xs px-2 py-0.5 rounded-full font-mono opacity-60"
                               :class="permClass(p)">
                           {{ p }}
                         </span>
-                        <!-- Extra Permissions -->
                         <span v-for="p in extraPermissions(u)" :key="p"
                               class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-mono"
                               :class="permClass(p)">
@@ -666,9 +664,7 @@ const navGroups = computed(() => {
                       </button>
                     </td>
                   </tr>
-                  <!-- Expand: Permission hinzufügen -->
-                  <tr v-if="expandedUser === u.microsoft_id"
-                      class="bg-gray-50 dark:bg-[#1C2535]">
+                  <tr v-if="expandedUser === u.microsoft_id" class="bg-gray-50 dark:bg-[#1C2535]">
                     <td colspan="6" class="px-5 py-3">
                       <div class="flex items-center gap-3">
                         <span class="text-xs text-gray-500 dark:text-gray-400">Extra Permission hinzufügen:</span>
@@ -680,7 +676,7 @@ const navGroups = computed(() => {
                           Hinzufügen
                         </button>
                         <span class="text-xs text-gray-400 italic">
-                          Rollen-Permissions werden automatisch aus der Rolle abgeleitet und können hier nicht entfernt werden.
+                          Rollen-Permissions werden automatisch abgeleitet und können hier nicht entfernt werden.
                         </span>
                       </div>
                     </td>
