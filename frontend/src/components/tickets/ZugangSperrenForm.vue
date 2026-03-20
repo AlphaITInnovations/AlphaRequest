@@ -14,11 +14,6 @@ const { form, companies, submitting, fieldClass, isInvalid, validationTriggered 
 const sc = (path: string) =>
   fieldClass(path).replace('placeholder-gray-400 dark:placeholder-gray-500', '')
 
-const DEFAULT_AUTO_REPLY = `Vielen Dank für Ihre Nachricht.
-
-Die E-Mail-Adresse von <Name> ist nicht mehr aktiv.
-
-Bitte wenden Sie sich an <Ersatzmailadresse>.`
 </script>
 
 <template>
@@ -158,8 +153,7 @@ Bitte wenden Sie sich an <Ersatzmailadresse>.`
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="label">Abwesenheitsnotiz aktivieren? *</label>
-                <select v-model="form.it.auto_reply" :class="sc('it.auto_reply')"
-                        @change="onAutoReplyChange">
+                <select v-model="form.it.auto_reply" :class="sc('it.auto_reply')">
                   <option value="">–</option>
                   <option>Ja</option>
                   <option>Nein</option>

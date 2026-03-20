@@ -30,9 +30,6 @@ const ARTIKEL = [
 const selectClass = (path: string) =>
   fieldClass(path).replace('placeholder-gray-400 dark:placeholder-gray-500', '')
 
-const BUNDESLAENDER = ['Baden-Württemberg','Bayern','Berlin','Brandenburg','Bremen','Hamburg',
-  'Hessen','Mecklenburg-Vorpommern','Niedersachsen','Nordrhein-Westfalen',
-  'Rheinland-Pfalz','Saarland','Sachsen','Sachsen-Anhalt','Schleswig-Holstein','Thüringen']
 </script>
 
 <template>

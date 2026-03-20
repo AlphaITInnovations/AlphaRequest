@@ -630,7 +630,7 @@ const navGroups = computed(() => {
                         </span>
                         <select
                           :value="u.role"
-                          @change="setRole(u.microsoft_id, ($event.target as HTMLSelectElement).value)"
+                          @change="setRole(u.microsoft_id, String(($event.target as HTMLSelectElement).value))"
                           class="text-xs rounded-lg border border-gray-200 dark:border-white/10
                                  bg-white dark:bg-[#263040] text-gray-700 dark:text-gray-300
                                  px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#3EAAB8]/40"

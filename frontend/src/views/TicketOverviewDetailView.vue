@@ -59,12 +59,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 function isArray(v: unknown): v is unknown[] {
   return Array.isArray(v)
 }
-function isEmpty(v: unknown): boolean {
-  if (v === null || v === undefined || v === '') return true
-  if (isObject(v) && Object.keys(v).length === 0) return true
-  if (isArray(v) && v.length === 0) return true
-  return false
-}
+
 
 onMounted(async () => {
   try {
