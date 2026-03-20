@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.models.models import Ticket, RequestStatus, TicketPriority, TicketType
 from alpharequestmanager.models import models
-from alpharequestmanager.database import database as db
+from alpharequestmanager.database import tickets as db
 
 class TicketService:
     # ---------------------------------------------------------

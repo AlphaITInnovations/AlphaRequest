@@ -1,125 +1,127 @@
-from alpharequestmanager.database.database import settings_get, settings_set
+"""
+Ticket-Erstellungsrechte werden als extra_permissions auf dem User gespeichert.
+Permission-Format: "create_<ticket_type>" z.B. "create_onboarding"
+Die Settings-Tabelle (TICKET_PERMISSIONS) wird nicht mehr verwendet.
+"""
+
+from alpharequestmanager.database.users import (
+    list_users,
+    add_extra_permission,
+    remove_extra_permission,
+    get_user,
+    set_extra_permissions,
+)
 from alpharequestmanager.models.models import TicketType
-from alpharequestmanager.utils.logger import logger
 
 
-def load_ticket_permissions() -> dict:
-    data = settings_get("TICKET_PERMISSIONS", {})
-    if not isinstance(data, dict):
-        return {}
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-    allowed = get_allowed_ticket_types()
-    cleaned = {}
+VALID_TICKET_TYPES: frozenset[str] = frozenset(t.value for t in TicketType)
 
-    for t in allowed:
-        users = data.get(t)
-        cleaned[t] = [str(u) for u in users] if isinstance(users, list) else []
 
-    return cleaned
+def _perm(ticket_type: str) -> str:
+    return f"create_{ticket_type}"
 
+
+def _require_valid_type(ticket_type: str) -> None:
+    if ticket_type not in VALID_TICKET_TYPES:
+        raise ValueError(
+            f"Ungültiger TicketType: {ticket_type!r}. "
+            f"Erlaubt: {sorted(VALID_TICKET_TYPES)}"
+        )
+
+
+# ── Read ──────────────────────────────────────────────────────────────────────
+
+def load_ticket_permissions() -> dict[str, list[str]]:
+    """
+    Gibt für jeden TicketType die Liste der erlaubten User-IDs zurück.
+    { "onboarding": ["user_id_1", ...], ... }
+    """
+    result: dict[str, list[str]] = {t.value: [] for t in TicketType}
+
+    for user in list_users():
+        for perm in user.extra_permissions:
+            if perm.startswith("create_"):
+                ticket_type = perm[len("create_"):]
+                if ticket_type in result:
+                    result[ticket_type].append(user.microsoft_id)
+
+    return result
 
 
 def can_user_create_ticket(ticket_type: str, user_id: str) -> bool:
     """
-    Prüft, ob ein User einen bestimmten Tickettyp erstellen darf.
-    - Admins haben KEINE Sonderrechte
-    - Leere Liste => niemand darf
-    - Tickettyp nicht vorhanden => niemand darf
+    Prüft ob ein User einen bestimmten Tickettyp erstellen darf.
+    - Admins haben keine automatischen Sonderrechte
+    - Leere Liste / unbekannter Typ => niemand darf
     """
-
     if not ticket_type or not user_id:
         return False
 
-    permissions = load_ticket_permissions()
-
-    allowed_users = permissions.get(ticket_type)
-    if not isinstance(allowed_users, list):
+    user = get_user(user_id)
+    if not user:
         return False
 
-    return user_id in allowed_users
+    return _perm(ticket_type) in user.extra_permissions
 
 
 def get_allowed_ticket_types_for_user(user_id: str) -> list[str]:
-    """
-    Gibt alle Tickettypen zurück, die der User erstellen darf.
-    """
+    """Gibt alle Tickettypen zurück die der User erstellen darf."""
     if not user_id:
         return []
 
-    permissions = load_ticket_permissions()
-    allowed = []
+    user = get_user(user_id)
+    if not user:
+        return []
 
-    for ticket_type, users in permissions.items():
-        if isinstance(users, list) and user_id in users:
-            allowed.append(ticket_type)
+    valid = {t.value for t in TicketType}
+    return [
+        perm[len("create_"):]
+        for perm in user.extra_permissions
+        if perm.startswith("create_") and perm[len("create_"):] in valid
+    ]
 
-    return allowed
+
+# ── Write ─────────────────────────────────────────────────────────────────────
+
+def add_user_ticket_permission(ticket_type: str, user_id: str) -> None:
+    _require_valid_type(ticket_type)
+    add_extra_permission(user_id, _perm(ticket_type))
 
 
-def init_ticket_permissions():
+def remove_user_ticket_permission(ticket_type: str, user_id: str) -> None:
+    _require_valid_type(ticket_type)
+    remove_extra_permission(user_id, _perm(ticket_type))
+
+
+def set_ticket_permissions_safe(payload: dict[str, list[str]]) -> None:
     """
-    Stellt sicher, dass für jeden TicketType ein Permission-Eintrag existiert.
-    Fehlende Tickettypen werden mit leerer Liste ergänzt.
+    Ersetzt für jeden übergebenen TicketType die erlaubten User komplett.
+    Andere extra_permissions der User (z.B. "manage") bleiben unberührt.
     """
-    raw = settings_get("TICKET_PERMISSIONS", {})
+    valid_types = {t.value for t in TicketType}
+    all_users   = {u.microsoft_id: u for u in list_users()}
 
-    if not isinstance(raw, dict):
-        logger.warning("TICKET_PERMISSIONS ist kein dict – wird zurückgesetzt")
-        raw = {}
+    # Sammle gewünschten Zielzustand: user_id → set of create_* perms
+    target: dict[str, set[str]] = {uid: set() for uid in all_users}
 
-    changed = False
-
-    for t in TicketType:
-        key = t.value
-        if key not in raw or not isinstance(raw.get(key), list):
-            raw[key] = []
-            changed = True
-
-    if changed:
-        settings_set("TICKET_PERMISSIONS", raw)
-        logger.info("TICKET_PERMISSIONS initialisiert / ergänzt")
-
-    return raw
-
-
-def get_allowed_ticket_types() -> set[str]:
-    return {t.value for t in TicketType}
-
-
-def add_user_ticket_permission(ticket_type: str, user_id: str):
-    perms = load_ticket_permissions()
-
-    if ticket_type not in get_allowed_ticket_types():
-        raise ValueError(f"Ungültiger TicketType: {ticket_type}")
-
-    if user_id not in perms[ticket_type]:
-        perms[ticket_type].append(user_id)
-        settings_set("TICKET_PERMISSIONS", perms)
-
-
-def remove_user_ticket_permission(ticket_type: str, user_id: str):
-    perms = load_ticket_permissions()
-
-    if ticket_type not in get_allowed_ticket_types():
-        raise ValueError(f"Ungültiger TicketType: {ticket_type}")
-
-    if user_id in perms[ticket_type]:
-        perms[ticket_type].remove(user_id)
-        settings_set("TICKET_PERMISSIONS", perms)
-
-
-def set_ticket_permissions_safe(payload: dict):
-    allowed = get_allowed_ticket_types()
-    perms = init_ticket_permissions()
-
-    for ticket_type, users in payload.items():
-        if ticket_type not in allowed:
-            continue  # oder raise Exception
-
-        if not isinstance(users, list):
+    for ticket_type, user_ids in payload.items():
+        if ticket_type not in valid_types:
             continue
+        perm = _perm(ticket_type)
+        for user_id in user_ids:
+            if user_id in target:
+                target[user_id].add(perm)
 
-        perms[ticket_type] = [str(u) for u in users]
+    # Für jeden User: create_* permissions auf Zielzustand bringen
+    for user_id, user in all_users.items():
+        current_create = {
+            p for p in user.extra_permissions if p.startswith("create_")
+        }
+        desired_create = target[user_id]
 
-    settings_set("TICKET_PERMISSIONS", perms)
-
+        for perm in current_create - desired_create:
+            remove_extra_permission(user_id, perm)
+        for perm in desired_create - current_create:
+            add_extra_permission(user_id, perm)

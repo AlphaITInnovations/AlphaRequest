@@ -5,7 +5,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
 
-const router  = useRouter()
+const router = useRouter()
+const auth   = useAuthStore()
 
 interface DashboardTicket {
   id: number; title: string; type_key: string
@@ -23,7 +24,6 @@ interface DashboardData {
   allowed_ticket_types: string[]
 }
 
-const auth    = useAuthStore()
 const loading = ref(true)
 const data    = ref<DashboardData>({ orders: [], department_requests: [], allowed_ticket_types: [] })
 const filter  = ref({ search: '', status: 'all', priority: 'all', department: 'all' })
@@ -38,6 +38,7 @@ const ticketTypes = [
   { key: 'niederlassung-schliessen', icon: '❌', label: 'Niederlassung schließen' },
 ]
 
+// Erlaubte Typen aus der Backend-Antwort – konsistent mit can_user_create_ticket serverseitig
 const allowedTypes = computed(() =>
   ticketTypes.filter(t => data.value.allowed_ticket_types.includes(t.key))
 )
@@ -106,14 +107,12 @@ onMounted(async () => {
 <template>
   <AppLayout title="Übersicht">
 
-    <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-24">
       <div class="w-8 h-8 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin"/>
     </div>
 
     <div v-else class="space-y-8">
 
-      <!-- Header -->
       <div>
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
           Willkommen zurück,
@@ -124,7 +123,6 @@ onMounted(async () => {
         </p>
       </div>
 
-      <!-- Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
 
         <!-- ── Neuer Auftrag ── -->
@@ -156,52 +154,36 @@ onMounted(async () => {
           <!-- Deine Aufträge -->
           <div class="rounded-2xl border border-gray-200/80 dark:border-white/[0.09]
                       bg-gray-50 dark:bg-[#1A2130] overflow-hidden">
-
-            <!-- Card Header -->
             <div class="px-6 py-4 border-b border-gray-200/80 dark:border-white/[0.09]
                         flex justify-between items-center">
-              <h2 class="text-base font-semibold text-gray-900 dark:text-white">
-                Deine Aufträge
-              </h2>
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">Deine Aufträge</h2>
               <span class="text-xs text-gray-400 bg-gray-100 dark:bg-white/[0.07]
                            px-2.5 py-1 rounded-full font-medium">
                 {{ filteredOrders.length }}
               </span>
             </div>
 
-            <!-- Filter -->
             <div class="px-6 py-4 border-b border-gray-200/80 dark:border-white/[0.09]
                         grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input
-                v-model="filter.search"
-                placeholder="Suchen…"
-                class="w-full rounded-xl border border-gray-200 dark:border-white/10
-                       bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
-                       placeholder-gray-400 dark:placeholder-gray-500
-                       px-3.5 py-2 text-sm
-                       focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 focus:border-[#3EAAB8]/50
-                       transition"
-              />
-              <select
-                v-model="filter.status"
-                class="w-full rounded-xl border border-gray-200 dark:border-white/10
-                       bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
-                       px-3.5 py-2 text-sm focus:outline-none focus:ring-2
-                       focus:ring-[#3EAAB8]/30 transition"
-              >
+              <input v-model="filter.search" placeholder="Suchen…"
+                     class="w-full rounded-xl border border-gray-200 dark:border-white/10
+                            bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+                            placeholder-gray-400 px-3.5 py-2 text-sm
+                            focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition" />
+              <select v-model="filter.status"
+                      class="w-full rounded-xl border border-gray-200 dark:border-white/10
+                             bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+                             px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition">
                 <option value="all">Alle Status</option>
                 <option value="in_request">Zu bearbeiten</option>
                 <option value="in_progress">In Bearbeitung</option>
                 <option value="archived">Erledigt</option>
                 <option value="rejected">Abgelehnt</option>
               </select>
-              <select
-                v-model="filter.priority"
-                class="w-full rounded-xl border border-gray-200 dark:border-white/10
-                       bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
-                       px-3.5 py-2 text-sm focus:outline-none focus:ring-2
-                       focus:ring-[#3EAAB8]/30 transition"
-              >
+              <select v-model="filter.priority"
+                      class="w-full rounded-xl border border-gray-200 dark:border-white/10
+                             bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+                             px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition">
                 <option value="all">Alle Prioritäten</option>
                 <option value="low">Niedrig</option>
                 <option value="medium">Mittel</option>
@@ -210,29 +192,23 @@ onMounted(async () => {
               </select>
             </div>
 
-            <!-- Liste -->
             <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[460px] overflow-auto">
-              <li
-                v-for="o in filteredOrders" :key="o.id"
-                @click="openTicket(o)"
-                class="flex items-center justify-between px-6 py-5 cursor-pointer
-                       hover:bg-gray-50 dark:hover:bg-[#263040] transition group"
-              >
+              <li v-for="o in filteredOrders" :key="o.id"
+                  @click="openTicket(o)"
+                  class="flex items-center justify-between px-6 py-5 cursor-pointer
+                         hover:bg-gray-50 dark:hover:bg-[#263040] transition group">
                 <div class="flex items-center gap-4 min-w-0">
-                  <!-- Status-Dot -->
                   <div class="w-2 h-2 rounded-full flex-shrink-0"
                        :class="{
-                         'bg-amber-400':  o.status === 'in_progress',
-                         'bg-[#3EAAB8]':  o.status === 'in_request',
-                         'bg-green-500':  o.status === 'archived',
-                         'bg-red-500':    o.status === 'rejected',
-                         'bg-gray-300':   !['in_progress','in_request','archived','rejected'].includes(o.status),
+                         'bg-amber-400': o.status === 'in_progress',
+                         'bg-[#3EAAB8]': o.status === 'in_request',
+                         'bg-green-500': o.status === 'archived',
+                         'bg-red-500':   o.status === 'rejected',
+                         'bg-gray-300':  !['in_progress','in_request','archived','rejected'].includes(o.status),
                        }" />
                   <div class="min-w-0">
                     <p class="text-sm font-medium text-gray-900 dark:text-white truncate
-                               group-hover:text-[#3EAAB8] transition-colors">
-                      {{ o.title }}
-                    </p>
+                               group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
                     <p class="text-xs text-gray-400 mt-0.5">{{ o.created_at }}</p>
                   </div>
                 </div>
@@ -258,26 +234,20 @@ onMounted(async () => {
           </div>
 
           <!-- Fachabteilungen -->
-          <div
-            v-if="data.department_requests.length > 0"
-            class="rounded-2xl border border-gray-200/80 dark:border-white/[0.09]
-                   bg-gray-50 dark:bg-[#1A2130] overflow-hidden"
-          >
+          <div v-if="data.department_requests.length > 0"
+               class="rounded-2xl border border-gray-200/80 dark:border-white/[0.09]
+                      bg-gray-50 dark:bg-[#1A2130] overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200/80 dark:border-white/[0.09]
                         flex items-center justify-between">
               <h2 class="text-base font-semibold text-gray-900 dark:text-white">
                 Fachabteilungen · Deine Aufgaben
               </h2>
-              <select
-                v-model="filter.department"
-                class="rounded-xl border border-gray-200 dark:border-white/10
-                       bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
-                       px-3 py-1.5 text-xs focus:outline-none focus:ring-2
-                       focus:ring-[#3EAAB8]/30 transition"
-              >
+              <select v-model="filter.department"
+                      class="rounded-xl border border-gray-200 dark:border-white/10
+                             bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+                             px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition">
                 <option value="all">Alle</option>
-                <option v-for="d in data.department_requests"
-                        :key="d.group_id" :value="d.group_id">
+                <option v-for="d in data.department_requests" :key="d.group_id" :value="d.group_id">
                   {{ d.group_name }}
                 </option>
               </select>
@@ -285,51 +255,30 @@ onMounted(async () => {
 
             <div class="divide-y divide-gray-100 dark:divide-white/[0.04]">
               <div v-for="dept in filteredDepts" :key="dept.group_id">
-
-                <!-- Dept Header -->
-                <button
-                  @click="toggleDept(dept.group_id)"
-                  class="w-full flex items-center justify-between px-6 py-4
-                         hover:bg-gray-50 dark:hover:bg-[#263040] transition text-left"
-                >
+                <button @click="toggleDept(dept.group_id)"
+                        class="w-full flex items-center justify-between px-6 py-4
+                               hover:bg-gray-50 dark:hover:bg-[#263040] transition text-left">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white">{{ dept.group_name }}</span>
                   <div class="flex items-center gap-2.5">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">
-                      {{ dept.group_name }}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-2.5">
-                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full
-                                 bg-[#3EAAB8]/10 text-[#3EAAB8]">
+                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8]">
                       {{ dept.tickets.length }}
                     </span>
-                    <svg
-                      class="w-4 h-4 text-gray-400 transition-transform duration-200"
-                      :class="openDepts[dept.group_id] ? 'rotate-180' : ''"
-                      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    >
+                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                         :class="openDepts[dept.group_id] ? 'rotate-180' : ''"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="6 9 12 15 18 9"/>
                     </svg>
                   </div>
                 </button>
-
-                <!-- Dept Tickets -->
-                <div
-                  v-show="openDepts[dept.group_id]"
-                  class="px-6 pb-4 space-y-2"
-                >
-                  <div
-                    v-for="t in dept.tickets" :key="t.id"
-                    @click="openGroupTicket(t, dept.group_id)"
-                    class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
-                           bg-white dark:bg-[#212B3A]
-                           border border-gray-200/80 dark:border-white/[0.09]
-                           hover:border-[#3EAAB8]/40 hover:shadow-sm transition group"
-                  >
+                <div v-show="openDepts[dept.group_id]" class="px-6 pb-4 space-y-2">
+                  <div v-for="t in dept.tickets" :key="t.id"
+                       @click="openGroupTicket(t, dept.group_id)"
+                       class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
+                              bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                              hover:border-[#3EAAB8]/40 hover:shadow-sm transition group">
                     <div class="min-w-0">
                       <p class="text-sm font-medium text-gray-900 dark:text-white truncate
-                                 group-hover:text-[#3EAAB8] transition-colors">
-                        {{ t.title }}
-                      </p>
+                                 group-hover:text-[#3EAAB8] transition-colors">{{ t.title }}</p>
                       <p class="text-xs text-gray-400 mt-0.5">{{ t.type_key }} · {{ t.created_at }}</p>
                     </div>
                     <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0 ml-3
@@ -338,12 +287,10 @@ onMounted(async () => {
                       <polyline points="9 18 15 12 9 6"/>
                     </svg>
                   </div>
-                  <p v-if="dept.tickets.length === 0"
-                     class="text-sm text-gray-400 italic px-1 py-2">
+                  <p v-if="dept.tickets.length === 0" class="text-sm text-gray-400 italic px-1 py-2">
                     Keine offenen Aufgaben.
                   </p>
                 </div>
-
               </div>
             </div>
           </div>

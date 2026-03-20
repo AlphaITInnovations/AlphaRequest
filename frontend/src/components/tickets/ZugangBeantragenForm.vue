@@ -87,7 +87,7 @@ const selectClass = (path: string) =>
               </div>
               <div>
                 <label class="label">Titel *</label>
-                <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Dr." />
+                <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
               </div>
               <div>
                 <label class="label">Eintrittsdatum *</label>

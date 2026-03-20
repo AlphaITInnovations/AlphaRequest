@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from pydantic import BaseModel
 from alpharequestmanager.core.dependencies import get_current_user
-from alpharequestmanager.database.database import get_companies, set_companies
+from alpharequestmanager.database.settings import get_companies, set_companies
 from alpharequestmanager.schemas.responses import DataResponse
 from alpharequestmanager.utils.logger import logger
 

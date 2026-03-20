@@ -5,6 +5,7 @@ from alpharequestmanager.utils.config import config
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.metrics.auth_metrics import update_last_activity
 from alpharequestmanager.core.session import TOKENS
+from alpharequestmanager.database.users import get_user_permissions
 
 SAFE_UPDATE_INTERVAL = 60  # seconds
 
@@ -15,11 +16,9 @@ def get_current_user(request: Request) -> Dict:
     now = int(time.time())
     last_activity_raw = session.get("last_activity")
 
-    # Nicht eingeloggt → 401 (Vue fängt das ab und zeigt Login-Seite)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    # Prometheus-Update
     update_last_activity(request)
 
     try:
@@ -37,12 +36,11 @@ def get_current_user(request: Request) -> Dict:
     except Exception:
         last_activity = 0
 
-    # First touch
     if last_activity == 0:
         session["last_activity"] = now
+        user["permissions"] = get_user_permissions(user["id"])
         return user
 
-    # Idle timeout → Session löschen, 401
     if now - last_activity > int(config.SESSION_TIMEOUT):
         sid = session.get("sid")
         try:
@@ -50,12 +48,12 @@ def get_current_user(request: Request) -> Dict:
                 TOKENS.delete(sid)
         except Exception:
             logger.exception("token revoke failed for sid=%s", sid)
-
         session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    # Reduce cookie churn
     if now - last_activity >= SAFE_UPDATE_INTERVAL:
         session["last_activity"] = now
 
+    # Permissions immer frisch aus der DB – nie aus der Session
+    user["permissions"] = get_user_permissions(user["id"])
     return user

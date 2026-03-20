@@ -10,7 +10,7 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 from alpharequestmanager.core.dependencies import get_current_user
-from alpharequestmanager.database.database import get_groupID_from_name, get_group_name_from_id
+from alpharequestmanager.database.groups import get_groupID_from_name, get_group_name_from_id
 from alpharequestmanager.services.microsoft_graph import send_mail, get_cached_user_mail
 from alpharequestmanager.services.microsoft_mail import send_test_mail, send_newrequest_mail, \
     send_mail_to_fachabteilung, send_mail_to_all_fachabteilung
@@ -18,7 +18,7 @@ from alpharequestmanager.services.ticket_history import add_history_event
 from alpharequestmanager.services.ticket_permissions import can_user_create_ticket
 from alpharequestmanager.services.workflow_state import build_workflow, set_workflow_state
 from alpharequestmanager.utils.logger import logger
-from alpharequestmanager.database import database
+from alpharequestmanager.database import tickets as database
 import json
 from alpharequestmanager.models.models import TicketType, RequestStatus, TicketPriority, Ticket
 from alpharequestmanager.utils.ticket_labels import TICKET_LABELS

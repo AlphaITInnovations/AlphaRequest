@@ -1,32 +1,46 @@
 import json
 from fastapi import APIRouter, Request, Depends, Query
 from alpharequestmanager.core.dependencies import get_current_user
-from alpharequestmanager.database import database
+from alpharequestmanager.database import tickets as database
 from alpharequestmanager.models.models import RequestStatus
 from alpharequestmanager.services.ticket_history import add_history_event
 from alpharequestmanager.services.microsoft_graph import get_cached_user_mail
 from alpharequestmanager.services.microsoft_mail import send_newrequest_mail
+from alpharequestmanager.services.ticket_permissions import can_user_create_ticket
 from alpharequestmanager.api.tickets import (
     generate_title, validate_assignee,
-    complete_ticket_internal, require_ticket_permission, _user_can_delete_ticket,
+    complete_ticket_internal, _user_can_delete_ticket,
 )
 from alpharequestmanager.schemas.ticket import (
-    TicketOut, TicketCreateRequest, TicketUpdateRequest,
+    TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut,
 )
 from alpharequestmanager.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
 )
+from alpharequestmanager.database.users import PERM_MANAGE, PERM_ADMIN
 
 router = APIRouter()
 
 
-# ── Dependencies ───────────────────────────────────────────────────────────────
+# ── Permission helpers ─────────────────────────────────────────────────────────
 
-def require_admin(user: dict = Depends(get_current_user)) -> dict:
-    if not user.get("is_admin"):
-        raise api_error(403, ErrorCode.ADMIN_REQUIRED, "Nur Admins haben Zugriff")
+def _require_admin(user: dict) -> dict:
+    if PERM_ADMIN not in user.get("permissions", []):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED, "Admin-Rechte erforderlich")
     return user
 
+
+def _require_manage(user: dict) -> dict:
+    if PERM_MANAGE not in user.get("permissions", []):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Keine Berechtigung")
+    return user
+
+
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    return _require_admin(user)
+
+
+# ── Ticket helpers ─────────────────────────────────────────────────────────────
 
 def _get_ticket_or_404(ticket_id: int):
     ticket = database.get_ticket(ticket_id)
@@ -36,16 +50,17 @@ def _get_ticket_or_404(ticket_id: int):
 
 
 def _assert_ticket_access(ticket, user: dict):
-    """Wirft 403 wenn User kein Admin ist und nicht Owner des Tickets."""
-    if not user.get("is_admin") and ticket.owner_id != user["id"]:
-        raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff auf dieses Ticket")
+    """Owner darf immer, Manager/Admin ebenfalls."""
+    if ticket.owner_id == user["id"]:
+        return
+    if PERM_MANAGE in user.get("permissions", []):
+        return
+    raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff auf dieses Ticket")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AUTH
 # ══════════════════════════════════════════════════════════════════════════════
-
-from alpharequestmanager.schemas.ticket import UserOut
 
 @router.get("/auth/me", response_model=DataResponse[UserOut])
 def get_me(user: dict = Depends(get_current_user)):
@@ -53,7 +68,7 @@ def get_me(user: dict = Depends(get_current_user)):
         id=user["id"],
         displayName=user["displayName"],
         mail=user.get("mail") or user.get("email"),
-        is_admin=user.get("is_admin", False),
+        permissions=user.get("permissions", []),
     ))
 
 
@@ -63,7 +78,7 @@ def get_me(user: dict = Depends(get_current_user)):
 
 @router.get("/tickets", response_model=ListResponse[TicketOut])
 def list_my_tickets(user: dict = Depends(get_current_user)):
-    items = database.list_tickets_by_assignee(user["id"])
+    items = database.list_tickets_by_owner(user["id"])
     return ListResponse(
         data=[TicketOut.from_ticket(t) for t in items],
         meta=Meta(total=len(items), limit=len(items), offset=0),
@@ -83,7 +98,9 @@ async def create_ticket(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
-    require_ticket_permission(user, data.ticket_type)
+    if not can_user_create_ticket(data.ticket_type.value, user["id"]):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        f"Kein Recht zum Erstellen von '{data.ticket_type.value}'-Tickets")
 
     if not validate_assignee(request.app.state.user_cache, data.assignee_id):
         raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
@@ -160,7 +177,6 @@ async def submit_ticket(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
-    """Ticket einreichen – startet den Workflow und setzt Status auf in_request."""
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
 
@@ -174,21 +190,23 @@ async def submit_ticket(
 @router.delete("/tickets/{ticket_id}", status_code=204)
 def delete_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     ticket = _get_ticket_or_404(ticket_id)
-    if not _user_can_delete_ticket(user, ticket["id"] if isinstance(ticket, dict) else ticket.id):
+    ticket_id_val = ticket["id"] if isinstance(ticket, dict) else ticket.id
+    if not _user_can_delete_ticket(user, ticket_id_val):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff")
     database.delete_ticket(ticket_id)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TICKETS – Admin
+# TICKETS – Admin / Manager
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/admin/tickets", response_model=ListResponse[TicketOut])
 def list_all_tickets(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
+    _require_manage(user)
     items = database.list_all_tickets(limit=limit, offset=offset)
     total = database.count_all_tickets()
     return ListResponse(
@@ -201,8 +219,9 @@ def list_all_tickets(
 def archive_ticket(
     ticket_id: int,
     request: Request,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
+    _require_manage(user)
     ticket = _get_ticket_or_404(ticket_id)
     request.app.state.manager.update_ticket(ticket_id=ticket.id,
                                              status=RequestStatus.archived)
@@ -223,7 +242,8 @@ def get_my_departments(ticket_id: int, user: dict = Depends(get_current_user)):
 
 
 @router.get("/tickets/{ticket_id}/departments/all")
-def get_all_departments(ticket_id: int, user: dict = Depends(require_admin)):
+def get_all_departments(ticket_id: int, user: dict = Depends(get_current_user)):
+    _require_manage(user)
     from alpharequestmanager.services.workflow_state import get_all_department_statuses
     return DataResponse(data=get_all_department_statuses(ticket_id))
 
@@ -238,7 +258,7 @@ async def set_department_status(
     from alpharequestmanager.services.workflow_state import (
         user_can_complete_department, set_department_status, can_archive_ticket,
     )
-    from alpharequestmanager.database.database import get_group_name_from_id
+    from alpharequestmanager.database.groups import get_group_name_from_id
 
     body = await request.json()
     status = body.get("status")

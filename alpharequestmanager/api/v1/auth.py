@@ -1,10 +1,12 @@
 import time
 from fastapi import APIRouter, Request, HTTPException, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
+from starlette import status
 from starlette.status import HTTP_302_FOUND
 
 from alpharequestmanager.core.dependencies import get_current_user
 from alpharequestmanager.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS
+from alpharequestmanager.database.users import upsert_user, get_user_permissions, get_user, ROLE_ADMIN
 from alpharequestmanager.metrics.auth_metrics import (
     record_login_attempt, record_login_success, record_logout,
 )
@@ -20,20 +22,46 @@ from alpharequestmanager.utils.logger import logger
 router = APIRouter()
 
 
-# ── Vue-Endpunkt ───────────────────────────────────────────────────────────────
+# ── /auth/refresh-session ─────────────────────────────────────────────────────
 
-@router.get("/auth/me", response_model=DataResponse[UserOut])
-def me(user: dict = Depends(get_current_user)):
+@router.post("/auth/refresh-session", response_model=DataResponse[UserOut])
+def refresh_session(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Aktualisiert Permissions in der Session.
+    Nützlich nachdem ein Admin einem User Rechte geändert hat.
+    """
+    db_user = get_user(user["id"])
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    request.session["user"]["permissions"] = db_user.permissions
+    request.session["last_activity"] = int(time.time())
+
     return DataResponse(data=UserOut(
         id=user["id"],
         displayName=user["displayName"],
         mail=user.get("mail") or user.get("email"),
-        is_admin=user.get("is_admin", False),
+        permissions=db_user.permissions,
+    ))
+
+
+# ── /auth/me ──────────────────────────────────────────────────────────────────
+
+@router.get("/auth/me", response_model=DataResponse[UserOut])
+def me(user: dict = Depends(get_current_user)):
+    permissions = get_user_permissions(user["id"])
+    return DataResponse(data=UserOut(
+        id=user["id"],
+        displayName=user["displayName"],
+        mail=user.get("mail") or user.get("email"),
+        permissions=permissions,
     ))
 
 
 # ── Login-Flow ─────────────────────────────────────────────────────────────────
-
 
 @router.get("/start-auth", include_in_schema=False)
 async def start_auth(request: Request):
@@ -47,18 +75,17 @@ async def start_auth(request: Request):
 @router.get("/auth/callback", include_in_schema=False)
 async def auth_callback(request: Request):
     try:
-        logger.info("Session vor Token-Abruf: %s", dict(request.session))
 
         if not request.session.get("auth_flow"):
             raise HTTPException(status_code=400, detail="OAuth Flow fehlt")
 
         result = acquire_token_by_auth_code(request)
-        logger.info("Token Result keys: %s",
-                    list(result.keys()) if isinstance(result, dict) else type(result))
+
 
         if not result or "access_token" not in result:
-            return request.app.templates.TemplateResponse(
-                "login.html", {"request": request, "error": "Tokenfehler"}
+            return RedirectResponse(
+                f"{config.FRONTEND_URL}/login?error=token_error",
+                status_code=HTTP_302_FOUND,
             )
 
         id_claims = result.get("id_token_claims", {}) or {}
@@ -69,13 +96,16 @@ async def auth_callback(request: Request):
             logger.exception("Graph-Call fehlgeschlagen")
             infos = {}
 
+        # Admin-Rolle automatisch setzen wenn User in der konfigurierten AAD-Gruppe ist
+        is_in_admin_group = config.ADMIN_GROUP_ID in (id_claims.get("groups", []) or [])
+        initial_role = ROLE_ADMIN if is_in_admin_group else None
+
         user_payload = {
             "id":          id_claims.get("oid") or id_claims.get("sub"),
             "displayName": id_claims.get("name") or infos.get("displayName"),
             "email":       id_claims.get("preferred_username")
                            or id_claims.get("email")
                            or infos.get("mail"),
-            "is_admin":    config.ADMIN_GROUP_ID in (id_claims.get("groups", []) or []),
             "phone":       infos.get("phone"),
             "mobile":      infos.get("mobile"),
             "company":     infos.get("company"),
@@ -83,30 +113,44 @@ async def auth_callback(request: Request):
             "address":     infos.get("address") or {},
         }
 
+        # User anlegen / last_login aktualisieren; Admin-Rolle ggf. erzwingen
+        db_user = upsert_user(
+            microsoft_id=user_payload["id"],
+            display_name=user_payload["displayName"] or "",
+            email=user_payload["email"] or "",
+            role=initial_role,
+        )
+
+        # Permissions in die Session schreiben
+        user_payload["permissions"] = db_user.permissions
+
         sid = rotate_sid(request.session)
         TOKENS.put(sid, result)
-
         request.session.update({"user": user_payload, "last_activity": int(time.time())})
-        record_login_success(request)
         request.session.pop("auth_flow", None)
 
         if approx_cookie_size_bytes(request.session) > 3000:
             logger.warning("Session cookie zu groß, shrinking")
             request.session.clear()
-            request.session.update({"sid": sid, "user": user_payload,
-                                    "last_activity": int(time.time())})
+            request.session.update({
+                "sid": sid,
+                "user": user_payload,
+                "last_activity": int(time.time()),
+            })
 
-        logger.info("Session nach Login: %s", dict(request.session))
+        record_login_success(request)
 
-        # Nach Login → Vue-App (FRONTEND_URL aus .env)
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
 
     except Exception as e:
         logger.exception("Login fehlgeschlagen")
-        return request.app.templates.TemplateResponse(
-            "login.html", {"request": request, "error": str(e)}
+        return RedirectResponse(
+            f"{config.FRONTEND_URL}/login?error=login_failed",
+            status_code=HTTP_302_FOUND,
         )
 
+
+# ── Logout ────────────────────────────────────────────────────────────────────
 
 @router.get("/logout", include_in_schema=False)
 async def logout(request: Request):
@@ -116,6 +160,4 @@ async def logout(request: Request):
         TOKENS.delete(sid)
     record_logout(request)
     request.session.clear()
-    logger.info("User logged out: %s", user_email)
-    # Nach Logout → Login-Seite direkt auf Backend
-    return RedirectResponse(f"{config.FRONTEND_URL}", status_code=HTTP_302_FOUND)
+    return RedirectResponse(f"{config.FRONTEND_URL}/login", status_code=HTTP_302_FOUND)

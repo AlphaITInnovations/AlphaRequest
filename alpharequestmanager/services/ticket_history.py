@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from alpharequestmanager.database.database import get_ticket, update_ticket
+from alpharequestmanager.database.tickets import get_ticket, update_ticket
 
 
 def add_history_event(

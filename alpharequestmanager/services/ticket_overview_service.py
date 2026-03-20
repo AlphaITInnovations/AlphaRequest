@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional
 
-from alpharequestmanager.database.database import settings_get, settings_set
+from alpharequestmanager.database.settings import settings_get, settings_set
 
 _SETTINGS_KEY = "TICKET_OVERVIEW_GROUPS"
 

@@ -2,12 +2,12 @@ import json
 from typing import Dict
 from alpharequestmanager.models.models import TicketType, RequestStatus
 
-from alpharequestmanager.database.database import (
+from alpharequestmanager.database.tickets import (
     update_ticket,
     get_ticket,
-    get_users_from_group,
-    get_groups, list_all_tickets, get_group_name_from_id,
+    list_all_tickets
 )
+from alpharequestmanager.database.groups import get_users_from_group, get_groups, get_group_name_from_id
 from alpharequestmanager.models.models import Ticket, TicketType
 
 # ============================================================
@@ -294,7 +294,7 @@ def get_tickets_for_department(group_id: str) -> list[Ticket]:
 
     return result
 
-from alpharequestmanager.database.database import get_group_ids_for_user
+from alpharequestmanager.database.groups import get_group_ids_for_user
 
 def get_tickets_for_user_departments(user_id: str) -> dict[str, list[Ticket]]:
     """

@@ -1,5 +1,5 @@
 import time
-from alpharequestmanager.database import database
+from alpharequestmanager.database import tickets as database
 from alpharequestmanager.services import ninja_api
 from alpharequestmanager.services.ninja_api import get_ticket
 from alpharequestmanager.utils.logger import logger

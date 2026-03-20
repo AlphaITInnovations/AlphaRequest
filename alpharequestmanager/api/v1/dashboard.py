@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from alpharequestmanager.core.dependencies import get_current_user
-from alpharequestmanager.database import database
+from alpharequestmanager.database import tickets as database
 from alpharequestmanager.models.models import RequestStatus, TicketType
 from alpharequestmanager.services.ticket_permissions import can_user_create_ticket
 from alpharequestmanager.services.workflow_state import get_department_requests_for_user

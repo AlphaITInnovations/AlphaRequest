@@ -11,7 +11,7 @@ import requests
 
 from alpharequestmanager.utils.config import config
 from alpharequestmanager.utils.logger import logger
-import alpharequestmanager.database.database as db
+from alpharequestmanager.database.settings import set_ninja_token, get_ninja_token
 from alpharequestmanager.services.ninja_render import render_ticket_description
 
 # =========================
@@ -51,7 +51,7 @@ def save_token(token_info: dict) -> None:
         token["refresh_token"] = None
     # in DB persistieren
     try:
-        db.set_ninja_token(token)
+        set_ninja_token(token)
     except Exception:
         logger.exception("Konnte Ninja-Token nicht persistieren")
         raise
@@ -60,7 +60,7 @@ def save_token(token_info: dict) -> None:
 def load_token() -> Optional[dict]:
     """Lädt das Token primär aus der DB; fällt (optional) auf config zurück."""
     try:
-        tok = db.get_ninja_token()
+        tok = get_ninja_token()
         if tok:
             return tok
     except Exception:

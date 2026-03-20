@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from alpharequestmanager.core.dependencies import get_current_user
-from alpharequestmanager.database import database
+from alpharequestmanager.database import tickets as database
 from alpharequestmanager.schemas.responses import DataResponse
 from alpharequestmanager.services.workflow_state import (
     get_department_info,

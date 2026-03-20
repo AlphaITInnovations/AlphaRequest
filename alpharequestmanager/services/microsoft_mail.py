@@ -12,7 +12,7 @@ import os
 import requests
 from fastapi import Request, Path
 
-from alpharequestmanager.database.database import get_groups
+from alpharequestmanager.database.groups import get_groups
 from alpharequestmanager.models.models import TicketPriority, TicketType, Ticket
 from alpharequestmanager.services.microsoft_auth import acquire_app_token
 from alpharequestmanager.utils.logger import logger

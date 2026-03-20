@@ -8,3 +8,5 @@ alpharequestmanager/tickets.db
 .env
 data
 /alpharequestmanager/templates/modals/old/
+
+alpharequestmanager/logs/

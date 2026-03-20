@@ -1,5 +1,5 @@
-from pydantic import BaseModel, field_serializer
-from typing import Optional
+from pydantic import BaseModel
+from typing import Optional, List
 from datetime import datetime
 from alpharequestmanager.models.models import (
     Ticket, TicketType, RequestStatus, TicketPriority
@@ -57,7 +57,7 @@ class TicketListResponse(BaseModel):
 
 class TicketCreateRequest(BaseModel):
     ticket_type: TicketType
-    description: str          # bleibt JSON-String wie bisher
+    description: str
     assignee_id: str
     assignee_name: str
     accountable_id: str
@@ -74,12 +74,11 @@ class TicketUpdateRequest(BaseModel):
     accountable_id: Optional[str] = None
     accountable_name: Optional[str] = None
     priority: Optional[TicketPriority] = None
-    action: str = "save"      # "save" | "complete"
+    action: str = "save"
 
 
-# ── alpharequestmanager/schemas/auth.py ───────────────────────────────────────
 class UserOut(BaseModel):
     id: str
     displayName: str
     mail: Optional[str] = None
-    is_admin: bool = False
+    permissions: List[str] = []

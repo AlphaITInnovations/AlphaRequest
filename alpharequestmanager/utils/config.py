@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-import alpharequestmanager.database.database as db
+import alpharequestmanager.database.settings as db
 from pathlib import Path
 
 def str_to_bool(s):

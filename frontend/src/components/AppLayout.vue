@@ -11,7 +11,6 @@ const { dark, toggleDark } = useTheme()
 const sidebarOpen = ref(true)
 
 function isActive(path: string) {
-  // Exakter Match oder direktes Kind (z.B. /tickets/123) aber nicht /tickets/new/...
   return route.path === path
 }
 
@@ -60,7 +59,7 @@ defineProps<{ title?: string }>()
         </a>
 
         <a
-          v-if="auth.isAdmin"
+          v-if="auth.canView"
           href="/tickets"
           class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150"
           :class="isActive('/tickets') ? 'bg-white/20 font-medium' : 'hover:bg-white/10'"
@@ -124,11 +123,9 @@ defineProps<{ title?: string }>()
             class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 transition"
             :title="dark ? 'Light Mode' : 'Dark Mode'"
           >
-            <!-- Moon -->
             <svg v-if="!dark" class="w-5 h-5 text-[#3EAAB8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
-            <!-- Sun -->
             <svg v-else class="w-5 h-5 text-[#3EAAB8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
               <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>

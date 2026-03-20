@@ -13,11 +13,10 @@ from alpharequestmanager.api.v1 import auth as auth_v1
 
 from alpharequestmanager.core.app_lifespan import lifespan
 from alpharequestmanager.core.session import setup_session
-from alpharequestmanager.database import database as db
+from alpharequestmanager.database import init_db
 from alpharequestmanager.models.models import TicketType
 from alpharequestmanager.metrics.metrics import init_metrics
 from alpharequestmanager.services.personalnummer_generator import init_personalnummer
-from alpharequestmanager.services.ticket_permissions import init_ticket_permissions
 from alpharequestmanager.services.ticket_service import TicketService
 from alpharequestmanager.utils.config import config
 from alpharequestmanager.api.v1 import dashboard as dashboard_v1
@@ -26,6 +25,7 @@ from alpharequestmanager.api.v1 import companies as companies_v1
 from alpharequestmanager.api.v1 import personalnummer as personalnummer_v1
 from alpharequestmanager.api.v1 import ticket_view as ticket_view_v1
 from alpharequestmanager.api.v1 import settings as settings_v1
+from alpharequestmanager.api.v1 import ticket_overview as ticket_overview_v1
 
 def get_ticket_type_dict():
     return {t.name: t.value for t in TicketType}
@@ -60,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(personalnummer_v1.router, prefix="/api/v1")
     app.include_router(ticket_view_v1.router, prefix="/api/v1")
     app.include_router(settings_v1.router, prefix="/api/v1")
+    app.include_router(ticket_overview_v1.router, prefix="/api/v1")
 
     return app
 
@@ -83,8 +84,7 @@ def run_server(https: bool = False):
 
 
 def main():
-    db.init_db()
-    init_ticket_permissions()
+    init_db()
     configure_event_loop()
     init_personalnummer()
     run_server(https=config.HTTPS)
