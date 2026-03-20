@@ -29,12 +29,12 @@ const DEPT_CLASS: Record<string, string> = {
   skipped:     'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
 }
 const ACTION_LABEL: Record<string, string> = {
-  ticket_created:        '📝 Ticket erstellt',
-  ticket_updated:        '✏️ Ticket bearbeitet',
-  ticket_submitted:      '📤 An Fachabteilungen übergeben',
-  department_done:       '✅ Fachabteilung erledigt',
-  ticket_archived:       '📦 Ticket archiviert',
-  ticket_archived_manual:'📦 Manuell archiviert',
+  ticket_created:         '📝 Ticket erstellt',
+  ticket_updated:         '✏️ Ticket bearbeitet',
+  ticket_submitted:       '📤 An Fachabteilungen übergeben',
+  department_done:        '✅ Fachabteilung erledigt',
+  ticket_archived:        '📦 Ticket archiviert',
+  ticket_archived_manual: '📦 Manuell archiviert',
 }
 
 function formatDate(ts: string) {
@@ -43,23 +43,13 @@ function formatDate(ts: string) {
   const d = new Date(s)
   return isNaN(d.getTime()) ? ts : d.toLocaleString('de-DE', {
     day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
+    hour: '2-digit', minute: '2-digit',
   })
 }
 
 function labelize(s: string) {
-  return s.replace(/_/g, ' ').replace(/-/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
+  return s.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
-
-// Rekursiver JSON-Renderer
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
-}
-function isArray(v: unknown): v is unknown[] {
-  return Array.isArray(v)
-}
-
 
 onMounted(async () => {
   try {
@@ -96,10 +86,8 @@ onMounted(async () => {
 
       <div class="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5">
 
-        <!-- ── Sidebar ── -->
+        <!-- Sidebar -->
         <aside class="space-y-4">
-
-          <!-- Meta -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-5 space-y-3 text-sm">
             <h2 class="font-semibold text-gray-900 dark:text-white">Übersicht</h2>
@@ -124,7 +112,6 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- Antragsteller -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-5 text-sm">
             <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Antragsteller</p>
@@ -139,7 +126,6 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- Fachabteilungen -->
           <div v-if="Object.keys(data.departments).length > 0"
                class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-5 text-sm">
@@ -157,14 +143,12 @@ onMounted(async () => {
           </div>
         </aside>
 
-        <!-- ── Content ── -->
+        <!-- Content -->
         <section class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 items-start">
 
-          <!-- Auftragsinhalt -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-6 space-y-3">
             <h2 class="text-base font-semibold text-gray-900 dark:text-white">Auftragsinhalt</h2>
-
             <template v-if="data.description && Object.keys(data.description).length > 0">
               <details v-for="(section, key) in data.description" :key="key"
                        class="border border-gray-200 dark:border-white/[0.06] rounded-xl overflow-hidden">
@@ -180,15 +164,12 @@ onMounted(async () => {
             <p v-else class="text-sm text-gray-400 italic">Keine Auftragsdaten vorhanden.</p>
           </div>
 
-          <!-- Verlauf -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-6 xl:sticky xl:top-4 max-h-[75vh] overflow-auto">
             <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5">Verlauf</h2>
-
             <ol v-if="data.history.length > 0"
                 class="relative border-l border-gray-200 dark:border-white/[0.09] pl-5 space-y-5">
-              <li v-for="e in data.history" :key="e.timestamp"
-                  class="relative">
+              <li v-for="e in data.history" :key="e.timestamp" class="relative">
                 <span class="absolute -left-[17px] top-1 w-3 h-3 rounded-full bg-[#3EAAB8]"/>
                 <div class="bg-gray-50 dark:bg-[#1A2130] rounded-xl p-3">
                   <div class="flex items-start justify-between gap-3">
@@ -218,7 +199,6 @@ onMounted(async () => {
 <script lang="ts">
 import { defineComponent, h } from 'vue'
 
-// Rekursiver Renderer für beliebige JSON-Strukturen
 const DescriptionRenderer = defineComponent({
   name: 'DescriptionRenderer',
   props: { value: { required: true } },
@@ -231,7 +211,7 @@ const DescriptionRenderer = defineComponent({
         return h('span', {
           class: val
             ? 'px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 font-medium'
-            : 'px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 font-medium'
+            : 'px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 font-medium',
         }, val ? 'Ja' : 'Nein')
       }
       if (Array.isArray(val)) {
@@ -239,7 +219,7 @@ const DescriptionRenderer = defineComponent({
         return h('div', { class: 'space-y-2' },
           val.map((item, i) => h('div', {
             key: i,
-            class: 'border border-gray-200 dark:border-white/[0.06] rounded-lg p-3'
+            class: 'border border-gray-200 dark:border-white/[0.06] rounded-lg p-3',
           }, [render(item)]))
         )
       }
@@ -254,14 +234,14 @@ const DescriptionRenderer = defineComponent({
               key: k,
               class: isComplex
                 ? 'md:col-span-2 border border-gray-200 dark:border-white/[0.06] rounded-xl overflow-hidden'
-                : 'border border-gray-200 dark:border-white/[0.06] rounded-xl p-3'
+                : 'border border-gray-200 dark:border-white/[0.06] rounded-xl p-3',
             }, isComplex ? [
               h('div', { class: 'px-4 py-2 bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-white/[0.06] text-xs font-semibold text-gray-500 uppercase tracking-wider' },
                 k.replace(/_/g, ' ')),
               h('div', { class: 'p-4' }, [render(v)])
             ] : [
               h('p', { class: 'text-xs text-gray-400 mb-1' }, k.replace(/_/g, ' ')),
-              render(v)
+              render(v),
             ])
           })
         )
@@ -273,6 +253,6 @@ const DescriptionRenderer = defineComponent({
       return h('span', { class: 'text-sm font-medium text-gray-900 dark:text-white' }, s)
     }
     return () => render(props.value)
-  }
+  },
 })
 </script>

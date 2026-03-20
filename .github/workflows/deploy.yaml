@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Trigger Dokploy (GitHub-style)
         run: |
-          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/Cj_A04ZbjiDABCk5BVwnO \
+          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/compose/rmL6U30Nznf1VPH37nnZt \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
