@@ -1,4 +1,3 @@
-# config.py
 import os
 from dotenv import load_dotenv
 import alpharequestmanager.database.database as db
@@ -32,14 +31,17 @@ class Config:
     NINJA_REDIRECT_URI = os.getenv("NINJA_REDIRECT_URI", "")
 
     PORT = int(os.getenv("PORT", 5000))
-    HTTPS = str_to_bool(os.getenv("HTTPS", False).lower())
-    DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", False).lower())
+    HTTPS = str_to_bool(os.getenv("HTTPS", "false"))
+    DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", "false"))
     USER_SYNC_INTERVAL = int(os.getenv("USER_SYNC_INTERVAL", "30"))
 
     PERSONALNUMMER_START = int(os.getenv("PERSONALNUMMER_START", 10000))
     PERSONALNUMMER_END = int(os.getenv("PERSONALNUMMER_END", 100000))
 
-    #Persistente Werte
+    # URLs – in .env setzen, Defaults für Dev
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://ai-ms-01.dom.local:5173")
+    BACKEND_URL:  str = os.getenv("BACKEND_URL",  "https://ai-ms-01.dom.local:5000")
+
     @property
     def COMPANIES(self):
         return db.get_companies()
@@ -53,4 +55,3 @@ class Config:
         return {k: v for k, v in cls.__dict__.items() if not k.startswith("__") and not callable(v)}
 
 config = Config()
-

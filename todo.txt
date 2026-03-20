@@ -2,7 +2,7 @@ TODO:
 angemeldete benutzer name
 favicon geht im dokploy nicht
 auftragsübersicht verbessern
-
+auftragsübersciht unterscheiden zwischen read only und löschen berechtigt
 
 
 
