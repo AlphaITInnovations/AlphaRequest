@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Ticket-Übersicht{% endblock %}
+
+{% block head %}
+<script>
+  window._TICKETS = {{ tickets | tojson }};
+</script>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('ticketsManager', () => ({
+    items: window._TICKETS,
+
+    filter: 'all',
+    search: '',
+    selected: [],
+
+    statuses: ['all', 'in_request', 'in_progress', 'archived', 'rejected'],
+
+    get filtered() {
+      let list = this.filter === 'all'
+        ? this.items
+        : this.items.filter(t => t.status === this.filter)
+
+      if (this.search.trim()) {
+        const q = this.search.toLowerCase()
+        list = list.filter(t =>
+          (t.title || '').toLowerCase().includes(q) ||
+          (t.creator || '').toLowerCase().includes(q) ||
+          String(t.id).includes(q)
+        )
+      }
+      return list
+    },
+
+    toggle(id) {
+      this.selected.includes(id)
+        ? this.selected = this.selected.filter(x => x !== id)
+        : this.selected.push(id)
+    },
+
+    toggleAll(e) {
+      this.selected = e.target.checked
+        ? this.filtered.map(t => t.id)
+        : []
+    },
+
+    async deleteSelected() {
+      if (!this.selected.length) return
+      if (!confirm(`${this.selected.length} Ticket(s) wirklich löschen?`)) return
+
+      await Promise.all(
+        this.selected.map(id =>
+          fetch(`/tickets/${id}/delete`, { method: 'POST' })
+        )
+      )
+      location.reload()
+    },
+
+    statusClass(s) {
+      return {
+        in_request: 'bg-primary/15 text-primary',
+        in_progress: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+        archived: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+        rejected: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200'
+      }[s] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+    },
+
+    priorityClass(p) {
+      return {
+        low: 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+        medium: 'bg-primary/20 text-primary',
+        high: 'bg-orange-200 text-orange-900 dark:bg-orange-900/40 dark:text-orange-200',
+        critical: 'bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-200'
+      }[p] || 'bg-gray-200 dark:bg-gray-700'
+    },
+
+    formatLocal(ts) {
+      if (!ts) return '–'
+      let s = String(ts).trim()
+      const hasTZ = s.endsWith('Z') || /[+-]\d\d:\d\d$/.test(s)
+      if (!hasTZ) s += 'Z'
+      const d = new Date(s)
+      if (isNaN(d.getTime())) return ts
+      return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+  }))
+})
+</script>
+{% endblock %}
+
+{% block content %}
+<div x-data="ticketsManager()" class="space-y-6 max-w-7xl mx-auto">
+
+  <!-- HEADER -->
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold text-gray-800 dark:text-gray-100">
+      Ticket-Übersicht
+    </h1>
+
+    <button
+      @click="deleteSelected"
+      :disabled="selected.length === 0"
+      class="px-4 py-2 rounded-md bg-red-600 text-white
+             hover:bg-red-700
+             disabled:opacity-40 disabled:cursor-not-allowed">
+      🗑️ Löschen (<span x-text="selected.length"></span>)
+    </button>
+  </div>
+
+  <!-- FILTER -->
+  <div class="flex flex-wrap items-center gap-3">
+    <template x-for="s in statuses" :key="s">
+      <button
+        @click="filter = s"
+        class="px-3 py-1.5 rounded-md text-sm font-medium capitalize
+               border border-gray-200 dark:border-gray-700"
+        :class="filter === s
+          ? 'bg-primary text-white'
+          : 'bg-white dark:bg-gray-800 hover:bg-primary/10 dark:hover:bg-gray-700'">
+        <span x-text="s"></span>
+      </button>
+    </template>
+
+    <div class="ml-auto">
+      <input
+        type="text"
+        x-model="search"
+        placeholder="Suchen…"
+        class="px-3 py-2 border rounded-md w-64
+               bg-white dark:bg-gray-800
+               border-gray-300 dark:border-gray-700
+               text-gray-800 dark:text-gray-100
+               focus:ring-2 focus:ring-primary">
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+        <tr>
+          <th class="p-4 w-10 text-center">
+            <input type="checkbox" @change="toggleAll">
+          </th>
+          <th class="p-4 text-left">ID</th>
+          <th class="p-4 text-left">Titel</th>
+          <th class="p-4 text-left">Ersteller</th>
+          <th class="p-4 text-left">Status</th>
+          <th class="p-4 text-left">Priorität</th>
+          <th class="p-4 text-right">Aktion</th>
+        </tr>
+      </thead>
+
+      <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+        <template x-for="t in filtered" :key="t.id">
+          <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+
+            <td class="p-4 text-center">
+              <input
+                type="checkbox"
+                :checked="selected.includes(t.id)"
+                @change="toggle(t.id)">
+            </td>
+
+            <td class="p-4 font-mono text-primary">
+              #<span x-text="t.id"></span>
+            </td>
+
+            <td class="p-4">
+              <div class="font-medium text-gray-800 dark:text-gray-100"
+                   x-text="t.title"></div>
+              <div class="text-xs text-gray-500 dark:text-gray-400"
+                   :title="t.created_at"
+                   x-text="formatLocal(t.created_at)">
+              </div>
+            </td>
+
+            <td class="p-4 text-gray-700 dark:text-gray-300"
+                x-text="t.creator"></td>
+
+            <td class="p-4">
+              <span
+                class="px-2 py-1 rounded text-xs font-semibold"
+                :class="statusClass(t.status)"
+                x-text="t.status">
+              </span>
+            </td>
+
+            <td class="p-4">
+              <span
+                class="px-2 py-1 rounded text-xs font-semibold"
+                :class="priorityClass(t.priority)"
+                x-text="t.priority">
+              </span>
+            </td>
+
+            <td class="p-4 text-right">
+              <a
+                :href="`/ticket-overview/${t.id}`"
+                class="px-3 py-1.5 rounded
+                       bg-primary/10 text-primary
+                       hover:bg-primary/20">
+                Details →
+              </a>
+            </td>
+
+          </tr>
+        </template>
+
+        <template x-if="filtered.length === 0">
+          <tr>
+            <td colspan="7" class="p-8 text-center text-gray-500 dark:text-gray-400">
+              Keine Tickets gefunden
+            </td>
+          </tr>
+        </template>
+
+      </tbody>
+    </table>
+  </div>
+
+<div class="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400 mt-4">
+  <div>
+    Seite {{ page }} von {{ (total // page_size) + (1 if total % page_size else 0) }}
+  </div>
+
+  <div class="space-x-2">
+    {% if page > 1 %}
+      <a href="?page={{ page - 1 }}" class="px-3 py-1 rounded border hover:bg-gray-100 dark:hover:bg-gray-700">
+        ← Zurück
+      </a>
+    {% endif %}
+
+    {% if page * page_size < total %}
+      <a href="?page={{ page + 1 }}" class="px-3 py-1 rounded border hover:bg-gray-100 dark:hover:bg-gray-700">
+        Weiter →
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+
+</div>
+{% endblock %}

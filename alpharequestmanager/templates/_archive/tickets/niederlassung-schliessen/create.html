@@ -1,0 +1,165 @@
+{% extends "tickets/_base_ticket.html" %}
+
+{% set form_action = "/tickets" %}
+{% set alpine_component = "niederlassungSchliessenPhase1Form()" %}
+
+{% block hidden_fields %}
+<input type="hidden" name="ticket_type" value="niederlassung-schliessen">
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
+
+{% block ticket_fields %}
+  {% include "tickets/niederlassung-schliessen/_form_fields.html" %}
+{% endblock %}
+
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+function niederlassungSchliessenPhase1Form() {
+  return {
+
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    confirmCreateOpen: false,
+
+    /* =================================================
+       DATA
+    ================================================= */
+
+    /* -------- PERSONAL / HR -------- */
+    p: {
+      location: "",
+      address: "",
+      closing_date: ""
+    },
+
+    /* -------- IT -------- */
+    it: {
+      hardware_action: "",
+      transfer_target: "",
+      confirm_dsl_cancel: "",
+      confirm_landline_cancel: ""
+    },
+
+    /* -------- FUHRPARK -------- */
+    f: {
+      pool_cars: "",
+      return_date: ""
+    },
+
+    /* =================================================
+       VALIDATION RULES
+       (PHASE 1)
+    ================================================= */
+    rules: {
+
+      location: { required: true },
+      address: { required: true },
+      closing_date: { required: true },
+
+      /* WORKFLOW */
+      accountable_id: { required: true }
+
+    },
+
+
+    /* =================================================
+       VALUE RESOLVER
+    ================================================= */
+    getValue(field) {
+
+      /* DOM FIRST */
+      const dom = document.querySelector(`[name="${field}"]`)?.value
+      if (dom !== undefined && dom !== "") return dom
+
+      if (field in this.p) return this.p[field]
+      if (field in this.it) return this.it[field]
+      if (field in this.f) return this.f[field]
+
+      return ""
+    },
+
+
+    /* =================================================
+       INIT
+    ================================================= */
+    init() {
+      this.validationTriggered = false
+    },
+
+
+    /* =================================================
+       CREATE FLOW
+    ================================================= */
+
+    openCreateConfirm() {
+
+      this.validationTriggered = false
+
+      this.$nextTick(() => {
+
+        if (!this.validateOrScroll()) return
+
+        this.confirmCreateOpen = true
+
+      })
+
+    },
+
+
+    confirmCreate() {
+
+      /* Verantwortlichen setzen */
+
+      const accountableId =
+        document.querySelector('[name="accountable_id"]')?.value || ""
+
+      const accountableName =
+        document.querySelector('[name="accountable_name"]')?.value || ""
+
+      this.$refs.assigneeId.value = accountableId
+      this.$refs.assigneeName.value = accountableName
+
+
+      /* DESCRIPTION SERIALISIEREN */
+
+      this.$refs.description.value = JSON.stringify(
+        {
+          personal: this.p,
+          it: this.it,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      )
+
+
+      this.confirmCreateOpen = false
+
+      const form = this.$el.closest("form")
+      if (!form) return
+
+      form.submit()
+
+    }
+
+  }
+}
+</script>
+{% endblock %}

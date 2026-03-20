@@ -1,0 +1,218 @@
+{% extends "tickets/_base_ticket.html" %}
+
+{% set form_action = "/tickets" %}
+{% set alpine_component = "zugangsperrenPhase1Form()" %}
+
+{% block hidden_fields %}
+<input type="hidden" name="ticket_type" value="zugang-sperren">
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
+
+{% block ticket_fields %}
+  {% include "tickets/zugang-sperren/_form_fields.html" %}
+{% endblock %}
+
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
+{% block extra_js %}
+
+<script>
+function zugangsperrenPhase1Form() {
+  return {
+
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    confirmCreateOpen: false,
+
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    /* ---------------- BASISDATEN ---------------- */
+    p: {
+      first_name: "",
+      last_name: "",
+      cost_center: "",
+      contract_company: "",
+      exit_date: "",
+      severance_agreement: ""
+    },
+
+    /* ---------------- IT ---------------- */
+    it: {
+      mail_forwarding: "",
+      mail_forward_to: "",
+      mailbox_access: "",
+      mailbox_access_for: "",
+      auto_reply: "",
+      auto_reply_text: ""
+    },
+
+    /* ---------------- FUHRPARK ---------------- */
+    f: {
+      car: "",
+      car_return_date: ""
+    },
+
+    /* =================================================
+       VALIDATION RULES
+    ================================================= */
+    rules: {
+
+      /* BASISDATEN */
+      first_name: { required: true },
+      last_name: { required: true },
+      cost_center: { required: true },
+      contract_company: { required: true },
+      exit_date: { required: true },
+      severance_agreement: { required: true },
+
+      /* IT CONDITIONALS */
+
+      mail_forward_to: {
+        requiredIf() {
+          return this.it.mail_forwarding === "Ja";
+        }
+      },
+
+      mailbox_access_for: {
+        requiredIf() {
+          return this.it.mailbox_access === "Ja";
+        }
+      },
+
+      auto_reply_text: {
+        requiredIf() {
+          return this.it.auto_reply === "Ja";
+        }
+      },
+
+      /* FUHRPARK */
+
+      car_return_date: {
+        requiredIf() {
+          return this.f.car === "Ja";
+        }
+      },
+
+      /* WORKFLOW */
+      accountable_id: { required: true }
+
+    },
+
+    /* =================================================
+       VALUE RESOLVER
+    ================================================= */
+    getValue(field) {
+
+      /* 1️⃣ DOM FIRST */
+      const dom = document.querySelector(`[name="${field}"]`)?.value;
+      if (dom !== undefined && dom !== "") return dom;
+
+      /* 2️⃣ PERSONAL */
+      if (this.p && field in this.p) return this.p[field];
+
+      /* 3️⃣ IT */
+      if (this.it && field in this.it) return this.it[field];
+
+      /* 4️⃣ FUHRPARK */
+      if (this.f && field in this.f) return this.f[field];
+
+      return "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
+      }
+
+    },
+
+    /* =================================================
+       CREATE FLOW
+    ================================================= */
+
+    openCreateConfirm() {
+
+      this.validationTriggered = false;
+
+      this.$nextTick(() => {
+
+        if (!this.validateOrScroll()) return;
+
+        this.confirmCreateOpen = true;
+
+      });
+
+    },
+
+    confirmCreate() {
+
+      /* ===============================
+         Verantwortlichen setzen
+      =============================== */
+
+      const accountableId =
+        document.querySelector('[name="accountable_id"]')?.value || "";
+
+      const accountableName =
+        document.querySelector('[name="accountable_name"]')?.value || "";
+
+      this.$refs.assigneeId.value = accountableId;
+      this.$refs.assigneeName.value = accountableName;
+
+      /* ===============================
+         JSON SERIALISIEREN
+      =============================== */
+
+      this.$refs.description.value = JSON.stringify(
+        {
+          personal: this.p,
+          it: this.it,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      );
+
+      this.confirmCreateOpen = false;
+
+      /* ===============================
+         FORM SUBMIT
+      =============================== */
+
+      const form = this.$el.closest("form");
+      if (!form) return;
+
+      form.submit();
+
+    }
+
+  };
+}
+</script>
+
+{% endblock %}

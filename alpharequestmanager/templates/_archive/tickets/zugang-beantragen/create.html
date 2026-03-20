@@ -1,0 +1,315 @@
+{% extends "tickets/_base_ticket.html" %}
+
+{% set form_action = "/tickets" %}
+{% set alpine_component = "zugangPhase1Form()" %}
+
+{% block hidden_fields %}
+<input type="hidden" name="ticket_type" value="zugang-beantragen">
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
+
+{% block ticket_fields %}
+  {% include "tickets/zugang-beantragen/_form_fields.html" %}
+{% endblock %}
+
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
+{% block extra_js %}
+
+<script>
+function zugangPhase1Form() {
+  return {
+
+    /* =================================================
+       BASE FORM (VALIDATION ENGINE)
+    ================================================= */
+    ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    modalOpen: false,
+    confirmCreateOpen: false,
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    p: {
+      first_name: "",
+      last_name: "",
+      title: "",
+      private_address: "",
+      start_date: "",
+      homeoffice: "",
+      department: "",
+      cost_center: "",
+      location: "",
+      contract_company: "",
+      notes: "",
+
+      /* NEU */
+      weekly_hours: "",
+      federal_state: "",
+
+      supervisor_hr_id: "",
+      supervisor_hr_name: "",
+      contact_person_id: "",
+      contact_person_name: "",
+      personal_number: ""
+    },
+
+    a: {
+      appearance_company: "",
+      appearance_address: ""
+    },
+
+    it: {
+
+      signature: {
+        title: "",
+        street: "",
+        zip: "",
+        city: "",
+        mobile: "",
+        phone: ""
+      },
+      timebutler: {
+        vacation_year: "",
+        supervisor_id: "",
+        supervisor_name: ""
+      },
+      datev: {
+        user: "",
+        required_rights: ""
+      },
+      other_systems: "",
+      mailboxes: {
+        additional: "",
+        notes: ""
+      },
+      additional_cost_centers: ""
+    },
+
+    f: {
+      car: "",
+      car_class: "",
+      car_from: ""
+    },
+
+    /* =================================================
+       VALIDATION RULES
+    ================================================= */
+    rules: {
+      first_name: { required: true },
+      last_name: { required: true },
+      title: { required: true },
+      private_address: { required: true },
+      start_date: { required: true },
+      homeoffice: { required: true },
+      department: { required: true },
+      cost_center: { required: true },
+      location: { required: true },
+      contract_company: { required: true },
+      weekly_hours: { required: true },
+      federal_state: { required: true },
+      personal_number: { required: true },
+
+      supervisor_hr_id: { required: true },
+      contact_person_id: { required: true },
+
+          vacation_year: { required: true },
+  tb_supervisor_id: { required: true },
+
+        car: { required: true },
+
+  car_class: {
+    requiredIf() {
+      return this.f.car === "Ja";
+    }
+  },
+
+  car_from: {
+    requiredIf() {
+      return this.f.car === "Ja";
+    }
+  },
+
+      accountable_id: { required: true },
+    },
+
+    /* =================================================
+       VALUE RESOLVER
+    ================================================= */
+    getValue(field) {
+
+      /* =========================================
+         1️⃣ ZUERST DOM CHECK (für Dropdowns!)
+      ========================================== */
+      const dom = document.querySelector(`[name="${field}"]`)?.value;
+      if (dom !== undefined && dom !== "") return dom;
+
+      /* =========================================
+         2️⃣ PERSONAL
+      ========================================== */
+      if (this.p && field in this.p) return this.p[field];
+
+      /* =========================================
+         3️⃣ ALLGEMEIN
+      ========================================== */
+      if (this.a && field in this.a) return this.a[field];
+
+      /* =========================================
+         4️⃣ FUHRPARK
+      ========================================== */
+      if (this.f && field in this.f) return this.f[field];
+
+      /* =========================================
+         5️⃣ IT – FLACH
+      ========================================== */
+      if (this.it && field in this.it) return this.it[field];
+
+      /* =========================================
+         6️⃣ IT – TIMEBUTLER
+      ========================================== */
+      if (field === "vacation_year")
+        return this.it.timebutler?.vacation_year ?? "";
+
+      if (field === "tb_supervisor_id")
+        return this.it.timebutler?.supervisor_id ?? "";
+
+      /* =========================================
+         7️⃣ DATEV
+      ========================================== */
+      if (field === "datev_user")
+        return this.it.datev?.user ?? "";
+
+      if (field === "datev_required_rights")
+        return this.it.datev?.required_rights ?? "";
+
+      /* =========================================
+         8️⃣ MAILBOXES
+      ========================================== */
+      if (field === "mailboxes_additional")
+        return this.it.mailboxes?.additional ?? "";
+
+      if (field === "mailboxes_notes")
+        return this.it.mailboxes?.notes ?? "";
+
+      return "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companies = [];
+      }
+    },
+
+    /* =================================================
+       PERSONALNUMMER
+    ================================================= */
+    async generatePersonalnummer() {
+      if (!this.isCreate) return;
+      if (!confirm("Nummer wirklich generieren?")) return;
+
+      try {
+        const res = await fetch("/api/personalnummer/next");
+        const data = await res.json();
+        this.p.personal_number = String(data.personalnummer);
+      } catch {
+        alert("Fehler beim Generieren der Personalnummer");
+      }
+    },
+      /* =================================================
+           CREATE FLOW (NEU)
+        ================================================= */
+        openCreateConfirm() {
+          this.validationTriggered = false;
+
+          this.$nextTick(() => {
+            if (!this.validateOrScroll()) return;
+            this.confirmCreateOpen = true;
+          });
+        },
+
+        confirmCreate() {
+
+          /* ===============================
+             Verantwortlichen setzen
+          =============================== */
+          const accountableId =
+            document.querySelector('[name="accountable_id"]')?.value || "";
+          const accountableName =
+            document.querySelector('[name="accountable_name"]')?.value || "";
+
+          this.$refs.assigneeId.value = accountableId;
+          this.$refs.assigneeName.value = accountableName;
+
+          /* ===============================
+             HR-Daten sync
+          =============================== */
+          this.p.supervisor_hr_id =
+            document.querySelector('[name="supervisor_hr_id"]')?.value || "";
+
+          this.p.supervisor_hr_name =
+            document.querySelector('[name="supervisor_hr_name"]')?.value || "";
+
+          this.p.contact_person_id =
+            document.querySelector('[name="contact_person_id"]')?.value || "";
+
+          this.p.contact_person_name =
+            document.querySelector('[name="contact_person_name"]')?.value || "";
+
+          /* ===============================
+             🔥 TIMEBUTLER SYNC (FIX)
+          =============================== */
+          this.it.timebutler.supervisor_id =
+            document.querySelector('[name="tb_supervisor_id"]')?.value || "";
+
+          this.it.timebutler.supervisor_name =
+            document.querySelector('[name="tb_supervisor_name"]')?.value || "";
+
+          /* ===============================
+             JSON serialisieren
+          =============================== */
+          this.$refs.description.value = JSON.stringify(
+            {
+              personal: this.p,
+              allgemein: this.a,
+              it: this.it,
+              fuhrpark: this.f
+            },
+            null,
+            2
+          );
+
+          this.confirmCreateOpen = false;
+
+          /* ===============================
+             FORM KORREKT SUBMITTEN
+          =============================== */
+          const form = this.$el.closest("form");
+          if (!form) return;
+
+          form.submit();
+        }
+
+  };
+}
+</script>
+{% endblock %}

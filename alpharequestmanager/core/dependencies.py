@@ -1,12 +1,11 @@
-# alpharequestmanager/dependencies.py — hardened get_current_user (idle-timeout)
-
 from typing import Dict
 import time
 from fastapi import Request, HTTPException, status
 from alpharequestmanager.utils.config import config
 from alpharequestmanager.utils.logger import logger
 from alpharequestmanager.metrics.auth_metrics import update_last_activity
-# Min-interval to reduce Set-Cookie churn
+from alpharequestmanager.core.session import TOKENS
+
 SAFE_UPDATE_INTERVAL = 60  # seconds
 
 
@@ -16,24 +15,20 @@ def get_current_user(request: Request) -> Dict:
     now = int(time.time())
     last_activity_raw = session.get("last_activity")
 
-    # --- Erst prüfen, ob User existiert ---
+    # Nicht eingeloggt → 401 (Vue fängt das ab und zeigt Login-Seite)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_302_FOUND,
-            headers={"Location": "/login"}
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    # --- Dann erst Prometheus-Update ---
+    # Prometheus-Update
     update_last_activity(request)
 
-    # Logging etc.
     try:
         cookie_len = sum((len(k) + len(v)) for k, v in request.cookies.items())
     except Exception:
         cookie_len = -1
 
     logger.info(
-        "🔍 session_keys=%s sid=%s last=%s now=%s cookie_len=%s",
+        "session_keys=%s sid=%s last=%s now=%s cookie_len=%s",
         list(session.keys()), session.get("sid"), last_activity_raw, now, cookie_len,
     )
 
@@ -47,26 +42,20 @@ def get_current_user(request: Request) -> Dict:
         session["last_activity"] = now
         return user
 
-    # Idle timeout
+    # Idle timeout → Session löschen, 401
     if now - last_activity > int(config.SESSION_TIMEOUT):
         sid = session.get("sid")
         try:
-            token_store = getattr(request.app.state, "token_store", None)
-            if sid and token_store:
-                token_store.delete(sid)
+            if sid:
+                TOKENS.delete(sid)
         except Exception:
             logger.exception("token revoke failed for sid=%s", sid)
 
         session.clear()
-        raise HTTPException(
-            status_code=status.HTTP_302_FOUND,
-            headers={"Location": "/login"}
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     # Reduce cookie churn
     if now - last_activity >= SAFE_UPDATE_INTERVAL:
         session["last_activity"] = now
 
-
-    #print(user)
     return user

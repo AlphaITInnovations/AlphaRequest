@@ -1,0 +1,66 @@
+<div
+  x-data="{ open: false }"
+  x-show="open"
+  @open-profile.window="open = true"
+  @click.outside="open = false"
+  @keydown.escape.window="open = false"
+  x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-8"
+  aria-modal="true"
+  role="dialog"
+>
+  <div
+    x-transition:enter="transition ease-out duration-200"
+    x-transition:enter-start="opacity-0 scale-95"
+    x-transition:enter-end="opacity-100 scale-100"
+    x-transition:leave="transition ease-in duration-150"
+    x-transition:leave-start="opacity-100 scale-100"
+    x-transition:leave-end="opacity-0 scale-95"
+    class="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-2xl shadow-2xl w-full max-w-2xl relative focus:outline-none"
+    @keydown.escape.stop="open = false"
+  >
+    <!-- Header -->
+    <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+      <h3 class="text-2xl font-semibold flex items-center gap-2">
+        <i data-lucide="user" class="w-6 h-6 text-primary"></i>
+        Benutzerprofil
+      </h3>
+      <button
+        @click="open = false"
+        class="text-gray-400 hover:text-red-500 transition text-2xl leading-none"
+        aria-label="Schließen"
+      >
+        ×
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="p-6 space-y-6 text-sm sm:text-base">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+        <div><span class="font-semibold">Name:</span> {{ user.displayName }}</div>
+        <div><span class="font-semibold">E-Mail:</span> {{ user.email }}</div>
+        <div><span class="font-semibold">Rolle:</span> {{ 'Administrator' if user.is_admin else 'Benutzer' }}</div>
+        <div><span class="font-semibold">ID:</span> {{ user.id }}</div>
+        <div><span class="font-semibold">Position:</span> {{ user.position or '-' }}</div>
+        <div><span class="font-semibold">Firma:</span> {{ user.company or '-' }}</div>
+        <div><span class="font-semibold">Telefon:</span> {{ user.phone or '-' }}</div>
+        <div><span class="font-semibold">Mobil:</span> {{ user.mobile or '-' }}</div>
+        <div class="sm:col-span-2">
+          <span class="font-semibold">Adresse:</span>
+          {{ user.address.street or '-' }},
+          {{ user.address.zip or '-' }} {{ user.address.city or '-' }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 text-right">
+      <button
+        class="inline-flex items-center justify-center px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primaryHover transition focus:outline-none"
+        @click="open = false"
+      >
+        Schließen
+      </button>
+    </div>
+  </div>
+</div>

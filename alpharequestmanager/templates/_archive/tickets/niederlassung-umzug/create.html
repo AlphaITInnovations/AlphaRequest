@@ -1,0 +1,287 @@
+{% extends "tickets/_base_ticket.html" %}
+
+{% set form_action = "/tickets" %}
+{% set alpine_component = "niederlassungumzugPhase1Form()" %}
+
+{% block hidden_fields %}
+<input type="hidden" name="ticket_type" value="niederlassung-umzug">
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
+
+{% block ticket_fields %}
+  {% include "tickets/niederlassung-umzug/_form_fields.html" %}
+{% endblock %}
+
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function niederlassungumzugPhase1Form() {
+  return {
+
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    confirmCreateOpen: false,
+
+    /* =================================================
+       DATA
+    ================================================= */
+    companies: [],
+
+    /* -------- MIETE ALT -------- */
+    miete_alt: {
+      location: "",
+      company: "",
+      lease_action: "",
+      lease_cancel_date: "",
+      lease_keep_reason: ""
+    },
+
+    /* -------- MIETE NEU -------- */
+    miete_neu: {
+      location: "",
+      company: "",
+      sign_visible: "",
+      reopening: "",
+      cost_center: "",
+      start_date: "",
+      address: "",
+
+      location_supervisor_id: "",
+      location_supervisor_name: "",
+
+      contact_person_id: "",
+      contact_person_name: ""
+    },
+
+    /* -------- IT ALT -------- */
+    it_alt: {
+      confirm_dsl_cancel: false,
+      confirm_landline_cancel: false,
+      network_hw_action: "",
+      network_hw_other: ""
+    },
+
+    /* -------- IT NEU -------- */
+    it_neu: {
+      server_rack: "",
+      network_cabling: "",
+      line_installed: "",
+      line_type: "",
+      line_location: "",
+      landlord_name: "",
+      landlord_contact: ""
+    },
+
+    /* -------- MARKETING -------- */
+    m: {
+      opening_hours: ""
+    },
+
+    /* -------- FUHRPARK -------- */
+    f: {
+      pool_cars: "",
+      pool_cars_from: ""
+    },
+
+
+    /* =================================================
+       VALIDATION RULES (PHASE 1)
+    ================================================= */
+    rules: {
+
+      /* MIETE ALT */
+      alt_location: { required: true },
+      alt_company: { required: true },
+      alt_lease_action: { required: true },
+
+      alt_lease_cancel_date: {
+        requiredIf() {
+          return this.miete_alt.lease_action === "cancel";
+        }
+      },
+
+      alt_lease_keep_reason: {
+        requiredIf() {
+          return this.miete_alt.lease_action === "keep";
+        }
+      },
+
+      /* MIETE NEU */
+      new_location: { required: true },
+      new_company: { required: true },
+      new_sign_visible: { required: true },
+      new_reopening: { required: true },
+      new_cost_center: { required: true },
+      new_start_date: { required: true },
+      new_address: { required: true },
+
+      location_supervisor_id: { required: true },
+      contact_person_id: { required: true },
+
+      /* WORKFLOW */
+      accountable_id: { required: true }
+
+    },
+
+
+    /* =================================================
+       VALUE RESOLVER
+    ================================================= */
+    getValue(field) {
+
+      const dom = document.querySelector(`[name="${field}"]`)?.value
+      if (dom !== undefined && dom !== "") return dom
+
+      if (field === "alt_location") return this.miete_alt.location
+      if (field === "alt_company") return this.miete_alt.company
+      if (field === "alt_lease_action") return this.miete_alt.lease_action
+      if (field === "alt_lease_cancel_date") return this.miete_alt.lease_cancel_date
+      if (field === "alt_lease_keep_reason") return this.miete_alt.lease_keep_reason
+
+      if (field === "new_location") return this.miete_neu.location
+      if (field === "new_company") return this.miete_neu.company
+      if (field === "new_sign_visible") return this.miete_neu.sign_visible
+      if (field === "new_reopening") return this.miete_neu.reopening
+      if (field === "new_cost_center") return this.miete_neu.cost_center
+      if (field === "new_start_date") return this.miete_neu.start_date
+      if (field === "new_address") return this.miete_neu.address
+
+      if (field === "location_supervisor_id") return this.miete_neu.location_supervisor_id
+      if (field === "contact_person_id") return this.miete_neu.contact_person_id
+
+      return ""
+    },
+
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+
+      try {
+        const res = await fetch("/api/companies")
+        const data = await res.json()
+        this.companies = data.companies || []
+      } catch {
+        this.companies = []
+      }
+
+      /* USER DROPDOWN EVENTS */
+      this.$el.addEventListener("user-selected", (e) => {
+
+        const { fieldId, id, name } = e.detail
+
+        if (fieldId === "location_supervisor_id") {
+          this.miete_neu.location_supervisor_id = id
+          this.miete_neu.location_supervisor_name = name
+        }
+
+        if (fieldId === "contact_person_id") {
+          this.miete_neu.contact_person_id = id
+          this.miete_neu.contact_person_name = name
+        }
+
+      })
+
+    },
+
+
+    /* =================================================
+       CREATE FLOW
+    ================================================= */
+
+    openCreateConfirm() {
+
+      this.validationTriggered = false
+
+      this.$nextTick(() => {
+
+        if (!this.validateOrScroll()) return
+
+        this.confirmCreateOpen = true
+
+      })
+
+    },
+
+
+    confirmCreate() {
+
+      const accountableId =
+        document.querySelector('[name="accountable_id"]')?.value || ""
+
+      const accountableName =
+        document.querySelector('[name="accountable_name"]')?.value || ""
+
+      this.$refs.assigneeId.value = accountableId
+      this.$refs.assigneeName.value = accountableName
+
+
+      /* ===============================
+         USER DROPDOWNS (DOM FALLBACK)
+      =============================== */
+
+      const locationSupervisorId =
+        document.querySelector('[name="location_supervisor_id"]')?.value || ""
+
+      const locationSupervisorName =
+        document.querySelector('[name="location_supervisor_name"]')?.value || ""
+
+      const contactPersonId =
+        document.querySelector('[name="contact_person_id"]')?.value || ""
+
+      const contactPersonName =
+        document.querySelector('[name="contact_person_name"]')?.value || ""
+
+
+      this.miete_neu.location_supervisor_id = locationSupervisorId
+      this.miete_neu.location_supervisor_name = locationSupervisorName
+
+      this.miete_neu.contact_person_id = contactPersonId
+      this.miete_neu.contact_person_name = contactPersonName
+
+
+      /* ===============================
+         DESCRIPTION SERIALISIEREN
+      =============================== */
+
+      this.$refs.description.value = JSON.stringify(
+        {
+          miete_alt: this.miete_alt,
+          miete_neu: this.miete_neu,
+          it_alt: this.it_alt,
+          it_neu: this.it_neu,
+          marketing: this.m,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      )
+
+      this.confirmCreateOpen = false
+
+      const form = this.$el.closest("form")
+      if (!form) return
+
+      form.submit()
+    }
+
+  }
+}
+</script>
+{% endblock %}

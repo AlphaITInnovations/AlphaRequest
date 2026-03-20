@@ -1,0 +1,236 @@
+{% extends "tickets/_base_ticket.html" %}
+
+{% set form_action = "/tickets" %}
+{% set alpine_component = "hardwareCreateForm()" %}
+
+{% block hidden_fields %}
+<input type="hidden" name="ticket_type" value="hardware">
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
+
+{% block ticket_fields %}
+  {% include "tickets/hardware/_form_fields.html" %}
+{% endblock %}
+
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+function hardwareCreateForm() {
+  return {
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "create",
+    isCreate: true,
+    modalOpen: false,
+    confirmCreateOpen: false,
+
+    /* =================================================
+       DATA
+    ================================================= */
+    data: {
+      mitarbeiterTyp: "",
+
+      /* BASISDATEN (PFLICHT) */
+      vorname: "",
+      nachname: "",
+      kostenstelle: "",
+      firma: "",
+
+      addr_strasse: "",
+      addr_nr: "",
+      addr_plz: "",
+      addr_stadt: "",
+      addr_tuerschild: "",
+
+      lieferungBis: "",
+
+      /* HARDWARE */
+      monitor: { benoetigt: false, anzahl: 1 },
+      geraet: "",
+
+      artikel: {
+        Notebook: false,
+        MiniPC: false,
+        Dockingstation: false,
+        MausUndTastatur: false,
+        Headset: false,
+        Webcam: false,
+      Handy: false,
+      SIM: false
+      },
+
+      dockingVorhanden: false,
+      bemerkung: "",
+      grundBestellung: ""
+    },
+
+    /* =================================================
+       FIRMA
+    ================================================= */
+    companies: [],
+    companiesLoading: false,
+    companiesError: "",
+
+    /* =================================================
+       IMAGE PREVIEW
+    ================================================= */
+    hoverKey: null,
+    previewIdx: 0,
+    previewUrls: [],
+    imgMap: {
+      Monitor: ['Monitor.jpg','monitor.jpg'],
+      Notebook: ['Notebook.jpg','notebook.jpg'],
+      MiniPC: ['MiniPC.jpg','minipc.jpg'],
+      Dockingstation: ['Dockingstation.jpg','dockingstation.jpg'],
+      MausUndTastatur:['MausUndTastatur.jpg','mausundtastatur.jpg'],
+      Headset:['Headset.jpg','headset.jpg'],
+      Webcam:['Webcam.jpg','webcam.jpg'],
+      HandyUndSim:['HandyUndSim.jpg','handyundsim.jpg']
+    },
+
+    /* =================================================
+       VALIDATION
+    ================================================= */
+    rules: {
+      mitarbeiterTyp: { required: true },
+
+      vorname: { required: true },
+      nachname: { required: true },
+      kostenstelle: { required: true },
+      firma: { required: true },
+
+      addr_strasse: { required: true },
+      addr_nr: { required: true },
+      addr_plz: { required: true },
+      addr_stadt: { required: true },
+
+      lieferungBis: { required: true },
+
+      accountable_id: { required: true },
+    },
+
+    /* =================================================
+       VALUE RESOLVER
+    ================================================= */
+    getValue(field) {
+      if (field in this.data) return this.data[field];
+      return document.querySelector(`[name="${field}"]`)?.value ?? "";
+    },
+
+    /* =================================================
+       INIT
+    ================================================= */
+    async init() {
+      this.fetchCompanies();
+
+      this.$watch("data.mitarbeiterTyp", () => {
+        this.resetHardwareOnly();
+      });
+    },
+
+    async fetchCompanies() {
+      try {
+        const res = await fetch("/api/companies");
+        const data = await res.json();
+        this.companies = data.companies || [];
+      } catch {
+        this.companiesError = "Firmen konnten nicht geladen werden";
+      }
+    },
+
+    /* =================================================
+       IMAGE HOVER
+    ================================================= */
+    hover(key) {
+      this.hoverKey = key;
+
+      if (!key || !this.imgMap[key]) {
+        this.previewUrls = [];
+        return;
+      }
+
+      this.previewUrls = this.imgMap[key].map(f => `/static/${f}`);
+      this.previewIdx = 0;
+    },
+
+    /* =================================================
+       RESET HARDWARE
+    ================================================= */
+    resetHardwareOnly() {
+      this.data.monitor = { benoetigt: false, anzahl: 1 };
+      this.data.geraet = "";
+
+      this.data.artikel = {
+        Notebook:false, MiniPC:false, Dockingstation:false,
+        MausUndTastatur:false, Headset:false, Webcam:false,   Handy:false, SIM:false
+      };
+
+      this.data.dockingVorhanden = false;
+      this.data.bemerkung = "";
+      this.data.grundBestellung = "";
+
+      this.previewUrls = [];
+      this.hoverKey = null;
+    },
+
+    /* =================================================
+       CREATE FLOW (JETZT WIE ZUGANG)
+    ================================================= */
+    openCreateConfirm() {
+
+      this.validationTriggered = false;
+
+      this.$nextTick(() => {
+        if (!this.validateOrScroll()) return;
+        this.confirmCreateOpen = true;
+      });
+
+    },
+
+    confirmCreate() {
+
+      /* Verantwortlichen setzen */
+      const accountableId =
+        document.querySelector('[name="accountable_id"]')?.value || "";
+
+      const accountableName =
+        document.querySelector('[name="accountable_name"]')?.value || "";
+
+      this.$refs.assigneeId.value = accountableId;
+      this.$refs.assigneeName.value = accountableName;
+
+      /* JSON serialisieren */
+      this.$refs.description.value = JSON.stringify(
+        {
+          hardware: this.data
+        },
+        null,
+        2
+      );
+
+      this.confirmCreateOpen = false;
+
+      const form = this.$el.closest("form");
+      if (!form) return;
+
+      form.submit();
+    }
+
+  };
+}
+</script>
+{% endblock %}

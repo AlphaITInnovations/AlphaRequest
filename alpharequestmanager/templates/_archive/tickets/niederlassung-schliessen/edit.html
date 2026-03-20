@@ -1,0 +1,245 @@
+{% extends "tickets/_base_ticket.html" %}
+{% block title %}Auftrag bearbeiten – {{ ticket.title }}{% endblock %}
+
+{% set form_action = "/tickets/update/" ~ ticket.id %}
+{% set alpine_component = "niederlassungSchliessenEditForm()" %}
+
+{% block hidden_fields %}
+<input type="hidden" name="description" x-ref="description">
+{% endblock %}
+
+{% block ticket_details %}
+  {% include "tickets/partials/_ticket_details.html" %}
+{% endblock %}
+
+{% block ticket_fields %}
+  {% include "tickets/niederlassung-schliessen/_form_fields.html" %}
+{% endblock %}
+
+{% block ticket_actions %}
+  {% include "tickets/partials/_ticket_actions.html" %}
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+function niederlassungSchliessenEditForm() {
+  return {
+
+    /* =================================================
+       BASE FORM
+    ================================================= */
+    ...baseForm(),
+
+    /* =================================================
+       MODE
+    ================================================= */
+    phase: "edit",
+    isCreate: false,
+
+    confirmCompleteOpen: false,
+    pendingAction: null,
+    pendingEvent: null,
+
+    openAssignModal: false,
+    assigneeMode: "accountable",
+    currentAssigneeName: "{{ ticket.assignee_name }}",
+
+
+    /* =================================================
+       DATA (PREFILL)
+    ================================================= */
+
+    /* -------- PERSONAL / HR -------- */
+    p: {
+      location: "",
+      address: "",
+      closing_date: "",
+      ...{{ description.personal | default({}) | tojson | safe }}
+    },
+
+    /* -------- IT -------- */
+    it: {
+      hardware_action: "",
+      transfer_target: "",
+      confirm_dsl_cancel: "",
+      confirm_landline_cancel: "",
+      ...{{ description.it | default({}) | tojson | safe }}
+    },
+
+    /* -------- FUHRPARK -------- */
+    f: {
+      pool_cars: "",
+      return_date: "",
+      ...{{ description.fuhrpark | default({}) | tojson | safe }}
+    },
+
+
+    /* =================================================
+       VALIDATION RULES
+    ================================================= */
+    rules: {
+
+      /* PERSONAL */
+      location: { required: true },
+      address: { required: true },
+      closing_date: { required: true },
+
+      /* IT */
+      hardware_action: { required: true },
+
+      transfer_target: {
+        requiredIf() {
+          return this.it.hardware_action === "transfer_branch";
+        }
+      },
+
+      confirm_dsl_cancel: { required: true },
+      confirm_landline_cancel: { required: true },
+
+      /* FUHRPARK */
+      pool_cars: { required: true },
+
+      return_date: {
+        requiredIf() {
+          return this.f.pool_cars === "Ja";
+        }
+      },
+
+      /* WORKFLOW */
+      accountable_id: { required: true }
+
+    },
+
+
+    /* =================================================
+       VALUE RESOLVER
+    ================================================= */
+    getValue(field) {
+
+      /* DOM FIRST */
+      const dom = document.querySelector(`[name="${field}"]`)?.value
+      if (dom !== undefined && dom !== "") return dom
+
+      if (field in this.p) return this.p[field]
+      if (field in this.it) return this.it[field]
+      if (field in this.f) return this.f[field]
+
+      return ""
+    },
+
+
+    /* =================================================
+       INIT
+    ================================================= */
+    init() {
+
+      this.$refs.assigneeId.value = "{{ ticket.assignee_id }}"
+      this.$refs.assigneeName.value = "{{ ticket.assignee_name }}"
+
+      this.updateDescription()
+      this.validationTriggered = false
+
+    },
+
+
+    /* =================================================
+       DESCRIPTION SYNC
+    ================================================= */
+    updateDescription() {
+
+      this.$refs.description.value = JSON.stringify(
+        {
+          personal: this.p,
+          it: this.it,
+          fuhrpark: this.f
+        },
+        null,
+        2
+      )
+
+    },
+
+
+    /* =================================================
+       SUBMIT
+    ================================================= */
+    submitEdit(action = "save", event) {
+
+      if (action === "complete") {
+
+        if (!this.validateOrScroll()) return
+
+        this.pendingAction = action
+        this.pendingEvent = event
+
+        this.confirmCompleteOpen = true
+        return
+      }
+
+      this.performSubmit(action, event)
+
+    },
+
+
+    performSubmit(action = "save", event = null) {
+
+      this.updateDescription()
+
+      const form = event
+        ? event.target.closest("form")
+        : this.pendingEvent?.target.closest("form")
+
+      if (!form) return
+
+      const input = document.createElement("input")
+      input.type = "hidden"
+      input.name = "action"
+      input.value = action
+
+      form.appendChild(input)
+
+      form.submit()
+
+    },
+
+
+    /* =================================================
+       WEITERGEBEN
+    ================================================= */
+    applyAssignee() {
+
+      let id = null
+      let name = null
+
+      if (this.assigneeMode === "accountable") {
+        id = document.querySelector('[name="accountable_id"]')?.value
+        name = document.querySelector('[name="accountable_name"]')?.value
+      }
+
+      if (this.assigneeMode === "supervisor") {
+        id = document.querySelector('[name="supervisor_id"]')?.value
+        name = document.querySelector('[name="supervisor_name"]')?.value
+      }
+
+      if (this.assigneeMode === "custom") {
+        id = document.querySelector('[name="custom_assignee_id"]')?.value
+        name = document.querySelector('[name="custom_assignee_name"]')?.value
+      }
+
+      if (!id) {
+        alert("Bitte Bearbeiter auswählen")
+        return
+      }
+
+      this.$refs.assigneeId.value = id
+      this.$refs.assigneeName.value = name
+      this.currentAssigneeName = name
+      this.openAssignModal = false
+
+    }
+
+  }
+}
+</script>
+{% endblock %}
