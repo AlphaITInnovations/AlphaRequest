@@ -7,6 +7,11 @@ import fs from 'node:fs'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_BACKEND_URL ?? 'https://ai-ms-01.dom.local:5000'
+  const isDev = mode === 'development'
+
+  const httpsConfig = isDev && fs.existsSync('../data/cert/key.pem')
+    ? { key: fs.readFileSync('../data/cert/key.pem'), cert: fs.readFileSync('../data/cert/cert.pem') }
+    : undefined
 
   return {
     plugins: [vue(), tailwindcss()],
@@ -17,14 +22,8 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: '0.0.0.0',
-      https: {
-        key:  fs.readFileSync('../data/cert/key.pem'),
-        cert: fs.readFileSync('../data/cert/cert.pem'),
-      },
-      hmr: {
-        host: 'ai-ms-01.dom.local',
-        port: 5173,
-      },
+      https: httpsConfig,
+      hmr: isDev ? { host: 'ai-ms-01.dom.local', port: 5173 } : undefined,
       proxy: {
         '/api':        { target: backendUrl, changeOrigin: true, secure: false },
         '/logout':     { target: backendUrl, changeOrigin: true, secure: false },
