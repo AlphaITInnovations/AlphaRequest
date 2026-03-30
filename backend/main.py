@@ -9,8 +9,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.datastructures import State
 from backend.api.v1 import tickets as tickets_v1
 from backend.api.v1 import auth as auth_v1
-from core.app_lifespan import lifespan
-from core.session import setup_session
+from backend.core.app_lifespan import lifespan
+from backend.core.session import setup_session
 from database import init_db
 from models.models import TicketType
 from metrics.metrics import init_metrics
