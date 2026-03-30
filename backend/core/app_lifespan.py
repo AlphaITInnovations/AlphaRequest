@@ -9,14 +9,17 @@ from backend.utils.logger import logger
 from backend.services import ninja_sync
 
 
+EXCLUDED_USERS = {"Administrator AlphaConsult", "CodeTwo Admin"}
+
 async def sync_users_into_cache(app):
     logger.info("🔄 Syncing AD user list…")
 
     token = acquire_app_token()
     access = token["access_token"]
 
-    #users = await list_all_users_appcontext(access)
     users = await list_all_users_with_e3_license(access)
+
+    users = [u for u in users if u.get("displayName") not in EXCLUDED_USERS]
 
     app.state.user_cache = users
     app.state.user_cache_timestamp = time.time()
