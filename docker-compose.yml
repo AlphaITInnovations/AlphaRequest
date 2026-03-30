@@ -19,6 +19,7 @@ services:
       - backend
     networks:
       - web
+      - dokploy-network
 
 networks:
   web:
