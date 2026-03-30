@@ -8,16 +8,26 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-    - name: Trigger Dokploy 1
-      run: |
-        curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/FLRGusi--QdRevMwRJV6u \
-          -H "Content-Type: application/json" \
-          -H "X-GitHub-Event: push" \
-          -d '{ ... }'
-
-    - name: Trigger Dokploy 2
-      run: |
-        curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/ttIhpb2X8TDnwloJT6Fz6 \
-          -H "Content-Type: application/json" \
-          -H "X-GitHub-Event: push" \
-          -d '{ ... }'
+      - name: Trigger Dokploy (GitHub-style)
+        run: |
+          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/FLRGusi--QdRevMwRJV6u \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d '{
+              "ref": "refs/heads/main",
+              "repository": {
+                "full_name": "AlphaITInnovations/AlphaRequestManager"
+              }
+            }'
+      - name: Trigger Dokploy2 (GitHub-style)
+        run: |
+          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/ttIhpb2X8TDnwloJT6Fz6 \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d '{
+              "ref": "refs/heads/main",
+              "repository": {
+                "full_name": "AlphaITInnovations/AlphaRequestManager"
+              }
+            }'
+          
