@@ -8,7 +8,6 @@ services:
     env_file: .env
     networks:
       - web
-      - dokploy-network
 
   frontend:
     build:
