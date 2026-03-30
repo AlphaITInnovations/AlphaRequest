@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { watch } from 'vue'
-import UserSelect from '@/components/UserSelect.vue'
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import type { useHardware, Phase } from '@/composables/useHardware'

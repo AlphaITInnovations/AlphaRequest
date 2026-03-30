@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import UserSelect from '@/components/UserSelect.vue'
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import type { useZugangSperren, Phase } from '@/composables/useZugangSperren'
