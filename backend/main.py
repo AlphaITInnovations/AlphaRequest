@@ -12,11 +12,11 @@ from backend.api.v1 import auth as auth_v1
 from backend.core.app_lifespan import lifespan
 from backend.core.session import setup_session
 from backend.database import init_db
-from models.models import TicketType
-from metrics.metrics import init_metrics
-from services.personalnummer_generator import init_personalnummer
-from services.ticket_service import TicketService
-from utils.config import config
+from backend.models.models import TicketType
+from backend.metrics.metrics import init_metrics
+from backend.services.personalnummer_generator import init_personalnummer
+from backend.services.ticket_service import TicketService
+from backend.utils.config import config
 from backend.api.v1 import dashboard as dashboard_v1
 from backend.api.v1 import users as users_v1
 from backend.api.v1 import companies as companies_v1
