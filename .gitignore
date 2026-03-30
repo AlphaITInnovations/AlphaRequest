@@ -8,5 +8,4 @@ backend/tickets.db
 .env
 data
 /backend/templates/modals/old/
-
 backend/logs/
