@@ -36,6 +36,7 @@ const ticketTypes = [
   { key: 'niederlassung-anmelden',   icon: '🏢', label: 'Niederlassung anmelden' },
   { key: 'niederlassung-umzug',      icon: '🔄', label: 'Niederlassung umziehen' },
   { key: 'niederlassung-schliessen', icon: '❌', label: 'Niederlassung schließen' },
+  { key: 'marketing-stellenanzeige', icon: '📄', label: 'Stellenanzeige' },
 ]
 
 // Erlaubte Typen aus der Backend-Antwort – konsistent mit can_user_create_ticket serverseitig

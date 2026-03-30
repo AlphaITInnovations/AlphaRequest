@@ -3,10 +3,10 @@
 __pycache__
 tickets.db
 .idea
-alpharequestmanager/tickets.db
+backend/tickets.db
 .venv
 .env
 data
-/alpharequestmanager/templates/modals/old/
+/backend/templates/modals/old/
 
-alpharequestmanager/logs/
+backend/logs/

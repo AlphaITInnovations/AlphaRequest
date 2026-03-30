@@ -7,6 +7,7 @@ export type TicketType =
   | 'niederlassung-umzug'
   | 'zugang-beantragen'
   | 'zugang-sperren'
+  | 'marketing-stellenanzeige'
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 

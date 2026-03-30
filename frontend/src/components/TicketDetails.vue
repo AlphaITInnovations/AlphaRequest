@@ -7,8 +7,7 @@ const props = defineProps<{
   priority?: TicketPriority
   comment?: string
   accountable?: { id: string; name: string } | null
-  accountableName?: string
-  accountableError?: boolean   // ← neu: zeigt Fehler an
+  accountableError?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,21 +30,8 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
 
     <!-- ── Verantwortlicher ── -->
     <div>
-      <!-- Edit: nur anzeigen, nicht änderbar -->
-      <template v-if="phase === 'edit'">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-          Verantwortlicher
-        </label>
-        <div class="w-full rounded-xl border border-gray-200 dark:border-white/10
-                    bg-gray-50 dark:bg-[#263040]
-                    text-gray-700 dark:text-gray-300
-                    px-3.5 py-2.5 text-sm">
-          {{ accountableName ?? '–' }}
-        </div>
-      </template>
-
       <!-- Create: UserSelect -->
-      <template v-else-if="phase === 'create'">
+      <template v-if="phase === 'create'">
         <div :class="accountableError ? 'ring-1 ring-red-400 rounded-xl' : ''">
           <UserSelect
             label="Verantwortlicher *"
@@ -58,14 +44,17 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
         </p>
       </template>
 
-      <!-- View: nur Text -->
+      <!-- Edit & View: read-only anzeigen -->
       <template v-else>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
           Verantwortlicher
         </label>
-        <p class="text-sm text-gray-900 dark:text-gray-100">
-          {{ accountableName ?? '–' }}
-        </p>
+        <div class="w-full rounded-xl border border-gray-200 dark:border-white/10
+                    bg-gray-50 dark:bg-[#263040]
+                    text-gray-700 dark:text-gray-300
+                    px-3.5 py-2.5 text-sm">
+          {{ accountable?.name ?? '–' }}
+        </div>
       </template>
     </div>
 

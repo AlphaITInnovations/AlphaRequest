@@ -152,6 +152,29 @@ const router = createRouter({
       path: '/:pathMatch(.*)*',
       redirect: '/dashboard',
     },
+
+    // ── Marketing Stellenanzeige ───────────────────────────────────────────────
+    {
+      path: '/tickets/new/marketing-stellenanzeige',
+      component: () => import('@/views/tickets/MarketingStelleCreateView.vue'),
+      meta: { requiresAuth: true, requiresTicketType: 'marketing-stellenanzeige' },
+    },
+    {
+      path: '/tickets/edit/marketing-stellenanzeige/:id',
+      component: () => import('@/views/tickets/MarketingStelleEditView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/tickets/group/marketing-stellenanzeige/:id',
+      component: () => import('@/views/tickets/MarketingStelleViewView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/backend-down',
+      component: () => import('@/views/BackendDownView.vue'),
+      meta: { requiresAuth: false },
+    },
+      
   ],
 })
 

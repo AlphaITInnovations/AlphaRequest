@@ -50,14 +50,6 @@ const selectClass = (path: string) =>
             @update:accountable="form.accountable = $event"
           />
 
-          <!-- Assignee (edit only) -->
-          <div v-if="phase === 'edit'" class="mt-5">
-            <UserSelect
-              label="Verantwortlicher (Bearbeitung)"
-              :model-value="form.assignee"
-              @update:model-value="form.assignee = $event"
-            />
-          </div>
         </div>
       </aside>
 

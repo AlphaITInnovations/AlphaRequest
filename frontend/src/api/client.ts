@@ -12,7 +12,6 @@ export function setupInterceptors(router: import('vue-router').Router) {
     err => {
       const status = err.response?.status
       if (status === 401 || status === 403) {
-        // Nicht nochmal pushen wenn wir schon auf /login sind
         if (router.currentRoute.value.path !== '/login') {
           router.push('/login')
         }
@@ -22,6 +21,15 @@ export function setupInterceptors(router: import('vue-router').Router) {
   )
 }
 
-
-
-
+/** Gibt true zurück wenn das Backend erreichbar ist */
+export async function checkBackendHealth(): Promise<boolean> {
+  try {
+    const res = await axios.get('/api/v1/health', {
+      withCredentials: true,
+      timeout: 3000,
+    })
+    return res.status === 200
+  } catch {
+    return false
+  }
+}

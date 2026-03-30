@@ -20,11 +20,13 @@ defineProps<{ title?: string }>()
 <template>
   <div class="flex min-h-screen bg-gray-100 dark:bg-[#1A2130] font-sans transition-colors duration-200">
 
-    <!-- ── Sidebar ── -->
+
+<!-- ── Sidebar ── -->
     <aside
       :class="sidebarOpen ? 'w-64' : 'w-[72px]'"
       class="hidden md:flex flex-col flex-shrink-0 m-3 rounded-2xl
-             bg-[#3EAAB8] text-white shadow-lg transition-all duration-300 overflow-hidden"
+             bg-[#3EAAB8] text-white shadow-lg transition-all duration-300 overflow-hidden
+             sticky top-3 h-[calc(100vh-1.5rem)]"
     >
       <!-- Brand -->
       <div class="flex items-center justify-between px-4 py-4 border-b border-white/15 min-h-[64px]">
