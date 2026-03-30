@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.datastructures import State
-from api.v1 import tickets as tickets_v1
-from api.v1 import auth as auth_v1
+from backend.api.v1 import tickets as tickets_v1
+from backend.api.v1 import auth as auth_v1
 from core.app_lifespan import lifespan
 from core.session import setup_session
 from database import init_db
@@ -17,13 +17,13 @@ from metrics.metrics import init_metrics
 from services.personalnummer_generator import init_personalnummer
 from services.ticket_service import TicketService
 from utils.config import config
-from api.v1 import dashboard as dashboard_v1
-from api.v1 import users as users_v1
-from api.v1 import companies as companies_v1
-from api.v1 import personalnummer as personalnummer_v1
-from api.v1 import ticket_view as ticket_view_v1
-from api.v1 import settings as settings_v1
-from api.v1 import ticket_overview as ticket_overview_v1
+from backend.api.v1 import dashboard as dashboard_v1
+from backend.api.v1 import users as users_v1
+from backend.api.v1 import companies as companies_v1
+from backend.api.v1 import personalnummer as personalnummer_v1
+from backend.api.v1 import ticket_view as ticket_view_v1
+from backend.api.v1 import settings as settings_v1
+from backend.api.v1 import ticket_overview as ticket_overview_v1
 
 
 def get_ticket_type_dict():
