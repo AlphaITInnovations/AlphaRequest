@@ -13,4 +13,4 @@ COPY backend/ ./backend/
 
 EXPOSE 5000
 
-CMD ["python", "-m", "backend.main"]
+CMD ["python", "-c", "from backend.main import main; main()"]
