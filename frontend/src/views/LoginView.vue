@@ -17,7 +17,7 @@ function startAuth() {
       </h1>
 
       <p class="text-center text-sm text-gray-600 dark:text-gray-300 mb-6">
-        Bitte melden Sie sich mit Ihrem Microsoft-Konto an.
+        Bitte melden Sie sich mit Ihrem Microsoft-Konto an...
       </p>
 
       <button
