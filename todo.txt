@@ -1,11 +1,4 @@
 TODO:
-angemeldete benutzer name
-favicon geht im dokploy nicht
-auftragsübersicht verbessern
-auftragsübersciht unterscheiden zwischen read only und löschen berechtigt
-ticket genaue historie also wer wann was geändert hat
-speichern abschließen knopf
-
 
 
 TODO Technische Überlegungen:

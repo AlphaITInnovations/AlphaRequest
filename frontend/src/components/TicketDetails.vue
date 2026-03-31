@@ -2,6 +2,11 @@
 import UserSelect from '@/components/UserSelect.vue'
 import type { TicketPriority } from '@/types/ticket'
 
+// ── DEV: auf false setzen um das echte UserSelect zu verwenden ──
+const DEV_MOCK_USER = true
+const DEV_USER = { id: 'd5b75d5f-bb6c-4553-b46e-13ffad7ef910', name: 'Monika Gericke-Müller' }
+// ───────────────────────────────────────────────────────────────
+
 const props = defineProps<{
   phase: 'create' | 'edit' | 'view'
   priority?: TicketPriority
@@ -30,21 +35,43 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
 
     <!-- ── Verantwortlicher ── -->
     <div>
-      <!-- Create: UserSelect -->
       <template v-if="phase === 'create'">
-        <div :class="accountableError ? 'ring-1 ring-red-400 rounded-xl' : ''">
-          <UserSelect
-            label="Verantwortlicher *"
-            :model-value="accountable"
-            @update:model-value="emit('update:accountable', $event)"
-          />
-        </div>
-        <p v-if="accountableError" class="mt-1 text-xs text-red-500">
-          Pflichtfeld – bitte einen Verantwortlichen auswählen.
-        </p>
+
+       <!-- DEV: fixer Benutzer -->
+        <template v-if="DEV_MOCK_USER">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            Verantwortlicher *
+          </label>
+          <select
+            @change="emit('update:accountable', ($event.target as HTMLSelectElement).value ? DEV_USER : null)"
+            class="w-full rounded-xl border border-gray-200 dark:border-white/10
+                   bg-white dark:bg-[#263040]
+                   text-gray-900 dark:text-gray-100
+                   px-3.5 py-2.5 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition"
+          >
+            <option value="">– Bitte wählen –</option>
+            <option :value="DEV_USER.id">{{ DEV_USER.name }}</option>
+          </select>
+        </template>
+
+        <!-- PROD: echtes UserSelect -->
+        <template v-else>
+          <div :class="accountableError ? 'ring-1 ring-red-400 rounded-xl' : ''">
+            <UserSelect
+              label="Verantwortlicher *"
+              :model-value="accountable"
+              @update:model-value="emit('update:accountable', $event)"
+            />
+          </div>
+          <p v-if="accountableError" class="mt-1 text-xs text-red-500">
+            Pflichtfeld – bitte einen Verantwortlichen auswählen.
+          </p>
+        </template>
+
       </template>
 
-      <!-- Edit & View: read-only anzeigen -->
+      <!-- Edit & View: read-only -->
       <template v-else>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
           Verantwortlicher
