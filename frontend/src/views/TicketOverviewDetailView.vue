@@ -29,14 +29,7 @@ const DEPT_CLASS: Record<string, string> = {
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
   skipped:     'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
 }
-const ACTION_LABEL: Record<string, string> = {
-  ticket_created:         '📝 Ticket erstellt',
-  ticket_updated:         '✏️ Ticket bearbeitet',
-  ticket_submitted:       '📤 An Fachabteilungen übergeben',
-  department_done:        '✅ Fachabteilung erledigt',
-  ticket_archived:        '📦 Ticket archiviert',
-  ticket_archived_manual: '📦 Manuell archiviert',
-}
+
 
 function formatDate(ts: string) {
   if (!ts) return '—'
