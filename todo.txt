@@ -3,5 +3,3 @@ TODO:
 
 TODO Technische Überlegungen:
 - ninja api key user
-- was wenn 2 leute parallel ein ticket speichern? -> evtl ticket sperren wenn in bearbeitung
-- Settings Page redesignen (dropdown reuse etc)
