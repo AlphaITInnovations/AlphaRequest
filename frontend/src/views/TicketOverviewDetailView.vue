@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
+import TicketHistoryTimeline from "@/views/TicketHistoryTimeline.vue";
 
 const route  = useRoute()
 const router = useRouter()
@@ -164,30 +165,10 @@ onMounted(async () => {
             <p v-else class="text-sm text-gray-400 italic">Keine Auftragsdaten vorhanden.</p>
           </div>
 
+
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-6 xl:sticky xl:top-4 max-h-[75vh] overflow-auto">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5">Verlauf</h2>
-            <ol v-if="data.history.length > 0"
-                class="relative border-l border-gray-200 dark:border-white/[0.09] pl-5 space-y-5">
-              <li v-for="e in data.history" :key="e.timestamp" class="relative">
-                <span class="absolute -left-[17px] top-1 w-3 h-3 rounded-full bg-[#3EAAB8]"/>
-                <div class="bg-gray-50 dark:bg-[#1A2130] rounded-xl p-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <p class="text-sm font-medium text-gray-900 dark:text-white">
-                      {{ ACTION_LABEL[e.action] ?? e.action }}
-                      <span v-if="e.action === 'department_done' && e.details?.department_name">
-                        – {{ e.details.department_name }}
-                      </span>
-                    </p>
-                    <span class="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
-                      {{ e.actor.name }}
-                    </span>
-                  </div>
-                  <p class="text-xs text-gray-400 mt-1">{{ formatDate(e.timestamp) }}</p>
-                </div>
-              </li>
-            </ol>
-            <p v-else class="text-sm text-gray-400 italic">Kein Verlauf vorhanden.</p>
+            <TicketHistoryTimeline :history="data.history" />
           </div>
 
         </section>

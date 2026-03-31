@@ -8,16 +8,15 @@ def add_history_event(
     *,
     actor_id: str | None,
     actor_name: str,
-    actor_type: str = "user",  # user | system
+    actor_type: str = "user",  # "user" | "system"
     action: str,
     details: dict | None = None,
-):
+) -> None:
     ticket = get_ticket(ticket_id)
     if not ticket:
         return
 
     history = ticket.history_parsed
-    print("before:", history)
     history.append({
         "timestamp": datetime.utcnow().isoformat(),
         "actor": {
@@ -28,11 +27,29 @@ def add_history_event(
         "action": action,
         "details": details or {},
     })
-    print("after:", history)
+
     update_ticket(
         ticket_id=ticket_id,
         history=json.dumps(history, ensure_ascii=False),
     )
+
+
+def add_field_change_events(
+    ticket_id: int,
+    *,
+    actor_id: str | None,
+    actor_name: str,
+    changes: dict,  # {"field": (old_value, new_value)}
+) -> None:
+    """Schreibt pro geändertem Feld ein eigenes History-Event."""
+    for field, (old_val, new_val) in changes.items():
+        add_history_event(
+            ticket_id,
+            actor_id=actor_id,
+            actor_name=actor_name,
+            action=f"{field}_changed",
+            details={"field": field, "old_value": old_val, "new_value": new_val},
+        )
 
 
 def get_ticket_history(ticket_id: int) -> list[dict]:
@@ -40,17 +57,8 @@ def get_ticket_history(ticket_id: int) -> list[dict]:
     if not ticket:
         return []
 
-    history = ticket.history_parsed or []
-
+    history = ticket.history_parsed
     if not isinstance(history, list):
         return []
 
-    try:
-        history = sorted(
-            history,
-            key=lambda x: x.get("timestamp", "")
-        )
-    except Exception:
-        pass
-
-    return history
+    return sorted(history, key=lambda x: x.get("timestamp", ""))

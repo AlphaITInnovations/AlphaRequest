@@ -215,11 +215,15 @@ export function useNiederlassungAnmelden(phase: Phase, ticketId?: number) {
     }
   }
 
-  async function submitEdit(action: 'save' | 'complete') {
-    if (!validate() || !ticketId) return
-    if (action === 'complete') { pendingComplete.value = true; return }
-    await _performEdit('save')
+async function submitEdit(action: 'save' | 'complete') {
+  if (!ticketId) return
+  if (action === 'complete') {
+    if (!validate()) return
+    pendingComplete.value = true
+    return
   }
+  await _performEdit('save')
+}
 
   async function confirmComplete() {
     pendingComplete.value = false

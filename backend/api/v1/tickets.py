@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
 from backend.models.models import RequestStatus, TicketType
-from backend.services.ticket_history import add_history_event
+from backend.services.ticket_history import add_history_event, add_field_change_events
 from backend.services.microsoft_graph import get_cached_user_mail
 from backend.services.microsoft_mail import send_newrequest_mail, send_mail_to_all_fachabteilung
 from backend.services.ticket_permissions import can_user_create_ticket
@@ -22,93 +22,67 @@ from backend.utils.logger import logger
 
 router = APIRouter()
 
+
 def _user_can_delete_ticket(user: dict, ticket_id: int) -> bool:
     """Admins oder Besitzer dürfen löschen."""
     if user.get("is_admin", False):
         return True
-
     try:
         owned = database.list_tickets_by_owner(user["id"])
     except Exception:
         logger.exception("Konnte Tickets des Users nicht laden")
         return False
-
     return any(t.id == ticket_id for t in owned)
 
 
 def generate_title(ticket_type, user):
-    # Titel generieren
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-
     if ticket_type == TicketType.zugang_beantragen:
         label = "Onboarding Mitarbeiter:innen"
     elif ticket_type == TicketType.zugang_sperren:
         label = "Offboarding Mitarbeiter:innen"
     else:
         label = TICKET_LABELS.get(ticket_type, ticket_type.value)
-
-    generated_title = f"{label} – {now_str}"
-
-    return generated_title
+    return f"{label} – {now_str}"
 
 
 def validate_assignee(user_cache, assignee_id: str) -> bool:
     if not assignee_id:
         return False
-    print(assignee_id)
     if assignee_id == "fachabteilung":
         return True
     return any(u.get("id") == assignee_id for u in user_cache)
 
 
 def complete_ticket_internal(ticket, request, user):
-    # Pflichtfelder prüfen
     if not ticket.priority:
         raise HTTPException(400, "Priorität fehlt")
-
     try:
         json.loads(ticket.description or "{}")
     except Exception:
         raise HTTPException(400, "Ticketbeschreibung ungültig")
 
     workflow = build_workflow(ticket)
-
     if not workflow or "departments" not in workflow:
         raise HTTPException(500, "Workflow konnte nicht erstellt werden")
-
-
 
     request.app.state.manager.update_ticket(
         ticket_id=ticket.id,
         status=RequestStatus.in_request,
     )
-
-    database.set_assignee(
-        ticket_id=ticket.id,
-        user_id = "fachabteilung",
-        user_name= "fachabteilung",
-    )
-
-    database.set_accountable(
-        ticket_id=ticket.id,
-        user_id="fachabteilung",
-        user_name="fachabteilung",
-    )
-
-
-
+    database.set_assignee(ticket_id=ticket.id, user_id="fachabteilung", user_name="fachabteilung")
+    database.set_accountable(ticket_id=ticket.id, user_id="fachabteilung", user_name="fachabteilung")
     set_workflow_state(ticket.id, workflow)
-
     send_mail_to_all_fachabteilung(workflow, ticket)
 
     logger.info(
         "Ticket %s in in_request überführt | Departments=%s",
         ticket.id,
-        list(workflow["departments"].keys())
+        list(workflow["departments"].keys()),
     )
 
 
-# ── Permission helpers ─────────────────────────────────────────────────────────
+# ── Permission helpers ────────────────────────────────────────────────────────
 
 def _require_admin(user: dict) -> dict:
     if PERM_ADMIN not in user.get("permissions", []):
@@ -187,7 +161,6 @@ async def create_ticket(
     if not can_user_create_ticket(data.ticket_type.value, user["id"]):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                         f"Kein Recht zum Erstellen von '{data.ticket_type.value}'-Tickets")
-
     if not validate_assignee(request.app.state.user_cache, data.assignee_id):
         raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
                         f"Unbekannter Assignee '{data.assignee_id}'")
@@ -212,8 +185,13 @@ async def create_ticket(
         accountable_name=data.accountable_name,
         priority=data.priority,
     )
-    add_history_event(ticket_id, actor_id=user["id"],
-                      actor_name=user["displayName"], action="ticket_created")
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_created",
+        details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
+    )
 
     mail_to = get_cached_user_mail(request.app, data.assignee_id)
     send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
@@ -231,28 +209,57 @@ async def update_ticket(
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
 
-    if data.assignee_id and not validate_assignee(
-        request.app.state.user_cache, data.assignee_id
-    ):
+    if data.assignee_id and not validate_assignee(request.app.state.user_cache, data.assignee_id):
         raise api_error(400, ErrorCode.INVALID_ASSIGNEE, "Unbekannter Assignee")
 
+    # --- Änderungen tracken (old → new) ---
+    changes = {}
+
+    if data.priority is not None and data.priority != ticket.priority:
+        changes["priority"] = {"old": ticket.priority.value, "new": data.priority.value}
+
+    if data.comment is not None:
+        stripped = data.comment.strip()
+        if stripped != ticket.comment:
+            changes["comment"] = {"old": ticket.comment, "new": stripped}
+
+    if data.description is not None and data.description != ticket.description:
+        try:
+            old_desc = json.loads(ticket.description) if ticket.description else {}
+            new_desc = json.loads(data.description)
+        except Exception:
+            old_desc, new_desc = ticket.description, data.description
+        changes["description"] = {"old": old_desc, "new": new_desc}
+
+    # --- DB Update ---
     updates = {k: v for k, v in {
         "description": data.description,
         "comment":     data.comment.strip() if data.comment else None,
-        "priority":    data.priority,
+        "priority":    data.priority.value if data.priority else None,
     }.items() if v is not None}
 
     if updates:
         database.update_ticket(ticket_id=ticket_id, **updates)
 
+    # --- Zuweisungen: nur bei in_progress änderbar ---
     if ticket.status == RequestStatus.in_progress:
         if data.assignee_id and ticket.assignee_id != data.assignee_id:
+            changes["assignee"] = {"old": ticket.assignee_name, "new": data.assignee_name or data.assignee_id}
             database.set_assignee(ticket_id, data.assignee_id, data.assignee_name or "")
+
         if data.accountable_id and ticket.accountable_id != data.accountable_id:
+            changes["accountable"] = {"old": ticket.accountable_name, "new": data.accountable_name or data.accountable_id}
             database.set_accountable(ticket_id, data.accountable_id, data.accountable_name or "")
 
-    add_history_event(ticket_id, actor_id=user["id"],
-                      actor_name=user["displayName"], action="ticket_updated")
+    # --- Ein gebündeltes History-Event für alle Änderungen ---
+    if changes:
+        add_history_event(
+            ticket_id,
+            actor_id=user["id"],
+            actor_name=user["displayName"],
+            action="ticket_updated",
+            details={"changes": changes},
+        )
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
@@ -267,8 +274,13 @@ async def submit_ticket(
     _assert_ticket_access(ticket, user)
 
     complete_ticket_internal(ticket, request, user)
-    add_history_event(ticket_id, actor_id=user["id"],
-                      actor_name=user["displayName"], action="ticket_submitted")
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_submitted",
+        details={"status_new": RequestStatus.in_request.value},
+    )
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
@@ -309,11 +321,18 @@ def archive_ticket(
 ):
     _require_manage(user)
     ticket = _get_ticket_or_404(ticket_id)
-    request.app.state.manager.update_ticket(ticket_id=ticket.id,
-                                             status=RequestStatus.archived)
-    add_history_event(ticket.id, actor_id=user["id"],
-                      actor_name=user["displayName"], action="ticket_archived_manual")
-
+    request.app.state.manager.update_ticket(ticket_id=ticket.id, status=RequestStatus.archived)
+    add_history_event(
+        ticket.id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="status_changed",
+        details={
+            "field": "status",
+            "old_value": ticket.status.value,
+            "new_value": RequestStatus.archived.value,
+        },
+    )
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
@@ -357,14 +376,31 @@ async def set_department_status(
                         "Erlaubte Werte: done, rejected, skipped")
 
     set_department_status(ticket_id, group_id, status)
-    add_history_event(ticket_id, actor_id=user["id"],
-                      actor_name=user["displayName"], action="department_done",
-                      details={"department_id": group_id,
-                               "department_name": get_group_name_from_id(group_id)})
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="department_status_changed",
+        details={
+            "department_id": group_id,
+            "department_name": get_group_name_from_id(group_id),
+            "new_value": status,
+        },
+    )
 
     if can_archive_ticket(ticket_id):
         database.update_ticket(ticket_id=ticket_id, status=RequestStatus.archived)
-        add_history_event(ticket_id, actor_id=None, actor_name="System",
-                          actor_type="system", action="ticket_archived")
+        add_history_event(
+            ticket_id,
+            actor_id=None,
+            actor_name="System",
+            actor_type="system",
+            action="status_changed",
+            details={
+                "field": "status",
+                "old_value": RequestStatus.in_request.value,
+                "new_value": RequestStatus.archived.value,
+            },
+        )
 
     return {"ok": True}
