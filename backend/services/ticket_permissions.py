@@ -1,7 +1,6 @@
 """
 Ticket-Erstellungsrechte werden als extra_permissions auf dem User gespeichert.
 Permission-Format: "create_<ticket_type>" z.B. "create_onboarding"
-Die Settings-Tabelle (TICKET_PERMISSIONS) wird nicht mehr verwendet.
 """
 
 from backend.database.users import (
@@ -10,6 +9,7 @@ from backend.database.users import (
     remove_extra_permission,
     get_user,
     set_extra_permissions,
+    upsert_user,
 )
 from backend.models.models import TicketType
 
@@ -95,15 +95,36 @@ def remove_user_ticket_permission(ticket_type: str, user_id: str) -> None:
     remove_extra_permission(user_id, _perm(ticket_type))
 
 
-def set_ticket_permissions_safe(payload: dict[str, list[str]]) -> None:
+def set_ticket_permissions_safe(
+    payload: dict[str, list[str]],
+    user_cache: list[dict] | None = None,
+) -> None:
     """
     Ersetzt für jeden übergebenen TicketType die erlaubten User komplett.
     Andere extra_permissions der User (z.B. "manage") bleiben unberührt.
+
+    user_cache: app.state.user_cache – wird benötigt um User die noch nie
+    eingeloggt waren automatisch in der DB anzulegen.
     """
     valid_types = {t.value for t in TicketType}
     all_users   = {u.microsoft_id: u for u in list_users()}
 
-    # Sammle gewünschten Zielzustand: user_id → set of create_* perms
+    # Unbekannte User-IDs aus dem Cache anlegen (noch nie eingeloggt)
+    if user_cache:
+        cache_by_id  = {u["id"]: u for u in user_cache}
+        all_user_ids = {uid for user_ids in payload.values() for uid in user_ids}
+
+        for user_id in all_user_ids:
+            if user_id not in all_users and user_id in cache_by_id:
+                u = cache_by_id[user_id]
+                upsert_user(
+                    microsoft_id=user_id,
+                    display_name=u.get("displayName", ""),
+                    email=u.get("mail") or u.get("userPrincipalName") or "",
+                )
+                all_users[user_id] = get_user(user_id)
+
+    # Zielzustand: user_id → gewünschte create_* permissions
     target: dict[str, set[str]] = {uid: set() for uid in all_users}
 
     for ticket_type, user_ids in payload.items():
@@ -116,9 +137,7 @@ def set_ticket_permissions_safe(payload: dict[str, list[str]]) -> None:
 
     # Für jeden User: create_* permissions auf Zielzustand bringen
     for user_id, user in all_users.items():
-        current_create = {
-            p for p in user.extra_permissions if p.startswith("create_")
-        }
+        current_create = {p for p in user.extra_permissions if p.startswith("create_")}
         desired_create = target[user_id]
 
         for perm in current_create - desired_create:

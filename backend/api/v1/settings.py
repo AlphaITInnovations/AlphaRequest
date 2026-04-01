@@ -258,10 +258,17 @@ def get_permissions(user: dict = Depends(get_current_user)):
 
 
 @router.put("/settings/permissions", response_model=DataResponse[PermissionsOut])
-def set_permissions(payload: PermissionsIn, user: dict = Depends(get_current_user)):
+def set_permissions(
+    payload: PermissionsIn,
+    request: Request,                          # ← neu
+    user: dict = Depends(get_current_user),
+):
     require_admin(user)
-    # Enum-Keys → strings für den Service
-    set_ticket_permissions_safe({k.value: v for k, v in payload.permissions.items()})
+    user_cache = getattr(request.app.state, "user_cache", [])
+    set_ticket_permissions_safe(
+        {k.value: v for k, v in payload.permissions.items()},
+        user_cache=user_cache,                 # ← neu
+    )
     return get_permissions(user)
 
 
