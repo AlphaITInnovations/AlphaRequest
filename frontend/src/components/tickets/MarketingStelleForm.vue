@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import UserSelect from '@/components/UserSelect.vue'
-import { GESELLSCHAFTEN, VORQUALIFIZIERUNG_OPTIONEN } from '@/composables/useMarketingStelle'
+import { VORQUALIFIZIERUNG_OPTIONEN } from '@/composables/useMarketingStelle'
 import type { useMarketingStelle, Phase } from '@/composables/useMarketingStelle'
 
 const props = defineProps<{
@@ -11,11 +11,10 @@ const props = defineProps<{
   phase: Phase
 }>()
 
-const { form, submitting, fieldClass, isInvalid, validationTriggered } = props.ctx
+const { form, companies, submitting, fieldClass, isInvalid, validationTriggered } = props.ctx
 
 const BESCHAEFTIGUNGSARTEN = ['Vollzeit', 'Teilzeit', 'Minijob', 'Befristet', 'Praktikum', 'Werkstudent']
 
-// Custom Vorqualifizierungsfragen
 const newCustomFrage = ref('')
 function addCustomFrage() {
   const v = newCustomFrage.value.trim()
@@ -104,21 +103,10 @@ const checkboxClass = (selected: boolean) =>
             </div>
             <div>
               <label class="label">Für welche Gesellschaft ist die Anzeige vorgesehen?{{ phase === 'edit' ? ' *' : '' }}</label>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1"
-                   :class="validationTriggered && phase === 'edit' && form.stelle.gesellschaften.length === 0
-                     ? 'ring-1 ring-red-400 rounded-xl p-2' : ''">
-                <label v-for="g in GESELLSCHAFTEN" :key="g"
-                       class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition text-sm"
-                       :class="form.stelle.gesellschaften.includes(g)
-                         ? 'ring-2 ring-[#3EAAB8] border-[#3EAAB8] bg-[#3EAAB8]/5 font-medium'
-                         : 'border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5'">
-                  <input type="checkbox" class="hidden" :value="g" v-model="form.stelle.gesellschaften" />
-                  <span :class="checkboxClass(form.stelle.gesellschaften.includes(g))">
-                    <span v-if="form.stelle.gesellschaften.includes(g)">✓</span>
-                  </span>
-                  {{ g }}
-                </label>
-              </div>
+              <select v-model="form.stelle.gesellschaft" :class="selectClass('stelle.gesellschaft')">
+                <option value="">Bitte wählen</option>
+                <option v-for="c in companies" :key="c">{{ c }}</option>
+              </select>
             </div>
           </div>
         </div>
@@ -250,7 +238,6 @@ const checkboxClass = (selected: boolean) =>
           <h2 class="section-title">🎯 Erstellung des Funnels</h2>
           <div class="space-y-5">
 
-            <!-- Standardfragen -->
             <div>
               <label class="label">Fragen zur Vorqualifizierung im Funnel</label>
               <p class="text-xs text-gray-400 mb-2">Mehrfachauswahl möglich</p>
@@ -269,10 +256,8 @@ const checkboxClass = (selected: boolean) =>
               </div>
             </div>
 
-            <!-- Custom Fragen -->
             <div>
               <label class="label">Eigene Vorqualifizierungsfragen (optional)</label>
-              <!-- Bestehende custom Fragen als Tags -->
               <div v-if="form.stelle.vorqualifizierung_custom.length" class="flex flex-wrap gap-2 mb-2">
                 <span v-for="(f, i) in form.stelle.vorqualifizierung_custom" :key="i"
                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm
@@ -282,7 +267,6 @@ const checkboxClass = (selected: boolean) =>
                           class="hover:text-red-500 transition text-base leading-none">&times;</button>
                 </span>
               </div>
-              <!-- Eingabe -->
               <div class="flex gap-2">
                 <input v-model="newCustomFrage"
                        @keydown.enter.prevent="addCustomFrage"
@@ -298,7 +282,6 @@ const checkboxClass = (selected: boolean) =>
               </div>
             </div>
 
-            <!-- FAQ -->
             <div>
               <label class="label">Häufige Bewerberfragen & Antworten (FAQ){{ phase === 'edit' ? ' *' : '' }}</label>
               <p class="text-xs text-gray-400 mb-1.5">Format: „Frage: … / Antwort: …", eine Zeile pro FAQ</p>
