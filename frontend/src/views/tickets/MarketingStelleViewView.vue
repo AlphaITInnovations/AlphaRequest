@@ -120,16 +120,10 @@ function goToEdit() {
             <h2 class="section-title">🏢 Niederlassung & Gesellschaft</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><p class="ro-label">Niederlassung</p><p class="ro-value">{{ s('niederlassung') }}</p></div>
-              <div class="md:col-span-2">
-                <p class="ro-label">Gesellschaft(en)</p>
-                <div class="flex flex-wrap gap-2 mt-1">
-                  <span v-for="g in sa('gesellschaften')" :key="g"
-                        class="px-2.5 py-1 rounded-lg text-xs font-medium
-                               bg-[#3EAAB8]/10 text-[#3EAAB8] border border-[#3EAAB8]/20">
-                    {{ g }}
-                  </span>
-                  <span v-if="sa('gesellschaften').length === 0" class="ro-value">—</span>
-                </div>
+              <div>
+                <p class="ro-label">Gesellschaft</p>
+                <!-- gesellschaft ist jetzt ein String (war früher Array gesellschaften) -->
+                <p class="ro-value">{{ s('gesellschaft') }}</p>
               </div>
             </div>
           </div>
