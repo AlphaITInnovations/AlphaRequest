@@ -10,6 +10,7 @@ const DEV_USERS = [
   { id: 'ba747ea7-5eeb-461f-b72c-6dbc60f0d4a8', name: 'Marco Hertwich' },
   { id: 'c981b8a4-3e46-4f19-80e9-f36213088a02', name: 'Markus Homberger' },
   { id: '6ae1614e-cfc4-4e64-a1dd-b31e2032f515', name: 'Thomas Lang' },
+  { id: 'bcb96d7d-50fc-4768-a48c-577088d68a7e', name: 'Marcel Nguyen' },
 ]
 // ───────────────────────────────────────────────────────────────
 
