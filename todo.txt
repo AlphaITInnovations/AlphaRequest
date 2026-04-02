@@ -3,6 +3,9 @@ verantwortlicher abteilung/group anstatt
 stellenanzeige firmen drop down
 falls ein benutzer noch nicht angemeldet war kann man diesem keine berechtigungen für die auftragstypen geben
 verantworlicher dev feld wird noch nicht rot
+Bei neustart alle sessions leeren?
+🎯 Erstellung des Funnels: felder mit auswahl
+
 
 TODO Technische Überlegungen:
 - ninja api key user

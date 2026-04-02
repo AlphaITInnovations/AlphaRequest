@@ -158,13 +158,15 @@ const checkboxClass = (selected: boolean) =>
           <div class="space-y-4">
             <div>
               <label class="label">Mindestens 3 Benefits{{ phase === 'edit' ? ' *' : '' }}</label>
-              <p class="text-xs text-gray-400 mb-1.5">Kommagetrennt, z. B. Weihnachtsgeld, 30 Tage Urlaub, unbefristeter Vertrag</p>
+              <p class="text-xs text-gray-400 mb-1.5">Bitte Benefits/Anreize durch Kommas trennen, z. B. XX € pro Stunde, Weihnachtsgeld, Zuschläge, unbefristeter Vertrag, 30 Tage Urlaub.</p>
               <textarea v-model="form.stelle.benefits" :class="fieldClass('stelle.benefits')"
-                        rows="3" class="resize-none" />
+                        rows="3" class="resize-none"
+                        placeholder="z. B. Weihnachtsgeld, 30 Tage Urlaub, unbefristeter Vertrag" />
             </div>
             <div>
               <label class="label">Ist eine Gehaltsangabe in der Anzeige gewünscht?{{ phase === 'edit' ? ' *' : '' }}</label>
-              <div class="grid grid-cols-2 gap-3 mt-1">
+              <div class="grid grid-cols-2 gap-3 mt-1 rounded-xl transition"
+                   :class="validationTriggered && isInvalid('stelle.gehaltsangabe') ? 'ring-1 ring-red-400 p-1' : ''">
                 <label v-for="opt in ['Ja', 'Nein']" :key="opt" :class="radioClass(form.stelle.gehaltsangabe === opt)">
                   <input type="radio" class="hidden" :value="opt" v-model="form.stelle.gehaltsangabe" />
                   <span class="text-sm font-medium">{{ opt }}</span>
@@ -173,18 +175,20 @@ const checkboxClass = (selected: boolean) =>
             </div>
             <div v-if="form.stelle.gehaltsangabe === 'Ja'">
               <label class="label">Beworbenes Gehalt *</label>
+              <p class="text-xs text-gray-400 mb-1.5">Bitte gib das Gehalt entweder konkret oder im „bis zu"-Format an, z. B. 3.000 € oder bis zu 3.000 €. Alternativ geht auch eine Spanne wie 2.800–3.200 € oder „ab 2.800 €".</p>
               <input v-model="form.stelle.gehalt" :class="fieldClass('stelle.gehalt')"
                      placeholder="z. B. 2.800 – 3.200 € oder ab 2.800 €" />
             </div>
             <div>
               <label class="label">Notwendige Bedingungen für Bewerber{{ phase === 'edit' ? ' *' : '' }}</label>
-              <p class="text-xs text-gray-400 mb-1.5">Nur zwingend nötige Voraussetzungen (z. B. Führerschein, Schichtbereitschaft)</p>
+              <p class="text-xs text-gray-400 mb-1.5">Bitte trage hier nur die Bedingungen ein, die zwingend nötig sind, z. B. Urkunden/Zeugnisse, Führerschein, Deutschkenntnisse, Ausbildung, Schichtbereitschaft.</p>
               <textarea v-model="form.stelle.bedingungen_notwendig"
                         :class="fieldClass('stelle.bedingungen_notwendig')"
                         rows="3" class="resize-none" />
             </div>
             <div>
               <label class="label">Wünschenswerte Qualifikationen (optional)</label>
+              <p class="text-xs text-gray-400 mb-1.5">Hier kannst du alles eintragen, was wünschenswert ist, aber nicht zwingend nötig – also Dinge, die ein Bonus wären, z. B. erste Erfahrung, Zusatzqualifikationen oder bestimmte Tools.</p>
               <textarea v-model="form.stelle.qualifikationen_nice"
                         class="w-full rounded-xl border border-gray-200 dark:border-white/10 px-3.5 py-2.5 text-sm
                                bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
@@ -204,7 +208,8 @@ const checkboxClass = (selected: boolean) =>
             </div>
             <div>
               <label class="label">Soll die Anzeige open end laufen?{{ phase === 'edit' ? ' *' : '' }}</label>
-              <div class="grid grid-cols-2 gap-3 mt-1">
+              <div class="grid grid-cols-2 gap-3 mt-1 rounded-xl transition"
+                   :class="validationTriggered && isInvalid('stelle.open_end') ? 'ring-1 ring-red-400 p-1' : ''">
                 <label v-for="opt in ['Ja', 'Nein']" :key="opt" :class="radioClass(form.stelle.open_end === opt)">
                   <input type="radio" class="hidden" :value="opt" v-model="form.stelle.open_end" />
                   <span class="text-sm font-medium">{{ opt }}</span>
@@ -213,6 +218,7 @@ const checkboxClass = (selected: boolean) =>
             </div>
             <div v-if="form.stelle.open_end === 'Nein'">
               <label class="label">Enddatum * <span class="text-xs font-normal text-gray-400">(mind. 3 Monate)</span></label>
+              <p class="text-xs text-gray-400 mb-1.5">Damit Meta dich wirklich kennenlernt, muss die Kampagne ⚠️ mindestens 3 Monate ⚠️ laufen. Bitte trag als Enddatum frühestens in 3 Monaten ein.</p>
               <input type="date" v-model="form.stelle.end_datum" :class="fieldClass('stelle.end_datum')" />
             </div>
             <div>
@@ -236,6 +242,11 @@ const checkboxClass = (selected: boolean) =>
         <!-- ── Funnel ───────────────────────────────────────────────── -->
         <div class="card space-y-4">
           <h2 class="section-title">🎯 Erstellung des Funnels</h2>
+          <p class="text-sm text-gray-600 dark:text-gray-400">Hier legen wir fest, welche Bewerberfragen im Funnel gestellt werden und welche FAQ angezeigt werden. Das ist quasi unser „Bewerbungs-Türsteher".</p>
+          <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+            <p class="font-semibold mb-1">⚠️ Hinweis</p>
+            <p>Bitte lösch die Talention-Kampagne nicht, wenn im Titel „Funnel / nicht löschen" steht. Wenn du die löscht, sind die Bewerber weg. Bitte einfach stehen lassen.</p>
+          </div>
           <div class="space-y-5">
 
             <div>
@@ -284,7 +295,7 @@ const checkboxClass = (selected: boolean) =>
 
             <div>
               <label class="label">Häufige Bewerberfragen & Antworten (FAQ){{ phase === 'edit' ? ' *' : '' }}</label>
-              <p class="text-xs text-gray-400 mb-1.5">Format: „Frage: … / Antwort: …", eine Zeile pro FAQ</p>
+              <p class="text-xs text-gray-400 mb-1.5">Welche Fragen kommen bei Bewerbern häufig, und wie sollen wir sie beantworten? Bitte im Format „Frage: … / Antwort: …" und jeweils eine Zeile pro FAQ.</p>
               <textarea v-model="form.stelle.faq" :class="fieldClass('stelle.faq')"
                         rows="4" class="resize-none"
                         placeholder="z. B. Gehalt (20–20,30 € i.d.R.), Schicht (2-Schicht), Sprache (Deutsch)" />

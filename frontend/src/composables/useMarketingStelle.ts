@@ -62,6 +62,7 @@ export { VORQUALIFIZIERUNG_OPTIONEN }
 type Rule = {
   required?: boolean
   requiredIf?: (f: MarketingStelleForm, phase: Phase) => boolean
+  min?: number  // Mindestwert für numerische Felder
 }
 
 const RULES: Record<string, Rule> = {
@@ -80,7 +81,7 @@ const RULES: Record<string, Rule> = {
   'stelle.open_end':                       { requiredIf: (_, p) => p === 'edit' },
   'stelle.end_datum':                      { requiredIf: (f, p) => p === 'edit' && f.stelle.open_end === 'Nein' },
   'stelle.staedte':                        { requiredIf: (_, p) => p === 'edit' },
-  'stelle.radius':                         { requiredIf: (_, p) => p === 'edit' },
+  'stelle.radius':                         { requiredIf: (_, p) => p === 'edit', min: 20 },
   'stelle.budget':                         { requiredIf: (_, p) => p === 'edit' },
   'stelle.faq':                            { requiredIf: (_, p) => p === 'edit' },
 }
@@ -156,8 +157,18 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
     const value = path === 'accountable'
       ? form.accountable?.id
       : getDeep(form as unknown as Record<string, unknown>, path)
-    if (rule.requiredIf) return rule.requiredIf(form, phase) && isEmpty(value)
-    return !!rule.required && isEmpty(value)
+
+    const active = rule.required || (rule.requiredIf ? rule.requiredIf(form, phase) : false)
+    if (!active) return false
+    if (isEmpty(value)) return true
+
+    // Mindestwert prüfen
+    if (rule.min !== undefined) {
+      const num = parseFloat(String(value).replace(/[^\d.]/g, ''))
+      if (isNaN(num) || num < rule.min) return true
+    }
+
+    return false
   }
 
   function fieldClass(path: string): string {
