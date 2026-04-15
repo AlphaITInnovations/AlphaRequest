@@ -9,7 +9,10 @@ const props = defineProps<{
   phase: Phase
 }>()
 
-const { form, companies, submitting, fieldClass, isInvalid, validationTriggered, generatePersonalnummer } = props.ctx
+const {
+  form, companies, departments, submitting, fieldClass, isInvalid,
+  validationTriggered, generatePersonalnummer, onSignatureTitleInput,
+} = props.ctx
 
 const BUNDESLAENDER = [
   'Baden-Württemberg','Bayern','Berlin','Brandenburg','Bremen','Hamburg',
@@ -19,6 +22,8 @@ const BUNDESLAENDER = [
 
 const selectClass = (path: string) =>
   fieldClass(path).replace('focus:ring-2', '').replace('placeholder-gray-400 dark:placeholder-gray-500', '')
+
+const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8] focus:ring-[#3EAAB8]/30 bg-white dark:bg-[#263040]'
 </script>
 
 <template>
@@ -49,7 +54,6 @@ const selectClass = (path: string) =>
             @update:comment="form.comment = $event"
             @update:accountable="form.accountable = $event"
           />
-
         </div>
       </aside>
 
@@ -82,13 +86,26 @@ const selectClass = (path: string) =>
                 <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
               </div>
               <div>
-                <label class="label">Eintrittsdatum *</label>
+                <label class="label">Eintrittsdatum (laut Vertrag) *</label>
                 <input type="date" v-model="form.personal.start_date" :class="fieldClass('personal.start_date')" />
               </div>
+
+              <!-- Privatadresse: Straße, PLZ, Ort -->
               <div class="md:col-span-2">
-                <label class="label">Privatadresse *</label>
-                <textarea v-model="form.personal.private_address" :class="fieldClass('personal.private_address')" rows="3" class="resize-none" placeholder="Straße, PLZ Ort" />
+                <label class="label">Straße (Privatadresse) *</label>
+                <input v-model="form.personal.private_street" :class="fieldClass('personal.private_street')" placeholder="Musterstraße 1" />
               </div>
+              <div>
+                <label class="label">Postleitzahl *</label>
+                <input v-model="form.personal.private_zip"
+                       @input="form.personal.private_zip = form.personal.private_zip.replace(/\D/g,'').slice(0,5)"
+                       :class="fieldClass('personal.private_zip')" inputmode="numeric" maxlength="5" placeholder="12345" />
+              </div>
+              <div>
+                <label class="label">Ort *</label>
+                <input v-model="form.personal.private_city" :class="fieldClass('personal.private_city')" placeholder="Musterstadt" />
+              </div>
+
               <div>
                 <label class="label">Homeoffice *</label>
                 <select v-model="form.personal.homeoffice" :class="selectClass('personal.homeoffice')">
@@ -143,10 +160,25 @@ const selectClass = (path: string) =>
           <div class="space-y-4">
             <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Organisation</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              <!-- Abteilung Dropdown -->
               <div>
                 <label class="label">Abteilung *</label>
-                <input v-model="form.personal.department" :class="fieldClass('personal.department')" />
+                <select v-model="form.personal.department" :class="selectClass('personal.department')">
+                  <option value="">Bitte wählen</option>
+                  <option value="Keine">Keine</option>
+                  <option v-for="dept in departments" :key="dept.id" :value="dept.name">{{ dept.name }}</option>
+                  <option value="Sonstige">Sonstige</option>
+                </select>
               </div>
+              <!-- Sonstige Freitextfeld -->
+              <div v-if="form.personal.department === 'Sonstige'">
+                <label class="label">Abteilung angeben *</label>
+                <input v-model="form.personal.department_other"
+                       :class="fieldClass('personal.department_other')"
+                       placeholder="Abteilungsname eingeben" />
+              </div>
+
               <div>
                 <label class="label">Kostenstelle *</label>
                 <input v-model="form.personal.cost_center"
@@ -249,116 +281,169 @@ const selectClass = (path: string) =>
         ═══════════════════════════════ -->
         <template v-if="phase === 'edit'">
 
-          <!-- Allgemein -->
-          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                      rounded-2xl shadow-sm p-6 space-y-4">
-            <h2 class="text-lg font-semibold text-[#3EAAB8]">Allgemein</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              Diese Angaben werden für das externe Auftreten genutzt (z. B. E-Mail-Signatur, Webseite).
-            </p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="label">Firma (Signatur/Webseite) *</label>
-                <select v-model="form.allgemein.appearance_company" :class="selectClass('allgemein.appearance_company')">
-                  <option value="">–</option>
-                  <option v-for="c in companies" :key="c">{{ c }}</option>
-                </select>
-              </div>
-              <div>
-                <label class="label">Adresse (Signatur/Webseite) *</label>
-                <textarea v-model="form.allgemein.appearance_address"
-                          :class="fieldClass('allgemein.appearance_address')"
-                          rows="3" class="resize-none" />
-              </div>
-            </div>
-          </div>
-
           <!-- IT Systemdaten -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-6 space-y-8">
             <h2 class="text-lg font-semibold text-[#3EAAB8]">IT / Systemdaten</h2>
 
-            <!-- Signatur -->
+            <!-- Firma (Signatur / Webseite) – ehemals unter "Allgemein" -->
             <div class="space-y-4">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">E-Mail-Signaturdaten</h3>
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Firma (Signatur / Webseite)</h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label class="label">Titel (Signatur) *</label><input v-model="form.it.signature.title" :class="fieldClass('it.signature.title')" /></div>
-                <div><label class="label">Straße *</label><input v-model="form.it.signature.street" :class="fieldClass('it.signature.street')" /></div>
+                <div>
+                  <label class="label">Firma *</label>
+                  <select v-model="form.it.appearance_company" :class="selectClass('it.appearance_company')">
+                    <option value="">–</option>
+                    <option v-for="c in companies" :key="c">{{ c }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- E-Mail-Signatur -->
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">E-Mail-Signatur</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="label">Titel (Signatur) *</label>
+                  <input v-model="form.it.signature.title"
+                         @input="onSignatureTitleInput"
+                         :class="fieldClass('it.signature.title')"
+                         placeholder="Wird automatisch aus Basisdaten übernommen" />
+                  <p class="text-xs text-gray-400 mt-1">Wird aus dem Titel in den Basisdaten vorbefüllt, kann aber angepasst werden.</p>
+                </div>
+                <div>
+                  <label class="label">Straße *</label>
+                  <input v-model="form.it.signature.street" :class="fieldClass('it.signature.street')" />
+                </div>
                 <div>
                   <label class="label">Postleitzahl *</label>
                   <input v-model="form.it.signature.zip"
                          @input="form.it.signature.zip = form.it.signature.zip.replace(/\D/g,'').slice(0,5)"
                          :class="fieldClass('it.signature.zip')" inputmode="numeric" maxlength="5" />
                 </div>
-                <div><label class="label">Ort *</label><input v-model="form.it.signature.city" :class="fieldClass('it.signature.city')" /></div>
                 <div>
-                  <label class="label">Handy *</label>
-                  <input v-model="form.it.signature.mobile"
-                         @input="form.it.signature.mobile = form.it.signature.mobile.replace(/[^0-9+]/g,'')"
-                         :class="fieldClass('it.signature.mobile')" inputmode="tel" />
-                </div>
-                <div>
-                  <label class="label">Telefon *</label>
-                  <input v-model="form.it.signature.phone"
-                         @input="form.it.signature.phone = form.it.signature.phone.replace(/[^0-9+-]/g,'')"
-                         :class="fieldClass('it.signature.phone')" inputmode="tel" />
+                  <label class="label">Ort *</label>
+                  <input v-model="form.it.signature.city" :class="fieldClass('it.signature.city')" />
                 </div>
               </div>
             </div>
 
-            <!-- DATEV -->
+            <!-- Software -->
             <div class="space-y-4">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">DATEV / weitere Systeme</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label class="label">DATEV-Anwender? *</label>
-                  <select v-model="form.it.datev.user" :class="selectClass('it.datev.user')">
-                    <option value="">–</option>
-                    <option>Ja</option>
-                    <option>Nein</option>
-                  </select>
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Software</h3>
+              <div class="space-y-3">
+                <div class="flex flex-wrap gap-x-8 gap-y-3">
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input type="checkbox" v-model="form.it.software.datev" :class="checkboxClass" />
+                    DATEV
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input type="checkbox" v-model="form.it.software.persopro" :class="checkboxClass" />
+                    PersoPro
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input type="checkbox" v-model="form.it.software.timejob" :class="checkboxClass" />
+                    TimeJob
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input type="checkbox" v-model="form.it.software.swoof" :class="checkboxClass" />
+                    Swoof
+                  </label>
                 </div>
-                <div v-if="form.it.datev.user === 'Ja'" class="md:col-span-2">
-                  <label class="label">Welche DATEV-Rechte werden benötigt? *</label>
-                  <textarea v-model="form.it.datev.required_rights"
-                            :class="fieldClass('it.datev.required_rights')"
+
+                <!-- DATEV Rechte (wenn angehakt) -->
+                <div v-if="form.it.software.datev" class="mt-2">
+                  <label class="label">DATEV Rechte</label>
+                  <textarea v-model="form.it.software.datev_rights"
+                            :class="fieldClass('it.software.datev_rights')"
                             rows="3" class="resize-none"
-                            placeholder="z. B. wie Benutzer Max Mustermann" />
+                            placeholder="DATEV Rechte wie Max Mustermann" />
                 </div>
-                <div class="md:col-span-2">
-                  <label class="label">Weitere Software</label>
-                  <textarea v-model="form.it.other_systems"
-                            :class="fieldClass('it.other_systems')"
-                            rows="3" class="resize-none"
-                            placeholder="z. B. PersoPro, TimeJob, Zoove" />
+              </div>
+
+              <!-- Festnetz-Telefonnummer beantragen -->
+              <div class="pt-2">
+                <div class="flex items-start gap-4">
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer whitespace-nowrap pt-2.5">
+                    <input type="checkbox" v-model="form.it.phone_order.enabled" :class="checkboxClass" />
+                    Festnetz-Telefonnummer beantragen
+                  </label>
+                  <div v-if="form.it.phone_order.enabled" class="flex-1">
+                    <label class="label">Aus welcher Niederlassung?</label>
+                    <input v-model="form.it.phone_order.location"
+                           :class="fieldClass('it.phone_order.location')"
+                           placeholder="Niederlassung für Rufnummer" />
+                  </div>
                 </div>
+              </div>
+
+              <!-- Weitere Software -->
+              <div class="pt-2">
+                <label class="label">Weitere Software</label>
+                <textarea v-model="form.it.other_systems"
+                          :class="fieldClass('it.other_systems')"
+                          rows="3" class="resize-none"
+                          placeholder="z. B. weitere benötigte Programme" />
               </div>
             </div>
 
-            <!-- Postfächer -->
+            <!-- Postfächer & Kostenstellen -->
             <div class="space-y-4">
               <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Postfächer & Kostenstellen</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-4">
+
+                <!-- Infopostfach der Niederlassung (standardmäßig angehakt) -->
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <input type="checkbox" v-model="form.it.mailboxes.info_mailbox" :class="checkboxClass" />
+                  Infopostfach der Niederlassung
+                </label>
+
+                <!-- Zusätzliche Postfächer -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="label">Zusätzliche Postfächer?</label>
+                    <select v-model="form.it.mailboxes.additional" :class="selectClass('it.mailboxes.additional')">
+                      <option value="">–</option>
+                      <option>Ja</option>
+                      <option>Nein</option>
+                    </select>
+                  </div>
+                  <div v-if="form.it.mailboxes.additional === 'Ja'" class="md:col-span-2">
+                    <label class="label">Postfächer eintragen *</label>
+                    <textarea v-model="form.it.mailboxes.notes"
+                              :class="fieldClass('it.mailboxes.notes')"
+                              rows="3" class="resize-none"
+                              placeholder="z. B. max.mustermann@alphaconsult.org" />
+                  </div>
+                </div>
+
+                <!-- Zusätzliche Kostenstellen / Niederlassungen -->
                 <div>
-                  <label class="label">Zusätzliche Postfächer? *</label>
-                  <select v-model="form.it.mailboxes.additional" :class="selectClass('it.mailboxes.additional')">
-                    <option value="">–</option>
-                    <option>Ja</option>
-                    <option>Nein</option>
-                  </select>
-                </div>
-                <div v-if="form.it.mailboxes.additional === 'Ja'" class="md:col-span-2">
-                  <label class="label">Postfächer eintragen *</label>
-                  <textarea v-model="form.it.mailboxes.notes"
-                            :class="fieldClass('it.mailboxes.notes')"
-                            rows="3" class="resize-none"
-                            placeholder="z. B. max.mustermann@alphaconsult.org" />
-                </div>
-                <div class="md:col-span-2">
                   <label class="label">Zusätzliche Kostenstellen / Niederlassungen</label>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
+                    z.&nbsp;B. für Drucker oder Rechte aufs Niederlassungslaufwerk
+                  </p>
                   <textarea v-model="form.it.additional_cost_centers"
                             :class="fieldClass('it.additional_cost_centers')"
                             rows="3" class="resize-none" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Hardware-Hinweis -->
+            <div class="rounded-xl border border-amber-300/50 bg-amber-50 dark:bg-amber-900/10
+                        dark:border-amber-500/20 px-4 py-3">
+              <div class="flex items-start gap-2.5">
+                <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p class="text-sm font-medium text-amber-800 dark:text-amber-300">Hardware-Bestellungen</p>
+                  <p class="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                    Bestellungen von Hardware (Handys, Notebooks, Monitore etc.) bitte im
+                    <strong>eigenen Hardware-Formular</strong> ausfüllen.
+                  </p>
                 </div>
               </div>
             </div>

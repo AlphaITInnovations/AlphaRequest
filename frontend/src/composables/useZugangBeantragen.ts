@@ -1,4 +1,4 @@
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { client } from '@/api/client'
 import { companiesApi } from '@/api/companies'
 import { personalnummerApi } from '@/api/personalnummer'
@@ -10,6 +10,8 @@ import type { TicketPriority } from '@/types/ticket'
 export type Phase = 'create' | 'edit'
 
 export interface UserRef { id: string; name: string }
+
+export interface GroupOption { id: string; name: string }
 
 export interface ZugangForm {
   // Details (rechte Sidebar)
@@ -23,12 +25,15 @@ export interface ZugangForm {
     first_name:        string
     last_name:         string
     title:             string
-    private_address:   string
+    private_street:    string
+    private_zip:       string
+    private_city:      string
     start_date:        string
     homeoffice:        string
     weekly_hours:      string
     federal_state:     string
     department:        string
+    department_other:  string
     cost_center:       string
     location:          string
     contract_company:  string
@@ -39,35 +44,36 @@ export interface ZugangForm {
     contact_person_name: string
   }
 
-  // Allgemein (nur edit)
-  allgemein: {
-    appearance_company: string
-    appearance_address: string
-  }
-
   // IT
   it: {
+    appearance_company: string
     signature: {
       title:  string
       street: string
       zip:    string
       city:   string
-      mobile: string
-      phone:  string
     }
     timebutler: {
       vacation_year:  string
       supervisor_id:   string
       supervisor_name: string
     }
-    datev: {
-      user:            string
-      required_rights: string
+    software: {
+      datev:        boolean
+      datev_rights: string
+      persopro:     boolean
+      timejob:      boolean
+      swoof:        boolean
+    }
+    phone_order: {
+      enabled:  boolean
+      location: string
     }
     other_systems: string
     mailboxes: {
-      additional: string
-      notes:      string
+      info_mailbox: boolean
+      additional:   string
+      notes:        string
     }
     additional_cost_centers: string
   }
@@ -92,12 +98,15 @@ const RULES_CREATE: Record<string, Rule> = {
   'personal.first_name':       { required: true },
   'personal.last_name':        { required: true },
   'personal.title':            { required: true },
-  'personal.private_address':  { required: true },
+  'personal.private_street':   { required: true },
+  'personal.private_zip':      { required: true, pattern: /^[0-9]{5}$/ },
+  'personal.private_city':     { required: true },
   'personal.start_date':       { required: true },
   'personal.homeoffice':       { required: true },
   'personal.weekly_hours':     { required: true },
   'personal.federal_state':    { required: true },
   'personal.department':       { required: true },
+  'personal.department_other': { requiredIf: f => f.personal.department === 'Sonstige' },
   'personal.cost_center':      { required: true },
   'personal.location':         { required: true },
   'personal.contract_company': { required: true },
@@ -114,17 +123,11 @@ const RULES_CREATE: Record<string, Rule> = {
 
 const RULES_EDIT: Record<string, Rule> = {
   ...RULES_CREATE,
-  'allgemein.appearance_company': { required: true },
-  'allgemein.appearance_address': { required: true },
-  'it.signature.title':   { required: true },
-  'it.signature.street':  { required: true },
-  'it.signature.zip':     { required: true, pattern: /^[0-9]{5}$/ },
-  'it.signature.city':    { required: true },
-  'it.signature.mobile':  { required: true },
-  'it.signature.phone':   { required: true },
-  'it.datev.user':        { required: true },
-  'it.datev.required_rights': { requiredIf: f => f.it.datev.user === 'Ja' },
-  'it.mailboxes.additional':  { required: true },
+  'it.appearance_company':    { required: true },
+  'it.signature.title':       { required: true },
+  'it.signature.street':      { required: true },
+  'it.signature.zip':         { required: true, pattern: /^[0-9]{5}$/ },
+  'it.signature.city':        { required: true },
   'it.mailboxes.notes':       { requiredIf: f => f.it.mailboxes.additional === 'Ja' },
 }
 
@@ -143,6 +146,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
   const router = useRouter()
 
   const companies       = ref<string[]>([])
+  const departments     = ref<GroupOption[]>([])
   const loading         = ref(false)
   const submitting      = ref(false)
   const validationTriggered = ref(false)
@@ -155,26 +159,42 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     comment:     '',
 
     personal: {
-      first_name: '', last_name: '', title: '', private_address: '',
+      first_name: '', last_name: '', title: '',
+      private_street: '', private_zip: '', private_city: '',
       start_date: '', homeoffice: '', weekly_hours: '', federal_state: '',
-      department: '', cost_center: '', location: '', contract_company: '',
+      department: '', department_other: '',
+      cost_center: '', location: '', contract_company: '',
       personal_number: '', supervisor_hr_id: '', supervisor_hr_name: '',
       contact_person_id: '', contact_person_name: '',
     },
 
-    allgemein: { appearance_company: '', appearance_address: '' },
-
     it: {
-      signature: { title: '', street: '', zip: '', city: '', mobile: '', phone: '' },
+      appearance_company: '',
+      signature: { title: '', street: '', zip: '', city: '' },
       timebutler: { vacation_year: '', supervisor_id: '', supervisor_name: '' },
-      datev: { user: '', required_rights: '' },
+      software: { datev: false, datev_rights: '', persopro: false, timejob: false, swoof: false },
+      phone_order: { enabled: false, location: '' },
       other_systems: '',
-      mailboxes: { additional: '', notes: '' },
+      mailboxes: { info_mailbox: true, additional: '', notes: '' },
       additional_cost_centers: '',
     },
 
     fuhrpark: { car: '', car_class: '', car_from: '' },
   })
+
+  // ── Auto-fill signature title from personal title ───────────────────────────
+  // Track whether the user has manually edited the signature title
+  const signatureTitleManuallyEdited = ref(false)
+
+  watch(() => form.personal.title, (newVal) => {
+    if (!signatureTitleManuallyEdited.value) {
+      form.it.signature.title = newVal
+    }
+  })
+
+  function onSignatureTitleInput() {
+    signatureTitleManuallyEdited.value = true
+  }
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -191,6 +211,9 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     const value = path === 'accountable'
       ? form.accountable?.id
       : getDeep(form as unknown as Record<string, unknown>, path)
+
+    // Department: "Keine" counts as valid (no value passed)
+    if (path === 'personal.department' && form.personal.department === 'Keine') return false
 
     if (rule.requiredIf) return rule.requiredIf(form) && isEmpty(value)
     if (rule.required && isEmpty(value)) return true
@@ -223,21 +246,41 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
   async function init() {
     loading.value = true
     try {
-      const { data } = await companiesApi.list()
-      companies.value = data.data.companies
+      // Load companies
+      const { data: compData } = await companiesApi.list()
+      companies.value = compData.data.companies
+
+      // Load department groups from API
+      try {
+        const { data: groupsData } = await client.get<{ data: GroupOption[] }>('/settings/groups')
+        departments.value = groupsData.data
+      } catch {
+        departments.value = []
+      }
 
       if (phase === 'edit' && ticketId) {
         const res = await client.get<{ data: { description: string; priority: string; comment: string; assignee_id: string; assignee_name: string; accountable_id: string; accountable_name: string } }>(`/tickets/${ticketId}`)
         const t = res.data.data
         const desc = JSON.parse(t.description || '{}')
 
-        if (desc.personal)  Object.assign(form.personal,  desc.personal)
-        if (desc.allgemein) Object.assign(form.allgemein, desc.allgemein)
+        if (desc.personal) Object.assign(form.personal, desc.personal)
+
+        // Legacy migration: old private_address → new fields
+        if (desc.personal?.private_address && !desc.personal?.private_street) {
+          form.personal.private_street = desc.personal.private_address
+        }
+
         if (desc.it) {
-          if (desc.it.signature)  Object.assign(form.it.signature,  desc.it.signature)
-          if (desc.it.timebutler) Object.assign(form.it.timebutler, desc.it.timebutler)
-          if (desc.it.datev)      Object.assign(form.it.datev,      desc.it.datev)
-          if (desc.it.mailboxes)  Object.assign(form.it.mailboxes,  desc.it.mailboxes)
+          if (desc.it.appearance_company != null) form.it.appearance_company = desc.it.appearance_company
+          // Legacy: migrate from old allgemein section
+          if (desc.allgemein?.appearance_company && !desc.it.appearance_company) {
+            form.it.appearance_company = desc.allgemein.appearance_company
+          }
+          if (desc.it.signature)    Object.assign(form.it.signature,    desc.it.signature)
+          if (desc.it.software)     Object.assign(form.it.software,     desc.it.software)
+          if (desc.it.phone_order)  Object.assign(form.it.phone_order,  desc.it.phone_order)
+          if (desc.it.timebutler)   Object.assign(form.it.timebutler,   desc.it.timebutler)
+          if (desc.it.mailboxes)    Object.assign(form.it.mailboxes,    desc.it.mailboxes)
           if (desc.it.other_systems != null)          form.it.other_systems = desc.it.other_systems
           if (desc.it.additional_cost_centers != null) form.it.additional_cost_centers = desc.it.additional_cost_centers
         }
@@ -247,6 +290,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         form.comment     = t.comment ?? ''
         form.assignee    = t.assignee_id    ? { id: t.assignee_id,    name: t.assignee_name }    : null
         form.accountable = t.accountable_id ? { id: t.accountable_id, name: t.accountable_name } : null
+
+        // Mark signature title as manually edited if it differs from personal title
+        if (form.it.signature.title && form.it.signature.title !== form.personal.title) {
+          signatureTitleManuallyEdited.value = true
+        }
       }
     } finally {
       loading.value = false
@@ -268,11 +316,21 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   function buildDescription(): string {
+    const personal = { ...form.personal }
+    // If department is "Keine", send empty string
+    if (personal.department === 'Keine') {
+      personal.department = ''
+      personal.department_other = ''
+    }
+    // If department is not "Sonstige", clear department_other
+    if (personal.department !== 'Sonstige') {
+      personal.department_other = ''
+    }
+
     return JSON.stringify({
-      personal:  form.personal,
-      allgemein: form.allgemein,
-      it:        form.it,
-      fuhrpark:  form.fuhrpark,
+      personal,
+      it: form.it,
+      fuhrpark: form.fuhrpark,
     })
   }
 
@@ -308,15 +366,15 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     }
   }
 
-async function submitEdit(action: 'save' | 'complete') {
-  if (!ticketId) return
-  if (action === 'complete') {
-    if (!validate()) return
-    pendingComplete.value = true
-    return
+  async function submitEdit(action: 'save' | 'complete') {
+    if (!ticketId) return
+    if (action === 'complete') {
+      if (!validate()) return
+      pendingComplete.value = true
+      return
+    }
+    await _performEdit('save')
   }
-  await _performEdit('save')
-}
 
   async function confirmComplete() {
     pendingComplete.value = false
@@ -348,9 +406,9 @@ async function submitEdit(action: 'save' | 'complete') {
   }
 
   return {
-    form, companies, loading, submitting, pendingConfirm, pendingComplete,
+    form, companies, departments, loading, submitting, pendingConfirm, pendingComplete,
     validationTriggered, errors,
-    init, validate, isInvalid, fieldClass,
+    init, validate, isInvalid, fieldClass, onSignatureTitleInput,
     generatePersonalnummer, submitCreate, confirmCreate, submitEdit, confirmComplete,
   }
 }
