@@ -576,9 +576,10 @@ const navGroups = computed(() => {
                   </div>
                   <div class="relative">
                     <input v-model="adGroupSearch[t.key]"
-                           placeholder="AD-Gruppe suchen…"
-                           class="input w-full"
-                           @focus="adGroupSearch[t.key] = adGroupSearch[t.key] ?? ''" />
+       placeholder="AD-Gruppe suchen…"
+       class="input w-full"
+       @focus="adGroupSearch[t.key] = adGroupSearch[t.key] ?? ''"
+       @blur="(adGroupSearch[t.key] = '', undefined)" />
                     <!-- Dropdown -->
                     <div v-if="adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0"
                          class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
@@ -861,6 +862,7 @@ const ENV_DESCS: Record<string, string> = {
   SECRET_KEY: 'Signierschlüssel für Session/Cookies',
 }
 function envDesc(key: string) { return ENV_DESCS[key] ?? key }
+
 </script>
 
 <style scoped>
