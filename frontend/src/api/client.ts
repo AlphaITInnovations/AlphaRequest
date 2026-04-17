@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useAuthStore } from '@/stores/authStore'
 
 export const client = axios.create({
   baseURL: '/api/v1',
@@ -13,7 +14,8 @@ export function setupInterceptors(router: import('vue-router').Router) {
       const status = err.response?.status
       if (status === 401 || status === 403) {
         if (router.currentRoute.value.path !== '/login') {
-          router.push('/login')
+          const auth = useAuthStore()
+          auth.markSessionExpired()
         }
       }
       return Promise.reject(err)

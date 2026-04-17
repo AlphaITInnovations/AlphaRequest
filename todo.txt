@@ -1,10 +1,11 @@
 TODO:
+workflow umarbeiten dass niederlassungleiter das ganze erstell
+Marcel liefert daten für titelgenerierung
+Bei Ticketpermissions gruppen funktionalität hinzufügen
+
 verantwortlicher abteilung/group anstatt
-stellenanzeige firmen drop down
-falls ein benutzer noch nicht angemeldet war kann man diesem keine berechtigungen für die auftragstypen geben
-verantworlicher dev feld wird noch nicht rot
-Bei neustart alle sessions leeren?
-🎯 Erstellung des Funnels: felder mit auswahl
+bei auswahl im dark mode schrift schlecht leserlicht
+
 
 
 TODO Technische Überlegungen:

@@ -6,6 +6,8 @@ import type { User, Permission, TicketType } from '@/types/ticket'
 export const useAuthStore = defineStore('auth', () => {
   const user    = ref<User | null>(null)
   const loading = ref(false)
+  const sessionExpired   = ref(false)
+  const reauthenticating = ref(false)
 
   // ── Basis ────────────────────────────────────────────────────────────────────
 
@@ -63,11 +65,63 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/logout'
   }
 
+  function markSessionExpired() {
+    user.value = null
+    sessionExpired.value = true
+  }
+
+  /**
+   * Öffnet den Microsoft-Login in einem Popup.
+   * Nach erfolgreichem Login wird die Session wiederhergestellt
+   * und das Modal geschlossen – die Seite bleibt erhalten.
+   */
+  async function reloginViaPopup(): Promise<boolean> {
+    reauthenticating.value = true
+
+    const width = 500
+    const height = 650
+    const left = window.screenX + (window.innerWidth - width) / 2
+    const top = window.screenY + (window.innerHeight - height) / 2
+
+    const popup = window.open(
+      '/start-auth',
+      'relogin',
+      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
+    )
+
+    if (!popup) {
+      reauthenticating.value = false
+      // Popup-Blocker → Fallback auf harten Redirect
+      window.location.href = '/login'
+      return false
+    }
+
+    // Warte bis das Popup geschlossen wird (OAuth Redirect fertig)
+    return new Promise<boolean>((resolve) => {
+      const timer = setInterval(async () => {
+        if (popup.closed) {
+          clearInterval(timer)
+          // Prüfe ob die Session wieder aktiv ist
+          try {
+            const { data } = await authApi.me()
+            user.value = data.data
+            sessionExpired.value = false
+            reauthenticating.value = false
+            resolve(true)
+          } catch {
+            reauthenticating.value = false
+            resolve(false)
+          }
+        }
+      }, 500)
+    })
+  }
+
   return {
-    user, loading,
+    user, loading, sessionExpired, reauthenticating,
     isLoggedIn, permissions, hasPermission,
     canView, canManage, isAdmin,
     canCreateTicket, allowedTicketTypes,
-    fetchMe, refreshSession, logout,
+    fetchMe, refreshSession, logout, markSessionExpired, reloginViaPopup,
   }
 })
