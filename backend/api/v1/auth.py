@@ -37,22 +37,46 @@ def refresh_session(
     if not db_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    request.session["user"]["permissions"] = db_user.permissions
+    from backend.services.ticket_permissions import get_allowed_ticket_types_for_user
+
+    permissions = list(db_user.permissions)
+    user_groups = user.get("groups", []) or []
+
+    if user_groups:
+        group_types = get_allowed_ticket_types_for_user(user["id"], user_groups)
+        for tt in group_types:
+            perm = f"create_{tt}"
+            if perm not in permissions:
+                permissions.append(perm)
+
+    request.session["user"]["permissions"] = permissions
     request.session["last_activity"] = int(time.time())
 
     return DataResponse(data=UserOut(
         id=user["id"],
         displayName=user["displayName"],
         mail=user.get("mail") or user.get("email"),
-        permissions=db_user.permissions,
+        permissions=permissions,
     ))
 
 
 # ── /auth/me ──────────────────────────────────────────────────────────────────
 
 @router.get("/auth/me", response_model=DataResponse[UserOut])
-def me(user: dict = Depends(get_current_user)):
+def me(request: Request, user: dict = Depends(get_current_user)):
+    from backend.services.ticket_permissions import get_allowed_ticket_types_for_user
+
     permissions = get_user_permissions(user["id"])
+    user_groups = user.get("groups", []) or []
+
+    # Gruppen-basierte create_* Permissions hinzufügen
+    if user_groups:
+        group_types = get_allowed_ticket_types_for_user(user["id"], user_groups)
+        for tt in group_types:
+            perm = f"create_{tt}"
+            if perm not in permissions:
+                permissions.append(perm)
+
     return DataResponse(data=UserOut(
         id=user["id"],
         displayName=user["displayName"],
@@ -71,6 +95,7 @@ def check_session(user: dict = Depends(check_session_only)):
     die Session nicht künstlich am Leben hält.
     """
     return {"status": "ok"}
+
 
 # ── Login-Flow ─────────────────────────────────────────────────────────────────
 
@@ -111,6 +136,9 @@ async def auth_callback(request: Request):
         is_in_admin_group = config.ADMIN_GROUP_ID in (id_claims.get("groups", []) or [])
         initial_role = ROLE_ADMIN if is_in_admin_group else None
 
+        user_groups = id_claims.get("groups", []) or []
+        logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
+
         user_payload = {
             "id":          id_claims.get("oid") or id_claims.get("sub"),
             "displayName": id_claims.get("name") or infos.get("displayName"),
@@ -122,6 +150,7 @@ async def auth_callback(request: Request):
             "company":     infos.get("company"),
             "position":    infos.get("position"),
             "address":     infos.get("address") or {},
+            "groups":      id_claims.get("groups", []) or [],
         }
 
         # User anlegen / last_login aktualisieren; Admin-Rolle ggf. erzwingen

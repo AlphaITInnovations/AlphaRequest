@@ -168,3 +168,44 @@ def get_cached_user_mail(app, user_id: str) -> str | None:
             return user.get("mail")
 
     return None
+
+
+async def list_all_groups(access_token: str) -> List[Dict[str, str]]:
+    """
+    Holt alle Sicherheitsgruppen und M365-Gruppen aus Azure AD.
+    Braucht Application Permission: Group.Read.All.
+    """
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    params = {
+        "$top": "999",
+        "$select": "id,displayName,description,groupTypes,mailEnabled,securityEnabled",
+        "$filter": "securityEnabled eq true",
+    }
+
+    url = "https://graph.microsoft.com/v1.0/groups"
+    groups: List[Dict[str, str]] = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while True:
+            resp = await client.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+            for g in data.get("value", []):
+                groups.append({
+                    "id": g.get("id"),
+                    "displayName": g.get("displayName") or "",
+                    "description": g.get("description") or "",
+                })
+
+            next_link = data.get("@odata.nextLink")
+            if not next_link:
+                break
+
+            url = next_link
+            params = None
+
+    return groups

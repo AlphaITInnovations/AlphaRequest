@@ -347,8 +347,8 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                     TimeJob
                   </label>
                   <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                    <input type="checkbox" v-model="form.it.software.swoof" :class="checkboxClass" />
-                    Swoof
+                    <input type="checkbox" v-model="form.it.software.zvoove" :class="checkboxClass" />
+                    Zvoove
                   </label>
                 </div>
 
@@ -441,8 +441,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                 <div>
                   <p class="text-sm font-medium text-amber-800 dark:text-amber-300">Hardware-Bestellungen</p>
                   <p class="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
-                    Bestellungen von Hardware (Handys, Notebooks, Monitore etc.) bitte im
-                    <strong>eigenen Hardware-Formular</strong> ausfüllen.
+                    Bitte bestellen Sie IT-Hardware, Mobiltelefone und Festnetzrufnummern weiterhin direkt über IT@alphaconsult.org
                   </p>
                 </div>
               </div>

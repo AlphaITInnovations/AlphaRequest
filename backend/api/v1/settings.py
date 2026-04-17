@@ -17,6 +17,7 @@ from backend.schemas.responses import DataResponse
 from backend.services.microsoft_mail import send_test_mail
 from backend.services.ticket_permissions import (
     set_ticket_permissions_safe, load_ticket_permissions,
+    load_group_ticket_permissions, set_group_ticket_permissions,
 )
 from backend.utils.config import config
 from backend.utils.logger import logger
@@ -224,6 +225,7 @@ class TicketTypeInfo(BaseModel):
     key: str
     label: str
     allowed_users: list[str]
+    allowed_groups: list[str]
 
 class PermissionsOut(BaseModel):
     types: list[TicketTypeInfo]
@@ -231,6 +233,7 @@ class PermissionsOut(BaseModel):
 class PermissionsIn(BaseModel):
     # Pydantic validiert die Keys direkt gegen den Enum
     permissions: dict[TicketType, list[str]]
+    group_permissions: dict[TicketType, list[str]] = {}
 
 
 @router.get("/settings/ticket-types", response_model=DataResponse[list[TicketTypeInfo]])
@@ -238,7 +241,7 @@ def get_ticket_types(user: dict = Depends(get_current_user)):
     """Listet alle gültigen Tickettypen – nützlich für Frontend-Dropdowns."""
     require_admin(user)
     return DataResponse(data=[
-        TicketTypeInfo(key=t.value, label=TICKET_LABELS.get(t, t.value), allowed_users=[])
+        TicketTypeInfo(key=t.value, label=TICKET_LABELS.get(t, t.value), allowed_users=[], allowed_groups=[])
         for t in TicketType
     ])
 
@@ -247,11 +250,13 @@ def get_ticket_types(user: dict = Depends(get_current_user)):
 def get_permissions(user: dict = Depends(get_current_user)):
     require_admin(user)
     perms = load_ticket_permissions()
+    group_perms = load_group_ticket_permissions()
     return DataResponse(data=PermissionsOut(types=[
         TicketTypeInfo(
             key=t.value,
             label=TICKET_LABELS.get(t, t.value),
             allowed_users=perms.get(t.value, []),
+            allowed_groups=group_perms.get(t.value, []),
         )
         for t in TicketType
     ]))
@@ -260,16 +265,44 @@ def get_permissions(user: dict = Depends(get_current_user)):
 @router.put("/settings/permissions", response_model=DataResponse[PermissionsOut])
 def set_permissions(
     payload: PermissionsIn,
-    request: Request,                          # ← neu
+    request: Request,
     user: dict = Depends(get_current_user),
 ):
     require_admin(user)
     user_cache = getattr(request.app.state, "user_cache", [])
     set_ticket_permissions_safe(
         {k.value: v for k, v in payload.permissions.items()},
-        user_cache=user_cache,                 # ← neu
+        user_cache=user_cache,
     )
+    # Gruppen-Permissions speichern
+    if payload.group_permissions:
+        set_group_ticket_permissions(
+            {k.value: v for k, v in payload.group_permissions.items()}
+        )
     return get_permissions(user)
+
+
+# ── AD Groups (Cache) ────────────────────────────────────────────────────────
+
+class AdGroupOut(BaseModel):
+    id: str
+    displayName: str
+    description: str
+
+
+@router.get("/settings/ad-groups", response_model=DataResponse[list[AdGroupOut]])
+def list_ad_groups(request: Request, user: dict = Depends(get_current_user)):
+    """Gibt alle AD-Gruppen aus dem Cache zurück (für Dropdowns)."""
+    require_admin(user)
+    groups = getattr(request.app.state, "group_cache", [])
+    return DataResponse(data=[
+        AdGroupOut(
+            id=g["id"],
+            displayName=g["displayName"],
+            description=g.get("description", ""),
+        )
+        for g in groups
+    ])
 
 
 # ── Groups ────────────────────────────────────────────────────────────────────

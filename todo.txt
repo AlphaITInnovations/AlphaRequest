@@ -1,11 +1,18 @@
 TODO:
+view only ansich auch für phase2 für den erstellt tab
+ ->versionierung fixen
+
 workflow umarbeiten dass niederlassungleiter das ganze erstell
 Marcel liefert daten für titelgenerierung
 Bei Ticketpermissions gruppen funktionalität hinzufügen
 
+
 verantwortlicher abteilung/group anstatt
 bei auswahl im dark mode schrift schlecht leserlicht
 
+kompletter audit log als neue datenbank tabelle mit alles wichtigen sachen: edit, remove,
+
+Feedback Frau Wolf: Übersicht für ersteller
 
 
 TODO Technische Überlegungen:

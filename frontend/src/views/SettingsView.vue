@@ -49,14 +49,42 @@ async function saveCompanies(list: string[]) {
 }
 
 // ── Ticket Permissions ─────────────────────────────────────────────────────────
-interface PermType { key: string; label: string; allowed_users: string[] }
+interface PermType { key: string; label: string; allowed_users: string[]; allowed_groups: string[] }
 const permissions  = ref<PermType[]>([])
 const permSelected = ref<Record<string, { id: string; name: string } | null>>({})
+
+// AD-Gruppen für Dropdown
+interface AdGroup { id: string; displayName: string; description: string }
+const adGroups = ref<AdGroup[]>([])
+const adGroupSearch = ref<Record<string, string>>({})
+
+async function loadAdGroups() {
+  try {
+    const { data } = await client.get('/settings/ad-groups')
+    adGroups.value = data.data
+  } catch { adGroups.value = [] }
+}
+
+function filteredAdGroups(key: string): AdGroup[] {
+  const t = permissions.value.find(p => p.key === key)
+  const alreadyAdded = new Set(t?.allowed_groups ?? [])
+  const q = (adGroupSearch.value[key] ?? '').toLowerCase().trim()
+  return adGroups.value
+    .filter(g => !alreadyAdded.has(g.id))
+    .filter(g => !q || g.displayName.toLowerCase().includes(q))
+}
+
+function adGroupName(id: string): string {
+  return adGroups.value.find(g => g.id === id)?.displayName ?? id
+}
 
 async function loadPermissions() {
   const { data } = await client.get('/settings/permissions')
   permissions.value = data.data.types
-  permissions.value.forEach(t => { permSelected.value[t.key] = null })
+  permissions.value.forEach(t => {
+    permSelected.value[t.key] = null
+    adGroupSearch.value[t.key] = ''
+  })
 }
 async function addPermUser(key: string) {
   const u = permSelected.value[key]
@@ -73,11 +101,31 @@ async function removePermUser(key: string, id: string) {
   t.allowed_users = t.allowed_users.filter(x => x !== id)
   await savePermissions()
 }
+async function addPermGroup(key: string, groupId: string) {
+  const t = permissions.value.find(p => p.key === key)!
+  if (!t.allowed_groups.includes(groupId)) {
+    t.allowed_groups.push(groupId)
+    await savePermissions()
+  }
+  adGroupSearch.value[key] = ''
+}
+async function removePermGroup(key: string, groupId: string) {
+  const t = permissions.value.find(p => p.key === key)!
+  t.allowed_groups = t.allowed_groups.filter(x => x !== groupId)
+  await savePermissions()
+}
 async function savePermissions() {
-  const payload: Record<string, string[]> = {}
-  permissions.value.forEach(t => { payload[t.key] = t.allowed_users })
+  const userPayload: Record<string, string[]> = {}
+  const groupPayload: Record<string, string[]> = {}
+  permissions.value.forEach(t => {
+    userPayload[t.key] = t.allowed_users
+    groupPayload[t.key] = t.allowed_groups
+  })
   try {
-    await client.put('/settings/permissions', { permissions: payload })
+    await client.put('/settings/permissions', {
+      permissions: userPayload,
+      group_permissions: groupPayload,
+    })
     showToast('Automatisch gespeichert', true)
   } catch { showToast('Fehler beim Speichern', false) }
 }
@@ -304,7 +352,7 @@ async function resetPersonalnummer() {
 onMounted(async () => {
   const { data } = await usersApi.list()
   users.value = data.data.users
-  await Promise.all([loadEnv(), loadCompanies(), loadPermissions(), loadGroups(), loadAppUsers()])
+  await Promise.all([loadEnv(), loadCompanies(), loadPermissions(), loadGroups(), loadAppUsers(), loadAdGroups()])
 })
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
@@ -471,29 +519,82 @@ const navGroups = computed(() => {
             <span class="text-xs text-gray-400">Automatisch gespeichert</span>
           </div>
           <div class="space-y-4">
-            <div v-for="t in permissions" :key="t.key" class="card-section space-y-3">
+            <div v-for="t in permissions" :key="t.key" class="card-section space-y-4">
               <div class="flex items-center justify-between">
                 <h3 class="font-semibold text-gray-900 dark:text-white">{{ t.label }}</h3>
                 <span class="font-mono text-xs text-gray-400">{{ t.key }}</span>
               </div>
-              <div v-if="t.allowed_users.length === 0"
+
+              <!-- Warnung wenn niemand berechtigt -->
+              <div v-if="t.allowed_users.length === 0 && t.allowed_groups.length === 0"
                    class="text-xs rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-900/20
                           text-amber-700 dark:text-amber-300 px-3 py-2">
                 ⚠ Niemand darf diesen Auftragstyp erstellen
               </div>
-              <div class="flex flex-wrap gap-2">
-                <span v-for="id in t.allowed_users" :key="id"
-                      class="inline-flex items-center gap-1.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] px-3 py-1 text-sm">
-                  {{ userName(id) }}
-                  <button @click="removePermUser(t.key, id)" class="hover:text-red-500 transition">✕</button>
-                </span>
-              </div>
-              <div class="flex gap-2">
-                <UserSelect label="" placeholder="Benutzer hinzufügen…"
-                            :model-value="permSelected[t.key]"
-                            @update:model-value="permSelected[t.key] = $event"
-                            class="flex-1" />
-                <button @click="addPermUser(t.key)" class="btn-primary self-end">+</button>
+
+              <div class="grid md:grid-cols-2 gap-6">
+
+                <!-- Benutzer -->
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">Benutzer</p>
+                    <span class="text-xs text-gray-400">{{ t.allowed_users.length }}</span>
+                  </div>
+                  <div class="flex flex-wrap gap-2 min-h-[36px]">
+                    <span v-for="id in t.allowed_users" :key="id"
+                          class="inline-flex items-center gap-1.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] px-3 py-1 text-sm">
+                      {{ userName(id) }}
+                      <button @click="removePermUser(t.key, id)" class="hover:text-red-500 transition">✕</button>
+                    </span>
+                    <span v-if="t.allowed_users.length === 0"
+                          class="text-xs text-gray-400 italic self-center">Keine Benutzer</span>
+                  </div>
+                  <div class="flex gap-2">
+                    <UserSelect label="" placeholder="Benutzer hinzufügen…"
+                                :model-value="permSelected[t.key]"
+                                @update:model-value="permSelected[t.key] = $event"
+                                class="flex-1" />
+                    <button @click="addPermUser(t.key)" class="btn-primary self-end">+</button>
+                  </div>
+                </div>
+
+                <!-- AD-Gruppen -->
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">AD-Gruppen</p>
+                    <span class="text-xs text-gray-400">{{ t.allowed_groups.length }}</span>
+                  </div>
+                  <div class="flex flex-wrap gap-2 min-h-[36px]">
+                    <span v-for="gid in t.allowed_groups" :key="gid"
+                          class="inline-flex items-center gap-1.5 rounded-full bg-purple-100 dark:bg-purple-900/20
+                                 text-purple-700 dark:text-purple-300 px-3 py-1 text-sm">
+                      {{ adGroupName(gid) }}
+                      <button @click="removePermGroup(t.key, gid)" class="hover:text-red-500 transition">✕</button>
+                    </span>
+                    <span v-if="t.allowed_groups.length === 0"
+                          class="text-xs text-gray-400 italic self-center">Keine Gruppen</span>
+                  </div>
+                  <div class="relative">
+                    <input v-model="adGroupSearch[t.key]"
+                           placeholder="AD-Gruppe suchen…"
+                           class="input w-full"
+                           @focus="adGroupSearch[t.key] = adGroupSearch[t.key] ?? ''"
+                           @blur="setTimeout(() => { adGroupSearch[t.key] = '' }, 200)" />
+                    <!-- Dropdown -->
+                    <div v-if="adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0"
+                         class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
+                                dark:border-white/10 bg-white dark:bg-[#263040] shadow-lg">
+                      <button v-for="g in filteredAdGroups(t.key).slice(0, 15)" :key="g.id"
+                              @mousedown.prevent="addPermGroup(t.key, g.id)"
+                              class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-[#3EAAB8]/10 transition
+                                     text-gray-900 dark:text-gray-100 flex items-center justify-between">
+                        <span>{{ g.displayName }}</span>
+                        <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[200px]">{{ g.description }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>

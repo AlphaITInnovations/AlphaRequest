@@ -15,8 +15,10 @@ from fastapi import Request, Path
 from backend.database.groups import get_groups
 from backend.models.models import TicketPriority, TicketType, Ticket
 from backend.services.microsoft_auth import acquire_app_token
+from backend.utils.config import Config
 from backend.utils.logger import logger
 from backend.utils.mail_templates import render_corporate_email
+from backend.utils.config import config
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 
@@ -278,7 +280,7 @@ def send_test_mail(to: str):
             subject="AlphaRequest Testmail",
             headline="AlphaRequest (hier klicken)",
             intro="Hallo,\n\n das hier ist eine Testmail vom AlphaRequest System\n",
-            info_box_url="https://alpharequest.dom.local/dashboard",
+            info_box_url=config.FRONTEND_URL + "/dashboard",
             content="",
         ),
         to_recipients=[to],
@@ -319,7 +321,8 @@ def send_newrequest_mail(to: str, prio: TicketPriority, titel: str, ttype: Ticke
                 f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
                 f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
             ),
-            info_box_url="https://alpharequest.dom.local/dashboard",
+            info_box_url=config.FRONTEND_URL + "/dashboard",
+
             content="",
         ),
         to_recipients=[to],
@@ -358,7 +361,7 @@ def send_mail_to_fachabteilung(to: str, prio: TicketPriority, titel: str, ttype:
                 f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
                 f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
             ),
-            info_box_url="https://alpharequest.dom.local/dashboard",
+            info_box_url=config.FRONTEND_URL + "dashboard",
             content="",
         ),
         to_recipients=[to],

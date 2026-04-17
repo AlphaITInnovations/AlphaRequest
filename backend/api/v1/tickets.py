@@ -35,14 +35,24 @@ def _user_can_delete_ticket(user: dict, ticket_id: int) -> bool:
     return any(t.id == ticket_id for t in owned)
 
 
-def generate_title(ticket_type, user):
+def generate_title(ticket_type, user, desc):
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    if isinstance(desc, str):
+        desc = json.loads(desc)
+
+    personal = desc.get("personal", {})
+    first_name = personal.get("first_name", "")
+    last_name = personal.get("last_name", "")
+    name = f"{first_name} {last_name}".strip()
+
     if ticket_type == TicketType.zugang_beantragen:
-        label = "Onboarding Mitarbeiter:innen"
+        label = f"Onboarding Mitarbeiter:innen – {name}"
     elif ticket_type == TicketType.zugang_sperren:
-        label = "Offboarding Mitarbeiter:innen"
+        label = f"Offboarding Mitarbeiter:innen – {name}"
     else:
         label = TICKET_LABELS.get(ticket_type, ticket_type.value)
+
     return f"{label} – {now_str}"
 
 
@@ -158,7 +168,7 @@ async def create_ticket(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
-    if not can_user_create_ticket(data.ticket_type.value, user["id"]):
+    if not can_user_create_ticket(data.ticket_type.value, user["id"], user.get("groups")):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                         f"Kein Recht zum Erstellen von '{data.ticket_type.value}'-Tickets")
     if not validate_assignee(request.app.state.user_cache, data.assignee_id):
@@ -170,7 +180,7 @@ async def create_ticket(
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
                         "description muss gültiges JSON sein")
 
-    title = generate_title(data.ticket_type, user)
+    title = generate_title(data.ticket_type, user, data.description)
     ticket_id = request.app.state.manager.create_ticket(
         title=title,
         ticket_type=data.ticket_type,

@@ -63,7 +63,7 @@ export interface ZugangForm {
       datev_rights: string
       persopro:     boolean
       timejob:      boolean
-      swoof:        boolean
+      zvoove:        boolean
     }
     phone_order: {
       enabled:  boolean
@@ -172,7 +172,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       appearance_company: '',
       signature: { title: '', street: '', zip: '', city: '' },
       timebutler: { vacation_year: '', supervisor_id: '', supervisor_name: '' },
-      software: { datev: false, datev_rights: '', persopro: false, timejob: false, swoof: false },
+      software: { datev: false, datev_rights: '', persopro: false, timejob: false, zvoove: false },
       phone_order: { enabled: false, location: '' },
       other_systems: '',
       mailboxes: { info_mailbox: true, additional: '', notes: '' },

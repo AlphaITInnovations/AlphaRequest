@@ -76,7 +76,7 @@ const softwareList = () => {
   if (sw('datev'))    items.push('DATEV')
   if (sw('persopro')) items.push('PersoPro')
   if (sw('timejob'))  items.push('TimeJob')
-  if (sw('swoof'))    items.push('Swoof')
+  if (sw('zvoove'))    items.push('Zvoove')
   return items.length > 0 ? items.join(', ') : '—'
 }
 </script>

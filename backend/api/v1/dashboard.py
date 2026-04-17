@@ -18,6 +18,8 @@ def get_dashboard(user: dict = Depends(get_current_user)):
 
     # ── Eigene Tickets (als Assignee) ──────────────────────────────────────────
     my_tickets = database.list_tickets_by_assignee(user_id)
+    my_created_ticket = database.list_tickets_by_owner(user_id)
+
     orders = [
         DashboardTicket(
             id=t.id,
@@ -28,6 +30,19 @@ def get_dashboard(user: dict = Depends(get_current_user)):
             created_at=t.created_at.strftime("%d.%m.%Y") if hasattr(t.created_at, "strftime") else str(t.created_at)[:10],
         )
         for t in my_tickets
+    ]
+
+    created_orders = [
+        DashboardTicket(
+            id=t.id,
+            title=t.title,
+            type_key=t.ticket_type if isinstance(t.ticket_type, str) else t.ticket_type.value,
+            status=t.status if isinstance(t.status, str) else t.status.value,
+            priority=t.priority if isinstance(t.priority, str) else t.priority.value,
+            created_at=t.created_at.strftime("%d.%m.%Y") if hasattr(t.created_at, "strftime") else str(t.created_at)[
+                :10],
+        )
+        for t in my_created_ticket
     ]
 
     # ── Department-Requests (exakt wie alte Dashboard-Route) ──────────────────
@@ -50,13 +65,15 @@ def get_dashboard(user: dict = Depends(get_current_user)):
     ]
 
     # ── Erlaubte Ticket-Typen ──────────────────────────────────────────────────
+    user_groups = user.get("groups", []) or []
     allowed = [
         t.value for t in TicketType
-        if can_user_create_ticket(t.value, user_id)
+        if can_user_create_ticket(t.value, user_id, user_groups)
     ]
-
+    print(allowed)
     return DataResponse(data=DashboardResponse(
         orders=orders,
+        created_orders=created_orders,
         department_requests=department_requests,
         allowed_ticket_types=allowed,
     ))

@@ -27,5 +27,6 @@ class DepartmentGroup(BaseModel):
 
 class DashboardResponse(BaseModel):
     orders: list[DashboardTicket]
+    created_orders: list[DashboardTicket]
     department_requests: list[DepartmentGroup]
     allowed_ticket_types: list[str]
