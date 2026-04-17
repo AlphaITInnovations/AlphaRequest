@@ -41,7 +41,7 @@ function onVisibilityChange() {
 
 function startHeartbeat() {
   stopHeartbeat()
-  heartbeatTimer = setInterval(checkSession, 30_000)
+  heartbeatTimer = setInterval(checkSession, 10_000)
   document.addEventListener('visibilitychange', onVisibilityChange)
 }
 
