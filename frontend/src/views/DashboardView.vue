@@ -116,8 +116,7 @@ function openTicket(o: DashboardTicket) {
   router.push(`/tickets/edit/${o.type_key}/${o.id}`)
 }
 function openCreatedTicket(o: DashboardTicket) {
-  if (o.status === 'in_progress') router.push(`/tickets/edit/${o.type_key}/${o.id}`)
-  else router.push(`/tickets/overview/${o.id}`)
+  router.push(`/tickets/overview/${o.id}`)
 }
 function openGroupTicket(t: DepartmentTicket, groupId: string) {
   router.push(`/tickets/group/${t.type_key}/${t.id}?department=${groupId}`)
