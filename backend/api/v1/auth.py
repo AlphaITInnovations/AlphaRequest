@@ -4,7 +4,7 @@ from fastapi.responses import RedirectResponse
 from starlette import status
 from starlette.status import HTTP_302_FOUND
 
-from backend.core.dependencies import get_current_user
+from backend.core.dependencies import get_current_user, check_session_only
 from backend.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS
 from backend.database.users import upsert_user, get_user_permissions, get_user, ROLE_ADMIN
 from backend.metrics.auth_metrics import (
