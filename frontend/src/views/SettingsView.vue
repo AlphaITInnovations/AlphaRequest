@@ -579,7 +579,7 @@ const navGroups = computed(() => {
                            placeholder="AD-Gruppe suchen…"
                            class="input w-full"
                            @focus="adGroupSearch[t.key] = adGroupSearch[t.key] ?? ''"
-                           @blur="setTimeout(() => { adGroupSearch[t.key] = '' }, 200)" />
+                           @blur="() => { const k = t.key; window.setTimeout(() => { adGroupSearch[k] = '' }, 200) }" />
                     <!-- Dropdown -->
                     <div v-if="adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0"
                          class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
