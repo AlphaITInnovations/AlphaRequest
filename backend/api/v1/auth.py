@@ -61,6 +61,17 @@ def me(user: dict = Depends(get_current_user)):
     ))
 
 
+# ── /auth/check (Heartbeat – aktualisiert last_activity NICHT) ────────────────
+
+@router.get("/auth/check")
+def check_session(user: dict = Depends(check_session_only)):
+    """
+    Prüft ob die Session noch gültig ist.
+    Aktualisiert last_activity NICHT – damit der Heartbeat
+    die Session nicht künstlich am Leben hält.
+    """
+    return {"status": "ok"}
+
 # ── Login-Flow ─────────────────────────────────────────────────────────────────
 
 @router.get("/start-auth", include_in_schema=False)

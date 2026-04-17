@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import { authApi } from '@/api/auth'
 
 const auth   = useAuthStore()
 const router = useRouter()
@@ -14,27 +15,34 @@ if (window.opener && !window.opener.closed) {
 }
 
 // ── Session-Heartbeat ────────────────────────────────────────────────────────
-// Prüft alle 60s ob die Session noch lebt. Bei 401 → Modal sofort.
+// Prüft alle 30s ob die Session noch lebt über /auth/check.
+// Dieser Endpoint aktualisiert last_activity NICHT – damit wird
+// der Inaktivitäts-Timeout des Backends nicht zurückgesetzt.
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+async function checkSession() {
+  if (!auth.isLoggedIn || auth.sessionExpired) return
+  if (router.currentRoute.value.path === '/login') return
+
+  try {
+    await authApi.checkSession()
+    // Session noch gültig – nichts zu tun
+  } catch {
+    // 401 → Interceptor ruft markSessionExpired() auf
+  }
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    // User kommt zurück zum Tab → sofort prüfen
+    checkSession()
+  }
+}
 
 function startHeartbeat() {
   stopHeartbeat()
-  heartbeatTimer = setInterval(async () => {
-    // Nur prüfen wenn eingeloggt und Modal nicht schon offen
-    if (!auth.isLoggedIn || auth.sessionExpired) return
-    // Nicht auf der Login-Seite prüfen
-    if (router.currentRoute.value.path === '/login') return
-
-    try {
-      await auth.fetchMe()
-      // fetchMe setzt user auf null bei Fehler
-      if (!auth.isLoggedIn) {
-        auth.markSessionExpired()
-      }
-    } catch {
-      // fetchMe fängt Fehler intern ab, aber sicherheitshalber
-    }
-  }, 10_000)
+  heartbeatTimer = setInterval(checkSession, 30_000)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 }
 
 function stopHeartbeat() {
@@ -42,6 +50,7 @@ function stopHeartbeat() {
     clearInterval(heartbeatTimer)
     heartbeatTimer = null
   }
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 }
 
 onMounted(() => {
@@ -93,6 +102,7 @@ function goToLogin() {
           </h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
             Sie wurden aufgrund von Inaktivität automatisch abgemeldet.<br />
+            Ihre Eingaben bleiben erhalten – melden Sie sich einfach erneut an.
           </p>
 
           <!-- Erneut anmelden (Popup) -->

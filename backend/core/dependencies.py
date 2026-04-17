@@ -57,3 +57,35 @@ def get_current_user(request: Request) -> Dict:
     # Permissions immer frisch aus der DB – nie aus der Session
     user["permissions"] = get_user_permissions(user["id"])
     return user
+
+
+
+def check_session_only(request: Request) -> Dict:
+    """
+    Prüft ob die Session noch gültig ist, OHNE last_activity zu aktualisieren.
+    Wird vom Heartbeat-Endpoint verwendet, damit der Heartbeat die Session
+    nicht künstlich am Leben hält.
+    """
+    session = request.session
+    user = session.get("user")
+    now = int(time.time())
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        last_activity = int(session.get("last_activity") or 0)
+    except Exception:
+        last_activity = 0
+
+    if last_activity == 0 or now - last_activity > int(config.SESSION_TIMEOUT):
+        sid = session.get("sid")
+        try:
+            if sid:
+                TOKENS.delete(sid)
+        except Exception:
+            logger.exception("token revoke failed for sid=%s", sid)
+        session.clear()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    return user
