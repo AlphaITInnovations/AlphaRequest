@@ -60,7 +60,7 @@ const checkboxClass = (selected: boolean) =>
 
         <!-- ── Freigabe ────────────────────────────────────────────── -->
         <div class="card space-y-4">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1">✅ Vorweg: Freigabe</h2>
+          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1">✅ Freigabe</h2>
 
           <!-- Hinweis -->
           <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
