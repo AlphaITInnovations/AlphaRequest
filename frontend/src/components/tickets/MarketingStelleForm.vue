@@ -59,12 +59,40 @@ const checkboxClass = (selected: boolean) =>
       <section class="space-y-6">
 
         <!-- ── Freigabe ────────────────────────────────────────────── -->
-        <div class="card">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1">✅ Freigabe erteilt durch</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="card space-y-4">
+          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1">✅ Vorweg: Freigabe</h2>
+
+          <!-- Hinweis -->
+          <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+            <p>Bevor wir loslegen, brauchen wir die <strong>Budget-Freigabe</strong>. Ohne bestätigte Freigabe durch den Budget-Verantwortlichen können wir die Kampagne leider nicht verbindlich einplanen.</p>
+          </div>
+
+          <!-- Checkbox -->
+          <label class="flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition"
+                 :class="[
+                   form.stelle.freigabe_erteilt
+                     ? 'ring-2 ring-[#3EAAB8] border-[#3EAAB8] bg-[#3EAAB8]/5'
+                     : 'border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5',
+                   validationTriggered && !form.stelle.freigabe_erteilt ? 'ring-2 ring-red-400 border-red-400' : ''
+                 ]">
+            <input type="checkbox" v-model="form.stelle.freigabe_erteilt" class="hidden" />
+            <span class="w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center text-xs mt-0.5"
+                  :class="form.stelle.freigabe_erteilt ? 'bg-[#3EAAB8] border-[#3EAAB8] text-white' : 'border-gray-300 dark:border-white/20'">
+              <span v-if="form.stelle.freigabe_erteilt">✓</span>
+            </span>
+            <div>
+              <span class="text-sm font-medium text-gray-900 dark:text-white">Ja, die Budget-Freigabe wurde erteilt</span>
+              <p class="text-xs text-gray-400 mt-0.5">Bitte bestätige, dass der/die Budget-Verantwortliche die Freigabe erteilt hat.</p>
+            </div>
+          </label>
+          <p v-if="validationTriggered && !form.stelle.freigabe_erteilt"
+             class="text-xs text-red-500">Die Freigabe muss bestätigt werden.</p>
+
+          <!-- Freigabe-Details (nur sichtbar wenn Haken gesetzt) -->
+          <div v-if="form.stelle.freigabe_erteilt" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
             <div :class="validationTriggered && isInvalid('stelle.freigabe_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
               <UserSelect
-                label="Name *"
+                label="Freigabe erteilt durch *"
                 placeholder="Person auswählen…"
                 :model-value="form.stelle.freigabe_id
                   ? { id: form.stelle.freigabe_id, name: form.stelle.freigabe_name }

@@ -17,6 +17,7 @@ export interface MarketingStelleForm {
   stelle: {
     antragsteller_name:  string
     antragsteller_email: string
+    freigabe_erteilt: boolean
     freigabe_name:  string
     freigabe_email: string
     freigabe_id:    string
@@ -68,7 +69,7 @@ type Rule = {
 }
 
 const RULES: Record<string, Rule> = {
-  'stelle.freigabe_id':                    { required: true },
+  'stelle.freigabe_id':                    { requiredIf: (f) => f.stelle.freigabe_erteilt },
   'stelle.talention_verantwortlicher_id':  { required: true },
   'stelle.niederlassung':                  { required: true },
   'stelle.gesellschaft':                   { required: true },
@@ -121,6 +122,7 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
     stelle: {
       antragsteller_name:  '',
       antragsteller_email: '',
+      freigabe_erteilt:    false,
       freigabe_name:       '',
       freigabe_email:      '',
       freigabe_id:         '',
@@ -189,6 +191,12 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
   function validate(): boolean {
     validationTriggered.value = true
     const failed = Object.keys(RULES).filter(p => isInvalid(p))
+
+    // Freigabe muss erteilt sein
+    if (!form.stelle.freigabe_erteilt) {
+      failed.push('stelle.freigabe_erteilt')
+    }
+
     errors.value = failed
     if (failed.length > 0) { window.scrollTo({ top: 0, behavior: 'smooth' }); return false }
     return true
