@@ -203,6 +203,20 @@ async def create_ticket(
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
 
+    # skip phase2 for marketing
+    if data.ticket_type == TicketType.marketing_stellenanzeige:
+        ticket = database.get_ticket(ticket_id)
+        complete_ticket_internal(ticket, request, user)
+        add_history_event(
+            ticket_id,
+            actor_id=user["id"],
+            actor_name=user["displayName"],
+            action="ticket_submitted",
+            details={"status_new": RequestStatus.in_request.value},
+        )
+        return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
     mail_to = get_cached_user_mail(request.app, data.assignee_id)
     send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
 

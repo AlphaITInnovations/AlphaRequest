@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import UserSelect from '@/components/UserSelect.vue'
 import { VORQUALIFIZIERUNG_OPTIONEN } from '@/composables/useMarketingStelle'
@@ -11,7 +10,7 @@ const props = defineProps<{
   phase: Phase
 }>()
 
-const { form, companies, submitting, fieldClass, isInvalid, validationTriggered } = props.ctx
+const { form, companies, submitting, fieldClass, isInvalid, validationTriggered, getUserMail } = props.ctx
 
 const BESCHAEFTIGUNGSARTEN = ['Vollzeit', 'Teilzeit', 'Minijob', 'Befristet', 'Praktikum', 'Werkstudent']
 
@@ -54,35 +53,30 @@ const checkboxClass = (selected: boolean) =>
       <p class="text-sm mt-0.5">{{ ctx.errors.value.length }} Fehler gefunden.</p>
     </div>
 
-    <div class="flex flex-col lg:flex-row gap-6">
-
-      <!-- Sidebar -->
-      <aside class="w-full lg:w-[320px] flex-shrink-0">
-        <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                    rounded-2xl shadow-sm p-6 lg:sticky lg:top-4">
-          <TicketDetails
-            :phase="phase"
-            :priority="form.priority"
-            :comment="form.comment"
-            :accountable="form.accountable"
-            :accountable-error="validationTriggered && isInvalid('accountable')"
-            @update:priority="form.priority = $event"
-            @update:comment="form.comment = $event"
-            @update:accountable="form.accountable = $event"
-          />
-        </div>
-      </aside>
+    <div class="max-w-4xl mx-auto">
 
       <!-- Main -->
-      <section class="flex-1 space-y-6">
+      <section class="space-y-6">
 
         <!-- ── Freigabe ────────────────────────────────────────────── -->
         <div class="card">
           <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1">✅ Freigabe erteilt durch</h2>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="label">Name</label>
-              <input :value="form.stelle.freigabe_name" readonly class="input-ro" />
+            <div :class="validationTriggered && isInvalid('stelle.freigabe_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
+              <UserSelect
+                label="Name *"
+                placeholder="Person auswählen…"
+                :model-value="form.stelle.freigabe_id
+                  ? { id: form.stelle.freigabe_id, name: form.stelle.freigabe_name }
+                  : null"
+                @update:model-value="v => {
+                  form.stelle.freigabe_id    = v?.id ?? ''
+                  form.stelle.freigabe_name  = v?.name ?? ''
+                  form.stelle.freigabe_email = v?.id ? getUserMail(v.id) : ''
+                }"
+              />
+              <p v-if="validationTriggered && isInvalid('stelle.freigabe_id')"
+                 class="text-xs text-red-500 mt-1">Pflichtfeld</p>
             </div>
             <div>
               <label class="label">E-Mail</label>
@@ -96,13 +90,13 @@ const checkboxClass = (selected: boolean) =>
           <h2 class="section-title">🏢 Niederlassung & Gesellschaft</h2>
           <div class="grid grid-cols-1 gap-4">
             <div>
-              <label class="label">Welche Niederlassung?{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Welche Niederlassung? *</label>
               <input v-model="form.stelle.niederlassung"
                      :class="fieldClass('stelle.niederlassung')"
                      placeholder="z. B. ACP Neumünster" />
             </div>
             <div>
-              <label class="label">Für welche Gesellschaft ist die Anzeige vorgesehen?{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Für welche Gesellschaft ist die Anzeige vorgesehen? *</label>
               <select v-model="form.stelle.gesellschaft" :class="selectClass('stelle.gesellschaft')">
                 <option value="">Bitte wählen</option>
                 <option v-for="c in companies" :key="c">{{ c }}</option>
@@ -116,27 +110,28 @@ const checkboxClass = (selected: boolean) =>
           <h2 class="section-title">💼 Zur beworbenen Stelle</h2>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
-              <label class="label">Gesuchte Berufsbezeichnung{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Gesuchte Berufsbezeichnung *</label>
               <input v-model="form.stelle.berufsbezeichnung"
                      :class="fieldClass('stelle.berufsbezeichnung')"
                      placeholder="z. B. Projektmanager:in Marketing (m/w/d)" />
             </div>
             <div>
-              <label class="label">Beschäftigungsart{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Beschäftigungsart *</label>
               <select v-model="form.stelle.beschaeftigungsart" :class="selectClass('stelle.beschaeftigungsart')">
                 <option value="">Bitte wählen</option>
                 <option v-for="art in BESCHAEFTIGUNGSARTEN" :key="art">{{ art }}</option>
               </select>
             </div>
             <div>
-              <label class="label">Kostenstelle{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Kostenstelle *</label>
               <input v-model="form.stelle.kostenstelle"
                      :class="fieldClass('stelle.kostenstelle')"
                      placeholder="z. B. 4711" />
             </div>
-            <div class="md:col-span-2">
+            <div class="md:col-span-2"
+                 :class="validationTriggered && isInvalid('stelle.talention_verantwortlicher_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
               <UserSelect
-                :label="`Wer bearbeitet die Talention-Kampagne / Wer ist verantwortlich?${phase === 'edit' ? ' *' : ''}`"
+                label="Wer bearbeitet die Talention-Kampagne / Wer ist verantwortlich? *"
                 placeholder="Mitarbeiter:in auswählen…"
                 :model-value="form.stelle.talention_verantwortlicher_id
                   ? { id: form.stelle.talention_verantwortlicher_id, name: form.stelle.talention_verantwortlicher_name }
@@ -157,14 +152,14 @@ const checkboxClass = (selected: boolean) =>
           <h2 class="section-title">⭐ Stellendetails & Benefits</h2>
           <div class="space-y-4">
             <div>
-              <label class="label">Mindestens 3 Benefits{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Mindestens 3 Benefits *</label>
               <p class="text-xs text-gray-400 mb-1.5">Bitte Benefits/Anreize durch Kommas trennen, z. B. XX € pro Stunde, Weihnachtsgeld, Zuschläge, unbefristeter Vertrag, 30 Tage Urlaub.</p>
               <textarea v-model="form.stelle.benefits" :class="fieldClass('stelle.benefits')"
                         rows="3" class="resize-none"
                         placeholder="z. B. Weihnachtsgeld, 30 Tage Urlaub, unbefristeter Vertrag" />
             </div>
             <div>
-              <label class="label">Ist eine Gehaltsangabe in der Anzeige gewünscht?{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Ist eine Gehaltsangabe in der Anzeige gewünscht? *</label>
               <div class="grid grid-cols-2 gap-3 mt-1 rounded-xl transition"
                    :class="validationTriggered && isInvalid('stelle.gehaltsangabe') ? 'ring-1 ring-red-400 p-1' : ''">
                 <label v-for="opt in ['Ja', 'Nein']" :key="opt" :class="radioClass(form.stelle.gehaltsangabe === opt)">
@@ -180,7 +175,7 @@ const checkboxClass = (selected: boolean) =>
                      placeholder="z. B. 2.800 – 3.200 € oder ab 2.800 €" />
             </div>
             <div>
-              <label class="label">Notwendige Bedingungen für Bewerber{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Notwendige Bedingungen für Bewerber *</label>
               <p class="text-xs text-gray-400 mb-1.5">Bitte trage hier nur die Bedingungen ein, die zwingend nötig sind, z. B. Urkunden/Zeugnisse, Führerschein, Deutschkenntnisse, Ausbildung, Schichtbereitschaft.</p>
               <textarea v-model="form.stelle.bedingungen_notwendig"
                         :class="fieldClass('stelle.bedingungen_notwendig')"
@@ -203,11 +198,11 @@ const checkboxClass = (selected: boolean) =>
           <h2 class="section-title">📅 Erstellung der Anzeige</h2>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="label">Wann soll die Anzeige online gehen?{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Wann soll die Anzeige online gehen? *</label>
               <input type="date" v-model="form.stelle.online_datum" :class="fieldClass('stelle.online_datum')" />
             </div>
             <div>
-              <label class="label">Soll die Anzeige open end laufen?{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Soll die Anzeige open end laufen? *</label>
               <div class="grid grid-cols-2 gap-3 mt-1 rounded-xl transition"
                    :class="validationTriggered && isInvalid('stelle.open_end') ? 'ring-1 ring-red-400 p-1' : ''">
                 <label v-for="opt in ['Ja', 'Nein']" :key="opt" :class="radioClass(form.stelle.open_end === opt)">
@@ -222,16 +217,16 @@ const checkboxClass = (selected: boolean) =>
               <input type="date" v-model="form.stelle.end_datum" :class="fieldClass('stelle.end_datum')" />
             </div>
             <div>
-              <label class="label">In welchen Städten ausspielen?{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">In welchen Städten ausspielen? *</label>
               <input v-model="form.stelle.staedte" :class="fieldClass('stelle.staedte')"
                      placeholder="z. B. München, Augsburg, Ingolstadt" />
             </div>
             <div>
-              <label class="label">Radius pro Stadt (km)?{{ phase === 'edit' ? ' *' : '' }} <span class="text-xs font-normal text-gray-400">mind. 20 km</span></label>
+              <label class="label">Radius pro Stadt (km)? * <span class="text-xs font-normal text-gray-400">mind. 20 km</span></label>
               <input v-model="form.stelle.radius" :class="fieldClass('stelle.radius')" placeholder="z. B. 25–30 km" />
             </div>
             <div>
-              <label class="label">Max. Budget pro Monat (€)?{{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Max. Budget pro Monat (€)? *</label>
               <p class="text-xs text-gray-400 mb-1.5">Empfehlung: mind. 500 € / Anzeige / Monat / Niederlassung</p>
               <input v-model="form.stelle.budget" :class="fieldClass('stelle.budget')"
                      placeholder="z. B. 500" inputmode="numeric" />
@@ -294,7 +289,7 @@ const checkboxClass = (selected: boolean) =>
             </div>
 
             <div>
-              <label class="label">Häufige Bewerberfragen & Antworten (FAQ){{ phase === 'edit' ? ' *' : '' }}</label>
+              <label class="label">Häufige Bewerberfragen & Antworten (FAQ) <span class="text-xs font-normal text-gray-400">(optional)</span></label>
               <p class="text-xs text-gray-400 mb-1.5">Welche Fragen kommen bei Bewerbern häufig, und wie sollen wir sie beantworten? Bitte im Format „Frage: … / Antwort: …" und jeweils eine Zeile pro FAQ.</p>
               <textarea v-model="form.stelle.faq" :class="fieldClass('stelle.faq')"
                         rows="4" class="resize-none"

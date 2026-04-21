@@ -1,6 +1,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { client } from '@/api/client'
+import { usersApi, type UserEntry } from '@/api/users'
 import { useAuthStore } from '@/stores/authStore'
 import type { TicketPriority } from '@/types/ticket'
 
@@ -18,6 +19,7 @@ export interface MarketingStelleForm {
     antragsteller_email: string
     freigabe_name:  string
     freigabe_email: string
+    freigabe_id:    string
 
     niederlassung:  string
     gesellschaft:   string   // ← war: gesellschaften: string[]
@@ -61,29 +63,28 @@ export { VORQUALIFIZIERUNG_OPTIONEN }
 
 type Rule = {
   required?: boolean
-  requiredIf?: (f: MarketingStelleForm, phase: Phase) => boolean
+  requiredIf?: (f: MarketingStelleForm) => boolean
   min?: number  // Mindestwert für numerische Felder
 }
 
 const RULES: Record<string, Rule> = {
-  'accountable':                           { required: true },
-  'stelle.talention_verantwortlicher_id':  { requiredIf: (_, p) => p === 'edit' },
-  'stelle.niederlassung':                  { requiredIf: (_, p) => p === 'edit' },
-  'stelle.gesellschaft':                   { requiredIf: (_, p) => p === 'edit' },  // ← angepasst
-  'stelle.berufsbezeichnung':              { requiredIf: (_, p) => p === 'edit' },
-  'stelle.beschaeftigungsart':             { requiredIf: (_, p) => p === 'edit' },
-  'stelle.kostenstelle':                   { requiredIf: (_, p) => p === 'edit' },
-  'stelle.benefits':                       { requiredIf: (_, p) => p === 'edit' },
-  'stelle.gehaltsangabe':                  { requiredIf: (_, p) => p === 'edit' },
-  'stelle.gehalt':                         { requiredIf: (f, p) => p === 'edit' && f.stelle.gehaltsangabe === 'Ja' },
-  'stelle.bedingungen_notwendig':          { requiredIf: (_, p) => p === 'edit' },
-  'stelle.online_datum':                   { requiredIf: (_, p) => p === 'edit' },
-  'stelle.open_end':                       { requiredIf: (_, p) => p === 'edit' },
-  'stelle.end_datum':                      { requiredIf: (f, p) => p === 'edit' && f.stelle.open_end === 'Nein' },
-  'stelle.staedte':                        { requiredIf: (_, p) => p === 'edit' },
-  'stelle.radius':                         { requiredIf: (_, p) => p === 'edit', min: 20 },
-  'stelle.budget':                         { requiredIf: (_, p) => p === 'edit' },
-  'stelle.faq':                            { requiredIf: (_, p) => p === 'edit' },
+  'stelle.freigabe_id':                    { required: true },
+  'stelle.talention_verantwortlicher_id':  { required: true },
+  'stelle.niederlassung':                  { required: true },
+  'stelle.gesellschaft':                   { required: true },
+  'stelle.berufsbezeichnung':              { required: true },
+  'stelle.beschaeftigungsart':             { required: true },
+  'stelle.kostenstelle':                   { required: true },
+  'stelle.benefits':                       { required: true },
+  'stelle.gehaltsangabe':                  { required: true },
+  'stelle.gehalt':                         { requiredIf: (f) => f.stelle.gehaltsangabe === 'Ja' },
+  'stelle.bedingungen_notwendig':          { required: true },
+  'stelle.online_datum':                   { required: true },
+  'stelle.open_end':                       { required: true },
+  'stelle.end_datum':                      { requiredIf: (f) => f.stelle.open_end === 'Nein' },
+  'stelle.staedte':                        { required: true },
+  'stelle.radius':                         { required: true, min: 20 },
+  'stelle.budget':                         { required: true },
 }
 
 function getDeep(obj: Record<string, unknown>, path: string): unknown {
@@ -104,6 +105,12 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
   const pendingConfirm      = ref(false)
   const pendingComplete     = ref(false)
   const companies           = ref<string[]>([])
+  const users               = ref<UserEntry[]>([])
+
+  function getUserMail(userId: string): string {
+    const u = users.value.find(u => u.id === userId)
+    return u?.mail ?? ''
+  }
 
   const form = reactive<MarketingStelleForm>({
     accountable: null,
@@ -116,6 +123,7 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
       antragsteller_email: '',
       freigabe_name:       '',
       freigabe_email:      '',
+      freigabe_id:         '',
 
       niederlassung: '',
       gesellschaft:  '',   // ← war: gesellschaften: []
@@ -158,7 +166,7 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
       ? form.accountable?.id
       : getDeep(form as unknown as Record<string, unknown>, path)
 
-    const active = rule.required || (rule.requiredIf ? rule.requiredIf(form, phase) : false)
+    const active = rule.required || (rule.requiredIf ? rule.requiredIf(form) : false)
     if (!active) return false
     if (isEmpty(value)) return true
 
@@ -189,17 +197,19 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
   async function init() {
     loading.value = true
     try {
-      // Companies laden
-      const { data: compData } = await client.get('/settings/companies')
-      companies.value = compData.data.companies ?? []
+      // Companies und Users laden
+      const [compRes, usersRes] = await Promise.all([
+        client.get('/settings/companies'),
+        usersApi.list(),
+      ])
+      companies.value = compRes.data.data.companies ?? []
+      users.value = usersRes.data.data.users ?? []
 
       if (phase === 'create') {
         const name  = auth.user?.displayName ?? ''
         const email = auth.user?.mail ?? ''
         form.stelle.antragsteller_name  = name
         form.stelle.antragsteller_email = email
-        form.stelle.freigabe_name       = name
-        form.stelle.freigabe_email      = email
       }
 
       if (phase === 'edit' && ticketId) {
@@ -228,17 +238,16 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
   }
 
   async function confirmCreate() {
-    if (!form.accountable) return
     submitting.value = true
     pendingConfirm.value = false
     try {
       await client.post('/tickets', {
         ticket_type:      'marketing-stellenanzeige',
         description:      buildDescription(),
-        assignee_id:      form.accountable.id,
-        assignee_name:    form.accountable.name,
-        accountable_id:   form.accountable.id,
-        accountable_name: form.accountable.name,
+        assignee_id:      'fachabteilung',
+        assignee_name:    'fachabteilung',
+        accountable_id:   'fachabteilung',
+        accountable_name: 'fachabteilung',
         priority:         form.priority,
         comment:          form.comment,
       })
@@ -288,10 +297,10 @@ export function useMarketingStelle(phase: Phase, ticketId?: number) {
   }
 
   return {
-    form, companies, loading, submitting,
+    form, companies, users, loading, submitting,
     pendingConfirm, pendingComplete,
     validationTriggered, errors,
-    init, validate, isInvalid, fieldClass,
+    init, validate, isInvalid, fieldClass, getUserMail,
     submitCreate, confirmCreate, submitEdit, confirmComplete,
   }
 }
