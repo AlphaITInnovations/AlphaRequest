@@ -26,9 +26,11 @@ async function checkSession() {
 
   try {
     await authApi.checkSession()
-    // Session noch gültig – nichts zu tun
   } catch {
-    // 401 → Interceptor ruft markSessionExpired() auf
+    // 401 → Session abgelaufen, Modal zeigen
+    if (auth.isLoggedIn) {
+      auth.markSessionExpired()
+    }
   }
 }
 
@@ -41,7 +43,7 @@ function onVisibilityChange() {
 
 function startHeartbeat() {
   stopHeartbeat()
-  heartbeatTimer = setInterval(checkSession, 10_000)
+  heartbeatTimer = setInterval(checkSession, 30_000)
   document.addEventListener('visibilitychange', onVisibilityChange)
 }
 

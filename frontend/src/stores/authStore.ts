@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(false)
   const sessionExpired   = ref(false)
   const reauthenticating = ref(false)
+  const hadSession       = ref(false)
 
   // ── Basis ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data } = await authApi.me()
       user.value = data.data
+      hadSession.value = true
     } catch {
       user.value = null
     } finally {
@@ -118,7 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    user, loading, sessionExpired, reauthenticating,
+    user, loading, sessionExpired, reauthenticating, hadSession,
     isLoggedIn, permissions, hasPermission,
     canView, canManage, isAdmin,
     canCreateTicket, allowedTicketTypes,

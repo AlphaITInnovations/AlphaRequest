@@ -12,10 +12,19 @@ export function setupInterceptors(router: import('vue-router').Router) {
     res => res,
     err => {
       const status = err.response?.status
-      if (status === 401 || status === 403) {
+      const url = err.config?.url ?? ''
+
+      // Auth-Endpoints nie abfangen – fetchMe/Router-Guard handeln das
+      const isAuthEndpoint = url.includes('/auth/')
+
+      if ((status === 401 || status === 403) && !isAuthEndpoint) {
         if (router.currentRoute.value.path !== '/login') {
           const auth = useAuthStore()
-          auth.markSessionExpired()
+          // Nur Modal zeigen wenn der User GERADE eingeloggt ist
+          // (d.h. ein normaler API-Call ist fehlgeschlagen)
+          if (auth.isLoggedIn) {
+            auth.markSessionExpired()
+          }
         }
       }
       return Promise.reject(err)

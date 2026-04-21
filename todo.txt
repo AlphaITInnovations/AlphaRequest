@@ -1,4 +1,6 @@
 TODO:
+sitzung abgelaufen kommt immer beim initialen aufruf
+
 view only ansich auch für phase2 für den erstellt tab
  ->versionierung fixen
 

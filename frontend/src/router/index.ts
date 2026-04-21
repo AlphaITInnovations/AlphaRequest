@@ -188,8 +188,7 @@ router.beforeEach(async (to) => {
   }
 
   if (!auth.isLoggedIn) {
-    auth.markSessionExpired()
-    return false
+    return { path: '/login' }
   }
 
   // Permission-Check (view, manage, admin)
