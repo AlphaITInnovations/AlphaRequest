@@ -19,7 +19,8 @@ from backend.database.users import PERM_MANAGE, PERM_ADMIN
 from backend.services.workflow_state import build_workflow, set_workflow_state
 from backend.utils.ticket_labels import TICKET_LABELS
 from backend.utils.logger import logger
-
+from datetime import datetime
+from zoneinfo import ZoneInfo
 router = APIRouter()
 
 
@@ -36,7 +37,7 @@ def _user_can_delete_ticket(user: dict, ticket_id: int) -> bool:
 
 
 def generate_title(ticket_type, user, desc):
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now_str = datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M")
 
     if isinstance(desc, str):
         desc = json.loads(desc)

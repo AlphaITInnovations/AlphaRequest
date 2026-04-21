@@ -1,4 +1,6 @@
 TODO:
+uhrzeit falsch
+
 
 workflow umarbeiten dass niederlassungleiter das ganze erstellt und somit soll er den verantworlichen eintragen
 Marcel liefert daten für titelgenerierung
