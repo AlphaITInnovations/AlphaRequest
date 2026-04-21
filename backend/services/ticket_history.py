@@ -1,5 +1,7 @@
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from backend.database.tickets import get_ticket, update_ticket
 
 
@@ -18,7 +20,7 @@ def add_history_event(
 
     history = ticket.history_parsed
     history.append({
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(ZoneInfo("Europe/Berlin")).isoformat(),
         "actor": {
             "id": actor_id,
             "name": actor_name,
