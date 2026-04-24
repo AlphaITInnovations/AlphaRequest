@@ -488,7 +488,7 @@ class ResetOut(BaseModel):
 def reset_personalnummer(user: dict = Depends(get_current_user)):
     require_admin(user)
     try:
-        from backend.services.personalnummer import reset_personalnummer as _reset
+        from backend.services.personalnummer_generator import reset_personalnummer as _reset
         _reset()
         return DataResponse(data=ResetOut(message="Personalnummer wurde zurückgesetzt"))
     except Exception as e:

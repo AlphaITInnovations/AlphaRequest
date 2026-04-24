@@ -1,17 +1,12 @@
 TODO:
 
 
-workflow umarbeiten dass niederlassungleiter das ganze erstellt und somit soll er den verantworlichen eintragen
 Marcel liefert daten für titelgenerierung
-Bei Ticketpermissions gruppen funktionalität hinzufügen
--> marketing ticket von phase1 direkt in phase3 ohne zwischenbearbeitung
 
-verantwortlicher abteilung/group anstatt
 bei auswahl im dark mode schrift schlecht leserlicht
 
 kompletter audit log als neue datenbank tabelle mit alles wichtigen sachen: edit, remove,
 
-Feedback Frau Wolf: Übersicht für ersteller
 
 
 TODO Technische Überlegungen:
