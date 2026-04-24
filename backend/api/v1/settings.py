@@ -437,6 +437,23 @@ def remove_member(
     raise HTTPException(404, "Gruppe nicht gefunden")
 
 
+# ── Gruppen (öffentlich, für Dropdowns) ──────────────────────────────────────
+
+class GroupSimpleOut(BaseModel):
+    id: str
+    name: str
+
+
+@router.get("/groups", response_model=DataResponse[list[GroupSimpleOut]])
+def list_groups_public(user: dict = Depends(get_current_user)):
+    """Gibt alle Fachabteilungen zurück (id + name). Kein Admin nötig."""
+    groups = get_groups()
+    return DataResponse(data=[
+        GroupSimpleOut(id=g["id"], name=g["name"])
+        for g in groups
+    ])
+
+
 # ── Test Mail ─────────────────────────────────────────────────────────────────
 
 class TestMailIn(BaseModel):

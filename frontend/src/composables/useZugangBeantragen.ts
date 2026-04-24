@@ -162,7 +162,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       first_name: '', last_name: '', title: '',
       private_street: '', private_zip: '', private_city: '',
       start_date: '', homeoffice: '', weekly_hours: '', federal_state: '',
-      department: '', department_other: '',
+      department: 'Keine', department_other: '',
       cost_center: '', location: '', contract_company: '',
       personal_number: '', supervisor_hr_id: '', supervisor_hr_name: '',
       contact_person_id: '', contact_person_name: '',
@@ -264,6 +264,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         const desc = JSON.parse(t.description || '{}')
 
         if (desc.personal) Object.assign(form.personal, desc.personal)
+
+        // Leere Fachabteilung → "Keine" (wird als '' gespeichert)
+        if (!form.personal.department) {
+          form.personal.department = 'Keine'
+        }
 
         // Legacy migration: old private_address → new fields
         if (desc.personal?.private_address && !desc.personal?.private_street) {

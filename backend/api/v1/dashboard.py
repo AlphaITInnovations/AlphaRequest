@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
+from backend.database.groups import get_group_ids_for_user
 from backend.models.models import RequestStatus, TicketType
 from backend.services.ticket_permissions import can_user_create_ticket
 from backend.services.workflow_state import get_department_requests_for_user
@@ -16,8 +17,9 @@ router = APIRouter()
 def get_dashboard(user: dict = Depends(get_current_user)):
     user_id = user["id"]
 
-    # ── Eigene Tickets (als Assignee) ──────────────────────────────────────────
-    my_tickets = database.list_tickets_by_assignee(user_id)
+    # ── Eigene Tickets (als Assignee oder via Gruppenassignment) ─────────────
+    user_group_ids = get_group_ids_for_user(user_id)
+    my_tickets = database.list_tickets_by_assignee_or_group(user_id, user_group_ids)
     my_created_ticket = database.list_tickets_by_owner(user_id)
 
     orders = [
@@ -70,7 +72,6 @@ def get_dashboard(user: dict = Depends(get_current_user)):
         t.value for t in TicketType
         if can_user_create_ticket(t.value, user_id, user_groups)
     ]
-    print(allowed)
     return DataResponse(data=DashboardResponse(
         orders=orders,
         created_orders=created_orders,

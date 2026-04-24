@@ -161,19 +161,19 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
             <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Organisation</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-              <!-- Abteilung Dropdown -->
+              <!-- Fachabteilung Dropdown -->
               <div>
-                <label class="label">Abteilung *</label>
+                <label class="label">Fachabteilung *</label>
                 <select v-model="form.personal.department" :class="selectClass('personal.department')">
-                  <option value="">Bitte wählen</option>
                   <option value="Keine">Keine</option>
                   <option v-for="dept in departments" :key="dept.id" :value="dept.name">{{ dept.name }}</option>
                   <option value="Sonstige">Sonstige</option>
                 </select>
+                <p class="text-xs text-gray-400 mt-1">Nur ändern, wenn es sich um eine Fachabteilung handelt.</p>
               </div>
               <!-- Sonstige Freitextfeld -->
               <div v-if="form.personal.department === 'Sonstige'">
-                <label class="label">Abteilung angeben *</label>
+                <label class="label">Fachabteilung angeben *</label>
                 <input v-model="form.personal.department_other"
                        :class="fieldClass('personal.department_other')"
                        placeholder="Abteilungsname eingeben" />
@@ -285,6 +285,9 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-6 space-y-8">
             <h2 class="text-lg font-semibold text-[#3EAAB8]">IT / Systemdaten</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 -mt-4">
+              Diese Daten werden für die E-Mail-Signatur verwendet – also für die Firma, unter der der Mitarbeitende auftreten soll.
+            </p>
 
             <!-- Firma (Signatur / Webseite) – ehemals unter "Allgemein" -->
             <div class="space-y-4">
@@ -422,7 +425,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                 <div>
                   <label class="label">Zusätzliche Kostenstellen / Niederlassungen</label>
                   <p class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
-                    z.&nbsp;B. für Drucker oder Rechte aufs Niederlassungslaufwerk
+                    Nur ausfüllen, wenn der Mitarbeitende Zugriff auf mehr als seine eigene Niederlassung benötigt (z.&nbsp;B. für Drucker oder Rechte aufs Niederlassungslaufwerk).
                   </p>
                   <textarea v-model="form.it.additional_cost_centers"
                             :class="fieldClass('it.additional_cost_centers')"

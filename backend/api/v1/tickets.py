@@ -62,6 +62,11 @@ def validate_assignee(user_cache, assignee_id: str) -> bool:
         return False
     if assignee_id == "fachabteilung":
         return True
+    # Check if it's a valid group ID
+    from backend.database.groups import get_groups
+    group_ids = {g["id"] for g in get_groups()}
+    if assignee_id in group_ids:
+        return True
     return any(u.get("id") == assignee_id for u in user_cache)
 
 
@@ -121,11 +126,22 @@ def _get_ticket_or_404(ticket_id: int):
 
 
 def _assert_ticket_access(ticket, user: dict):
-    """Owner darf immer, Manager/Admin ebenfalls."""
-    if ticket.owner_id == user["id"]:
+    """Owner, Assignee, Accountable, Gruppen-Mitglied, Manager/Admin dürfen zugreifen."""
+    user_id = user["id"]
+
+    if ticket.owner_id == user_id:
+        return
+    if ticket.assignee_id == user_id:
+        return
+    if ticket.accountable_id == user_id:
         return
     if PERM_MANAGE in user.get("permissions", []):
         return
+    if ticket.assignee_group_id:
+        from backend.database.groups import get_group_ids_for_user
+        if ticket.assignee_group_id in get_group_ids_for_user(user_id):
+            return
+
     raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff auf dieses Ticket")
 
 
@@ -204,7 +220,7 @@ async def create_ticket(
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
 
-    # skip phase2 for marketing
+    # Skip phase2 for marketing → direkt an Fachabteilung
     if data.ticket_type == TicketType.marketing_stellenanzeige:
         ticket = database.get_ticket(ticket_id)
         complete_ticket_internal(ticket, request, user)
@@ -217,11 +233,30 @@ async def create_ticket(
         )
         return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
+    # Assignee: Fachabteilung oder User → DB-Update + Mail
+    from backend.database.groups import get_groups
+    group_map = {g["id"]: g["name"] for g in get_groups()}
+    if data.assignee_id in group_map:
+        group_name = group_map[data.assignee_id]
+        database.update_ticket(ticket_id,
+            assignee_id=None, assignee_name=None,
+            assignee_group_id=data.assignee_id, assignee_group_name=group_name)
 
-    mail_to = get_cached_user_mail(request.app, data.assignee_id)
-    send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
+        all_groups = get_groups()
+        for g in all_groups:
+            if g["id"] == data.assignee_id:
+                for mail in g.get("distributions", []):
+                    if mail:
+                        send_newrequest_mail(mail.strip(), data.priority, title, data.ticket_type, ticket_id)
+                break
+    else:
+        mail_to = get_cached_user_mail(request.app, data.assignee_id)
+        if mail_to:
+            send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
 
 
 @router.patch("/tickets/{ticket_id}", response_model=DataResponse[TicketOut])
@@ -269,8 +304,22 @@ async def update_ticket(
     # --- Zuweisungen: nur bei in_progress änderbar ---
     if ticket.status == RequestStatus.in_progress:
         if data.assignee_id and ticket.assignee_id != data.assignee_id:
-            changes["assignee"] = {"old": ticket.assignee_name, "new": data.assignee_name or data.assignee_id}
-            database.set_assignee(ticket_id, data.assignee_id, data.assignee_name or "")
+            from backend.database.groups import get_groups
+            group_map = {g["id"]: g["name"] for g in get_groups()}
+
+            if data.assignee_id in group_map:
+                # Zuweisung an eine Fachabteilung
+                group_name = group_map[data.assignee_id]
+                changes["assignee"] = {"old": ticket.assignee_name, "new": group_name}
+                database.update_ticket(ticket_id,
+                    assignee_id=None, assignee_name=None,
+                    assignee_group_id=data.assignee_id, assignee_group_name=group_name)
+            else:
+                # Zuweisung an einen User
+                changes["assignee"] = {"old": ticket.assignee_name, "new": data.assignee_name or data.assignee_id}
+                database.set_assignee(ticket_id, data.assignee_id, data.assignee_name or "")
+                # Gruppen-Zuweisung aufheben
+                database.update_ticket(ticket_id, assignee_group_id=None, assignee_group_name=None)
 
         if data.accountable_id and ticket.accountable_id != data.accountable_id:
             changes["accountable"] = {"old": ticket.accountable_name, "new": data.accountable_name or data.accountable_id}
