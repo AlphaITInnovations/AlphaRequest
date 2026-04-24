@@ -307,17 +307,18 @@ def send_newrequest_mail(to: str, prio: TicketPriority, titel: str, ttype: Ticke
     }
 
     readable_type = ticket_type_labels.get(ttype, ttype.value)
+
     readable_prio = priority_labels.get(prio, prio.value)
 
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-        subject=f"Neuer Auftrag #{ticketid} in AlphaRequest",
+        subject=f"Neuer Auftrag {readable_type} #{ticketid} in AlphaRequest",
         body=render_corporate_email(
             subject=titel,
             headline="AlphaRequest (hier klicken)",
             intro=(
                 f"Hallo,\n\n"
-                f"Ihnen wurde ein neuer Auftrag „{readable_type}“ "
+                f"Ihnen wurde ein neuer Auftrag „{titel}“ "
                 f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
                 f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
             ),

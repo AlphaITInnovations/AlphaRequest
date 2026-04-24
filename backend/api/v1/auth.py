@@ -137,7 +137,7 @@ async def auth_callback(request: Request):
         initial_role = ROLE_ADMIN if is_in_admin_group else None
 
         user_groups = id_claims.get("groups", []) or []
-        logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
+        #logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
         user_payload = {
             "id":          id_claims.get("oid") or id_claims.get("sub"),
