@@ -197,15 +197,15 @@ onMounted(async () => {
             <!-- Tabs -->
             <div class="flex items-center border-b border-gray-200/80 dark:border-white/[0.09]">
               <button @click="activeTab = 'assigned'" class="tab-btn" :class="activeTab === 'assigned' ? 'tab-active' : 'tab-idle'">
-                Meine Aufträge
+                Zu bearbeitende Aufträge
                 <span v-if="assignedOpen > 0" class="badge" :class="activeTab === 'assigned' ? 'badge-on' : 'badge-off'">{{ assignedOpen }}</span>
               </button>
               <button @click="activeTab = 'created'" class="tab-btn" :class="activeTab === 'created' ? 'tab-active' : 'tab-idle'">
-                Erstellt
+                Von mir erstellte Aufträge
                 <span v-if="createdOpen > 0" class="badge" :class="activeTab === 'created' ? 'badge-on' : 'badge-off'">{{ createdOpen }}</span>
               </button>
               <button @click="activeTab = 'departments'" class="tab-btn" :class="activeTab === 'departments' ? 'tab-active' : 'tab-idle'">
-                Fachabteilung
+                Durch Fachabteilung auszuführende Aufträge
                 <span v-if="deptTotal > 0" class="badge" :class="activeTab === 'departments' ? 'badge-on' : 'badge-off'">{{ deptTotal }}</span>
               </button>
             </div>
