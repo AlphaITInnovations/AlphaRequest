@@ -128,7 +128,7 @@ def render_corporate_email(
     - headline is clickable and opens info_box_url (required)
     """
     b = branding or MailBranding()
-
+    print(info_box_url)
     if not info_box_url:
         raise ValueError("info_box_url ist Pflicht (Headline soll klickbar sein).")
 

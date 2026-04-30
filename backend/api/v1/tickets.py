@@ -51,6 +51,14 @@ def generate_title(ticket_type, user, desc):
         label = f"Onboarding Mitarbeiter:innen – {name}"
     elif ticket_type == TicketType.zugang_sperren:
         label = f"Offboarding Mitarbeiter:innen – {name}"
+    elif ticket_type == TicketType.marketing_stellenanzeige:
+        stelle = desc.get("stelle", {})
+
+        unit = stelle.get("gesellschaft", "")
+        Niederlassung = stelle.get("niederlassung", "")
+        Job = stelle.get("berufsbezeichnung", "")
+
+        label = f"{unit}_{Niederlassung}_{Job}"
     else:
         label = TICKET_LABELS.get(ticket_type, ticket_type.value)
 

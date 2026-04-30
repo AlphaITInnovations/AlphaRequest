@@ -362,7 +362,7 @@ def send_mail_to_fachabteilung(to: str, prio: TicketPriority, titel: str, ttype:
                 f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
                 f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
             ),
-            info_box_url=config.FRONTEND_URL + "dashboard",
+            info_box_url=config.FRONTEND_URL + "/dashboard",
             content="",
         ),
         to_recipients=[to],
