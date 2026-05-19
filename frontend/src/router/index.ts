@@ -140,6 +140,23 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
 
+    // ── Hotelbuchung ──────────────────────────────────────────────────────────
+    {
+      path: '/tickets/new/hotelbuchung',
+      component: () => import('@/views/tickets/HotelbuchungCreateView.vue'),
+      meta: { requiresAuth: true, requiresTicketType: 'hotelbuchung' },
+    },
+    {
+      path: '/tickets/edit/hotelbuchung/:id',
+      component: () => import('@/views/tickets/HotelbuchungEditView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/tickets/group/hotelbuchung/:id',
+      component: () => import('@/views/tickets/HotelbuchungViewView.vue'),
+      meta: { requiresAuth: true },
+    },
+
     // ── Settings ───────────────────────────────────────────────────────────────
     {
       path: '/settings',

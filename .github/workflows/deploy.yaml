@@ -2,13 +2,44 @@ name: Deploy via Dokploy
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - dev
 
 jobs:
-  deploy:
+  deploy-dev:
+    if: github.ref == 'refs/heads/dev'
     runs-on: self-hosted
     steps:
-      - name: Trigger Dokploy (GitHub-style)
+      - name: Trigger Backend Dev Deploy
+        run: |
+          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/AkN9vYpN34VyHGlsCLymv \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d '{
+              "ref": "refs/heads/dev",
+              "repository": {
+                "full_name": "AlphaITInnovations/AlphaRequestManager"
+              }
+            }'
+
+      - name: Trigger Frontend Dev Deploy
+        run: |
+          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/V7fd_CCzd45gQ3fOM6xz3 \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d '{
+              "ref": "refs/heads/dev",
+              "repository": {
+                "full_name": "AlphaITInnovations/AlphaRequestManager"
+              }
+            }'
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    steps:
+      - name: Trigger Backend Prod Deploy
         run: |
           curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/FLRGusi--QdRevMwRJV6u \
             -H "Content-Type: application/json" \
@@ -19,7 +50,8 @@ jobs:
                 "full_name": "AlphaITInnovations/AlphaRequestManager"
               }
             }'
-      - name: Trigger Dokploy2 (GitHub-style)
+
+      - name: Trigger Frontend Prod Deploy
         run: |
           curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/ttIhpb2X8TDnwloJT6Fz6 \
             -H "Content-Type: application/json" \
@@ -30,4 +62,3 @@ jobs:
                 "full_name": "AlphaITInnovations/AlphaRequestManager"
               }
             }'
-          
