@@ -110,6 +110,8 @@ async def start_auth(request: Request):
 
 @router.get("/auth/callback", include_in_schema=False)
 async def auth_callback(request: Request):
+    logger.info("FRONTEND_URL=%s", config.FRONTEND_URL)
+    logger.info("REDIRECT_URI=%s", config.REDIRECT_URI)
     try:
 
         if not request.session.get("auth_flow"):
