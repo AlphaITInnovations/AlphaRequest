@@ -21,6 +21,7 @@ class TicketType(str, Enum):
     zugang_beantragen = "zugang-beantragen"
     zugang_sperren = "zugang-sperren"
     marketing_stellenanzeige = "marketing-stellenanzeige"
+    hotelbuchung = "hotelbuchung"
 
 
 

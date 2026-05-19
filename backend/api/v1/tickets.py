@@ -59,6 +59,8 @@ def generate_title(ticket_type, user, desc):
         Job = stelle.get("berufsbezeichnung", "")
 
         label = f"{unit}_{Niederlassung}_{Job}"
+    elif ticket_type == TicketType.hotelbuchung:
+        label = f"Hotelbuchung – {user['displayName']}"
     else:
         label = TICKET_LABELS.get(ticket_type, ticket_type.value)
 
@@ -228,8 +230,8 @@ async def create_ticket(
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
 
-    # Skip phase2 for marketing → direkt an Fachabteilung
-    if data.ticket_type == TicketType.marketing_stellenanzeige:
+    # Skip phase2 for marketing and hotelbuchung → direkt an Fachabteilung
+    if data.ticket_type in (TicketType.marketing_stellenanzeige, TicketType.hotelbuchung):
         ticket = database.get_ticket(ticket_id)
         complete_ticket_internal(ticket, request, user)
         add_history_event(

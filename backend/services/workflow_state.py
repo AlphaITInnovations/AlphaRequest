@@ -266,6 +266,27 @@ def build_workflow_marketing_stellenanzeige(description: dict) -> dict:
 
     return workflow
 
+
+def build_workflow_hotelbuchung(description: dict) -> dict:
+    groups = {g["name"].lower(): g for g in get_groups()}
+
+    workflow = {"departments": {}}
+
+    def add_group(name: str):
+        g = groups.get(name.lower())
+        if not g:
+            return
+        workflow["departments"][g["id"]] = {
+            "name": g["name"],
+            "required": True,
+            "status": DEPARTMENT_STATUS_OPEN,
+        }
+
+    add_group("Hotelbuchung")
+
+    return workflow
+
+
 WORKFLOW_BUILDERS = {
     TicketType.zugang_beantragen: build_workflow_zugang_beantragen,
     TicketType.zugang_sperren: build_workflow_zugang_sperren,
@@ -273,8 +294,8 @@ WORKFLOW_BUILDERS = {
     TicketType.niederlassung_anmelden: build_workflow_niederlassung_anmelden,
     TicketType.niederlassung_umzug: build_workflow_niederlassung_umzug,
     TicketType.niederlassung_schliessen: build_workflow_niederlassung_schliessen,
-    TicketType.marketing_stellenanzeige: build_workflow_marketing_stellenanzeige,  # NEU
-
+    TicketType.marketing_stellenanzeige: build_workflow_marketing_stellenanzeige,
+    TicketType.hotelbuchung: build_workflow_hotelbuchung,
 }
 
 

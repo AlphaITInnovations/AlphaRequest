@@ -1,10 +1,9 @@
 TODO:
+antrag hotelbuchung
+Beantragung Buchung -> an buchungsabteilung -> nach Buchung nochma zu frau Alina Merica -> Export pdf mit angabe (beantrager und alle Infos, reisegrund, Niederlassung, zeitstem)
 
-
-Marcel liefert daten für titelgenerierung
 
 bei auswahl im dark mode schrift schlecht leserlicht
-
 kompletter audit log als neue datenbank tabelle mit alles wichtigen sachen: edit, remove,
 
 
