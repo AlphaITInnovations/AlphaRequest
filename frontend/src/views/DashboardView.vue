@@ -47,6 +47,7 @@ const ticketTypes = [
   { key: 'niederlassung-umzug',      icon: '🔄', label: 'Niederlassung umziehen' },
   { key: 'niederlassung-schliessen', icon: '❌', label: 'Niederlassung schließen' },
   { key: 'marketing-stellenanzeige', icon: '📄', label: 'Marketing - Stellenanzeige' },
+  { key: 'hotelbuchung',            icon: '🏨', label: 'Hotelbuchung' },
 ]
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(ticketTypes.map(t => [t.key, t.label]))
 
@@ -56,7 +57,7 @@ const allowedTypes = computed(() =>
 
 // ── Labels & styles ───────────────────────────────────────────────────────────
 const STATUS_LABEL: Record<string, string> = {
-  in_progress: 'In Bearbeitung', in_request: 'In Durchführung',
+  in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
   archived: 'Erledigt', rejected: 'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
@@ -116,7 +117,8 @@ function openTicket(o: DashboardTicket) {
   router.push(`/tickets/edit/${o.type_key}/${o.id}`)
 }
 function openCreatedTicket(o: DashboardTicket) {
-  router.push(`/tickets/overview/${o.id}`)
+  if (o.status === 'in_progress') router.push(`/tickets/edit/${o.type_key}/${o.id}`)
+  else router.push(`/tickets/overview/${o.id}`)
 }
 function openGroupTicket(t: DepartmentTicket, groupId: string) {
   router.push(`/tickets/group/${t.type_key}/${t.id}?department=${groupId}`)
@@ -197,15 +199,15 @@ onMounted(async () => {
             <!-- Tabs -->
             <div class="flex items-center border-b border-gray-200/80 dark:border-white/[0.09]">
               <button @click="activeTab = 'assigned'" class="tab-btn" :class="activeTab === 'assigned' ? 'tab-active' : 'tab-idle'">
-                Zu bearbeitende Aufträge
+                Meine Aufträge
                 <span v-if="assignedOpen > 0" class="badge" :class="activeTab === 'assigned' ? 'badge-on' : 'badge-off'">{{ assignedOpen }}</span>
               </button>
               <button @click="activeTab = 'created'" class="tab-btn" :class="activeTab === 'created' ? 'tab-active' : 'tab-idle'">
-                Von mir erstellte Aufträge
+                Erstellt
                 <span v-if="createdOpen > 0" class="badge" :class="activeTab === 'created' ? 'badge-on' : 'badge-off'">{{ createdOpen }}</span>
               </button>
               <button @click="activeTab = 'departments'" class="tab-btn" :class="activeTab === 'departments' ? 'tab-active' : 'tab-idle'">
-                Durch Fachabteilung auszuführende Aufträge
+                Fachabteilung
                 <span v-if="deptTotal > 0" class="badge" :class="activeTab === 'departments' ? 'badge-on' : 'badge-off'">{{ deptTotal }}</span>
               </button>
             </div>
