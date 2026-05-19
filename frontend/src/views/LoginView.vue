@@ -13,7 +13,7 @@ function startAuth() {
       <img :src="logoUrl" alt="Firmenlogo" class="mx-auto mb-4 h-16 w-auto" loading="lazy" />
 
       <h1 class="text-2xl font-semibold text-center mb-6" style="color: #3EAAB8">
-        AlphaRequest
+        AAAAAAAAAAAAAAAAAlphaRequest
       </h1>
 
       <p class="text-center text-sm text-gray-600 dark:text-gray-300 mb-6">
