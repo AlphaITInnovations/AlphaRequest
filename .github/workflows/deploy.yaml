@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Trigger Backend Dev Deploy
         run: |
-          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/DEV_BACKEND_WEBHOOK_PLACEHOLDER \
+          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/AkN9vYpN34VyHGlsCLymv \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
@@ -25,7 +25,7 @@ jobs:
 
       - name: Trigger Frontend Dev Deploy
         run: |
-          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/DEV_FRONTEND_WEBHOOK_PLACEHOLDER \
+          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/V7fd_CCzd45gQ3fOM6xz3 \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
