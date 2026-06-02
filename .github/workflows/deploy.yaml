@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Trigger Backend Dev Deploy
         run: |
-          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/AkN9vYpN34VyHGlsCLymv \
+          curl -k -X POST https://srv-ai-apps.alphaconsultgruppe.org/api/deploy/AkN9vYpN34VyHGlsCLymv \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
@@ -25,7 +25,7 @@ jobs:
 
       - name: Trigger Frontend Dev Deploy
         run: |
-          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/V7fd_CCzd45gQ3fOM6xz3 \
+          curl -k -X POST https://srv-ai-apps.alphaconsultgruppe.org/api/deploy/V7fd_CCzd45gQ3fOM6xz3 \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
@@ -41,7 +41,7 @@ jobs:
     steps:
       - name: Trigger Backend Prod Deploy
         run: |
-          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/FLRGusi--QdRevMwRJV6u \
+          curl -k -X POST https://srv-ai-apps.alphaconsultgruppe.org/api/deploy/FLRGusi--QdRevMwRJV6u \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
@@ -53,7 +53,7 @@ jobs:
 
       - name: Trigger Frontend Prod Deploy
         run: |
-          curl -k -X POST https://srv-ai-apps.int.alpha-it-innovations.org/api/deploy/ttIhpb2X8TDnwloJT6Fz6 \
+          curl -k -X POST https://srv-ai-apps.alphaconsultgruppe.org/api/deploy/ttIhpb2X8TDnwloJT6Fz6 \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: push" \
             -d '{
