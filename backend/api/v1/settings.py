@@ -160,7 +160,7 @@ def get_env(user: dict = Depends(get_current_user)):
     require_admin(user)
     return DataResponse(data=EnvResponse(
         general={
-            "APP_ENV":     {"value": config.APP_ENV,           "sensitive": False},
+            "0APP_ENV":     {"value": config.APP_ENV,           "sensitive": False},
             "PORT":        {"value": config.PORT,              "sensitive": False},
             "HTTPS":       {"value": bool(config.HTTPS),       "sensitive": False},
             "TICKET_MAIL": {"value": config.TICKET_MAIL or "—","sensitive": False},
