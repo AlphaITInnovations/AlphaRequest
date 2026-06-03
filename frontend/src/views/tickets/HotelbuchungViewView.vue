@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
-import NiederlassungAnmeldenContentPanel from '@/components/tickets/NiederlassungAnmeldenContentPanel.vue'
+import HotelbuchungContentPanel from '@/components/tickets/HotelbuchungContentPanel.vue'
 
 const route        = useRoute()
 const router       = useRouter()
@@ -49,15 +49,10 @@ async function markDone() {
     submitting.value = false
   }
 }
-
-function goToEdit() {
-  if (!confirm('⚠️ Achtung\n\nIn dieser Phase soll das Ticket nur im Notfall bearbeitet werden.\n\nMöchten Sie wirklich fortfahren?')) return
-  router.push(`/tickets/edit/niederlassung-anmelden/${ticketId}`)
-}
 </script>
 
 <template>
-  <AppLayout title="Fachabteilung – Niederlassung anmelden">
+  <AppLayout title="Fachabteilung – Hotelbuchung">
     <div v-if="loading" class="flex items-center justify-center py-24">
       <div class="w-8 h-8 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin"/>
     </div>
@@ -73,24 +68,22 @@ function goToEdit() {
 
         <!-- Sidebar -->
         <aside class="space-y-4">
-          <div class="card space-y-4 text-sm">
+          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                      rounded-2xl shadow-sm p-5 space-y-4 text-sm">
             <div><p class="ro-label">Status</p><p class="font-medium text-gray-900 dark:text-white">{{ STATUS_LABEL[data.ticket.status] ?? data.ticket.status }}</p></div>
             <div><p class="ro-label">Priorität</p><p class="font-medium text-gray-900 dark:text-white">{{ PRIORITY_LABEL[data.ticket.priority] ?? data.ticket.priority }}</p></div>
             <div><p class="ro-label">Antragsteller</p><p class="font-medium text-gray-900 dark:text-white">{{ data.ticket.owner_name }}</p></div>
-            <div class="pt-3 border-t border-gray-100 dark:border-white/[0.06] space-y-3">
-              <div><p class="ro-label">Verantwortlicher</p><p class="text-gray-900 dark:text-white">{{ data.ticket.accountable_name || '—' }}</p></div>
-              <div v-if="data.ticket.comment"><p class="ro-label">Kommentar</p><p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ data.ticket.comment }}</p></div>
-            </div>
           </div>
-          <div class="card text-sm">
+          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                      rounded-2xl shadow-sm p-5 text-sm">
             <p class="ro-label mb-2">Fachabteilung</p>
-            <p class="font-semibold text-[#3EAAB8] mb-3">{{ data.department.name }}</p>
+            <p class="font-semibold text-[#3EAAB8] mb-2">{{ data.department.name }}</p>
             <p class="ro-label mb-1">Bearbeitungsstatus</p>
-            <span class="text-sm font-medium"
+            <span class="inline-flex items-center gap-1.5 text-sm font-medium"
                   :class="{
-                    'text-green-600': data.department.status === 'done',
-                    'text-red-500':   data.department.status === 'rejected',
-                    'text-[#3EAAB8]': ['open','in_progress'].includes(data.department.status),
+                    'text-green-600':  data.department.status === 'done',
+                    'text-red-500':    data.department.status === 'rejected',
+                    'text-[#3EAAB8]':  ['open','in_progress'].includes(data.department.status),
                   }">
               {{ DEPT_STATUS_LABEL[data.department.status] ?? data.department.status }}
             </span>
@@ -99,7 +92,7 @@ function goToEdit() {
 
         <!-- Content -->
         <section class="lg:col-span-2 space-y-5">
-          <NiederlassungAnmeldenContentPanel :description="data.description" />
+          <HotelbuchungContentPanel :description="data.description" />
         </section>
       </div>
 
@@ -110,7 +103,6 @@ function goToEdit() {
         :department-status="data.department.status"
         :can-complete="data.department.can_complete"
         @department-done="markDone"
-        @department-edit="goToEdit"
       />
     </div>
   </AppLayout>
@@ -118,7 +110,5 @@ function goToEdit() {
 
 <style scoped>
 @reference "../../style.css";
-.card     { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-5; }
 .ro-label { @apply text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5; }
-.ro-value { @apply text-sm text-gray-900 dark:text-white; }
 </style>
