@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
+import MarketingStelleContentPanel from '@/components/tickets/MarketingStelleContentPanel.vue'
 
 const route        = useRoute()
 const router       = useRouter()
@@ -24,12 +25,6 @@ const PRIORITY_LABEL: Record<string, string> = {
 const DEPT_STATUS_LABEL: Record<string, string> = {
   done: 'Ausgeführt', rejected: 'Abgelehnt', skipped: 'Übersprungen',
   open: 'Offen', in_progress: 'In Bearbeitung',
-}
-
-const s  = (k: string) => data.value?.description?.stelle?.[k] ?? '—'
-const sa = (k: string): string[] => {
-  const v = data.value?.description?.stelle?.[k]
-  return Array.isArray(v) ? v : []
 }
 
 onMounted(async () => {
@@ -87,7 +82,6 @@ function goToEdit() {
               <div v-if="data.ticket.comment"><p class="ro-label">Kommentar</p><p class="ro-value whitespace-pre-wrap">{{ data.ticket.comment }}</p></div>
             </div>
           </div>
-
           <div class="card text-sm">
             <p class="ro-label mb-2">Fachabteilung</p>
             <p class="font-semibold text-[#3EAAB8] mb-3">{{ data.department.name }}</p>
@@ -105,92 +99,7 @@ function goToEdit() {
 
         <!-- Content -->
         <section class="lg:col-span-2 space-y-5">
-
-          <!-- Freigabe -->
-          <div class="card space-y-3">
-            <h2 class="section-title">✅ Freigabe</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><p class="ro-label">Freigabe erteilt durch</p><p class="ro-value">{{ s('freigabe_name') }}</p></div>
-              <div><p class="ro-label">E-Mail</p><p class="ro-value">{{ s('freigabe_email') }}</p></div>
-            </div>
-          </div>
-
-          <!-- Niederlassung & Gesellschaft -->
-          <div class="card space-y-3">
-            <h2 class="section-title">🏢 Niederlassung & Gesellschaft</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><p class="ro-label">Niederlassung</p><p class="ro-value">{{ s('niederlassung') }}</p></div>
-              <div>
-                <p class="ro-label">Gesellschaft</p>
-                <!-- gesellschaft ist jetzt ein String (war früher Array gesellschaften) -->
-                <p class="ro-value">{{ s('gesellschaft') }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Stelle -->
-          <div class="card space-y-3">
-            <h2 class="section-title">💼 Stelle</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="md:col-span-2"><p class="ro-label">Berufsbezeichnung</p><p class="ro-value">{{ s('berufsbezeichnung') }}</p></div>
-              <div><p class="ro-label">Beschäftigungsart</p><p class="ro-value">{{ s('beschaeftigungsart') }}</p></div>
-              <div><p class="ro-label">Kostenstelle</p><p class="ro-value">{{ s('kostenstelle') }}</p></div>
-              <div class="md:col-span-2"><p class="ro-label">Talention-Verantwortlicher</p><p class="ro-value">{{ s('talention_verantwortlicher_name') }}</p></div>
-            </div>
-          </div>
-
-          <!-- Benefits & Details -->
-          <div class="card space-y-4">
-            <h2 class="section-title">⭐ Benefits & Details</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="md:col-span-2"><p class="ro-label">Benefits</p><p class="ro-value whitespace-pre-wrap">{{ s('benefits') }}</p></div>
-              <div><p class="ro-label">Gehaltsangabe gewünscht</p><p class="ro-value">{{ s('gehaltsangabe') }}</p></div>
-              <div v-if="s('gehaltsangabe') === 'Ja'"><p class="ro-label">Gehalt</p><p class="ro-value">{{ s('gehalt') }}</p></div>
-              <div class="md:col-span-2"><p class="ro-label">Notwendige Bedingungen</p><p class="ro-value whitespace-pre-wrap">{{ s('bedingungen_notwendig') }}</p></div>
-              <div class="md:col-span-2" v-if="s('qualifikationen_nice') !== '—'">
-                <p class="ro-label">Wünschenswerte Qualifikationen</p>
-                <p class="ro-value whitespace-pre-wrap">{{ s('qualifikationen_nice') }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Anzeige -->
-          <div class="card space-y-3">
-            <h2 class="section-title">📅 Anzeige</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><p class="ro-label">Online ab</p><p class="ro-value">{{ s('online_datum') }}</p></div>
-              <div><p class="ro-label">Open End</p><p class="ro-value">{{ s('open_end') }}</p></div>
-              <div v-if="s('open_end') === 'Nein'"><p class="ro-label">Enddatum</p><p class="ro-value">{{ s('end_datum') }}</p></div>
-              <div><p class="ro-label">Städte</p><p class="ro-value">{{ s('staedte') }}</p></div>
-              <div><p class="ro-label">Radius</p><p class="ro-value">{{ s('radius') }}</p></div>
-              <div><p class="ro-label">Max. Budget / Monat</p><p class="ro-value">{{ s('budget') }} €</p></div>
-            </div>
-          </div>
-
-          <!-- Funnel -->
-          <div class="card space-y-4">
-            <h2 class="section-title">🎯 Funnel</h2>
-            <div>
-              <p class="ro-label mb-2">Vorqualifizierungsfragen</p>
-              <ul v-if="sa('vorqualifizierung_fragen').length || sa('vorqualifizierung_custom').length"
-                  class="space-y-1.5">
-                <li v-for="f in sa('vorqualifizierung_fragen')" :key="f"
-                    class="flex items-start gap-2 text-sm text-gray-900 dark:text-white">
-                  <span class="text-[#3EAAB8] mt-0.5">✓</span> {{ f }}
-                </li>
-                <li v-for="f in sa('vorqualifizierung_custom')" :key="f"
-                    class="flex items-start gap-2 text-sm text-gray-900 dark:text-white">
-                  <span class="text-[#3EAAB8] mt-0.5">✓</span> {{ f }}
-                </li>
-              </ul>
-              <p v-else class="ro-value">—</p>
-            </div>
-            <div>
-              <p class="ro-label">FAQ</p>
-              <p class="ro-value whitespace-pre-wrap">{{ s('faq') }}</p>
-            </div>
-          </div>
-
+          <MarketingStelleContentPanel :description="data.description" />
         </section>
       </div>
 
@@ -209,8 +118,7 @@ function goToEdit() {
 
 <style scoped>
 @reference "../../style.css";
-.card          { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-5; }
-.section-title { @apply text-base font-semibold text-[#3EAAB8] mb-1; }
-.ro-label      { @apply text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5; }
-.ro-value      { @apply text-sm text-gray-900 dark:text-white; }
+.card     { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-5; }
+.ro-label { @apply text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5; }
+.ro-value { @apply text-sm text-gray-900 dark:text-white; }
 </style>

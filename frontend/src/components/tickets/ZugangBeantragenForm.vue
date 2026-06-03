@@ -267,10 +267,23 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                     <option v-for="n in 7" :key="n">{{ n }}</option>
                   </select>
                 </div>
-                <div>
-                  <label class="label">Benötigt ab? *</label>
-                  <input type="date" v-model="form.fuhrpark.car_from" :class="fieldClass('fuhrpark.car_from')" />
-                </div>
+<div>
+  <label class="label">Benötigt ab? *</label>
+
+  <input
+    type="date"
+    v-model="form.fuhrpark.car_from"
+    :class="fieldClass('fuhrpark.car_from')"
+  />
+
+  <div class="mt-2 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2">
+    <p class="text-sm text-slate-700 dark:text-slate-300">
+      <strong>Hinweis:</strong> Bitte abstimmen, ob der Firmenwagen bereits
+      während der Probezeit oder erst nach deren Abschluss bereitgestellt
+      werden soll, und entsprechendes Datum eintragen.
+    </p>
+  </div>
+</div>
               </template>
             </div>
           </div>
