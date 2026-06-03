@@ -1,12 +1,10 @@
-
-
-<!-- ── NiederlassungSchliessenViewView.vue ────────────────────────────────── -->
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
+import NiederlassungSchliessenContentPanel from '@/components/tickets/NiederlassungSchliessenContentPanel.vue'
 
 const route        = useRoute()
 const router       = useRouter()
@@ -27,15 +25,6 @@ const PRIORITY_LABEL: Record<string, string> = {
 const DEPT_STATUS_LABEL: Record<string, string> = {
   done: 'Ausgeführt', rejected: 'Abgelehnt', skipped: 'Übersprungen',
   open: 'Offen', in_progress: 'In Bearbeitung',
-}
-
-const p = (k: string) => data.value?.description?.personal?.[k] ?? '—'
-const it = (k: string) => data.value?.description?.it?.[k]      ?? '—'
-const f  = (k: string) => data.value?.description?.fuhrpark?.[k] ?? '—'
-
-const HARDWARE_LABEL: Record<string, string> = {
-  return_it:       'Wird an die IT gesendet',
-  transfer_branch: 'Transfer in andere Niederlassung',
 }
 
 onMounted(async () => {
@@ -110,61 +99,7 @@ function goToEdit() {
 
         <!-- Content -->
         <section class="lg:col-span-2 space-y-5">
-
-          <!-- Personalabteilung -->
-          <div class="card space-y-4">
-            <h2 class="section-title">Personalabteilung</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><p class="ro-label">Niederlassung</p><p class="ro-value">{{ p('location') }}</p></div>
-              <div><p class="ro-label">Schließungsdatum</p><p class="ro-value">{{ p('closing_date') }}</p></div>
-              <div class="md:col-span-2"><p class="ro-label">Adresse</p><p class="ro-value whitespace-pre-wrap">{{ p('address') }}</p></div>
-            </div>
-          </div>
-
-          <!-- IT -->
-          <div class="card space-y-5">
-            <h2 class="section-title">IT</h2>
-
-            <!-- Bestätigungen -->
-            <div class="rounded-xl border border-red-300/60 bg-red-50 dark:bg-red-900/20 p-5 space-y-3">
-              <p class="text-sm font-semibold text-red-800 dark:text-red-200">⚠️ Wichtige Hinweise</p>
-              <div class="flex items-start gap-3 text-sm text-red-800 dark:text-red-200">
-                <span>{{ it('confirm_dsl_cancel') ? '✅' : '⬜' }}</span>
-                <div>
-                  <strong>Die DSL/Internetleitung wird gekündigt.</strong>
-                  <p class="text-xs mt-0.5 opacity-75">Bestätigt: {{ it('confirm_dsl_cancel') ? 'Ja' : 'Nein' }}</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-3 text-sm text-red-800 dark:text-red-200">
-                <span>{{ it('confirm_landline_cancel') ? '✅' : '⬜' }}</span>
-                <div>
-                  <strong>Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!</strong>
-                  <p class="text-xs mt-0.5 opacity-75">Bestätigt: {{ it('confirm_landline_cancel') ? 'Ja' : 'Nein' }}</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="md:col-span-2">
-                <p class="ro-label">Umgang mit Hardware</p>
-                <p class="ro-value">{{ HARDWARE_LABEL[it('hardware_action')] ?? it('hardware_action') }}</p>
-              </div>
-              <div v-if="it('hardware_action') === 'transfer_branch'" class="md:col-span-2">
-                <p class="ro-label">Ziel-Niederlassung</p>
-                <p class="ro-value whitespace-pre-wrap">{{ it('transfer_target') }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Fuhrpark -->
-          <div class="card space-y-4">
-            <h2 class="section-title">Fuhrpark</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><p class="ro-label">Poolfahrzeuge vor Ort?</p><p class="ro-value">{{ f('pool_cars') }}</p></div>
-              <div v-if="f('pool_cars') === 'Ja'"><p class="ro-label">Rückgabedatum</p><p class="ro-value">{{ f('return_date') }}</p></div>
-            </div>
-          </div>
-
+          <NiederlassungSchliessenContentPanel :description="data.description" />
         </section>
       </div>
 
@@ -183,8 +118,7 @@ function goToEdit() {
 
 <style scoped>
 @reference "../../style.css";
-.card          { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-5; }
-.section-title { @apply text-base font-semibold text-[#3EAAB8]; }
-.ro-label      { @apply text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5; }
-.ro-value      { @apply text-sm text-gray-900 dark:text-white; }
+.card     { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-5; }
+.ro-label { @apply text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5; }
+.ro-value { @apply text-sm text-gray-900 dark:text-white; }
 </style>

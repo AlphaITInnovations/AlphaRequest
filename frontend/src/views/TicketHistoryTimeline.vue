@@ -69,29 +69,59 @@ function getMeta(action: string) {
   return ACTION_META[action] ?? { label: action, icon: '🔹', color: 'bg-gray-400' }
 }
 
-// Nur geänderte Keys aus einem description-Snapshot-Diff extrahieren
-function descriptionDiff(old: Record<string, any>, next: Record<string, any>): { key: string; section: string; oldVal: any; newVal: any }[] {
-  const result: { key: string; section: string; oldVal: any; newVal: any }[] = []
-  for (const section of Object.keys(next)) {
-    const oldSec = old?.[section] ?? {}
-    const newSec = next[section] ?? {}
-    for (const key of Object.keys(newSec)) {
-      if (JSON.stringify(oldSec[key]) !== JSON.stringify(newSec[key])) {
-        result.push({ key, section, oldVal: oldSec[key] ?? '—', newVal: newSec[key] })
-      }
-    }
-  }
-  return result
+function labelize(s: string) {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 function formatVal(v: any): string {
   if (v === null || v === undefined || v === '') return '—'
   if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
+  if (typeof v === 'object') return '—' // sollte nach flatten nicht mehr vorkommen
   return String(v)
 }
 
-function labelize(s: string) {
-  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+// Flacht ein verschachteltes Objekt auf primitive Werte ab.
+// { software: { datev: true, persopro: false } } → { 'software.datev': true, 'software.persopro': false }
+function flatten(obj: Record<string, any>, prefix = ''): Record<string, any> {
+  const result: Record<string, any> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${k}` : k
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      Object.assign(result, flatten(v, fullKey))
+    } else {
+      result[fullKey] = v
+    }
+  }
+  return result
+}
+
+// Vergleicht zwei description-Snapshots und gibt nur geänderte primitive Felder zurück.
+function descriptionDiff(
+  old: Record<string, any>,
+  next: Record<string, any>
+): { key: string; label: string; oldVal: any; newVal: any }[] {
+  const flatOld  = flatten(old  ?? {})
+  const flatNext = flatten(next ?? {})
+
+  // Alle Keys aus beiden Seiten zusammenführen
+  const allKeys = new Set([...Object.keys(flatOld), ...Object.keys(flatNext)])
+  const result: { key: string; label: string; oldVal: any; newVal: any }[] = []
+
+  for (const key of allKeys) {
+    const o = flatOld[key]
+    const n = flatNext[key]
+    if (JSON.stringify(o) !== JSON.stringify(n)) {
+      // Leere Strings / false / null beim alten Wert: nur anzeigen wenn neuer Wert sinnvoll ist
+      const newMeaningful = n !== null && n !== undefined && n !== '' && n !== false
+      const oldMeaningful = o !== null && o !== undefined && o !== '' && o !== false
+      if (!newMeaningful && !oldMeaningful) continue
+
+      // Label aus dem letzten Segment des Pfads
+      const lastSegment = key.split('.').pop() ?? key
+      result.push({ key, label: labelize(lastSegment), oldVal: o, newVal: n })
+    }
+  }
+  return result
 }
 </script>
 
@@ -123,7 +153,7 @@ function labelize(s: string) {
             </div>
           </div>
 
-          <!-- ticket_created: priority + type -->
+          <!-- ticket_created -->
           <template v-if="e.action === 'ticket_created'">
             <div class="flex gap-2 flex-wrap">
               <span class="text-xs px-2 py-0.5 rounded-full bg-[#3EAAB8]/15 text-[#3EAAB8] font-medium">
@@ -135,20 +165,23 @@ function labelize(s: string) {
             </div>
           </template>
 
-          <!-- ticket_updated: changes pro Feld -->
+          <!-- ticket_updated -->
           <template v-if="e.action === 'ticket_updated' && e.details?.changes">
 
-            <!-- description snapshot diff -->
+            <!-- description snapshot diff (rekursiv geflattened) -->
             <template v-if="e.details.changes.description">
               <div class="space-y-1.5">
                 <p class="text-xs text-gray-400 font-medium uppercase tracking-wider">Formular-Änderungen</p>
-                <div v-for="diff in descriptionDiff(e.details.changes.description.old, e.details.changes.description.new)"
-                     :key="diff.section + diff.key"
-                     class="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-0.5 text-xs items-baseline">
-                  <span class="text-gray-400">{{ labelize(diff.key) }}</span>
-                  <span class="line-through text-red-400 dark:text-red-400 truncate">{{ formatVal(diff.oldVal) }}</span>
-                  <span class="text-green-600 dark:text-green-400 font-medium truncate">{{ formatVal(diff.newVal) }}</span>
-                </div>
+                <template v-if="descriptionDiff(e.details.changes.description.old, e.details.changes.description.new).length > 0">
+                  <div v-for="diff in descriptionDiff(e.details.changes.description.old, e.details.changes.description.new)"
+                       :key="diff.key"
+                       class="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-0.5 text-xs items-baseline">
+                    <span class="text-gray-400 truncate">{{ diff.label }}</span>
+                    <span class="line-through text-red-400 truncate">{{ formatVal(diff.oldVal) }}</span>
+                    <span class="text-green-600 dark:text-green-400 font-medium truncate">{{ formatVal(diff.newVal) }}</span>
+                  </div>
+                </template>
+                <p v-else class="text-xs text-gray-400 italic">Keine sichtbaren Änderungen</p>
               </div>
             </template>
 
@@ -158,7 +191,7 @@ function labelize(s: string) {
                    class="grid grid-cols-[100px_1fr] gap-x-3 text-xs items-baseline">
                 <span class="text-gray-400">{{ FIELD_LABEL[field] ?? labelize(String(field)) }}</span>
                 <span>
-                  <span class="line-through text-red-400 dark:text-red-400 mr-1.5">{{ formatVal(change.old) }}</span>
+                  <span class="line-through text-red-400 mr-1.5">{{ formatVal(change.old) }}</span>
                   <span class="text-green-600 dark:text-green-400 font-medium">{{ formatVal(change.new) }}</span>
                 </span>
               </div>
@@ -168,7 +201,12 @@ function labelize(s: string) {
 
           <!-- ticket_submitted -->
           <template v-if="e.action === 'ticket_submitted'">
-            <p class="text-xs text-gray-400">Status → <span class="font-medium text-[#3EAAB8]">Zu bearbeiten</span></p>
+            <p class="text-xs text-gray-400">
+              Status →
+              <span class="font-medium text-[#3EAAB8]">
+                {{ STATUS_LABEL[e.details?.status_new] ?? 'Zu bearbeiten' }}
+              </span>
+            </p>
           </template>
 
           <!-- status_changed -->

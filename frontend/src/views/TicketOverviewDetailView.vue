@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
-import TicketHistoryTimeline from "@/views/TicketHistoryTimeline.vue";
+import TicketHistoryTimeline from '@/views/TicketHistoryTimeline.vue'
+import ZugangBeantragenContentPanel from '@/components/tickets/ZugangBeantragenContentPanel.vue'
+// Weitere Panels hier importieren sobald sie erstellt wurden:
+import ZugangSperrenContentPanel from '@/components/tickets/ZugangSperrenContentPanel.vue'
+import HardwareContentPanel from '@/components/tickets/HardwareContentPanel.vue'
+import NiederlassungAnmeldenContentPanel from '@/components/tickets/NiederlassungAnmeldenContentPanel.vue'
+import NiederlassungUmzugContentPanel from '@/components/tickets/NiederlassungUmzugContentPanel.vue'
+import NiederlassungSchliessenContentPanel from '@/components/tickets/NiederlassungSchliessenContentPanel.vue'
+import MarketingStelleContentPanel from '@/components/tickets/MarketingStelleContentPanel.vue'
+import HotelbuchungContentPanel from '@/components/tickets/HotelbuchungContentPanel.vue'
 
 const route  = useRoute()
 const router = useRouter()
@@ -12,9 +21,26 @@ const id     = Number(route.params.id)
 const loading = ref(true)
 const data    = ref<any>(null)
 
+const PANEL_MAP: Record<string, Component> = {
+  'zugang-beantragen': ZugangBeantragenContentPanel,
+  'zugang-sperren':           ZugangSperrenContentPanel,
+  'hardware':                 HardwareContentPanel,
+  'niederlassung-anmelden':   NiederlassungAnmeldenContentPanel,
+  'niederlassung-umzug':      NiederlassungUmzugContentPanel,
+  'niederlassung-schliessen': NiederlassungSchliessenContentPanel,
+  'marketing-stellenanzeige': MarketingStelleContentPanel,
+  'hotelbuchung':             HotelbuchungContentPanel,
+}
+
+const contentPanel = computed(() =>
+  data.value ? PANEL_MAP[data.value.type_key] ?? null : null
+)
+
 const STATUS_LABEL: Record<string, string> = {
-  in_request: 'Zu bearbeiten', in_progress: 'In Bearbeitung',
-  archived: 'Erledigt', rejected: 'Abgelehnt',
+  in_request:  'Zu bearbeiten',
+  in_progress: 'In Bearbeitung',
+  archived:    'Erledigt',
+  rejected:    'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
   in_request:  'bg-[#3EAAB8]/15 text-[#3EAAB8]',
@@ -29,7 +55,13 @@ const DEPT_CLASS: Record<string, string> = {
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
   skipped:     'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
 }
-
+const DEPT_STATUS_LABEL: Record<string, string> = {
+  done:        'Ausgeführt',
+  open:        'Offen',
+  in_progress: 'In Bearbeitung',
+  rejected:    'Abgelehnt',
+  skipped:     'Übersprungen',
+}
 
 function formatDate(ts: string) {
   if (!ts) return '—'
@@ -39,10 +71,6 @@ function formatDate(ts: string) {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
-}
-
-function labelize(s: string) {
-  return s.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 onMounted(async () => {
@@ -80,8 +108,10 @@ onMounted(async () => {
 
       <div class="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5">
 
-        <!-- Sidebar -->
+        <!-- ── Sidebar ── -->
         <aside class="space-y-4">
+
+          <!-- Übersicht -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-5 space-y-3 text-sm">
             <h2 class="font-semibold text-gray-900 dark:text-white">Übersicht</h2>
@@ -106,10 +136,13 @@ onMounted(async () => {
             </div>
           </div>
 
+          <!-- Personen -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-5 text-sm">
-            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Antragsteller</p>
-            <p class="font-medium text-gray-900 dark:text-white">{{ data.owner_name }}</p>
+            <div>
+              <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Antragsteller</p>
+              <p class="font-medium text-gray-900 dark:text-white">{{ data.owner_name }}</p>
+            </div>
             <div v-if="data.accountable_name" class="mt-3">
               <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Verantwortlicher</p>
               <p class="font-medium text-gray-900 dark:text-white">{{ data.accountable_name }}</p>
@@ -120,7 +153,8 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div v-if="Object.keys(data.departments).length > 0"
+          <!-- Fachabteilungen -->
+          <div v-if="Object.keys(data.departments ?? {}).length > 0"
                class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-5 text-sm">
             <p class="font-semibold text-gray-900 dark:text-white mb-3">Fachabteilungen</p>
@@ -130,35 +164,47 @@ onMounted(async () => {
                 <span class="text-gray-700 dark:text-gray-300">{{ dept.name }}</span>
                 <span class="text-xs font-medium px-2 py-0.5 rounded-full"
                       :class="DEPT_CLASS[dept.status] ?? 'bg-gray-100 text-gray-500'">
-                  {{ dept.status }}
+                  {{ DEPT_STATUS_LABEL[dept.status] ?? dept.status }}
                 </span>
               </li>
             </ul>
           </div>
         </aside>
 
-        <!-- Content -->
+        <!-- ── Main Content ── -->
         <section class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 items-start">
 
-          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                      rounded-2xl shadow-sm p-6 space-y-3">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white">Auftragsinhalt</h2>
-            <template v-if="data.description && Object.keys(data.description).length > 0">
-              <details v-for="(section, key) in data.description" :key="key"
-                       class="border border-gray-200 dark:border-white/[0.06] rounded-xl overflow-hidden">
-                <summary class="cursor-pointer px-4 py-3 font-medium text-sm
-                                text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5">
-                  {{ labelize(String(key)) }}
-                </summary>
-                <div class="p-4 border-t border-gray-100 dark:border-white/[0.04]">
-                  <DescriptionRenderer :value="section" />
-                </div>
-              </details>
-            </template>
-            <p v-else class="text-sm text-gray-400 italic">Keine Auftragsdaten vorhanden.</p>
+          <!-- Auftragsinhalt -->
+          <div class="space-y-5">
+            <!-- Dediziertes Panel vorhanden → rendern -->
+            <component
+              v-if="contentPanel"
+              :is="contentPanel"
+              :description="data.description"
+            />
+
+            <!-- Fallback: generischer JSON-Renderer -->
+            <div v-else
+                 class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                        rounded-2xl shadow-sm p-6 space-y-3">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">Auftragsinhalt</h2>
+              <template v-if="data.description && Object.keys(data.description).length > 0">
+                <details v-for="(section, key) in data.description" :key="key"
+                         class="border border-gray-200 dark:border-white/[0.06] rounded-xl overflow-hidden">
+                  <summary class="cursor-pointer px-4 py-3 font-medium text-sm
+                                  text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5">
+                    {{ String(key).replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }}
+                  </summary>
+                  <div class="p-4 border-t border-gray-100 dark:border-white/[0.04]">
+                    <DescriptionRenderer :value="section" />
+                  </div>
+                </details>
+              </template>
+              <p v-else class="text-sm text-gray-400 italic">Keine Auftragsdaten vorhanden.</p>
+            </div>
           </div>
 
-
+          <!-- Verlauf -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-6 xl:sticky xl:top-4 max-h-[75vh] overflow-auto">
             <TicketHistoryTimeline :history="data.history" />
