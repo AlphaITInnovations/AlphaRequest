@@ -1,15 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
-from backend.models.models import TicketType
-
-
-class DashboardTicket(BaseModel):
-    id: int
-    title: str
-    type_key: str
-    status: str
-    priority: str
-    created_at: str
 
 
 class DepartmentTicket(BaseModel):
@@ -25,8 +14,19 @@ class DepartmentGroup(BaseModel):
     tickets: list[DepartmentTicket]
 
 
+class DashboardTicket(BaseModel):
+    id: int
+    title: str
+    type_key: str
+    status: str
+    priority: str
+    created_at: str
+    assignee_group_name: str | None = None   # ← NEU
+
+
 class DashboardResponse(BaseModel):
     orders: list[DashboardTicket]
+    group_orders: list[DashboardTicket]      # ← NEU
     created_orders: list[DashboardTicket]
     department_requests: list[DepartmentGroup]
     allowed_ticket_types: list[str]

@@ -1,6 +1,9 @@
 TODO:
 antrag hotelbuchung
-Beantragung Buchung -> an buchungsabteilung -> nach Buchung nochma zu frau Alina Merica -> Export pdf mit angabe (beantrager und alle Infos, reisegrund, Niederlassung, zeitstem)
+Beantragung Buchung
+    -> an buchungsabteilung
+    -> nach Buchung nochma zu frau Alina Merica 
+    -> Export pdf mit angabe (beantrager und alle Infos, reisegrund, Niederlassung, zeitstem)
 
 
 bei auswahl im dark mode schrift schlecht leserlicht

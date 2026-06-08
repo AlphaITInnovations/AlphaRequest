@@ -12,6 +12,7 @@ const auth   = useAuthStore()
 interface DashboardTicket {
   id: number; title: string; type_key: string
   status: string; priority: string; created_at: string
+  assignee_group_name?: string | null
 }
 interface DepartmentTicket {
   id: number; title: string; type_key: string; created_at: string
@@ -21,6 +22,7 @@ interface DepartmentGroup {
 }
 interface DashboardData {
   orders: DashboardTicket[]
+  group_orders: DashboardTicket[]
   created_orders: DashboardTicket[]
   department_requests: DepartmentGroup[]
   allowed_ticket_types: string[]
@@ -28,34 +30,29 @@ interface DashboardData {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading   = ref(true)
-const data      = ref<DashboardData>({ orders: [], created_orders: [], department_requests: [], allowed_ticket_types: [] })
+const data      = ref<DashboardData>({ orders: [], group_orders: [], created_orders: [], department_requests: [], allowed_ticket_types: [] })
 const openDepts = ref<Record<string, boolean>>({})
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-type Tab = 'assigned' | 'created' | 'departments'
-const activeTab = ref<Tab>('assigned')
+type Tab = 'mine' | 'group' | 'created' | 'departments'
+const activeTab = ref<Tab>('mine')
 
-// ── Filter (persistent across tabs) ───────────────────────────────────────────
+// ── Filter ────────────────────────────────────────────────────────────────────
 const filter = ref({ search: '', status: 'all', priority: 'all', department: 'all' })
 
-// ── Ticket type config ────────────────────────────────────────────────────────
+// ── Labels ────────────────────────────────────────────────────────────────────
 const ticketTypes = [
-  { key: 'hardware',                 icon: '📦', label: 'Hardwarebestellung' },
-  { key: 'zugang-beantragen',        icon: '🔑', label: 'Onboarding Mitarbeiter:innen' },
-  { key: 'zugang-sperren',           icon: '🔒', label: 'Offboarding Mitarbeiter:innen' },
-  { key: 'niederlassung-anmelden',   icon: '🏢', label: 'Niederlassung anmelden' },
-  { key: 'niederlassung-umzug',      icon: '🔄', label: 'Niederlassung umziehen' },
-  { key: 'niederlassung-schliessen', icon: '❌', label: 'Niederlassung schließen' },
-  { key: 'marketing-stellenanzeige', icon: '📄', label: 'Marketing - Stellenanzeige' },
-  { key: 'hotelbuchung',            icon: '🏨', label: 'Hotelbuchung' },
+  { key: 'hardware',                 label: 'Hardwarebestellung' },
+  { key: 'zugang-beantragen',        label: 'Onboarding Mitarbeiter:innen' },
+  { key: 'zugang-sperren',           label: 'Offboarding Mitarbeiter:innen' },
+  { key: 'niederlassung-anmelden',   label: 'Niederlassung anmelden' },
+  { key: 'niederlassung-umzug',      label: 'Niederlassung umziehen' },
+  { key: 'niederlassung-schliessen', label: 'Niederlassung schließen' },
+  { key: 'marketing-stellenanzeige', label: 'Marketing - Stellenanzeige' },
+  { key: 'hotelbuchung',             label: 'Hotelbuchung' },
 ]
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(ticketTypes.map(t => [t.key, t.label]))
 
-const allowedTypes = computed(() =>
-  ticketTypes.filter(t => data.value.allowed_ticket_types.includes(t.key))
-)
-
-// ── Labels & styles ───────────────────────────────────────────────────────────
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
   archived: 'Erledigt', rejected: 'Abgelehnt',
@@ -73,62 +70,65 @@ const PRIORITY_CLASS: Record<string, string> = {
   low: 'text-gray-400', medium: 'text-blue-400', high: 'text-amber-500', critical: 'text-red-500',
 }
 
-function dotClass(status: string): string {
-  return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', archived: 'bg-green-500', rejected: 'bg-red-500' }[status] ?? 'bg-gray-300'
+function dotClass(s: string) {
+  return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', archived: 'bg-green-500', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
 }
 
-// ── Stat counts ───────────────────────────────────────────────────────────────
-const assignedOpen   = computed(() => data.value.orders.filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
-const createdOpen    = computed(() => data.value.created_orders.filter(o => o.status !== 'archived').length)
-const deptTotal      = computed(() => data.value.department_requests.reduce((s, d) => s + d.tickets.length, 0))
+// ── Counts ────────────────────────────────────────────────────────────────────
+const mineCount    = computed(() => data.value.orders.filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
+const groupCount   = computed(() => data.value.group_orders.filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
+const createdCount = computed(() => data.value.created_orders.filter(o => o.status !== 'archived').length)
+const deptCount    = computed(() => data.value.department_requests.reduce((s, d) => s + d.tickets.length, 0))
+const totalOpen    = computed(() => mineCount.value + groupCount.value + deptCount.value)
 
-// ── Filtered lists ────────────────────────────────────────────────────────────
+// ── Filtering ─────────────────────────────────────────────────────────────────
 function applyFilter(list: DashboardTicket[]) {
   return list.filter(o => {
     const q = filter.value.search.toLowerCase()
     return (
-      (!q || o.title.toLowerCase().includes(q) || o.type_key.toLowerCase().includes(q) || (TYPE_LABEL[o.type_key] ?? '').toLowerCase().includes(q)) &&
+      (!q || o.title.toLowerCase().includes(q) || (TYPE_LABEL[o.type_key] ?? '').toLowerCase().includes(q)) &&
       (filter.value.status === 'all' || o.status === filter.value.status) &&
       (filter.value.priority === 'all' || o.priority === filter.value.priority)
     )
   })
 }
 
-const filteredAssigned = computed(() => applyFilter(data.value.orders))
-const filteredCreated  = computed(() => applyFilter(data.value.created_orders))
+const filteredMine    = computed(() => applyFilter(data.value.orders))
+const filteredGroup   = computed(() => applyFilter(data.value.group_orders))
+const groupedByDept  = computed(() => {
+  const map = new Map<string, DashboardTicket[]>()
+  for (const t of filteredGroup.value) {
+    const name = t.assignee_group_name ?? 'Unbekannt'
+    if (!map.has(name)) map.set(name, [])
+    map.get(name)!.push(t)
+  }
+  return Array.from(map.entries()).map(([name, tickets]) => ({ name, tickets }))
+})
+const openGroupDepts = ref<Record<string, boolean>>({})
+const filteredCreated = computed(() => applyFilter(data.value.created_orders))
 const filteredCreatedActive   = computed(() => filteredCreated.value.filter(o => o.status !== 'archived'))
 const filteredCreatedArchived = computed(() => filteredCreated.value.filter(o => o.status === 'archived'))
-const showArchivedCreated = ref(false)
-const filteredDepts    = computed(() =>
+const showArchived = ref(false)
+
+const filteredDepts = computed(() =>
   filter.value.department === 'all'
     ? data.value.department_requests
     : data.value.department_requests.filter(d => d.group_id === filter.value.department)
 )
 
-// Current tab count (for the result indicator)
 const currentCount = computed(() => {
-  if (activeTab.value === 'assigned') return filteredAssigned.value.length
+  if (activeTab.value === 'mine') return filteredMine.value.length
+  if (activeTab.value === 'group') return filteredGroup.value.length
   if (activeTab.value === 'created') return filteredCreated.value.length
   return filteredDepts.value.reduce((s, d) => s + d.tickets.length, 0)
 })
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-function openTicket(o: DashboardTicket) {
-  router.push(`/tickets/edit/${o.type_key}/${o.id}`)
-}
-function openCreatedTicket(o: DashboardTicket) {
-  if (o.status === 'in_progress') router.push(`/tickets/edit/${o.type_key}/${o.id}`)
-  else router.push(`/tickets/overview/${o.id}`)
-}
-function openGroupTicket(t: DepartmentTicket, groupId: string) {
-  router.push(`/tickets/group/${t.type_key}/${t.id}?department=${groupId}`)
-}
-function openNew(key: string) {
-  router.push(`/tickets/new/${key}`)
-}
-function toggleDept(id: string) {
-  openDepts.value[id] = !openDepts.value[id]
-}
+function openTicket(o: DashboardTicket) { router.push(`/tickets/edit/${o.type_key}/${o.id}`) }
+function openCreatedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
+function openGroupTicket(t: DepartmentTicket, gid: string) { router.push(`/tickets/group/${t.type_key}/${t.id}?department=${gid}`) }
+function toggleDept(id: string) { openDepts.value[id] = !openDepts.value[id] }
+function toggleGroupDept(name: string) { openGroupDepts.value[name] = !openGroupDepts.value[name] }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 onMounted(async () => {
@@ -136,6 +136,15 @@ onMounted(async () => {
     const res = await client.get<{ data: DashboardData }>('/dashboard')
     data.value = res.data.data
     data.value.department_requests.forEach(d => { openDepts.value[d.group_id] = true })
+    // Auto-open group accordions
+    for (const t of data.value.group_orders) {
+      if (t.assignee_group_name) openGroupDepts.value[t.assignee_group_name] = true
+    }
+    // Auto-select tab with most relevant content
+    if (mineCount.value > 0) activeTab.value = 'mine'
+    else if (groupCount.value > 0) activeTab.value = 'group'
+    else if (deptCount.value > 0) activeTab.value = 'departments'
+    else if (createdCount.value > 0) activeTab.value = 'created'
   } finally {
     loading.value = false
   }
@@ -158,110 +167,218 @@ onMounted(async () => {
             Willkommen zurück,
             <span class="text-[#3EAAB8]">{{ auth.user?.displayName }}</span> 👋
           </h1>
-          <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">Hier ist deine aktuelle Übersicht.</p>
+          <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">
+            <template v-if="totalOpen > 0">Du hast <strong class="text-gray-700 dark:text-gray-200">{{ totalOpen }}</strong> offene Aufgaben.</template>
+            <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
+          </p>
         </div>
+        <button @click="router.push('/tickets/new')"
+                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
+                       bg-[#3EAAB8] hover:bg-[#2B7D89] text-white text-sm font-semibold
+                       shadow-sm hover:shadow-md transition-all">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          Neues Prozess-Ticket
+        </button>
       </div>
 
-      <!-- ── Stat Cards ── REMOVED -->
-
-      <div class="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
-
-        <!-- ══════════════════════════════════════════
-             SIDEBAR: Neuer Auftrag (LINKS)
-        ══════════════════════════════════════════ -->
-        <aside class="space-y-3 h-fit lg:sticky lg:top-4">
-          <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1">
-            Neuer Auftrag
-          </h2>
-          <div class="space-y-2">
-            <button v-for="t in allowedTypes" :key="t.key" @click="openNew(t.key)"
-                    class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left
-                           bg-[#3EAAB8] hover:bg-[#2B7D89] text-white
-                           transition-all duration-150 shadow-sm hover:shadow-md">
-              <span class="text-base leading-none">{{ t.icon }}</span>
-              <span class="text-sm font-medium truncate">{{ t.label }}</span>
-            </button>
-            <p v-if="allowedTypes.length === 0" class="text-sm text-gray-400 italic px-1">
-              Keine Auftragstypen verfügbar.
-            </p>
+      <!-- ── Stat Cards ── -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <button @click="activeTab = 'mine'" class="stat" :class="activeTab === 'mine' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            </span>
+            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ mineCount }}</span>
           </div>
-        </aside>
+          <p class="stat-label">Mir zugewiesen</p>
+        </button>
 
-        <!-- ══════════════════════════════════════════
-             MAIN CONTENT (RECHTS)
-        ══════════════════════════════════════════ -->
-        <div class="min-w-0 space-y-0">
+        <button @click="activeTab = 'group'" class="stat" :class="activeTab === 'group' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </span>
+            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ groupCount }}</span>
+          </div>
+          <p class="stat-label">Meiner Abteilung</p>
+        </button>
 
-          <!-- Tab Bar + Filter -->
-          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                      rounded-t-2xl overflow-hidden">
+        <button @click="activeTab = 'departments'" class="stat" :class="activeTab === 'departments' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-[#3EAAB8]/15 text-[#3EAAB8]">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            </span>
+            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ deptCount }}</span>
+          </div>
+          <p class="stat-label">Fachabteilung</p>
+        </button>
 
-            <!-- Tabs -->
-            <div class="flex items-center border-b border-gray-200/80 dark:border-white/[0.09]">
-              <button @click="activeTab = 'assigned'" class="tab-btn" :class="activeTab === 'assigned' ? 'tab-active' : 'tab-idle'">
-                Meine Aufträge
-                <span v-if="assignedOpen > 0" class="badge" :class="activeTab === 'assigned' ? 'badge-on' : 'badge-off'">{{ assignedOpen }}</span>
-              </button>
-              <button @click="activeTab = 'created'" class="tab-btn" :class="activeTab === 'created' ? 'tab-active' : 'tab-idle'">
-                Erstellt
-                <span v-if="createdOpen > 0" class="badge" :class="activeTab === 'created' ? 'badge-on' : 'badge-off'">{{ createdOpen }}</span>
-              </button>
-              <button @click="activeTab = 'departments'" class="tab-btn" :class="activeTab === 'departments' ? 'tab-active' : 'tab-idle'">
-                Fachabteilung
-                <span v-if="deptTotal > 0" class="badge" :class="activeTab === 'departments' ? 'badge-on' : 'badge-off'">{{ deptTotal }}</span>
-              </button>
+        <button @click="activeTab = 'created'" class="stat" :class="activeTab === 'created' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            </span>
+            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ createdCount }}</span>
+          </div>
+          <p class="stat-label">Von mir erstellt</p>
+        </button>
+      </div>
+
+      <!-- ── Main Content ── -->
+      <div class="space-y-0">
+
+        <!-- Filter Bar -->
+        <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                    rounded-t-2xl overflow-hidden">
+
+          <!-- Filter -->
+          <div class="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+              </svg>
+              <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10" />
             </div>
+            <select v-model="filter.status" class="fi">
+              <option value="all">Alle Status</option>
+              <option value="in_request">Zu bearbeiten</option>
+              <option value="in_progress">In Bearbeitung</option>
+              <option value="archived">Erledigt</option>
+              <option value="rejected">Abgelehnt</option>
+            </select>
+            <select v-model="filter.priority" class="fi">
+              <option value="all">Alle Prioritäten</option>
+              <option value="low">Niedrig</option>
+              <option value="medium">Mittel</option>
+              <option value="high">Hoch</option>
+              <option value="critical">Kritisch</option>
+            </select>
+          </div>
+        </div>
 
-            <!-- Shared Filter Row -->
-            <div class="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
-              <div class="relative">
-                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-                </svg>
-                <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10" />
+        <!-- List Container -->
+        <div class="bg-gray-50 dark:bg-[#1A2130] border border-t-0 border-gray-200/80 dark:border-white/[0.09]
+                    rounded-b-2xl overflow-hidden">
+
+          <!-- Dept sub-filter -->
+          <div v-if="activeTab === 'departments' && data.department_requests.length > 1"
+               class="px-5 py-3 border-b border-gray-200/80 dark:border-white/[0.09] flex items-center justify-between">
+            <span class="text-xs text-gray-400">Abteilung</span>
+            <select v-model="filter.department" class="fi w-auto text-xs py-1.5">
+              <option value="all">Alle</option>
+              <option v-for="d in data.department_requests" :key="d.group_id" :value="d.group_id">{{ d.group_name }}</option>
+            </select>
+          </div>
+
+          <!-- Result count -->
+          <div class="px-5 py-2 text-xs text-gray-400 border-b border-gray-100 dark:border-white/[0.04]">
+            {{ currentCount }} {{ currentCount === 1 ? 'Ergebnis' : 'Ergebnisse' }}
+          </div>
+
+          <!-- ═══ TAB: Mir zugewiesen ═══ -->
+          <ul v-if="activeTab === 'mine'" class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[560px] overflow-auto">
+            <li v-for="o in filteredMine" :key="o.id" @click="openTicket(o)" class="row group">
+              <div class="flex items-center gap-3.5 min-w-0">
+                <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
+                  <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
+                </div>
               </div>
-              <select v-model="filter.status" class="fi">
-                <option value="all">Alle Status</option>
-                <option value="in_request">Zu bearbeiten</option>
-                <option value="in_progress">In Bearbeitung</option>
-                <option value="archived">Erledigt</option>
-                <option value="rejected">Abgelehnt</option>
-              </select>
-              <select v-model="filter.priority" class="fi">
-                <option value="all">Alle Prioritäten</option>
-                <option value="low">Niedrig</option>
-                <option value="medium">Mittel</option>
-                <option value="high">Hoch</option>
-                <option value="critical">Kritisch</option>
-              </select>
+              <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
+                <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
+                <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
+                <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </li>
+            <li v-if="filteredMine.length === 0" class="empty">Keine dir zugewiesenen Aufträge.</li>
+          </ul>
+
+          <!-- ═══ TAB: Meine Abteilung ═══ -->
+          <div v-if="activeTab === 'group'" class="max-h-[560px] overflow-auto">
+            <div class="divide-y divide-gray-100 dark:divide-white/[0.04]">
+              <div v-for="g in groupedByDept" :key="g.name">
+                <button @click="toggleGroupDept(g.name)"
+                        class="w-full flex items-center justify-between px-5 py-4
+                               hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-6 h-6 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400
+                                 flex items-center justify-center flex-shrink-0">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      </svg>
+                    </span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ g.name }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{{ g.tickets.length }}</span>
+                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                         :class="openGroupDepts[g.name] ? 'rotate-180' : ''"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </button>
+                <div v-show="openGroupDepts[g.name]" class="px-5 pb-4 space-y-2">
+                  <div v-for="o in g.tickets" :key="o.id" @click="openTicket(o)"
+                       class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
+                              bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                              hover:border-[#3EAAB8]/40 hover:shadow-sm transition group">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
+                      <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
+                        <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
+                      <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
+                      <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
+                      <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+            <p v-if="groupedByDept.length === 0" class="empty">Keine Aufträge an deine Abteilung zugewiesen.</p>
           </div>
 
-          <!-- List Container -->
-          <div class="bg-gray-50 dark:bg-[#1A2130] border border-t-0 border-gray-200/80 dark:border-white/[0.09]
-                      rounded-b-2xl overflow-hidden">
-
-            <!-- Department filter (only in dept tab) -->
-            <div v-if="activeTab === 'departments' && data.department_requests.length > 1"
-                 class="px-5 py-3 border-b border-gray-200/80 dark:border-white/[0.09] flex items-center justify-between">
-              <span class="text-xs text-gray-400">Abteilung filtern</span>
-              <select v-model="filter.department" class="fi w-auto text-xs py-1.5">
-                <option value="all">Alle Abteilungen</option>
-                <option v-for="d in data.department_requests" :key="d.group_id" :value="d.group_id">
-                  {{ d.group_name }}
-                </option>
-              </select>
+          <!-- ═══ TAB: Fachabteilung ═══ -->
+          <div v-if="activeTab === 'departments'" class="max-h-[560px] overflow-auto">
+            <div class="divide-y divide-gray-100 dark:divide-white/[0.04]">
+              <div v-for="dept in filteredDepts" :key="dept.group_id">
+                <button @click="toggleDept(dept.group_id)"
+                        class="w-full flex items-center justify-between px-5 py-4
+                               hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white">{{ dept.group_name }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8]">{{ dept.tickets.length }}</span>
+                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                         :class="openDepts[dept.group_id] ? 'rotate-180' : ''"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </button>
+                <div v-show="openDepts[dept.group_id]" class="px-5 pb-4 space-y-2">
+                  <div v-for="t in dept.tickets" :key="t.id" @click="openGroupTicket(t, dept.group_id)"
+                       class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
+                              bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                              hover:border-[#3EAAB8]/40 hover:shadow-sm transition group">
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ t.title }}</p>
+                      <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[t.type_key] ?? t.type_key }} · {{ t.created_at }}</p>
+                    </div>
+                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0 ml-3 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </div>
+                </div>
+              </div>
             </div>
+            <p v-if="filteredDepts.length === 0" class="empty">Keine Fachabteilungsaufgaben.</p>
+          </div>
 
-            <!-- Result count -->
-            <div class="px-5 py-2 text-xs text-gray-400 border-b border-gray-100 dark:border-white/[0.04]">
-              {{ currentCount }} {{ currentCount === 1 ? 'Ergebnis' : 'Ergebnisse' }}
-            </div>
-
-            <!-- ═══ TAB: Assigned ═══ -->
-            <ul v-if="activeTab === 'assigned'"
-                class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[540px] overflow-auto">
-              <li v-for="o in filteredAssigned" :key="o.id" @click="openTicket(o)" class="ticket-row group">
+          <!-- ═══ TAB: Erstellt ═══ -->
+          <div v-if="activeTab === 'created'" class="max-h-[560px] overflow-auto">
+            <ul class="divide-y divide-gray-100 dark:divide-white/[0.06]">
+              <li v-for="o in filteredCreatedActive" :key="o.id" @click="openCreatedTicket(o)" class="row group">
                 <div class="flex items-center gap-3.5 min-w-0">
                   <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
                   <div class="min-w-0">
@@ -270,115 +387,44 @@ onMounted(async () => {
                   </div>
                 </div>
                 <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                  <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] ?? o.priority }}</span>
-                  <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status] ?? 'bg-gray-100 text-gray-500'">{{ STATUS_LABEL[o.status] ?? o.status }}</span>
+                  <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
+                  <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
                   <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
               </li>
-              <li v-if="filteredAssigned.length === 0" class="empty">Keine zugewiesenen Aufträge gefunden.</li>
+              <li v-if="filteredCreatedActive.length === 0 && filteredCreatedArchived.length === 0" class="empty">Keine erstellten Aufträge.</li>
+              <li v-else-if="filteredCreatedActive.length === 0" class="px-5 py-8 text-center text-sm text-gray-400 italic">Keine offenen Aufträge.</li>
             </ul>
 
-            <!-- ═══ TAB: Created ═══ -->
-            <div v-if="activeTab === 'created'" class="max-h-[540px] overflow-auto">
-              <!-- Aktive Aufträge -->
-              <ul class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-                <li v-for="o in filteredCreatedActive" :key="o.id" @click="openCreatedTicket(o)" class="ticket-row group">
+            <!-- Erledigt -->
+            <div v-if="filteredCreatedArchived.length > 0" class="border-t border-gray-200/80 dark:border-white/[0.09]">
+              <button @click="showArchived = !showArchived"
+                      class="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
+                <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Erledigt</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ filteredCreatedArchived.length }}</span>
+                  <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" :class="showArchived ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+              </button>
+              <ul v-show="showArchived" class="divide-y divide-gray-100 dark:divide-white/[0.06]">
+                <li v-for="o in filteredCreatedArchived" :key="o.id" @click="openCreatedTicket(o)" class="row group opacity-60">
                   <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
+                    <div class="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
                     <div class="min-w-0">
                       <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
                       <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
                     </div>
                   </div>
                   <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                    <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] ?? o.priority }}</span>
-                    <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status] ?? 'bg-gray-100 text-gray-500'">{{ STATUS_LABEL[o.status] ?? o.status }}</span>
+                    <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Erledigt</span>
                     <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                   </div>
                 </li>
-                <li v-if="filteredCreatedActive.length === 0 && filteredCreatedArchived.length === 0" class="empty">
-                  Keine erstellten Aufträge gefunden.
-                </li>
-                <li v-else-if="filteredCreatedActive.length === 0" class="px-5 py-8 text-center text-sm text-gray-400 italic">
-                  Keine offenen Aufträge.
-                </li>
               </ul>
-
-              <!-- Erledigt (einklappbar) -->
-              <div v-if="filteredCreatedArchived.length > 0"
-                   class="border-t border-gray-200/80 dark:border-white/[0.09]">
-                <button @click="showArchivedCreated = !showArchivedCreated"
-                        class="w-full flex items-center justify-between px-5 py-3.5
-                               hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
-                  <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Erledigt</span>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full
-                                 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                      {{ filteredCreatedArchived.length }}
-                    </span>
-                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
-                         :class="showArchivedCreated ? 'rotate-180' : ''"
-                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                  </div>
-                </button>
-                <ul v-show="showArchivedCreated"
-                    class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-                  <li v-for="o in filteredCreatedArchived" :key="o.id" @click="openCreatedTicket(o)" class="ticket-row group opacity-70">
-                    <div class="flex items-center gap-3.5 min-w-0">
-                      <div class="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
-                      <div class="min-w-0">
-                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                      <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Erledigt</span>
-                      <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    </div>
-                  </li>
-                </ul>
-              </div>
             </div>
-
-            <!-- ═══ TAB: Departments ═══ -->
-            <div v-if="activeTab === 'departments'" class="max-h-[540px] overflow-auto">
-              <div class="divide-y divide-gray-100 dark:divide-white/[0.04]">
-                <div v-for="dept in filteredDepts" :key="dept.group_id">
-                  <button @click="toggleDept(dept.group_id)"
-                          class="w-full flex items-center justify-between px-5 py-4
-                                 hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ dept.group_name }}</span>
-                    <div class="flex items-center gap-2">
-                      <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8]">{{ dept.tickets.length }}</span>
-                      <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
-                           :class="openDepts[dept.group_id] ? 'rotate-180' : ''"
-                           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </div>
-                  </button>
-                  <div v-show="openDepts[dept.group_id]" class="px-5 pb-4 space-y-2">
-                    <div v-for="t in dept.tickets" :key="t.id"
-                         @click="openGroupTicket(t, dept.group_id)"
-                         class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
-                                bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                                hover:border-[#3EAAB8]/40 hover:shadow-sm transition group">
-                      <div class="min-w-0">
-                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ t.title }}</p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[t.type_key] ?? t.type_key }} · {{ t.created_at }}</p>
-                      </div>
-                      <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0 ml-3 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    </div>
-                    <p v-if="dept.tickets.length === 0" class="text-sm text-gray-400 italic px-1 py-2">Keine offenen Aufgaben.</p>
-                  </div>
-                </div>
-              </div>
-              <p v-if="filteredDepts.length === 0" class="empty">Keine Fachabteilungsaufgaben vorhanden.</p>
-            </div>
-
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   </AppLayout>
@@ -387,26 +433,14 @@ onMounted(async () => {
 <style scoped>
 @reference "../style.css";
 
-/* ── Tabs ── */
-.tab-btn {
-  @apply relative flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-colors whitespace-nowrap;
+.stat {
+  @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+         rounded-2xl p-4 text-left transition-all duration-150 hover:shadow-md hover:border-gray-300 dark:hover:border-white/20;
 }
-.tab-active {
-  @apply text-[#3EAAB8] border-b-2 border-[#3EAAB8];
-}
-.tab-idle {
-  @apply text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200
-         border-b-2 border-transparent;
-}
+.stat-on { @apply ring-2 ring-[#3EAAB8]/40 border-[#3EAAB8]/30; }
+.stat-icon { @apply w-8 h-8 rounded-lg flex items-center justify-center; }
+.stat-label { @apply text-xs font-medium text-gray-500 dark:text-gray-400 mt-2; }
 
-/* ── Badges ── */
-.badge {
-  @apply text-xs font-semibold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-tight;
-}
-.badge-on  { @apply bg-[#3EAAB8] text-white; }
-.badge-off { @apply bg-gray-200 dark:bg-white/10 text-gray-500 dark:text-gray-400; }
-
-/* ── Filter Input ── */
 .fi {
   @apply w-full rounded-xl border border-gray-200 dark:border-white/10
          bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
@@ -414,14 +448,10 @@ onMounted(async () => {
          focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition;
 }
 
-/* ── Ticket Row ── */
-.ticket-row {
+.row {
   @apply flex items-center justify-between px-5 py-4 cursor-pointer
          hover:bg-white/60 dark:hover:bg-[#263040] transition;
 }
 
-/* ── Empty State ── */
-.empty {
-  @apply px-5 py-14 text-center text-sm text-gray-400 italic;
-}
+.empty { @apply px-5 py-14 text-center text-sm text-gray-400 italic; }
 </style>

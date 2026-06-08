@@ -26,6 +26,11 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresPermission: 'view' },
     },
     {
+      path: '/tickets/new',
+      component: () => import('@/views/TicketCreateView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/tickets/overview/:id',
       component: () => import('@/views/TicketOverviewDetailView.vue'),
       meta: { requiresAuth: true, requiresPermission: 'view' },
@@ -67,7 +72,7 @@ const router = createRouter({
     {
       path: '/tickets/new/zugang-beantragen',
       component: () => import('@/views/tickets/ZugangBeantragenCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'zugang-beantragen' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/zugang-beantragen/:id',
@@ -84,7 +89,7 @@ const router = createRouter({
     {
       path: '/tickets/new/hardware',
       component: () => import('@/views/tickets/HardwareCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'hardware' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/hardware/:id',
@@ -96,7 +101,7 @@ const router = createRouter({
     {
       path: '/tickets/new/zugang-sperren',
       component: () => import('@/views/tickets/ZugangSperrenCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'zugang-sperren' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/zugang-sperren/:id',
@@ -108,7 +113,7 @@ const router = createRouter({
     {
       path: '/tickets/new/niederlassung-anmelden',
       component: () => import('@/views/tickets/NiederlassungAnmeldenCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'niederlassung-anmelden' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/niederlassung-anmelden/:id',
@@ -120,7 +125,7 @@ const router = createRouter({
     {
       path: '/tickets/new/niederlassung-umzug',
       component: () => import('@/views/tickets/NiederlassungUmzugCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'niederlassung-umzug' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/niederlassung-umzug/:id',
@@ -132,7 +137,7 @@ const router = createRouter({
     {
       path: '/tickets/new/niederlassung-schliessen',
       component: () => import('@/views/tickets/NiederlassungSchliessenCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'niederlassung-schliessen' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/niederlassung-schliessen/:id',
@@ -144,7 +149,7 @@ const router = createRouter({
     {
       path: '/tickets/new/hotelbuchung',
       component: () => import('@/views/tickets/HotelbuchungCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'hotelbuchung' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/hotelbuchung/:id',
@@ -164,17 +169,11 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresPermission: 'admin' },
     },
 
-    // ── Catch-all ──────────────────────────────────────────────────────────────
-    {
-      path: '/:pathMatch(.*)*',
-      redirect: '/dashboard',
-    },
-
     // ── Marketing Stellenanzeige ───────────────────────────────────────────────
     {
       path: '/tickets/new/marketing-stellenanzeige',
       component: () => import('@/views/tickets/MarketingStelleCreateView.vue'),
-      meta: { requiresAuth: true, requiresTicketType: 'marketing-stellenanzeige' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/tickets/edit/marketing-stellenanzeige/:id',
@@ -186,12 +185,19 @@ const router = createRouter({
       component: () => import('@/views/tickets/MarketingStelleViewView.vue'),
       meta: { requiresAuth: true },
     },
+
+    // ── Backend Down ───────────────────────────────────────────────────────────
     {
       path: '/backend-down',
       component: () => import('@/views/BackendDownView.vue'),
       meta: { requiresAuth: false },
     },
-      
+
+    // ── Catch-all (MUSS GANZ AM ENDE STEHEN) ──────────────────────────────────
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/dashboard',
+    },
   ],
 })
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-const props = defineProps<{
+defineProps<{
   phase: 'create' | 'edit' | 'view'
   loading?: boolean
   confirmCreateOpen?:   boolean

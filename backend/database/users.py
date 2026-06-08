@@ -121,7 +121,6 @@ def upsert_user(
 
     return get_user(microsoft_id)
 
-
 def get_user(microsoft_id: str) -> Optional[AppUser]:
     conn = get_connection()
     try:
