@@ -50,6 +50,7 @@ const ticketTypes = [
   { key: 'niederlassung-schliessen', label: 'Niederlassung schließen' },
   { key: 'marketing-stellenanzeige', label: 'Marketing - Stellenanzeige' },
   { key: 'hotelbuchung',             label: 'Hotelbuchung' },
+  { key: 'basis-ticket',             label: 'Ticket' },
 ]
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(ticketTypes.map(t => [t.key, t.label]))
 

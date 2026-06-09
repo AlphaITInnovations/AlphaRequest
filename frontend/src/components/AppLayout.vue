@@ -85,18 +85,18 @@ defineProps<{ title?: string }>()
           </svg>
           <span v-if="sidebarOpen" class="text-sm truncate">Neues Prozess-Ticket</span>
         </button>
-        <button @click="navigate('/tickets/new/fachabteilung')"
+        <button @click="navigate('/tickets/new/basis-ticket')"
                 class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
                 :class="[
                   sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
-                  isActive('/tickets/new/fachabteilung')
+                  isActive('/tickets/new/basis-ticket')
                     ? 'bg-white text-[#3EAAB8] font-semibold shadow-sm'
                     : 'bg-white/20 hover:bg-white/30 text-white'
                 ]">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" d="M12 4v16m8-8H4"/>
           </svg>
-          <span v-if="sidebarOpen" class="text-sm truncate">Neues Fachabteilungs-Ticket</span>
+          <span v-if="sidebarOpen" class="text-sm truncate">Neues Ticket</span>
         </button>
       </div>
 

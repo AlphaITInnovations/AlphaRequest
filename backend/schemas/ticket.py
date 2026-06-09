@@ -66,6 +66,17 @@ class TicketCreateRequest(BaseModel):
     priority: TicketPriority = TicketPriority.medium
 
 
+class BasisTicketCreateRequest(BaseModel):
+    title: str
+    description: str
+    assignee_id: str
+    assignee_name: str
+    accountable_id: str
+    accountable_name: str
+    comment: Optional[str] = ""
+    priority: TicketPriority = TicketPriority.medium
+
+
 class TicketUpdateRequest(BaseModel):
     description: Optional[str] = None
     comment: Optional[str] = None

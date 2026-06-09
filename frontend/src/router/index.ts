@@ -162,6 +162,23 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
 
+    // ── Basis-Ticket ──────────────────────────────────────────────────────────
+    {
+      path: '/tickets/new/basis-ticket',
+      component: () => import('@/views/tickets/BasisTicketCreateView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/tickets/edit/basis-ticket/:id',
+      component: () => import('@/views/tickets/BasisTicketEditView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/tickets/view/basis-ticket/:id',
+      component: () => import('@/views/tickets/BasisTicketViewView.vue'),
+      meta: { requiresAuth: true },
+    },
+
     // ── Settings ───────────────────────────────────────────────────────────────
     {
       path: '/settings',

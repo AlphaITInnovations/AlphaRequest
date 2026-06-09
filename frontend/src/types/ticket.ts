@@ -9,6 +9,7 @@ export type TicketType =
   | 'zugang-sperren'
   | 'marketing-stellenanzeige'
   | 'hotelbuchung'
+  | 'basis-ticket'
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 

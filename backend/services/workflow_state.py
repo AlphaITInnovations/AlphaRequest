@@ -287,6 +287,14 @@ def build_workflow_hotelbuchung(description: dict) -> dict:
     return workflow
 
 
+def build_workflow_basis_ticket(description: dict) -> dict:
+    """
+    Basis-Tickets haben keine Phase 3 / keine Fachabteilungen.
+    Leerer Workflow – wird nur als Fallback benötigt.
+    """
+    return {"departments": {}}
+
+
 WORKFLOW_BUILDERS = {
     TicketType.zugang_beantragen: build_workflow_zugang_beantragen,
     TicketType.zugang_sperren: build_workflow_zugang_sperren,
@@ -296,6 +304,7 @@ WORKFLOW_BUILDERS = {
     TicketType.niederlassung_schliessen: build_workflow_niederlassung_schliessen,
     TicketType.marketing_stellenanzeige: build_workflow_marketing_stellenanzeige,
     TicketType.hotelbuchung: build_workflow_hotelbuchung,
+    TicketType.basis_ticket: build_workflow_basis_ticket,
 }
 
 

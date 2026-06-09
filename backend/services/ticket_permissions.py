@@ -70,6 +70,7 @@ def can_user_create_ticket(
       1. Der User die extra_permission "create_<type>" hat, ODER
       2. Der User Mitglied einer AD-Gruppe ist, die für diesen Typ berechtigt ist.
     """
+
     if not ticket_type or not user_id:
         return False
 

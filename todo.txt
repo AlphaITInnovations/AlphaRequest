@@ -1,4 +1,11 @@
 TODO:
+
+BasisTicket:
+Bug dass in der navigation beide Felder "Neues Prozess Ticket" und "neues Ticket " weiß leuchten sobald ich auf der neues ticket seite bin
+im edit view soll erst neuer eintrag und darunter verlauf stehen sodass es zeitluch richtig sortiert ist
+Im Edit view soll der verantworliche weiterhin anpassbar sein, also dass man das ticket auch wieder weitergeben kann
+
+
 antrag hotelbuchung
 Beantragung Buchung
     -> an buchungsabteilung
