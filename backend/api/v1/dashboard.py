@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
-from backend.database.groups import get_group_ids_for_user, get_group_name_from_id
-from backend.models.models import RequestStatus, TicketType
+from backend.models.models import TicketType
 from backend.services.ticket_permissions import can_user_create_ticket
-from backend.services.workflow_state import get_department_requests_for_user
+from backend.services.workflow_state import get_department_board_for_user
 from backend.schemas.dashboard import (
     DashboardResponse, DashboardTicket, DepartmentGroup, DepartmentTicket,
 )
@@ -21,31 +20,25 @@ def _to_dashboard_ticket(t) -> DashboardTicket:
         status=t.status if isinstance(t.status, str) else t.status.value,
         priority=t.priority if isinstance(t.priority, str) else t.priority.value,
         created_at=t.created_at.strftime("%d.%m.%Y") if hasattr(t.created_at, "strftime") else str(t.created_at)[:10],
-        assignee_group_id=t.assignee_group_id or None,
-        assignee_group_name=t.assignee_group_name or None,
     )
 
 
 @router.get("/dashboard", response_model=DataResponse[DashboardResponse])
 def get_dashboard(user: dict = Depends(get_current_user)):
     user_id = user["id"]
-    user_group_ids = get_group_ids_for_user(user_id)
 
     # ── 1. Mir direkt zugewiesene Tickets ──────────────────────────────────────
     my_direct = database.list_tickets_by_assignee(user_id)
     my_orders = [_to_dashboard_ticket(t) for t in my_direct]
 
-    # ── 2. Meiner Abteilung zugewiesene Tickets ───────────────────────────────
-    group_tickets = database.list_tickets_by_groups(user_group_ids)
-    group_orders = [_to_dashboard_ticket(t) for t in group_tickets]
-
-    # ── 3. Erstellte Tickets ──────────────────────────────────────────────────
+    # ── 2. Erstellte Tickets ──────────────────────────────────────────────────
     my_created = database.list_tickets_by_owner(user_id)
     created_orders = [_to_dashboard_ticket(t) for t in my_created]
 
-    # ── 4. Fachabteilungs-Aufgaben (Phase 3 Workflow) ─────────────────────────
-    raw_depts = get_department_requests_for_user(user_id)
-    department_requests = [
+    # ── 3. „Meine Abteilung" – einheitlich (Bearbeitung + Durchführung) ───────
+    # Pro Abteilung genau die Tickets, die sie aktuell betreffen, jedes einmal.
+    raw_board = get_department_board_for_user(user_id)
+    department_board = [
         DepartmentGroup(
             group_id=d["group_id"],
             group_name=d["group_name"] or d["group_id"],
@@ -57,11 +50,14 @@ def get_dashboard(user: dict = Depends(get_current_user)):
                     created_at=t["created_at"][:10] if t["created_at"] else "",
                     status=t["status"],
                     priority=t["priority"],
+                    phase_type=t["phase_type"],
+                    phase_label=t["phase_label"],
+                    department_id=t["department_id"],
                 )
                 for t in d["tickets"]
             ],
         )
-        for d in raw_depts
+        for d in raw_board
     ]
 
     # ── Erlaubte Ticket-Typen ──────────────────────────────────────────────────
@@ -73,8 +69,7 @@ def get_dashboard(user: dict = Depends(get_current_user)):
 
     return DataResponse(data=DashboardResponse(
         orders=my_orders,
-        group_orders=group_orders,
         created_orders=created_orders,
-        department_requests=department_requests,
+        department_board=department_board,
         allowed_ticket_types=allowed,
     ))

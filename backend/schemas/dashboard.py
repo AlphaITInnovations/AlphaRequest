@@ -8,6 +8,10 @@ class DepartmentTicket(BaseModel):
     created_at: str
     status: str
     priority: str
+    phase_type: str
+    phase_label: str
+    # group_id der Reviewing-Abteilung (für ?department=); None in Assignment-Phase.
+    department_id: str | None = None
 
 
 class DepartmentGroup(BaseModel):
@@ -23,13 +27,11 @@ class DashboardTicket(BaseModel):
     status: str
     priority: str
     created_at: str
-    assignee_group_id: str | None = None
-    assignee_group_name: str | None = None
 
 
 class DashboardResponse(BaseModel):
     orders: list[DashboardTicket]
-    group_orders: list[DashboardTicket]      # ← NEU
     created_orders: list[DashboardTicket]
-    department_requests: list[DepartmentGroup]
+    # Einheitliche „Meine Abteilung"-Liste (Assignment + Durchführung, dedupliziert).
+    department_board: list[DepartmentGroup]
     allowed_ticket_types: list[str]
