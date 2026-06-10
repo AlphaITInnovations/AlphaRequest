@@ -15,16 +15,33 @@ interface DashboardTicket {
   assignee_group_id?: string | null
   assignee_group_name?: string | null
 }
+interface DepartmentTicket {
+  id: number; title: string; type_key: string; created_at: string
+  status: string; priority: string
+}
+interface DepartmentGroup {
+  group_id: string; group_name: string; tickets: DepartmentTicket[]
+}
 interface DashboardData {
   orders: DashboardTicket[]
   group_orders: DashboardTicket[]
   created_orders: DashboardTicket[]
+  department_requests: DepartmentGroup[]
   allowed_ticket_types: string[]
 }
 
+// Vereinheitlichter Eintrag für den „Meine Abteilung"-Tab
+interface DeptItem {
+  id: number; title: string; type_key: string
+  status: string; priority: string; created_at: string
+  kind: 'assignment' | 'review'
+  link: string
+}
+interface DeptGroup { group_id: string; group_name: string; tickets: DeptItem[] }
+
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading   = ref(true)
-const data      = ref<DashboardData>({ orders: [], group_orders: [], created_orders: [], allowed_ticket_types: [] })
+const data      = ref<DashboardData>({ orders: [], group_orders: [], created_orders: [], department_requests: [], allowed_ticket_types: [] })
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type Tab = 'mine' | 'group' | 'created'
@@ -70,12 +87,13 @@ function dotClass(s: string) {
 
 // ── Counts ────────────────────────────────────────────────────────────────────
 const mineCount    = computed(() => data.value.orders.filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
-const groupCount   = computed(() => data.value.group_orders.filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
+const groupCount   = computed(() => baseDeptGroups.value.reduce((s, g) =>
+  s + g.tickets.filter(t => t.status !== 'archived' && t.status !== 'rejected').length, 0))
 const createdCount = computed(() => data.value.created_orders.filter(o => o.status !== 'archived').length)
 const totalOpen    = computed(() => mineCount.value + groupCount.value)
 
 // ── Filtering ─────────────────────────────────────────────────────────────────
-function applyFilter(list: DashboardTicket[]) {
+function applyFilter<T extends { title: string; type_key: string; status: string; priority: string }>(list: T[]): T[] {
   return list.filter(o => {
     const q = filter.value.search.toLowerCase()
     return (
@@ -87,48 +105,84 @@ function applyFilter(list: DashboardTicket[]) {
 }
 
 const filteredMine    = computed(() => applyFilter(data.value.orders))
-const filteredGroup   = computed(() => applyFilter(data.value.group_orders))
-const groupedByDept  = computed(() => {
-  const map = new Map<string, DashboardTicket[]>()
-  for (const t of filteredGroup.value) {
-    const name = t.assignee_group_name ?? 'Unbekannt'
-    if (!map.has(name)) map.set(name, [])
-    map.get(name)!.push(t)
-  }
-  return Array.from(map.entries()).map(([name, tickets]) => ({ name, tickets }))
-})
 const openGroupDepts = ref<Record<string, boolean>>({})
 const filteredCreated = computed(() => applyFilter(data.value.created_orders))
 const filteredCreatedActive   = computed(() => filteredCreated.value.filter(o => o.status !== 'archived'))
 const filteredCreatedArchived = computed(() => filteredCreated.value.filter(o => o.status === 'archived'))
 const showArchived = ref(false)
 
+// ── „Meine Abteilung" – vereinheitlicht ─────────────────────────────────────────
+// Kombiniert zwei Quellen, gruppiert nach Abteilung (group_id):
+//   • department_requests → Durchführungs-/Freigabe-Tickets (Phase „Durchführung").
+//     group_id ist hier der KORREKTE Workflow-Department-Key → ?department=<id>.
+//   • group_orders        → Tickets, die meiner Abteilung zur Bearbeitung
+//     (Assignment-Phase) zugewiesen sind → Formular ohne department.
+// Dedupe pro Abteilung über die Ticket-ID (Review hat Vorrang vor Assignment).
+const baseDeptGroups = computed<DeptGroup[]>(() => {
+  const map = new Map<string, DeptGroup & { seen: Set<number> }>()
+  const ensure = (gid: string, name: string) => {
+    if (!map.has(gid)) map.set(gid, { group_id: gid, group_name: name || 'Unbekannt', tickets: [], seen: new Set() })
+    const e = map.get(gid)!
+    if ((!e.group_name || e.group_name === 'Unbekannt') && name) e.group_name = name
+    return e
+  }
+
+  // 1) Durchführung / Freigabe (autoritative Department-ID)
+  for (const d of data.value.department_requests) {
+    const g = ensure(d.group_id, d.group_name)
+    for (const t of d.tickets) {
+      g.tickets.push({
+        id: t.id, title: t.title, type_key: t.type_key,
+        status: t.status, priority: t.priority, created_at: t.created_at,
+        kind: 'review',
+        link: `/tickets/view/${t.type_key}/${t.id}?department=${d.group_id}`,
+      })
+      g.seen.add(t.id)
+    }
+  }
+
+  // 2) Meiner Abteilung zur Bearbeitung zugewiesen (Assignment-Phase)
+  for (const o of data.value.group_orders) {
+    const gid = o.assignee_group_id || o.assignee_group_name || 'unknown'
+    const g = ensure(gid, o.assignee_group_name || '')
+    if (g.seen.has(o.id)) continue
+    g.seen.add(o.id)
+    g.tickets.push({
+      id: o.id, title: o.title, type_key: o.type_key,
+      status: o.status, priority: o.priority, created_at: o.created_at,
+      kind: 'assignment',
+      link: `/tickets/view/${o.type_key}/${o.id}`,
+    })
+  }
+
+  return Array.from(map.values()).map(({ seen, ...g }) => g)
+})
+
+const myDepartmentGroups = computed<DeptGroup[]>(() =>
+  baseDeptGroups.value
+    .map(g => ({ ...g, tickets: applyFilter(g.tickets) }))
+    .filter(g => g.tickets.length > 0)
+)
+
 const currentCount = computed(() => {
   if (activeTab.value === 'mine') return filteredMine.value.length
-  if (activeTab.value === 'group') return filteredGroup.value.length
+  if (activeTab.value === 'group') return myDepartmentGroups.value.reduce((s, g) => s + g.tickets.length, 0)
   return filteredCreated.value.length
 })
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 function openTicket(o: DashboardTicket) { router.push(`/tickets/view/${o.type_key}/${o.id}`) }
 function openCreatedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
-// Tickets der eigenen Abteilung: Department-ID in die URL, damit die Detailansicht
-// die Fachabteilungs-Aktionen (z. B. „Ausgeführt") anzeigen kann.
-function openMyGroupTicket(o: DashboardTicket) {
-  const dep = o.assignee_group_id ? `?department=${o.assignee_group_id}` : ''
-  router.push(`/tickets/view/${o.type_key}/${o.id}${dep}`)
-}
-function toggleGroupDept(name: string) { openGroupDepts.value[name] = !openGroupDepts.value[name] }
+function openDeptItem(t: DeptItem) { router.push(t.link) }
+function toggleGroupDept(id: string) { openGroupDepts.value[id] = !openGroupDepts.value[id] }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
     const res = await client.get<{ data: DashboardData }>('/dashboard')
     data.value = res.data.data
-    // Auto-open group accordions
-    for (const t of data.value.group_orders) {
-      if (t.assignee_group_name) openGroupDepts.value[t.assignee_group_name] = true
-    }
+    // Auto-open department accordions
+    for (const g of baseDeptGroups.value) openGroupDepts.value[g.group_id] = true
     // Auto-select tab with most relevant content
     if (mineCount.value > 0) activeTab.value = 'mine'
     else if (groupCount.value > 0) activeTab.value = 'group'
@@ -267,8 +321,8 @@ onMounted(async () => {
           <!-- ═══ TAB: Meine Abteilung ═══ -->
           <div v-if="activeTab === 'group'" class="max-h-[560px] overflow-auto">
             <div class="divide-y divide-gray-100 dark:divide-white/[0.04]">
-              <div v-for="g in groupedByDept" :key="g.name">
-                <button @click="toggleGroupDept(g.name)"
+              <div v-for="g in myDepartmentGroups" :key="g.group_id">
+                <button @click="toggleGroupDept(g.group_id)"
                         class="w-full flex items-center justify-between px-5 py-4
                                hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
                   <div class="flex items-center gap-2.5">
@@ -278,37 +332,41 @@ onMounted(async () => {
                         <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
                       </svg>
                     </span>
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ g.name }}</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ g.group_name }}</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{{ g.tickets.length }}</span>
                     <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
-                         :class="openGroupDepts[g.name] ? 'rotate-180' : ''"
+                         :class="openGroupDepts[g.group_id] ? 'rotate-180' : ''"
                          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                   </div>
                 </button>
-                <div v-show="openGroupDepts[g.name]" class="px-5 pb-4 space-y-2">
-                  <div v-for="o in g.tickets" :key="o.id" @click="openMyGroupTicket(o)"
+                <div v-show="openGroupDepts[g.group_id]" class="px-5 pb-4 space-y-2">
+                  <div v-for="t in g.tickets" :key="t.kind + '-' + t.id" @click="openDeptItem(t)"
                        class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
                               bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                               hover:border-[#3EAAB8]/40 hover:shadow-sm transition group">
                     <div class="flex items-center gap-3 min-w-0">
-                      <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
+                      <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(t.status)" />
                       <div class="min-w-0">
-                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ t.title }}</p>
+                        <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[t.type_key] ?? t.type_key }} · {{ t.created_at }}</p>
                       </div>
                     </div>
                     <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                      <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
-                      <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
+                      <span v-if="t.kind === 'review'"
+                            class="hidden sm:inline text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8]">
+                        Durchführung
+                      </span>
+                      <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[t.priority]">{{ PRIORITY_LABEL[t.priority] }}</span>
+                      <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[t.status]">{{ STATUS_LABEL[t.status] }}</span>
                       <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <p v-if="groupedByDept.length === 0" class="empty">Keine Aufträge an deine Abteilung zugewiesen.</p>
+            <p v-if="myDepartmentGroups.length === 0" class="empty">Keine Aufträge für deine Abteilung.</p>
           </div>
 
           <!-- ═══ TAB: Erstellt ═══ -->

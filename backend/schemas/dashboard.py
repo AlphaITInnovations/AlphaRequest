@@ -6,6 +6,8 @@ class DepartmentTicket(BaseModel):
     title: str
     type_key: str
     created_at: str
+    status: str
+    priority: str
 
 
 class DepartmentGroup(BaseModel):
