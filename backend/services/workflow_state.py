@@ -387,7 +387,18 @@ def get_tickets_for_user_departments(user_id: str) -> dict[str, list[Ticket]]:
     return result
 
 
-def _ticket_to_department_item(ticket: Ticket) -> dict:
+def _current_phase_of(workflow: dict) -> Optional[dict]:
+    """Aktuelle Phase aus einem (bereits geparsten) Workflow-Dict, oder None."""
+    if not _is_new_format(workflow):
+        return None
+    phases = workflow.get("phases", [])
+    idx = workflow.get("current_phase_index", 0)
+    if 0 <= idx < len(phases):
+        return phases[idx]
+    return None
+
+
+def _board_item(ticket: Ticket, phase: dict, department_id: Optional[str]) -> dict:
     return {
         "id": ticket.id,
         "title": ticket.title,
@@ -395,33 +406,59 @@ def _ticket_to_department_item(ticket: Ticket) -> dict:
         "status": ticket.status.value,
         "priority": ticket.priority.value,
         "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+        "phase_type": phase.get("type"),
+        "phase_label": phase.get("label"),
+        # group_id der Reviewing-Abteilung (für ?department=). None in der
+        # Assignment-Phase – dort öffnet der Link das Bearbeitungs-Formular.
+        "department_id": department_id,
     }
 
 
-def get_department_requests_for_user(user_id: str) -> list[dict]:
-    group_ids = get_group_ids_for_user(user_id)
+def get_department_board_for_user(user_id: str) -> list[dict]:
+    """
+    Einheitliche „Meine Abteilung"-Liste: pro Gruppe des Users genau die Tickets,
+    die AKTUELL diese Gruppe betreffen – jedes Ticket genau einmal, in seiner
+    aktuellen Phase. Keine Überlappung zwischen Assignment- und Review-Phase.
+
+    - Assignment-Phase: Ticket ist der Gruppe zur Bearbeitung zugewiesen
+      (assignee_group_id == group_id) -> department_id = None.
+    - Department-Review-Phase („Durchführung"): Gruppe ist required Reviewer und
+      noch nicht 'done' -> department_id = group_id.
+    """
+    group_ids = set(get_group_ids_for_user(user_id))
     if not group_ids:
         return []
 
-    tickets = list_all_tickets()
-    result: list[dict] = []
+    boards: dict[str, dict] = {}
 
-    for group_id in group_ids:
-        group_tickets: list[dict] = []
+    def board_for(gid: str) -> dict:
+        if gid not in boards:
+            boards[gid] = {
+                "group_id": gid,
+                "group_name": get_group_name_from_id(gid) or gid,
+                "tickets": [],
+            }
+        return boards[gid]
 
-        for ticket in tickets:
-            if ticket.status != RequestStatus.in_request:
-                continue
-            departments = _get_departments_from_workflow(ticket.workflow_state_parsed)
-            dept = departments.get(group_id)
-            if dept and dept.get("required") and dept.get("status") != DEPARTMENT_STATUS_DONE:
-                group_tickets.append(_ticket_to_department_item(ticket))
+    for ticket in list_all_tickets():
+        if ticket.status in (RequestStatus.archived, RequestStatus.rejected):
+            continue
 
-        if group_tickets:
-            result.append({
-                "group_id": group_id,
-                "group_name": get_group_name_from_id(group_id),
-                "tickets": group_tickets,
-            })
+        phase = _current_phase_of(ticket.workflow_state_parsed)
+        if not phase:
+            continue
+        ptype = phase.get("type")
 
-    return result
+        if ptype == PhaseType.assignment.value:
+            gid = ticket.assignee_group_id
+            if gid and gid in group_ids:
+                board_for(gid)["tickets"].append(_board_item(ticket, phase, None))
+
+        elif ptype == PhaseType.department_review.value:
+            departments = phase.get("departments", {})
+            for gid in group_ids:
+                dept = departments.get(gid)
+                if dept and dept.get("required") and dept.get("status") != DEPARTMENT_STATUS_DONE:
+                    board_for(gid)["tickets"].append(_board_item(ticket, phase, gid))
+
+    return [b for b in boards.values() if b["tickets"]]

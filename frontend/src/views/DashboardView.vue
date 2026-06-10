@@ -12,36 +12,26 @@ const auth   = useAuthStore()
 interface DashboardTicket {
   id: number; title: string; type_key: string
   status: string; priority: string; created_at: string
-  assignee_group_id?: string | null
-  assignee_group_name?: string | null
 }
-interface DepartmentTicket {
+// Einheitlicher „Meine Abteilung"-Eintrag (vom Backend fertig gruppiert)
+interface DeptBoardTicket {
   id: number; title: string; type_key: string; created_at: string
   status: string; priority: string
+  phase_type: 'assignment' | 'department_review' | string
+  phase_label: string
+  department_id: string | null
 }
-interface DepartmentGroup {
-  group_id: string; group_name: string; tickets: DepartmentTicket[]
-}
+interface DeptBoardGroup { group_id: string; group_name: string; tickets: DeptBoardTicket[] }
 interface DashboardData {
   orders: DashboardTicket[]
-  group_orders: DashboardTicket[]
   created_orders: DashboardTicket[]
-  department_requests: DepartmentGroup[]
+  department_board: DeptBoardGroup[]
   allowed_ticket_types: string[]
 }
 
-// Vereinheitlichter Eintrag für den „Meine Abteilung"-Tab
-interface DeptItem {
-  id: number; title: string; type_key: string
-  status: string; priority: string; created_at: string
-  kind: 'assignment' | 'review'
-  link: string
-}
-interface DeptGroup { group_id: string; group_name: string; tickets: DeptItem[] }
-
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading   = ref(true)
-const data      = ref<DashboardData>({ orders: [], group_orders: [], created_orders: [], department_requests: [], allowed_ticket_types: [] })
+const data      = ref<DashboardData>({ orders: [], created_orders: [], department_board: [], allowed_ticket_types: [] })
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type Tab = 'mine' | 'group' | 'created'
@@ -87,8 +77,7 @@ function dotClass(s: string) {
 
 // ── Counts ────────────────────────────────────────────────────────────────────
 const mineCount    = computed(() => data.value.orders.filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
-const groupCount   = computed(() => baseDeptGroups.value.reduce((s, g) =>
-  s + g.tickets.filter(t => t.status !== 'archived' && t.status !== 'rejected').length, 0))
+const groupCount   = computed(() => data.value.department_board.reduce((s, g) => s + g.tickets.length, 0))
 const createdCount = computed(() => data.value.created_orders.filter(o => o.status !== 'archived').length)
 const totalOpen    = computed(() => mineCount.value + groupCount.value)
 
@@ -111,55 +100,11 @@ const filteredCreatedActive   = computed(() => filteredCreated.value.filter(o =>
 const filteredCreatedArchived = computed(() => filteredCreated.value.filter(o => o.status === 'archived'))
 const showArchived = ref(false)
 
-// ── „Meine Abteilung" – vereinheitlicht ─────────────────────────────────────────
-// Kombiniert zwei Quellen, gruppiert nach Abteilung (group_id):
-//   • department_requests → Durchführungs-/Freigabe-Tickets (Phase „Durchführung").
-//     group_id ist hier der KORREKTE Workflow-Department-Key → ?department=<id>.
-//   • group_orders        → Tickets, die meiner Abteilung zur Bearbeitung
-//     (Assignment-Phase) zugewiesen sind → Formular ohne department.
-// Dedupe pro Abteilung über die Ticket-ID (Review hat Vorrang vor Assignment).
-const baseDeptGroups = computed<DeptGroup[]>(() => {
-  const map = new Map<string, DeptGroup & { seen: Set<number> }>()
-  const ensure = (gid: string, name: string) => {
-    if (!map.has(gid)) map.set(gid, { group_id: gid, group_name: name || 'Unbekannt', tickets: [], seen: new Set() })
-    const e = map.get(gid)!
-    if ((!e.group_name || e.group_name === 'Unbekannt') && name) e.group_name = name
-    return e
-  }
-
-  // 1) Durchführung / Freigabe (autoritative Department-ID)
-  for (const d of data.value.department_requests) {
-    const g = ensure(d.group_id, d.group_name)
-    for (const t of d.tickets) {
-      g.tickets.push({
-        id: t.id, title: t.title, type_key: t.type_key,
-        status: t.status, priority: t.priority, created_at: t.created_at,
-        kind: 'review',
-        link: `/tickets/view/${t.type_key}/${t.id}?department=${d.group_id}`,
-      })
-      g.seen.add(t.id)
-    }
-  }
-
-  // 2) Meiner Abteilung zur Bearbeitung zugewiesen (Assignment-Phase)
-  for (const o of data.value.group_orders) {
-    const gid = o.assignee_group_id || o.assignee_group_name || 'unknown'
-    const g = ensure(gid, o.assignee_group_name || '')
-    if (g.seen.has(o.id)) continue
-    g.seen.add(o.id)
-    g.tickets.push({
-      id: o.id, title: o.title, type_key: o.type_key,
-      status: o.status, priority: o.priority, created_at: o.created_at,
-      kind: 'assignment',
-      link: `/tickets/view/${o.type_key}/${o.id}`,
-    })
-  }
-
-  return Array.from(map.values()).map(({ seen, ...g }) => g)
-})
-
-const myDepartmentGroups = computed<DeptGroup[]>(() =>
-  baseDeptGroups.value
+// ── „Meine Abteilung" ──────────────────────────────────────────────────────────
+// Vollständig vom Backend gruppiert: jede Abteilung genau einmal, jedes Ticket
+// genau einmal in seiner aktuellen Phase. Frontend filtert nur noch.
+const myDepartmentGroups = computed<DeptBoardGroup[]>(() =>
+  data.value.department_board
     .map(g => ({ ...g, tickets: applyFilter(g.tickets) }))
     .filter(g => g.tickets.length > 0)
 )
@@ -173,7 +118,12 @@ const currentCount = computed(() => {
 // ── Actions ───────────────────────────────────────────────────────────────────
 function openTicket(o: DashboardTicket) { router.push(`/tickets/view/${o.type_key}/${o.id}`) }
 function openCreatedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
-function openDeptItem(t: DeptItem) { router.push(t.link) }
+// Durchführung (department_id gesetzt) → ?department=<id> für die Aktionsleiste,
+// Bearbeitung → Formular ohne department.
+function openDeptItem(t: DeptBoardTicket) {
+  const dep = t.department_id ? `?department=${t.department_id}` : ''
+  router.push(`/tickets/view/${t.type_key}/${t.id}${dep}`)
+}
 function toggleGroupDept(id: string) { openGroupDepts.value[id] = !openGroupDepts.value[id] }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -182,7 +132,7 @@ onMounted(async () => {
     const res = await client.get<{ data: DashboardData }>('/dashboard')
     data.value = res.data.data
     // Auto-open department accordions
-    for (const g of baseDeptGroups.value) openGroupDepts.value[g.group_id] = true
+    for (const g of data.value.department_board) openGroupDepts.value[g.group_id] = true
     // Auto-select tab with most relevant content
     if (mineCount.value > 0) activeTab.value = 'mine'
     else if (groupCount.value > 0) activeTab.value = 'group'
@@ -342,7 +292,7 @@ onMounted(async () => {
                   </div>
                 </button>
                 <div v-show="openGroupDepts[g.group_id]" class="px-5 pb-4 space-y-2">
-                  <div v-for="t in g.tickets" :key="t.kind + '-' + t.id" @click="openDeptItem(t)"
+                  <div v-for="t in g.tickets" :key="t.id" @click="openDeptItem(t)"
                        class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
                               bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                               hover:border-[#3EAAB8]/40 hover:shadow-sm transition group">
@@ -354,9 +304,11 @@ onMounted(async () => {
                       </div>
                     </div>
                     <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                      <span v-if="t.kind === 'review'"
-                            class="hidden sm:inline text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8]">
-                        Durchführung
+                      <span class="hidden sm:inline text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                            :class="t.phase_type === 'department_review'
+                              ? 'bg-[#3EAAB8]/10 text-[#3EAAB8]'
+                              : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'">
+                        {{ t.phase_label }}
                       </span>
                       <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[t.priority]">{{ PRIORITY_LABEL[t.priority] }}</span>
                       <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[t.status]">{{ STATUS_LABEL[t.status] }}</span>
