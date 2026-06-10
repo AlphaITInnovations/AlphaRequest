@@ -18,7 +18,10 @@ from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
 )
 from backend.database.users import PERM_MANAGE, PERM_ADMIN
-from backend.services.workflow_state import build_workflow, set_workflow_state
+from backend.services.workflow_state import (
+    build_workflow, set_workflow_state, advance_phase,
+    reject_workflow, get_current_phase, all_required_departments_done,
+)
 from backend.utils.ticket_labels import TICKET_LABELS
 from backend.utils.logger import logger
 from datetime import datetime
@@ -86,32 +89,11 @@ def validate_assignee(user_cache, assignee_id: str) -> bool:
     return any(u.get("id") == assignee_id for u in user_cache)
 
 
-def complete_ticket_internal(ticket, request, user):
-    if not ticket.priority:
-        raise HTTPException(400, "Priorität fehlt")
-    try:
-        json.loads(ticket.description or "{}")
-    except Exception:
-        raise HTTPException(400, "Ticketbeschreibung ungültig")
-
+def _build_and_init_workflow(ticket) -> dict:
+    """Builds workflow, saves it, advances past the creation phase. Returns updated workflow."""
     workflow = build_workflow(ticket)
-    if not workflow or "departments" not in workflow:
-        raise HTTPException(500, "Workflow konnte nicht erstellt werden")
-
-    request.app.state.manager.update_ticket(
-        ticket_id=ticket.id,
-        status=RequestStatus.in_request,
-    )
-    database.set_assignee(ticket_id=ticket.id, user_id="fachabteilung", user_name="fachabteilung")
-    database.set_accountable(ticket_id=ticket.id, user_id="fachabteilung", user_name="fachabteilung")
     set_workflow_state(ticket.id, workflow)
-    send_mail_to_all_fachabteilung(workflow, ticket)
-
-    logger.info(
-        "Ticket %s in in_request überführt | Departments=%s",
-        ticket.id,
-        list(workflow["departments"].keys()),
-    )
+    return advance_phase(ticket.id)
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
@@ -241,10 +223,21 @@ async def create_ticket(
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
 
-    # Skip phase2 for marketing, hotelbuchung → direkt an Fachabteilung
-    if data.ticket_type in (TicketType.marketing_stellenanzeige, TicketType.hotelbuchung):
-        ticket = database.get_ticket(ticket_id)
-        complete_ticket_internal(ticket, request, user)
+    ticket = database.get_ticket(ticket_id)
+    updated_workflow = _build_and_init_workflow(ticket)
+    ticket = database.get_ticket(ticket_id)
+
+    # Check what phase we're now in after advancing past creation
+    from backend.services.workflow_state import PhaseType as WfPhaseType
+    phases = updated_workflow.get("phases", [])
+    current_idx = updated_workflow.get("current_phase_index", 0)
+    current_phase = phases[current_idx] if current_idx < len(phases) else None
+
+    if current_phase and current_phase["type"] == WfPhaseType.department_review:
+        # No assignment phase — notify departments immediately
+        database.set_assignee(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
+        database.set_accountable(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
+        send_mail_to_all_fachabteilung(current_phase.get("departments", {}), ticket)
         add_history_event(
             ticket_id,
             actor_id=user["id"],
@@ -252,28 +245,25 @@ async def create_ticket(
             action="ticket_submitted",
             details={"status_new": RequestStatus.in_request.value},
         )
-        return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
-
-    # Assignee: Fachabteilung oder User → DB-Update + Mail
-    from backend.database.groups import get_groups
-    group_map = {g["id"]: g["name"] for g in get_groups()}
-    if data.assignee_id in group_map:
-        group_name = group_map[data.assignee_id]
-        database.update_ticket(ticket_id,
-            assignee_id=None, assignee_name=None,
-            assignee_group_id=data.assignee_id, assignee_group_name=group_name)
-
-        all_groups = get_groups()
-        for g in all_groups:
-            if g["id"] == data.assignee_id:
-                for mail in g.get("distributions", []):
-                    if mail:
-                        send_newrequest_mail(mail.strip(), data.priority, title, data.ticket_type, ticket_id)
-                break
     else:
-        mail_to = get_cached_user_mail(request.app, data.assignee_id)
-        if mail_to:
-            send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
+        # Assignment phase — notify assignee
+        from backend.database.groups import get_groups
+        group_map = {g["id"]: g["name"] for g in get_groups()}
+        if data.assignee_id in group_map:
+            group_name = group_map[data.assignee_id]
+            database.update_ticket(ticket_id,
+                assignee_id=None, assignee_name=None,
+                assignee_group_id=data.assignee_id, assignee_group_name=group_name)
+            for g in get_groups():
+                if g["id"] == data.assignee_id:
+                    for mail in g.get("distributions", []):
+                        if mail:
+                            send_newrequest_mail(mail.strip(), data.priority, title, data.ticket_type, ticket_id)
+                    break
+        else:
+            mail_to = get_cached_user_mail(request.app, data.assignee_id)
+            if mail_to:
+                send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
@@ -437,28 +427,72 @@ async def submit_ticket(
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
 
-    # Basis-Ticket: Phase 3 überspringen → direkt archivieren
-    if ticket.ticket_type == TicketType.basis_ticket:
-        request.app.state.manager.update_ticket(
-            ticket_id=ticket.id,
-            status=RequestStatus.archived,
-        )
+    current_phase = get_current_phase(ticket_id)
+    if not current_phase:
+        raise api_error(400, ErrorCode.INVALID_STATUS, "Ticket hat keine aktive Phase")
+
+    from backend.services.phase_definitions import PhaseType
+    if current_phase["type"] != PhaseType.assignment:
+        raise api_error(400, ErrorCode.INVALID_STATUS, "Aktuelle Phase kann nicht über Submit abgeschlossen werden")
+
+    updated_workflow = advance_phase(ticket_id)
+
+    phases = updated_workflow.get("phases", [])
+    current_idx = updated_workflow.get("current_phase_index", 0)
+    next_phase = phases[current_idx] if current_idx < len(phases) else None
+
+    if next_phase and next_phase["type"] == PhaseType.department_review:
+        ticket = database.get_ticket(ticket_id)
+        database.set_assignee(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
+        database.set_accountable(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
+        send_mail_to_all_fachabteilung(next_phase.get("departments", {}), ticket)
         add_history_event(
             ticket_id,
             actor_id=user["id"],
             actor_name=user["displayName"],
-            action="ticket_archived",
-            details={"status_new": RequestStatus.archived.value, "reason": "basis_ticket_completed"},
+            action="ticket_submitted",
+            details={"status_new": RequestStatus.in_request.value},
         )
-        return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    else:
+        action = "ticket_archived" if not next_phase else "phase_advanced"
+        add_history_event(
+            ticket_id,
+            actor_id=user["id"],
+            actor_name=user["displayName"],
+            action=action,
+            details={"phase_completed": current_phase["key"]},
+        )
 
-    complete_ticket_internal(ticket, request, user)
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
+@router.post("/tickets/{ticket_id}/reject", response_model=DataResponse[TicketOut])
+async def reject_ticket(
+    ticket_id: int,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+
+    if ticket.status in (RequestStatus.archived, RequestStatus.rejected):
+        raise api_error(400, ErrorCode.INVALID_STATUS, "Ticket ist bereits abgeschlossen")
+
+    body = await request.json()
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise api_error(400, ErrorCode.INVALID_DESCRIPTION, "Ablehnungsgrund (message) ist erforderlich")
+
+    from zoneinfo import ZoneInfo
+    rejected_at = datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
+    reject_workflow(ticket_id, message=message, rejected_by=user["displayName"], rejected_at=rejected_at)
+
     add_history_event(
         ticket_id,
         actor_id=user["id"],
         actor_name=user["displayName"],
-        action="ticket_submitted",
-        details={"status_new": RequestStatus.in_request.value},
+        action="ticket_rejected",
+        details={"message": message},
     )
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
@@ -567,19 +601,33 @@ async def set_department_status(
         },
     )
 
-    if can_archive_ticket(ticket_id):
-        database.update_ticket(ticket_id=ticket_id, status=RequestStatus.archived)
-        add_history_event(
-            ticket_id,
-            actor_id=None,
-            actor_name="System",
-            actor_type="system",
-            action="status_changed",
-            details={
-                "field": "status",
-                "old_value": RequestStatus.in_request.value,
-                "new_value": RequestStatus.archived.value,
-            },
-        )
+    if all_required_departments_done(ticket_id):
+        updated_workflow = advance_phase(ticket_id)
+        phases = updated_workflow.get("phases", [])
+        current_idx = updated_workflow.get("current_phase_index", 0)
+        next_phase = phases[current_idx] if current_idx < len(phases) else None
+
+        if next_phase:
+            add_history_event(
+                ticket_id,
+                actor_id=None,
+                actor_name="System",
+                actor_type="system",
+                action="phase_advanced",
+                details={"new_phase": next_phase["key"]},
+            )
+        else:
+            add_history_event(
+                ticket_id,
+                actor_id=None,
+                actor_name="System",
+                actor_type="system",
+                action="status_changed",
+                details={
+                    "field": "status",
+                    "old_value": RequestStatus.in_request.value,
+                    "new_value": RequestStatus.archived.value,
+                },
+            )
 
     return {"ok": True}
