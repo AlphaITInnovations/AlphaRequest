@@ -372,17 +372,18 @@ def send_mail_to_fachabteilung(to: str, prio: TicketPriority, titel: str, ttype:
 
 
 
-def send_mail_to_all_fachabteilung(workflow: dict, ticket: Ticket):
+def send_mail_to_all_fachabteilung(departments: dict, ticket: Ticket):
     """
     Sammelt alle Verteiler-Mailadressen der betroffenen
     Fachabteilungen und sendet eine Mail.
+    departments: dict mapping group_id → {name, required, status}
     """
 
-    if not workflow or "departments" not in workflow:
+    if not departments:
         logger.warning("Workflow enthält keine Departments")
         return
 
-    department_ids = workflow["departments"].keys()
+    department_ids = departments.keys()
 
     groups = get_groups()
 

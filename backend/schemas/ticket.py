@@ -24,6 +24,7 @@ class TicketOut(BaseModel):
     accountable_name: Optional[str] = None
     assignee_group_id: Optional[str] = None
     assignee_group_name: Optional[str] = None
+    workflow_state: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 
@@ -47,6 +48,7 @@ class TicketOut(BaseModel):
             accountable_name=t.accountable_name,
             assignee_group_id=t.assignee_group_id,
             assignee_group_name=t.assignee_group_name,
+            workflow_state=t.workflow_state_parsed or None,
         )
 
 
