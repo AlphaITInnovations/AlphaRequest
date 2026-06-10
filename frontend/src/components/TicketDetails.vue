@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { inject, computed, type ComputedRef } from 'vue'
 import UserSelect from '@/components/UserSelect.vue'
-import type { TicketPriority } from '@/types/ticket'
+import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
+import type { TicketPriority, WorkflowPhase } from '@/types/ticket'
 
 defineProps<{
   phase: 'create' | 'edit' | 'view'
@@ -9,6 +11,10 @@ defineProps<{
   accountable?: { id: string; name: string } | null
   accountableError?: boolean
 }>()
+
+// Phasen werden vom Detail-View bereitgestellt (nur im Edit-/View-Kontext vorhanden)
+const injectedPhases = inject<ComputedRef<WorkflowPhase[]> | null>('workflowPhases', null)
+const phases = computed<WorkflowPhase[]>(() => injectedPhases?.value ?? [])
 
 const emit = defineEmits<{
   'update:priority':    [v: TicketPriority]
@@ -26,6 +32,13 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
 
 <template>
   <div class="space-y-5">
+
+    <!-- Phasen-Fortschritt (nur im Edit-Kontext) -->
+    <template v-if="phases.length">
+      <PhaseProgress :phases="phases" />
+      <hr class="border-gray-100 dark:border-white/[0.06]" />
+    </template>
+
     <h2 class="text-base font-semibold text-gray-900 dark:text-white">Details</h2>
 
     <!-- Verantwortlicher -->
