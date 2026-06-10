@@ -18,7 +18,11 @@ const ctx = entry?.useComposable('create')
 
 onMounted(() => {
   if (!entry) { router.replace('/dashboard'); return }
-  if (!auth.canCreateTicket(ticketType)) { router.replace('/dashboard'); return }
+  // Basis-Tickets darf jeder eingeloggte User erstellen (keine create_-Permission).
+  // Für Prozess-Tickets greift die clientseitige Berechtigungsprüfung; der Server erzwingt sie ohnehin.
+  if (ticketType !== 'basis-ticket' && !auth.canCreateTicket(ticketType)) {
+    router.replace('/dashboard'); return
+  }
   ctx.init()
 })
 </script>
