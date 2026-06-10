@@ -55,6 +55,8 @@ def get_dashboard(user: dict = Depends(get_current_user)):
                     title=t["title"],
                     type_key=t["type_key"],
                     created_at=t["created_at"][:10] if t["created_at"] else "",
+                    status=t["status"],
+                    priority=t["priority"],
                 )
                 for t in d["tickets"]
             ],
