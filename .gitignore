@@ -9,3 +9,4 @@ backend/tickets.db
 data
 /backend/templates/modals/old/
 backend/logs/
+.claude
