@@ -125,9 +125,9 @@ const currentCount = computed(() => {
 })
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-function openTicket(o: DashboardTicket) { router.push(`/tickets/edit/${o.type_key}/${o.id}`) }
+function openTicket(o: DashboardTicket) { router.push(`/tickets/view/${o.type_key}/${o.id}`) }
 function openCreatedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
-function openGroupTicket(t: DepartmentTicket, gid: string) { router.push(`/tickets/group/${t.type_key}/${t.id}?department=${gid}`) }
+function openGroupTicket(t: DepartmentTicket, gid: string) { router.push(`/tickets/view/${t.type_key}/${t.id}?department=${gid}`) }
 function toggleDept(id: string) { openDepts.value[id] = !openDepts.value[id] }
 function toggleGroupDept(name: string) { openGroupDepts.value[name] = !openGroupDepts.value[name] }
 
