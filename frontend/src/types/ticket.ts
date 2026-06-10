@@ -24,6 +24,43 @@ export interface User {
 
 // ── Tickets ───────────────────────────────────────────────────────────────────
 
+// ── Workflow / Phase types ────────────────────────────────────────────────────
+
+export type PhaseType   = 'creation' | 'assignment' | 'department_review'
+export type PhaseStatus = 'pending' | 'in_progress' | 'done'
+
+export type DeptStatus = 'open' | 'in_progress' | 'done' | 'skipped' | 'rejected'
+
+export interface Department {
+  name:     string
+  required: boolean
+  status:   DeptStatus
+}
+
+export interface WorkflowPhase {
+  key:         string
+  label:       string
+  type:        PhaseType
+  status:      PhaseStatus
+  departments?: Record<string, Department>
+}
+
+export interface WorkflowRejection {
+  phase_key:   string
+  phase_index: number
+  message:     string
+  rejected_by: string
+  rejected_at: string
+}
+
+export interface WorkflowState {
+  current_phase_index: number
+  phases:              WorkflowPhase[]
+  rejected:            WorkflowRejection | null
+}
+
+// ── Tickets ───────────────────────────────────────────────────────────────────
+
 export interface Ticket {
   id:                  number
   title:               string
@@ -42,6 +79,7 @@ export interface Ticket {
   accountable_name:    string | null
   assignee_group_id:   string | null
   assignee_group_name: string | null
+  workflow_state:      WorkflowState | null
 }
 
 export interface TicketCreateRequest {

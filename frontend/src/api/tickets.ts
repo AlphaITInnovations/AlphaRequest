@@ -14,6 +14,7 @@ export const ticketsApi = {
   create:  (data: TicketCreateRequest)      => client.post<DataResponse<Ticket>>('/tickets', data),
   update:  (id: number, data: TicketUpdateRequest) => client.patch<DataResponse<Ticket>>(`/tickets/${id}`, data),
   submit:  (id: number)                     => client.post<DataResponse<Ticket>>(`/tickets/${id}/submit`),
+  reject:  (id: number, message: string)    => client.post<DataResponse<Ticket>>(`/tickets/${id}/reject`, { message }),
   archive: (id: number)                     => client.post<DataResponse<Ticket>>(`/admin/tickets/${id}/archive`),
   remove:  (id: number)                     => client.delete(`/tickets/${id}`),
 
