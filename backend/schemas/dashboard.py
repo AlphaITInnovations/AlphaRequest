@@ -21,7 +21,8 @@ class DashboardTicket(BaseModel):
     status: str
     priority: str
     created_at: str
-    assignee_group_name: str | None = None   # ← NEU
+    assignee_group_id: str | None = None
+    assignee_group_name: str | None = None
 
 
 class DashboardResponse(BaseModel):
