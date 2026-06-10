@@ -81,10 +81,7 @@ onMounted(async () => {
 
         <!-- ── Content ── -->
         <section class="flex-1">
-          <BasisTicketContentPanel
-            :titel="data.parsed?.ticket?.titel ?? ''"
-            :eintraege="data.parsed?.ticket?.eintraege ?? []"
-          />
+          <BasisTicketContentPanel :description="data.parsed" />
         </section>
       </div>
     </div>

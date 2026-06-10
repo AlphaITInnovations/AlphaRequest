@@ -21,6 +21,7 @@ def _to_dashboard_ticket(t) -> DashboardTicket:
         status=t.status if isinstance(t.status, str) else t.status.value,
         priority=t.priority if isinstance(t.priority, str) else t.priority.value,
         created_at=t.created_at.strftime("%d.%m.%Y") if hasattr(t.created_at, "strftime") else str(t.created_at)[:10],
+        assignee_group_id=t.assignee_group_id or None,
         assignee_group_name=t.assignee_group_name or None,
     )
 

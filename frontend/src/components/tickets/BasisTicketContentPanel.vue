@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 export interface Eintrag {
   text:        string
   author_id:   string
@@ -6,10 +8,12 @@ export interface Eintrag {
   timestamp:   string
 }
 
-defineProps<{
-  titel:     string
-  eintraege: Eintrag[]
-}>()
+// Einheitlich mit den übrigen ContentPanels: erhält das geparste description-JSON
+// ({ ticket: { titel, eintraege } }).
+const props = defineProps<{ description: any }>()
+
+const titel     = computed<string>(() => props.description?.ticket?.titel ?? '')
+const eintraege = computed<Eintrag[]>(() => props.description?.ticket?.eintraege ?? [])
 
 function formatDate(iso: string): string {
   try {

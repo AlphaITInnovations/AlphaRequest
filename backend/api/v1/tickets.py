@@ -315,6 +315,11 @@ async def create_basis_ticket(
         details={"priority": data.priority, "ticket_type": "basis-ticket"},
     )
 
+    # Workflow aufbauen und an der Erstellungsphase vorbei in die Bearbeitung schieben.
+    # Basis-Tickets haben Phasen [creation, assignment] – danach immer Assignment-Phase.
+    ticket = database.get_ticket(ticket_id)
+    _build_and_init_workflow(ticket)
+
     # Mail an Assignee (User oder Gruppe)
     from backend.database.groups import get_groups
     group_map = {g["id"]: g["name"] for g in get_groups()}

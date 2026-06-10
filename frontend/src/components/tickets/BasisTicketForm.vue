@@ -81,10 +81,7 @@ function handleCreate() {
         <!-- ═══ Edit ═══ -->
         <template v-if="phase === 'edit'">
           <!-- ContentPanel: Titel + Verlauf (readonly) -->
-          <BasisTicketContentPanel
-            :titel="form.ticket.titel"
-            :eintraege="form.ticket.eintraege"
-          />
+          <BasisTicketContentPanel :description="{ ticket: form.ticket }" />
 
           <!-- Neuer Eintrag -->
           <div class="card">
