@@ -28,6 +28,8 @@ export interface User {
 
 export type PhaseType   = 'creation' | 'assignment' | 'department_review'
 export type PhaseStatus = 'pending' | 'in_progress' | 'done'
+// Frontend-Darstellung einer Phase (datengetrieben vom Backend)
+export type PhaseView   = 'form' | 'readonly'
 
 export type DeptStatus = 'open' | 'in_progress' | 'done' | 'skipped' | 'rejected'
 
@@ -37,11 +39,21 @@ export interface Department {
   status:   DeptStatus
 }
 
+export type ResponsibilityKind = 'owner' | 'user' | 'group' | 'departments' | 'none'
+
+export interface PhaseResponsibility {
+  kind: ResponsibilityKind
+  id?:   string | null
+  name?: string | null
+}
+
 export interface WorkflowPhase {
   key:         string
   label:       string
   type:        PhaseType
+  view?:        PhaseView
   status:      PhaseStatus
+  responsibility?: PhaseResponsibility
   departments?: Record<string, Department>
 }
 
