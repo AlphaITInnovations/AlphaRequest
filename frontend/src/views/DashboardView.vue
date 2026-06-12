@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { client } from '@/api/client'
@@ -40,6 +40,11 @@ const activeTab = ref<Tab>('mine')
 // ── Filter ────────────────────────────────────────────────────────────────────
 const filter = ref({ search: '', status: 'all', priority: 'all' })
 
+// Beim Tab-Wechsel die Filter zurücksetzen
+watch(activeTab, () => {
+  filter.value = { search: '', status: 'all', priority: 'all' }
+})
+
 // ── Labels ────────────────────────────────────────────────────────────────────
 const ticketTypes = [
   { key: 'hardware',                 label: 'Hardwarebestellung' },
@@ -54,8 +59,10 @@ const ticketTypes = [
 ]
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(ticketTypes.map(t => [t.key, t.label]))
 
+// Phasen-orientierte Bezeichnung (Status korreliert 1:1 mit der Phase):
+// in_progress = Bearbeitung, in_request = Durchführung.
 const STATUS_LABEL: Record<string, string> = {
-  in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
+  in_progress: 'Bearbeitung', in_request: 'Durchführung',
   archived: 'Erledigt', rejected: 'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
@@ -232,9 +239,9 @@ onMounted(async () => {
               <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10" />
             </div>
             <select v-model="filter.status" class="fi">
-              <option value="all">Alle Status</option>
-              <option value="in_request">Zu bearbeiten</option>
-              <option value="in_progress">In Bearbeitung</option>
+              <option value="all">Alle Phasen</option>
+              <option value="in_progress">Bearbeitung</option>
+              <option value="in_request">Durchführung</option>
               <option value="archived">Erledigt</option>
               <option value="rejected">Abgelehnt</option>
             </select>
@@ -312,14 +319,14 @@ onMounted(async () => {
                       </div>
                     </div>
                     <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                      <span class="hidden sm:inline text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                      <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[t.priority]">{{ PRIORITY_LABEL[t.priority] }}</span>
+                      <!-- Phasen-Badge ersetzt den (redundanten) Status-Badge -->
+                      <span class="text-xs font-medium px-2.5 py-1 rounded-full"
                             :class="t.phase_type === 'department_review'
-                              ? 'bg-[#3EAAB8]/10 text-[#3EAAB8]'
-                              : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'">
+                              ? 'bg-[#3EAAB8]/10 text-[#3EAAB8] dark:bg-[#3EAAB8]/20'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'">
                         {{ t.phase_label }}
                       </span>
-                      <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[t.priority]">{{ PRIORITY_LABEL[t.priority] }}</span>
-                      <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[t.status]">{{ STATUS_LABEL[t.status] }}</span>
                       <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                     </div>
                   </div>
