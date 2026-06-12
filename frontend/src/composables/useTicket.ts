@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { ticketsApi } from '@/api/tickets'
-import type { Ticket, WorkflowPhase, Watcher } from '@/types/ticket'
+import type { Ticket, WorkflowPhase, Watcher, Department } from '@/types/ticket'
 
 export function useTicket(ticketId: number) {
   const ticket    = ref<Ticket | null>(null)
@@ -40,6 +40,13 @@ export function useTicket(ticketId: number) {
   const activeDepartments = computed(() =>
     isDeptReviewPhase.value ? (currentPhase.value?.departments ?? {}) : {}
   )
+
+  // Alle Reviewing-Fachabteilungen (aus der department_review-Phase, unabhängig
+  // davon ob sie gerade aktiv ist) – für die Status-Übersicht in den Details.
+  const reviewDepartments = computed<Record<string, Department>>(() => {
+    const p = phases.value.find(ph => ph.type === 'department_review')
+    return p?.departments ?? {}
+  })
 
   // Beobachter
   const watchers = computed<Watcher[]>(() => ticket.value?.watchers ?? [])
@@ -88,7 +95,7 @@ export function useTicket(ticketId: number) {
     ticket, loading, submitting,
     workflow, phases, currentPhase, currentView,
     isAssignmentPhase, isDeptReviewPhase, isRejected, isCompleted,
-    description, activeDepartments, watchers,
+    description, activeDepartments, reviewDepartments, watchers,
     load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher,
   }
 }

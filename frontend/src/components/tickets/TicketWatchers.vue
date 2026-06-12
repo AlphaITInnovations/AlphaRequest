@@ -42,6 +42,7 @@ function onSelect(v: { id: string; name: string } | null) {
     <p v-else class="text-sm text-gray-400 italic mb-2.5">Noch keine Beobachter.</p>
 
     <UserSelect
+      label=""
       placeholder="Beobachter hinzufügen…"
       :model-value="selected"
       @update:model-value="onSelect"

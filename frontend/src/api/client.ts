@@ -1,10 +1,26 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/authStore'
+import { createWatchers } from '@/composables/createWatchers'
 
 export const client = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
+})
+
+// Beim Erstellen die im Create-Flow (TicketCreateView) gesammelten Beobachter
+// mitschicken. Bewusst eng begrenzt: nur die beiden Create-Endpunkte und nur,
+// wenn eine Beobachter-Liste gesetzt ist. So müssen die 9 Ticket-Composables
+// nicht einzeln angepasst werden. Die Liste wird bei jedem Create-Mount via
+// resetCreateWatchers() neu gesetzt.
+client.interceptors.request.use(config => {
+  const url = config.url ?? ''
+  const isCreate = (config.method ?? '').toLowerCase() === 'post'
+    && (url === '/tickets' || url === '/tickets/basis')
+  if (isCreate && createWatchers.value.length && config.data && typeof config.data === 'object') {
+    config.data = { ...config.data, watchers: createWatchers.value }
+  }
+  return config
 })
 
 export function setupInterceptors(router: import('vue-router').Router) {
