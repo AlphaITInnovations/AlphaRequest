@@ -20,8 +20,8 @@ const entry = TICKET_REGISTRY[ticketType]
 // Always call composable during setup (needed for reactivity even when in dept-view mode)
 const formCtx = entry?.useComposable('edit', ticketId)
 
-const { ticket, loading, submitting, phases,
-        isAssignmentPhase, isDeptReviewPhase, isRejected,
+const { ticket, loading, submitting, phases, currentView,
+        isDeptReviewPhase, isRejected,
         description, activeDepartments,
         load, markDepartmentDone, rejectTicket } = useTicket(ticketId)
 
@@ -52,8 +52,8 @@ onMounted(async () => {
 
   if (!ticket.value) { router.replace('/dashboard'); return }
 
-  // Initialize form composable only when in assignment phase
-  if (isAssignmentPhase.value && formCtx) {
+  // Formular-Composable nur initialisieren, wenn die aktuelle Phase ein Formular zeigt
+  if (currentView.value === 'form' && formCtx) {
     await formCtx.init()
   }
 })
@@ -97,11 +97,12 @@ function goToEdit() {
     <template v-else-if="ticket">
 
       <!-- ═══════════════════════════════════════════════════════════════════
-           ASSIGNMENT PHASE — das Formular ist selbst-layoutend
+           VIEW = FORM — das Formular ist selbst-layoutend
            (Sidebar mit Fortschritt + Details links, Eingabefelder rechts).
            Wir reichen nur die Phasen via provide() in dessen Sidebar durch.
+           Datengetrieben über phase.view, nicht mehr über den Phasen-Typ.
       ════════════════════════════════════════════════════════════════════ -->
-      <div v-if="isAssignmentPhase" class="space-y-6 pb-24">
+      <div v-if="currentView === 'form'" class="space-y-6 pb-24">
 
         <div class="max-w-7xl mx-auto">
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ ticket.title }}</h1>

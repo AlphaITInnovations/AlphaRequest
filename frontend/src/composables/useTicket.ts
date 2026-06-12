@@ -21,6 +21,16 @@ export function useTicket(ticketId: number) {
   const isRejected         = computed(() => !!workflow.value?.rejected)
   const isCompleted        = computed(() => ticket.value?.status === 'archived')
 
+  // Datengetriebene Frontend-Ansicht der aktuellen Phase: 'form' | 'readonly'.
+  // rejected/archived erzwingen read-only; sonst phase.view (Fallback aus type).
+  const currentView = computed<'form' | 'readonly'>(() => {
+    if (isRejected.value || isCompleted.value) return 'readonly'
+    const p = currentPhase.value
+    if (!p) return 'readonly'
+    if (p.view === 'form' || p.view === 'readonly') return p.view
+    return p.type === 'assignment' ? 'form' : 'readonly'
+  })
+
   const description = computed<Record<string, unknown>>(() => {
     try { return JSON.parse(ticket.value?.description ?? '{}') }
     catch { return {} }
@@ -63,7 +73,7 @@ export function useTicket(ticketId: number) {
 
   return {
     ticket, loading, submitting,
-    workflow, phases, currentPhase,
+    workflow, phases, currentPhase, currentView,
     isAssignmentPhase, isDeptReviewPhase, isRejected, isCompleted,
     description, activeDepartments,
     load, markDepartmentDone, rejectTicket,

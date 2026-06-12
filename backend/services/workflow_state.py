@@ -174,11 +174,19 @@ def build_workflow(ticket: Ticket) -> dict:
             "key": phase_def.key,
             "label": phase_def.label,
             "type": phase_def.type.value,
+            "view": phase_def.effective_view.value,
             "status": PHASE_STATUS_IN_PROGRESS if i == 0 else PHASE_STATUS_PENDING,
         }
-        if phase_def.type == PhaseType.department_review:
+        if phase_def.type == PhaseType.creation:
+            # Zuständigkeit der Erstellungsphase ist immer der Ersteller.
+            phase["responsibility"] = {"kind": "owner", "id": ticket.owner_id, "name": ticket.owner_name}
+        elif phase_def.type == PhaseType.department_review:
             builder = DEPARTMENT_BUILDERS.get(ticket.ticket_type)
             phase["departments"] = builder(description) if builder else {}
+            phase["responsibility"] = {"kind": "departments"}
+        # assignment-Phasen: responsibility wird beim Aktivieren gesetzt
+        # (set_phase_responsibility); current_responsibility() leitet sonst aus
+        # dem Ticket ab (Fallback, deckt auch Alt-Tickets ab).
         phases.append(phase)
 
     return {
@@ -248,6 +256,86 @@ def get_current_phase(ticket_id: int) -> Optional[dict]:
     phases = workflow.get("phases", [])
     idx = workflow.get("current_phase_index", 0)
     return phases[idx] if idx < len(phases) else None
+
+
+# ============================================================
+# Responsibility & view (single source of truth)
+# ============================================================
+
+def set_phase_responsibility(ticket_id: int, phase_index: int, responsibility: dict) -> None:
+    """Setzt die Zuständigkeit einer einzelnen Phase im Workflow."""
+    workflow = _require_workflow(ticket_id)
+    phases = workflow["phases"]
+    if 0 <= phase_index < len(phases):
+        phases[phase_index]["responsibility"] = responsibility
+        set_workflow_state(ticket_id, workflow)
+
+
+def phase_view(phase: Optional[dict]) -> str:
+    """Frontend-Ansicht einer Phase: 'form' | 'readonly' (Fallback aus type)."""
+    if not phase:
+        return "readonly"
+    v = phase.get("view")
+    if v in ("form", "readonly"):
+        return v
+    return "form" if phase.get("type") == PhaseType.assignment.value else "readonly"
+
+
+def current_responsibility(ticket) -> dict:
+    """
+    Einheitliche Quelle der Wahrheit: wer ist in der AKTUELLEN Phase zuständig?
+    Rückgabe-kinds: owner | user | group | departments | none.
+    Akzeptiert ein Ticket-Objekt (mit workflow_state_parsed + assignee-Feldern).
+
+    Explizit im Workflow gesetzte responsibility hat Vorrang; sonst wird aus
+    phase.type + Ticket abgeleitet (deckt Alt-Tickets und noch nicht zugewiesene
+    assignment-Phasen ab).
+    """
+    workflow = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
+    phase = _current_phase_of(workflow)
+    if not phase:
+        return {"kind": "none"}
+
+    ptype = phase.get("type")
+
+    if ptype == PhaseType.department_review.value:
+        return {"kind": "departments", "departments": phase.get("departments", {})}
+
+    resp = phase.get("responsibility")
+    if isinstance(resp, dict) and resp.get("kind") and resp.get("kind") != "departments":
+        # Owner/User können ohne id auskommen (Fallback füllt nach)
+        if resp.get("id") or resp.get("kind") == "owner":
+            return resp
+
+    if ptype == PhaseType.assignment.value:
+        gid = getattr(ticket, "assignee_group_id", None)
+        if gid:
+            return {"kind": "group", "id": gid, "name": getattr(ticket, "assignee_group_name", None)}
+        aid = getattr(ticket, "assignee_id", None)
+        if aid and aid != "fachabteilung":
+            return {"kind": "user", "id": aid, "name": getattr(ticket, "assignee_name", None)}
+        return {"kind": "none"}
+
+    if ptype == PhaseType.creation.value:
+        return {"kind": "owner", "id": getattr(ticket, "owner_id", None), "name": getattr(ticket, "owner_name", None)}
+
+    return {"kind": "none"}
+
+
+def user_is_responsible(ticket, user_id: str, user_group_ids=None) -> bool:
+    """True, wenn der User in der aktuellen Phase handeln muss/darf."""
+    group_ids = set(user_group_ids or [])
+    resp = current_responsibility(ticket)
+    kind = resp.get("kind")
+    if kind in ("user", "owner"):
+        return resp.get("id") == user_id
+    if kind == "group":
+        return resp.get("id") in group_ids
+    if kind == "departments":
+        for gid, dept in resp.get("departments", {}).items():
+            if gid in group_ids and dept.get("required") and dept.get("status") != DEPARTMENT_STATUS_DONE:
+                return True
+    return False
 
 
 # ============================================================
