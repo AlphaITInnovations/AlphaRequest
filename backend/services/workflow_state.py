@@ -285,11 +285,10 @@ def current_responsibility(ticket) -> dict:
     """
     Einheitliche Quelle der Wahrheit: wer ist in der AKTUELLEN Phase zuständig?
     Rückgabe-kinds: owner | user | group | departments | none.
-    Akzeptiert ein Ticket-Objekt (mit workflow_state_parsed + assignee-Feldern).
 
-    Explizit im Workflow gesetzte responsibility hat Vorrang; sonst wird aus
-    phase.type + Ticket abgeleitet (deckt Alt-Tickets und noch nicht zugewiesene
-    assignment-Phasen ab).
+    Liest AUSSCHLIESSLICH aus dem workflow_state (phase.responsibility / departments).
+    Die alten assignee/accountable-Spalten werden NICHT mehr ausgewertet – Alt-Tickets
+    werden beim Start einmalig in den Workflow migriert (backfill_phase_responsibility).
     """
     workflow = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
     phase = _current_phase_of(workflow)
@@ -302,24 +301,65 @@ def current_responsibility(ticket) -> dict:
         return {"kind": "departments", "departments": phase.get("departments", {})}
 
     resp = phase.get("responsibility")
-    if isinstance(resp, dict) and resp.get("kind") and resp.get("kind") != "departments":
-        # Owner/User können ohne id auskommen (Fallback füllt nach)
-        if resp.get("id") or resp.get("kind") == "owner":
-            return resp
+    if isinstance(resp, dict) and resp.get("kind"):
+        return resp
 
-    if ptype == PhaseType.assignment.value:
-        gid = getattr(ticket, "assignee_group_id", None)
-        if gid:
-            return {"kind": "group", "id": gid, "name": getattr(ticket, "assignee_group_name", None)}
-        aid = getattr(ticket, "assignee_id", None)
-        if aid and aid != "fachabteilung":
-            return {"kind": "user", "id": aid, "name": getattr(ticket, "assignee_name", None)}
-        return {"kind": "none"}
-
+    # creation-Phase ohne explizite responsibility → Ersteller (owner_* bleibt in Gebrauch)
     if ptype == PhaseType.creation.value:
         return {"kind": "owner", "id": getattr(ticket, "owner_id", None), "name": getattr(ticket, "owner_name", None)}
 
     return {"kind": "none"}
+
+
+def primary_responsibility(ticket) -> Optional[dict]:
+    """
+    Die „verantwortliche" Person/Gruppe eines Tickets für die Anzeige
+    („Verantwortlicher") = responsibility der ersten Bearbeitungs-(assignment)-Phase,
+    stabil über alle Phasen. None, wenn der Typ keine Bearbeitungsphase hat.
+    """
+    workflow = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
+    if not _is_new_format(workflow):
+        return None
+    for phase in workflow.get("phases", []):
+        if phase.get("type") == PhaseType.assignment.value:
+            resp = phase.get("responsibility")
+            if isinstance(resp, dict) and resp.get("kind") in ("user", "group"):
+                return resp
+            return None
+    return None
+
+
+def backfill_phase_responsibility() -> None:
+    """
+    Einmalige, idempotente Migration: trägt für bestehende Tickets die
+    responsibility der Bearbeitungs-(assignment)-Phase nach, sofern noch nicht
+    gesetzt – abgeleitet aus den Alt-Spalten assignee_group_id / assignee_id.
+    Danach ist die Zuständigkeit vollständig im workflow_state und die Spalten
+    werden nicht mehr gelesen.
+    """
+    for ticket in list_all_tickets():
+        workflow = ticket.workflow_state_parsed
+        if not _is_new_format(workflow):
+            continue
+        changed = False
+        for phase in workflow.get("phases", []):
+            if phase.get("type") != PhaseType.assignment.value:
+                continue
+            resp = phase.get("responsibility")
+            if isinstance(resp, dict) and resp.get("kind") in ("user", "group"):
+                continue  # bereits gesetzt
+            gid = getattr(ticket, "assignee_group_id", None)
+            aid = getattr(ticket, "assignee_id", None)
+            if gid:
+                phase["responsibility"] = {"kind": "group", "id": gid,
+                                           "name": getattr(ticket, "assignee_group_name", None)}
+                changed = True
+            elif aid and aid != "fachabteilung":
+                phase["responsibility"] = {"kind": "user", "id": aid,
+                                           "name": getattr(ticket, "assignee_name", None)}
+                changed = True
+        if changed:
+            set_workflow_state(ticket.id, workflow)
 
 
 def user_is_responsible(ticket, user_id: str, user_group_ids=None) -> bool:

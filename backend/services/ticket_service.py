@@ -20,18 +20,10 @@ class TicketService:
             owner_name: str,
             owner_info: str,
             comment: str,
-            assignee_id: str,
-            assignee_name: str,
-            accountable_id: str,
-            accountable_name: str,
             priority: TicketPriority = TicketPriority.medium,
     ) -> int:
-
-        # --- Pflichtvalidierung ---
-        if not assignee_id:
-            raise ValueError("Assignee muss gesetzt sein")
-
-        # --- Ticket anlegen ---
+        # Zuständigkeit wird nicht mehr in assignee/accountable-Spalten geschrieben,
+        # sondern als responsibility im workflow_state (siehe API-Layer).
         ticket_id = db.insert_ticket(
             title=title,
             ticket_type=ticket_type.value,
@@ -43,16 +35,7 @@ class TicketService:
             status=RequestStatus.in_progress.value,
             priority=priority.value,
         )
-        # --- Initial Assignments (mit History!) ---
-        self.assign_to_user(ticket_id, assignee_id, assignee_name)
-        self.assign_accountable(ticket_id, accountable_id, accountable_name)
-
-
-        logger.info(
-            f"Created ticket #{ticket_id} "
-            f"(assignee={assignee_name}"
-        )
-
+        logger.info(f"Created ticket #{ticket_id}")
         return ticket_id
 
     # ---------------------------------------------------------
