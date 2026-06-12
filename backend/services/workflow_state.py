@@ -502,21 +502,26 @@ def _board_item(ticket: Ticket, phase: dict, department_id: Optional[str]) -> di
     }
 
 
-def get_department_board_for_user(user_id: str) -> list[dict]:
+def get_dashboard_work(user_id: str) -> dict:
     """
-    Einheitliche „Meine Abteilung"-Liste: pro Gruppe des Users genau die Tickets,
-    die AKTUELL diese Gruppe betreffen – jedes Ticket genau einmal, in seiner
-    aktuellen Phase. Keine Überlappung zwischen Assignment- und Review-Phase.
+    Einheitliche Dashboard-Arbeitslisten – ein Durchlauf, basierend auf der
+    aktuellen Zuständigkeit (current_responsibility). Jedes Ticket erscheint
+    genau einmal in seiner aktuellen Phase.
 
-    - Assignment-Phase: Ticket ist der Gruppe zur Bearbeitung zugewiesen
-      (assignee_group_id == group_id) -> department_id = None.
-    - Department-Review-Phase („Durchführung"): Gruppe ist required Reviewer und
-      noch nicht 'done' -> department_id = group_id.
+    Rückgabe:
+      {
+        "assigned": [ <board_item> ],          # mir PERSÖNLICH zugewiesen (kind=user)
+        "departments": [ {group_id, group_name, tickets:[<board_item>]} ]  # meine Abteilungen
+      }
+
+    - assignment + kind=user, id=me        -> assigned (Link öffnet Formular)
+    - assignment + kind=group (meine)      -> department-board, department_id=None (Formular)
+    - department_review (meine als offener required Reviewer) -> department-board,
+      department_id=group_id (Durchführungs-Aktionsleiste)
     """
     group_ids = set(get_group_ids_for_user(user_id))
-    if not group_ids:
-        return []
 
+    assigned: list[dict] = []
     boards: dict[str, dict] = {}
 
     def board_for(gid: str) -> dict:
@@ -535,18 +540,25 @@ def get_department_board_for_user(user_id: str) -> list[dict]:
         phase = _current_phase_of(ticket.workflow_state_parsed)
         if not phase:
             continue
-        ptype = phase.get("type")
 
-        if ptype == PhaseType.assignment.value:
-            gid = ticket.assignee_group_id
-            if gid and gid in group_ids:
+        resp = current_responsibility(ticket)
+        kind = resp.get("kind")
+
+        if kind == "user":
+            if resp.get("id") == user_id:
+                assigned.append(_board_item(ticket, phase, None))
+
+        elif kind == "group":
+            gid = resp.get("id")
+            if gid in group_ids:
                 board_for(gid)["tickets"].append(_board_item(ticket, phase, None))
 
-        elif ptype == PhaseType.department_review.value:
-            departments = phase.get("departments", {})
-            for gid in group_ids:
-                dept = departments.get(gid)
-                if dept and dept.get("required") and dept.get("status") != DEPARTMENT_STATUS_DONE:
+        elif kind == "departments":
+            for gid, dept in resp.get("departments", {}).items():
+                if gid in group_ids and dept.get("required") and dept.get("status") != DEPARTMENT_STATUS_DONE:
                     board_for(gid)["tickets"].append(_board_item(ticket, phase, gid))
 
-    return [b for b in boards.values() if b["tickets"]]
+    return {
+        "assigned": assigned,
+        "departments": [b for b in boards.values() if b["tickets"]],
+    }

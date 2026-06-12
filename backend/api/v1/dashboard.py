@@ -3,7 +3,7 @@ from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
 from backend.models.models import TicketType
 from backend.services.ticket_permissions import can_user_create_ticket
-from backend.services.workflow_state import get_department_board_for_user
+from backend.services.workflow_state import get_dashboard_work
 from backend.schemas.dashboard import (
     DashboardResponse, DashboardTicket, DepartmentGroup, DepartmentTicket,
 )
@@ -23,21 +23,28 @@ def _to_dashboard_ticket(t) -> DashboardTicket:
     )
 
 
+def _board_item_to_dashboard_ticket(it: dict) -> DashboardTicket:
+    return DashboardTicket(
+        id=it["id"],
+        title=it["title"],
+        type_key=it["type_key"],
+        status=it["status"],
+        priority=it["priority"],
+        created_at=(it["created_at"] or "")[:10],
+    )
+
+
 @router.get("/dashboard", response_model=DataResponse[DashboardResponse])
 def get_dashboard(user: dict = Depends(get_current_user)):
     user_id = user["id"]
 
-    # ── 1. Mir direkt zugewiesene Tickets ──────────────────────────────────────
-    my_direct = database.list_tickets_by_assignee(user_id)
-    my_orders = [_to_dashboard_ticket(t) for t in my_direct]
+    # ── Arbeitslisten aus der aktuellen Zuständigkeit (ein Durchlauf) ──────────
+    work = get_dashboard_work(user_id)
 
-    # ── 2. Erstellte Tickets ──────────────────────────────────────────────────
-    my_created = database.list_tickets_by_owner(user_id)
-    created_orders = [_to_dashboard_ticket(t) for t in my_created]
+    # 1. Mir persönlich zugewiesen (aktuelle Phase: kind=user)
+    my_orders = [_board_item_to_dashboard_ticket(it) for it in work["assigned"]]
 
-    # ── 3. „Meine Abteilung" – einheitlich (Bearbeitung + Durchführung) ───────
-    # Pro Abteilung genau die Tickets, die sie aktuell betreffen, jedes einmal.
-    raw_board = get_department_board_for_user(user_id)
+    # 2. Meine Abteilung (Bearbeitung + Durchführung, jedes Ticket einmal)
     department_board = [
         DepartmentGroup(
             group_id=d["group_id"],
@@ -47,7 +54,7 @@ def get_dashboard(user: dict = Depends(get_current_user)):
                     id=t["id"],
                     title=t["title"],
                     type_key=t["type_key"],
-                    created_at=t["created_at"][:10] if t["created_at"] else "",
+                    created_at=(t["created_at"] or "")[:10],
                     status=t["status"],
                     priority=t["priority"],
                     phase_type=t["phase_type"],
@@ -57,8 +64,12 @@ def get_dashboard(user: dict = Depends(get_current_user)):
                 for t in d["tickets"]
             ],
         )
-        for d in raw_board
+        for d in work["departments"]
     ]
+
+    # 3. Erstellte Tickets (wird in Stufe 3 zu „Beobachter")
+    my_created = database.list_tickets_by_owner(user_id)
+    created_orders = [_to_dashboard_ticket(t) for t in my_created]
 
     # ── Erlaubte Ticket-Typen ──────────────────────────────────────────────────
     user_groups = user.get("groups", []) or []
