@@ -2,7 +2,7 @@
 
 // ── api/tickets.ts ─────────────────────────────────────────────────────────────
 import type {
-  Ticket, TicketCreateRequest, TicketUpdateRequest,
+  Ticket, TicketCreateRequest, TicketUpdateRequest, Watcher,
   DataResponse, ListResponse,
 } from '@/types/ticket'
 import {client} from "@/api/client.ts";
@@ -22,6 +22,13 @@ export const ticketsApi = {
   getAllDepartments:  (id: number)                          => client.get(`/tickets/${id}/departments/all`),
   setDepartmentStatus: (ticketId: number, groupId: string, status: string) =>
     client.patch(`/tickets/${ticketId}/departments/${groupId}`, { status }),
+
+  // ── Beobachter ──
+  getWatchers:    (id: number) => client.get<DataResponse<{ watchers: Watcher[] }>>(`/tickets/${id}/watchers`),
+  addWatcher:     (id: number, userId: string, userName: string) =>
+    client.post<DataResponse<{ watchers: Watcher[] }>>(`/tickets/${id}/watchers`, { user_id: userId, user_name: userName }),
+  removeWatcher:  (id: number, userId: string) =>
+    client.delete<DataResponse<{ watchers: Watcher[] }>>(`/tickets/${id}/watchers/${userId}`),
 }
 
 

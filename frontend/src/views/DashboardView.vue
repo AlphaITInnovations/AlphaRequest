@@ -24,17 +24,17 @@ interface DeptBoardTicket {
 interface DeptBoardGroup { group_id: string; group_name: string; tickets: DeptBoardTicket[] }
 interface DashboardData {
   orders: DashboardTicket[]
-  created_orders: DashboardTicket[]
+  watched_orders: DashboardTicket[]
   department_board: DeptBoardGroup[]
   allowed_ticket_types: string[]
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading   = ref(true)
-const data      = ref<DashboardData>({ orders: [], created_orders: [], department_board: [], allowed_ticket_types: [] })
+const data      = ref<DashboardData>({ orders: [], watched_orders: [], department_board: [], allowed_ticket_types: [] })
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-type Tab = 'mine' | 'group' | 'created'
+type Tab = 'mine' | 'group' | 'watched'
 const activeTab = ref<Tab>('mine')
 
 // ── Filter ────────────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ function dotClass(s: string) {
 // ── Counts ────────────────────────────────────────────────────────────────────
 const mineCount    = computed(() => (data.value.orders ?? []).filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
 const groupCount   = computed(() => (data.value.department_board ?? []).reduce((s, g) => s + g.tickets.length, 0))
-const createdCount = computed(() => (data.value.created_orders ?? []).filter(o => o.status !== 'archived').length)
+const watchedCount = computed(() => (data.value.watched_orders ?? []).filter(o => o.status !== 'archived').length)
 const totalOpen    = computed(() => mineCount.value + groupCount.value)
 
 // ── Filtering ─────────────────────────────────────────────────────────────────
@@ -95,9 +95,9 @@ function applyFilter<T extends { title: string; type_key: string; status: string
 
 const filteredMine    = computed(() => applyFilter(data.value.orders))
 const openGroupDepts = ref<Record<string, boolean>>({})
-const filteredCreated = computed(() => applyFilter(data.value.created_orders))
-const filteredCreatedActive   = computed(() => filteredCreated.value.filter(o => o.status !== 'archived'))
-const filteredCreatedArchived = computed(() => filteredCreated.value.filter(o => o.status === 'archived'))
+const filteredWatched = computed(() => applyFilter(data.value.watched_orders))
+const filteredWatchedActive   = computed(() => filteredWatched.value.filter(o => o.status !== 'archived'))
+const filteredWatchedArchived = computed(() => filteredWatched.value.filter(o => o.status === 'archived'))
 const showArchived = ref(false)
 
 // ── „Meine Abteilung" ──────────────────────────────────────────────────────────
@@ -112,12 +112,13 @@ const myDepartmentGroups = computed<DeptBoardGroup[]>(() =>
 const currentCount = computed(() => {
   if (activeTab.value === 'mine') return filteredMine.value.length
   if (activeTab.value === 'group') return myDepartmentGroups.value.reduce((s, g) => s + g.tickets.length, 0)
-  return filteredCreated.value.length
+  return filteredWatched.value.length
 })
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 function openTicket(o: DashboardTicket) { router.push(`/tickets/view/${o.type_key}/${o.id}`) }
-function openCreatedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
+// Beobachter öffnen die read-only Gesamtansicht
+function openWatchedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
 // Durchführung (department_id gesetzt) → ?department=<id> für die Aktionsleiste,
 // Bearbeitung → Formular ohne department.
 function openDeptItem(t: DeptBoardTicket) {
@@ -134,7 +135,7 @@ onMounted(async () => {
     // Defensiv gegen fehlende Felder (z. B. veraltete Backend-Antwort)
     data.value = {
       orders:               d.orders ?? [],
-      created_orders:       d.created_orders ?? [],
+      watched_orders:       d.watched_orders ?? [],
       department_board:     d.department_board ?? [],
       allowed_ticket_types: d.allowed_ticket_types ?? [],
     }
@@ -143,7 +144,7 @@ onMounted(async () => {
     // Auto-select tab with most relevant content
     if (mineCount.value > 0) activeTab.value = 'mine'
     else if (groupCount.value > 0) activeTab.value = 'group'
-    else if (createdCount.value > 0) activeTab.value = 'created'
+    else if (watchedCount.value > 0) activeTab.value = 'watched'
   } finally {
     loading.value = false
   }
@@ -204,14 +205,14 @@ onMounted(async () => {
           <p class="stat-label">Meiner Abteilung</p>
         </button>
 
-        <button @click="activeTab = 'created'" class="stat" :class="activeTab === 'created' ? 'stat-on' : ''">
+        <button @click="activeTab = 'watched'" class="stat" :class="activeTab === 'watched' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             </span>
-            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ createdCount }}</span>
+            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ watchedCount }}</span>
           </div>
-          <p class="stat-label">Von mir erstellt</p>
+          <p class="stat-label">Beobachter</p>
         </button>
       </div>
 
@@ -328,10 +329,10 @@ onMounted(async () => {
             <p v-if="myDepartmentGroups.length === 0" class="empty">Keine Aufträge für deine Abteilung.</p>
           </div>
 
-          <!-- ═══ TAB: Erstellt ═══ -->
-          <div v-if="activeTab === 'created'" class="max-h-[560px] overflow-auto">
+          <!-- ═══ TAB: Beobachter ═══ -->
+          <div v-if="activeTab === 'watched'" class="max-h-[560px] overflow-auto">
             <ul class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-              <li v-for="o in filteredCreatedActive" :key="o.id" @click="openCreatedTicket(o)" class="row group">
+              <li v-for="o in filteredWatchedActive" :key="o.id" @click="openWatchedTicket(o)" class="row group">
                 <div class="flex items-center gap-3.5 min-w-0">
                   <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
                   <div class="min-w-0">
@@ -345,22 +346,22 @@ onMounted(async () => {
                   <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
               </li>
-              <li v-if="filteredCreatedActive.length === 0 && filteredCreatedArchived.length === 0" class="empty">Keine erstellten Aufträge.</li>
-              <li v-else-if="filteredCreatedActive.length === 0" class="px-5 py-8 text-center text-sm text-gray-400 italic">Keine offenen Aufträge.</li>
+              <li v-if="filteredWatchedActive.length === 0 && filteredWatchedArchived.length === 0" class="empty">Du beobachtest keine Tickets.</li>
+              <li v-else-if="filteredWatchedActive.length === 0" class="px-5 py-8 text-center text-sm text-gray-400 italic">Keine offenen beobachteten Tickets.</li>
             </ul>
 
             <!-- Erledigt -->
-            <div v-if="filteredCreatedArchived.length > 0" class="border-t border-gray-200/80 dark:border-white/[0.09]">
+            <div v-if="filteredWatchedArchived.length > 0" class="border-t border-gray-200/80 dark:border-white/[0.09]">
               <button @click="showArchived = !showArchived"
                       class="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
                 <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Erledigt</span>
                 <div class="flex items-center gap-2">
-                  <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ filteredCreatedArchived.length }}</span>
+                  <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ filteredWatchedArchived.length }}</span>
                   <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" :class="showArchived ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
               </button>
               <ul v-show="showArchived" class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-                <li v-for="o in filteredCreatedArchived" :key="o.id" @click="openCreatedTicket(o)" class="row group opacity-60">
+                <li v-for="o in filteredWatchedArchived" :key="o.id" @click="openWatchedTicket(o)" class="row group opacity-60">
                   <div class="flex items-center gap-3.5 min-w-0">
                     <div class="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
                     <div class="min-w-0">
