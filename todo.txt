@@ -1,7 +1,8 @@
 TODO:
-in viewview bei onboarding ein raw view der json daten
 
-phasensystem überarbeiten
+evtl zuordnung mehrere fachabteilungen weil workflow komisch ist
+phasensystem überarbeiten!
+beobachter funktionalität
 
 bug report knopf
 
