@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { inject, computed, type ComputedRef } from 'vue'
+import { inject, computed, type ComputedRef, type Ref } from 'vue'
 import UserSelect from '@/components/UserSelect.vue'
 import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
-import type { TicketPriority, WorkflowPhase } from '@/types/ticket'
+import TicketWatchers from '@/components/tickets/TicketWatchers.vue'
+import type { TicketPriority, WorkflowPhase, Watcher } from '@/types/ticket'
 
 defineProps<{
   phase: 'create' | 'edit' | 'view'
@@ -15,6 +16,17 @@ defineProps<{
 // Phasen werden vom Detail-View bereitgestellt (nur im Edit-/View-Kontext vorhanden)
 const injectedPhases = inject<ComputedRef<WorkflowPhase[]> | null>('workflowPhases', null)
 const phases = computed<WorkflowPhase[]>(() => injectedPhases?.value ?? [])
+
+// Beobachter werden ebenfalls vom Detail-View bereitgestellt (nur im Edit-Kontext).
+interface WatchersCtx {
+  watchers: Ref<Watcher[]> | ComputedRef<Watcher[]>
+  busy: Ref<boolean>
+  add: (id: string, name: string) => void
+  remove: (id: string) => void
+}
+const watchersCtx = inject<WatchersCtx | null>('ticketWatchers', null)
+const watcherList = computed<Watcher[]>(() => watchersCtx?.watchers.value ?? [])
+const watcherBusy = computed<boolean>(() => watchersCtx?.busy.value ?? false)
 
 const emit = defineEmits<{
   'update:priority':    [v: TicketPriority]
@@ -69,6 +81,15 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
         </div>
       </template>
     </div>
+
+    <!-- Beobachter (direkt unter Verantwortlicher, nur im Edit-Kontext) -->
+    <TicketWatchers
+      v-if="watchersCtx"
+      :watchers="watcherList"
+      :busy="watcherBusy"
+      @add="watchersCtx.add"
+      @remove="watchersCtx.remove"
+    />
 
     <!-- Priorität -->
     <div>
