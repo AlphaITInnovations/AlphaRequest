@@ -130,8 +130,8 @@ export function useBasisTicket(phase: Phase = 'create', ticketId?: number) {
 
         form.priority    = t.priority as TicketPriority
         form.comment     = t.comment ?? ''
-        form.assignee    = t.assignee_id    ? { id: t.assignee_id,    name: t.assignee_name }    : null
-        form.accountable = t.accountable_id ? { id: t.accountable_id, name: t.accountable_name } : null
+        form.assignee    = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
+        form.accountable = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
       }
     } finally {
       loading.value = false

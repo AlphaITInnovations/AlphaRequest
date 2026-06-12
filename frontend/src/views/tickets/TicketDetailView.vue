@@ -212,7 +212,7 @@ function goToEdit() {
                 </div>
                 <div>
                   <p class="meta-label">Verantwortlicher</p>
-                  <p class="meta-value">{{ ticket.accountable_name || '—' }}</p>
+                  <p class="meta-value">{{ ticket.responsible?.name || '—' }}</p>
                 </div>
               </div>
 
