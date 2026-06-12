@@ -92,6 +92,12 @@ export interface Ticket {
   assignee_group_id:   string | null
   assignee_group_name: string | null
   workflow_state:      WorkflowState | null
+  watchers?:           Watcher[]
+}
+
+export interface Watcher {
+  id:   string
+  name: string | null
 }
 
 export interface TicketCreateRequest {

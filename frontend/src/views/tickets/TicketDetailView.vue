@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
+import TicketWatchers from '@/components/tickets/TicketWatchers.vue'
 import { TICKET_REGISTRY } from '@/utils/ticketRegistry'
 import { useTicket } from '@/composables/useTicket'
 import type { TicketType } from '@/types/ticket'
@@ -22,8 +23,18 @@ const formCtx = entry?.useComposable('edit', ticketId)
 
 const { ticket, loading, submitting, phases, currentView,
         isDeptReviewPhase, isRejected,
-        description, activeDepartments,
-        load, markDepartmentDone, rejectTicket } = useTicket(ticketId)
+        description, activeDepartments, watchers,
+        load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher } = useTicket(ticketId)
+
+const watcherBusy = ref(false)
+async function onAddWatcher(id: string, name: string) {
+  watcherBusy.value = true
+  try { await addWatcher(id, name) } finally { watcherBusy.value = false }
+}
+async function onRemoveWatcher(id: string) {
+  watcherBusy.value = true
+  try { await removeWatcher(id) } finally { watcherBusy.value = false }
+}
 
 // Phasen an die geteilte TicketDetails-Sidebar (im Formular) durchreichen
 provide('workflowPhases', phases)
@@ -127,6 +138,14 @@ function goToEdit() {
           :ctx="formCtx"
           phase="edit"
         />
+
+        <!-- Beobachter -->
+        <div class="max-w-7xl mx-auto">
+          <div class="lg:w-[320px]">
+            <TicketWatchers :watchers="watchers" :busy="watcherBusy"
+                            @add="onAddWatcher" @remove="onRemoveWatcher" />
+          </div>
+        </div>
       </div>
 
       <!-- ═══════════════════════════════════════════════════════════════════
@@ -209,6 +228,10 @@ function goToEdit() {
                 </span>
               </div>
             </div>
+
+            <!-- Beobachter -->
+            <TicketWatchers class="mt-4" :watchers="watchers" :busy="watcherBusy"
+                            @add="onAddWatcher" @remove="onRemoveWatcher" />
           </aside>
 
           <!-- ── Content: read-only panel ── -->

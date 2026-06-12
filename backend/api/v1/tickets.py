@@ -146,6 +146,11 @@ def _assert_ticket_access(ticket, user: dict):
     if user_is_responsible(ticket, user_id, user_group_ids):
         return
 
+    # Beobachter dürfen das Ticket sehen
+    from backend.database.ticket_watchers import is_watcher
+    if is_watcher(ticket.id, user_id):
+        return
+
     raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff auf dieses Ticket")
 
 
@@ -180,7 +185,42 @@ def list_my_tickets(user: dict = Depends(get_current_user)):
 def get_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
-    return DataResponse(data=TicketOut.from_ticket(ticket))
+    from backend.database.ticket_watchers import list_watchers
+    return DataResponse(data=TicketOut.from_ticket(ticket, watchers=list_watchers(ticket_id)))
+
+
+# ── Beobachter (Watcher) ──────────────────────────────────────────────────────
+# Jeder mit Ticket-Zugriff darf die Beobachterliste lesen und ändern.
+
+@router.get("/tickets/{ticket_id}/watchers")
+def get_ticket_watchers(ticket_id: int, user: dict = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    from backend.database.ticket_watchers import list_watchers
+    return DataResponse(data={"watchers": list_watchers(ticket_id)})
+
+
+@router.post("/tickets/{ticket_id}/watchers", status_code=201)
+async def add_ticket_watcher(ticket_id: int, request: Request, user: dict = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    body = await request.json()
+    watcher_id = (body.get("user_id") or "").strip()
+    watcher_name = (body.get("user_name") or "").strip()
+    if not watcher_id:
+        raise api_error(400, ErrorCode.INVALID_WATCHER, "user_id ist erforderlich")
+    from backend.database.ticket_watchers import add_watcher, list_watchers
+    add_watcher(ticket_id, watcher_id, watcher_name or None)
+    return DataResponse(data={"watchers": list_watchers(ticket_id)})
+
+
+@router.delete("/tickets/{ticket_id}/watchers/{watcher_id}")
+def remove_ticket_watcher(ticket_id: int, watcher_id: str, user: dict = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    from backend.database.ticket_watchers import remove_watcher, list_watchers
+    remove_watcher(ticket_id, watcher_id)
+    return DataResponse(data={"watchers": list_watchers(ticket_id)})
 
 
 @router.post("/tickets", response_model=DataResponse[TicketOut], status_code=201)
@@ -228,6 +268,10 @@ async def create_ticket(
         action="ticket_created",
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
+
+    # Ersteller automatisch als Beobachter
+    from backend.database.ticket_watchers import add_watcher
+    add_watcher(ticket_id, user["id"], user["displayName"])
 
     ticket = database.get_ticket(ticket_id)
     updated_workflow = _build_and_init_workflow(ticket)
@@ -320,6 +364,10 @@ async def create_basis_ticket(
         action="ticket_created",
         details={"priority": data.priority, "ticket_type": "basis-ticket"},
     )
+
+    # Ersteller automatisch als Beobachter
+    from backend.database.ticket_watchers import add_watcher
+    add_watcher(ticket_id, user["id"], user["displayName"])
 
     # Workflow aufbauen und an der Erstellungsphase vorbei in die Bearbeitung schieben.
     # Basis-Tickets haben Phasen [creation, assignment] – danach immer Assignment-Phase.

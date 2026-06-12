@@ -31,7 +31,8 @@ class DashboardTicket(BaseModel):
 
 class DashboardResponse(BaseModel):
     orders: list[DashboardTicket]
-    created_orders: list[DashboardTicket]
+    # Tickets, die der Nutzer beobachtet (Ersteller ist automatisch Beobachter).
+    watched_orders: list[DashboardTicket]
     # Einheitliche „Meine Abteilung"-Liste (Assignment + Durchführung, dedupliziert).
     department_board: list[DepartmentGroup]
     allowed_ticket_types: list[str]

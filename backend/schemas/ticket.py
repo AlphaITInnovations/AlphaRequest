@@ -6,6 +6,11 @@ from backend.models.models import (
 )
 
 
+class WatcherOut(BaseModel):
+    id: str
+    name: Optional[str] = None
+
+
 class TicketOut(BaseModel):
     id: int
     title: str
@@ -25,11 +30,13 @@ class TicketOut(BaseModel):
     assignee_group_id: Optional[str] = None
     assignee_group_name: Optional[str] = None
     workflow_state: Optional[dict] = None
+    # Nur im Detail-Endpoint befüllt (Listen vermeiden so N+1-Queries).
+    watchers: List[WatcherOut] = []
 
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_ticket(cls, t: Ticket) -> "TicketOut":
+    def from_ticket(cls, t: Ticket, watchers: Optional[list] = None) -> "TicketOut":
         return cls(
             id=t.id,
             title=t.title,
@@ -49,6 +56,7 @@ class TicketOut(BaseModel):
             assignee_group_id=t.assignee_group_id,
             assignee_group_name=t.assignee_group_name,
             workflow_state=t.workflow_state_parsed or None,
+            watchers=[WatcherOut(**w) for w in (watchers or [])],
         )
 
 

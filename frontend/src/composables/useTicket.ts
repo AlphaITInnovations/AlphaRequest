@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { ticketsApi } from '@/api/tickets'
-import type { Ticket, WorkflowPhase } from '@/types/ticket'
+import type { Ticket, WorkflowPhase, Watcher } from '@/types/ticket'
 
 export function useTicket(ticketId: number) {
   const ticket    = ref<Ticket | null>(null)
@@ -41,6 +41,19 @@ export function useTicket(ticketId: number) {
     isDeptReviewPhase.value ? (currentPhase.value?.departments ?? {}) : {}
   )
 
+  // Beobachter
+  const watchers = computed<Watcher[]>(() => ticket.value?.watchers ?? [])
+
+  async function addWatcher(userId: string, userName: string) {
+    await ticketsApi.addWatcher(ticketId, userId, userName)
+    await load()
+  }
+
+  async function removeWatcher(userId: string) {
+    await ticketsApi.removeWatcher(ticketId, userId)
+    await load()
+  }
+
   async function load() {
     loading.value = true
     try {
@@ -75,7 +88,7 @@ export function useTicket(ticketId: number) {
     ticket, loading, submitting,
     workflow, phases, currentPhase, currentView,
     isAssignmentPhase, isDeptReviewPhase, isRejected, isCompleted,
-    description, activeDepartments,
-    load, markDepartmentDone, rejectTicket,
+    description, activeDepartments, watchers,
+    load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher,
   }
 }

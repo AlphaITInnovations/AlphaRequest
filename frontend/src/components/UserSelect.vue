@@ -130,7 +130,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
   <div ref="root" class="relative">
 
     <!-- Label -->
-    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+    <label v-if="label" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
       {{ label }}
     </label>
 

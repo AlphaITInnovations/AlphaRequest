@@ -67,9 +67,10 @@ def get_dashboard(user: dict = Depends(get_current_user)):
         for d in work["departments"]
     ]
 
-    # 3. Erstellte Tickets (wird in Stufe 3 zu „Beobachter")
-    my_created = database.list_tickets_by_owner(user_id)
-    created_orders = [_to_dashboard_ticket(t) for t in my_created]
+    # 3. Beobachtete Tickets (Ersteller ist automatisch Beobachter)
+    from backend.database.ticket_watchers import list_ticket_ids_for_watcher
+    watched_tickets = [database.get_ticket(tid) for tid in list_ticket_ids_for_watcher(user_id)]
+    watched_orders = [_to_dashboard_ticket(t) for t in watched_tickets if t]
 
     # ── Erlaubte Ticket-Typen ──────────────────────────────────────────────────
     user_groups = user.get("groups", []) or []
@@ -80,7 +81,7 @@ def get_dashboard(user: dict = Depends(get_current_user)):
 
     return DataResponse(data=DashboardResponse(
         orders=my_orders,
-        created_orders=created_orders,
+        watched_orders=watched_orders,
         department_board=department_board,
         allowed_ticket_types=allowed,
     ))
