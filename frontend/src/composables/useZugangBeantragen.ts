@@ -259,7 +259,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       }
 
       if (phase === 'edit' && ticketId) {
-        const res = await client.get<{ data: { description: string; priority: string; comment: string; assignee_id: string; assignee_name: string; accountable_id: string; accountable_name: string } }>(`/tickets/${ticketId}`)
+        const res = await client.get<{ data: any }>(`/tickets/${ticketId}`)
         const t = res.data.data
         const desc = JSON.parse(t.description || '{}')
 
@@ -293,8 +293,8 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
         form.priority    = t.priority as TicketPriority
         form.comment     = t.comment ?? ''
-        form.assignee    = t.assignee_id    ? { id: t.assignee_id,    name: t.assignee_name }    : null
-        form.accountable = t.accountable_id ? { id: t.accountable_id, name: t.accountable_name } : null
+        form.assignee    = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
+        form.accountable = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
 
         // Mark signature title as manually edited if it differs from personal title
         if (form.it.signature.title && form.it.signature.title !== form.personal.title) {

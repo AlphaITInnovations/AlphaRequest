@@ -127,26 +127,21 @@ def _get_ticket_or_404(ticket_id: int):
 
 
 def _assert_ticket_access(ticket, user: dict):
-    """Owner, Assignee, Accountable, in der aktuellen Phase Zuständige (inkl.
-    Reviewing-Fachabteilungen), Gruppen-Mitglied oder Manager/Admin dürfen zugreifen."""
+    """Ersteller, in der aktuellen Phase Zuständige (Person/Gruppe/Reviewing-
+    Fachabteilungen), Beobachter oder Manager/Admin dürfen zugreifen.
+    Die alten assignee/accountable-Spalten werden NICHT mehr ausgewertet –
+    Zuständigkeit kommt aus dem workflow_state."""
     user_id = user["id"]
 
     if ticket.owner_id == user_id:
-        return
-    if ticket.assignee_id == user_id:
-        return
-    if ticket.accountable_id == user_id:
         return
     if PERM_MANAGE in user.get("permissions", []):
         return
 
     from backend.database.groups import get_group_ids_for_user
     user_group_ids = get_group_ids_for_user(user_id)
-    if ticket.assignee_group_id and ticket.assignee_group_id in user_group_ids:
-        return
 
-    # In der aktuellen Phase zuständig? Deckt die Reviewing-Fachabteilungen ab,
-    # die früher (assignee="fachabteilung") fälschlich ausgesperrt wurden.
+    # In der aktuellen Phase zuständig (Person, Gruppe oder Reviewing-Fachabteilung)?
     from backend.services.workflow_state import user_is_responsible
     if user_is_responsible(ticket, user_id, user_group_ids):
         return
@@ -260,10 +255,6 @@ async def create_ticket(
         owner_name=user["displayName"],
         owner_info=json.dumps(user, ensure_ascii=False),
         comment=data.comment,
-        assignee_id=data.assignee_id,
-        assignee_name=data.assignee_name,
-        accountable_id=data.accountable_id,
-        accountable_name=data.accountable_name,
         priority=data.priority,
     )
     add_history_event(
@@ -287,15 +278,14 @@ async def create_ticket(
     ticket = database.get_ticket(ticket_id)
 
     # Check what phase we're now in after advancing past creation
-    from backend.services.workflow_state import PhaseType as WfPhaseType
+    from backend.services.workflow_state import PhaseType as WfPhaseType, set_phase_responsibility
     phases = updated_workflow.get("phases", [])
     current_idx = updated_workflow.get("current_phase_index", 0)
     current_phase = phases[current_idx] if current_idx < len(phases) else None
 
     if current_phase and current_phase["type"] == WfPhaseType.department_review:
         # Keine Assignment-Phase — direkt die Fachabteilungen benachrichtigen.
-        # Zuständigkeit steht im workflow_state.departments (kein "fachabteilung"-Sentinel
-        # mehr in assignee/accountable — die bleiben informativ).
+        # Zuständigkeit steht im workflow_state.departments.
         send_mail_to_all_fachabteilung(current_phase.get("departments", {}), ticket)
         add_history_event(
             ticket_id,
@@ -305,14 +295,14 @@ async def create_ticket(
             details={"status_new": RequestStatus.in_request.value},
         )
     else:
-        # Assignment phase — notify assignee
+        # Bearbeitungsphase: Zuständigkeit in den Workflow schreiben (Person oder
+        # Gruppe) statt in die assignee-Spalten. Mailversand nutzt data.assignee_id.
         from backend.database.groups import get_groups
         group_map = {g["id"]: g["name"] for g in get_groups()}
         if data.assignee_id in group_map:
             group_name = group_map[data.assignee_id]
-            database.update_ticket(ticket_id,
-                assignee_id=None, assignee_name=None,
-                assignee_group_id=data.assignee_id, assignee_group_name=group_name)
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "group", "id": data.assignee_id, "name": group_name})
             for g in get_groups():
                 if g["id"] == data.assignee_id:
                     for mail in g.get("distributions", []):
@@ -320,6 +310,8 @@ async def create_ticket(
                             send_newrequest_mail(mail.strip(), data.priority, title, data.ticket_type, ticket_id)
                     break
         else:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "user", "id": data.assignee_id, "name": data.assignee_name})
             mail_to = get_cached_user_mail(request.app, data.assignee_id)
             if mail_to:
                 send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
@@ -360,10 +352,6 @@ async def create_basis_ticket(
         owner_name=user["displayName"],
         owner_info=json.dumps(user, ensure_ascii=False),
         comment=data.comment or "",
-        assignee_id=data.assignee_id,
-        assignee_name=data.assignee_name,
-        accountable_id=data.accountable_id,
-        accountable_name=data.accountable_name,
         priority=data.priority or "medium",
     )
     add_history_event(
@@ -385,25 +373,26 @@ async def create_basis_ticket(
     # Workflow aufbauen und an der Erstellungsphase vorbei in die Bearbeitung schieben.
     # Basis-Tickets haben Phasen [creation, assignment] – danach immer Assignment-Phase.
     ticket = database.get_ticket(ticket_id)
-    _build_and_init_workflow(ticket)
+    updated_workflow = _build_and_init_workflow(ticket)
+    current_idx = updated_workflow.get("current_phase_index", 0)
 
-    # Mail an Assignee (User oder Gruppe)
+    # Zuständigkeit der Bearbeitungsphase in den Workflow schreiben (Person/Gruppe)
     from backend.database.groups import get_groups
+    from backend.services.workflow_state import set_phase_responsibility
     group_map = {g["id"]: g["name"] for g in get_groups()}
     if data.assignee_id in group_map:
         group_name = group_map[data.assignee_id]
-        database.update_ticket(ticket_id,
-            assignee_id=None, assignee_name=None,
-            assignee_group_id=data.assignee_id, assignee_group_name=group_name)
-
-        all_groups = get_groups()
-        for g in all_groups:
+        set_phase_responsibility(ticket_id, current_idx,
+            {"kind": "group", "id": data.assignee_id, "name": group_name})
+        for g in get_groups():
             if g["id"] == data.assignee_id:
                 for mail in g.get("distributions", []):
                     if mail:
                         send_newrequest_mail(mail.strip(), data.priority, title, TicketType.basis_ticket, ticket_id)
                 break
     else:
+        set_phase_responsibility(ticket_id, current_idx,
+            {"kind": "user", "id": data.assignee_id, "name": data.assignee_name})
         mail_to = get_cached_user_mail(request.app, data.assignee_id)
         if mail_to:
             send_newrequest_mail(mail_to, data.priority, title, TicketType.basis_ticket, ticket_id)
@@ -453,29 +442,28 @@ async def update_ticket(
     if updates:
         database.update_ticket(ticket_id=ticket_id, **updates)
 
-    # --- Zuweisungen: nur bei in_progress änderbar ---
-    if ticket.status == RequestStatus.in_progress:
-        if data.assignee_id and ticket.assignee_id != data.assignee_id:
-            from backend.database.groups import get_groups
+    # --- Zuweisung der Bearbeitungsphase: nur in der assignment-Phase änderbar ---
+    # Schreibt die responsibility in den Workflow (Person/Gruppe), nicht in die
+    # alten assignee/accountable-Spalten.
+    if data.assignee_id:
+        from backend.database.groups import get_groups
+        from backend.services.workflow_state import (
+            get_workflow_state, current_responsibility, set_phase_responsibility,
+            PhaseType as WfPhaseType,
+        )
+        wf = get_workflow_state(ticket_id)
+        phases = wf.get("phases", [])
+        idx = wf.get("current_phase_index", 0)
+        if 0 <= idx < len(phases) and phases[idx].get("type") == WfPhaseType.assignment.value:
             group_map = {g["id"]: g["name"] for g in get_groups()}
-
             if data.assignee_id in group_map:
-                # Zuweisung an eine Fachabteilung
-                group_name = group_map[data.assignee_id]
-                changes["assignee"] = {"old": ticket.assignee_name, "new": group_name}
-                database.update_ticket(ticket_id,
-                    assignee_id=None, assignee_name=None,
-                    assignee_group_id=data.assignee_id, assignee_group_name=group_name)
+                new_resp = {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]}
             else:
-                # Zuweisung an einen User
-                changes["assignee"] = {"old": ticket.assignee_name, "new": data.assignee_name or data.assignee_id}
-                database.set_assignee(ticket_id, data.assignee_id, data.assignee_name or "")
-                # Gruppen-Zuweisung aufheben
-                database.update_ticket(ticket_id, assignee_group_id=None, assignee_group_name=None)
-
-        if data.accountable_id and ticket.accountable_id != data.accountable_id:
-            changes["accountable"] = {"old": ticket.accountable_name, "new": data.accountable_name or data.accountable_id}
-            database.set_accountable(ticket_id, data.accountable_id, data.accountable_name or "")
+                new_resp = {"kind": "user", "id": data.assignee_id, "name": data.assignee_name or data.assignee_id}
+            old = current_responsibility(ticket)
+            if old.get("id") != new_resp["id"]:
+                changes["assignee"] = {"old": old.get("name"), "new": new_resp["name"]}
+                set_phase_responsibility(ticket_id, idx, new_resp)
 
     # --- Ein gebündeltes History-Event für alle Änderungen ---
     if changes:

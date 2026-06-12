@@ -7,6 +7,7 @@ from backend.schemas.responses import DataResponse
 from backend.services.workflow_state import (
     get_department_info,
     user_can_complete_department,
+    primary_responsibility,
 )
 
 router = APIRouter()
@@ -71,7 +72,7 @@ def get_ticket_view(
             status=ticket.status if isinstance(ticket.status, str) else ticket.status.value,
             priority=ticket.priority if isinstance(ticket.priority, str) else ticket.priority.value,
             owner_name=ticket.owner_name,
-            accountable_name=ticket.accountable_name,
+            accountable_name=(primary_responsibility(ticket) or {}).get("name"),
             comment=ticket.comment or "",
             created_at=ticket.created_at.strftime("%d.%m.%Y %H:%M") if hasattr(ticket.created_at, "strftime") else str(ticket.created_at)[:16],
         ),

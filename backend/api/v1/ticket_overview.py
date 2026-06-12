@@ -143,15 +143,24 @@ def get_overview_ticket(
     except Exception:
         description = {}
 
-    workflow    = ticket.workflow_state_parsed or {}
+    workflow = ticket.workflow_state_parsed or {}
+    # departments aus der department_review-Phase (neues Format), Fallback altes Format
+    dept_map = workflow.get("departments", {})
+    for phase in workflow.get("phases", []):
+        if phase.get("type") == "department_review":
+            dept_map = phase.get("departments", {})
+            break
     departments = {
         gid: DepartmentStatus(
             name=d.get("name", gid),
             status=d.get("status", "open"),
             required=d.get("required", True),
         )
-        for gid, d in workflow.get("departments", {}).items()
+        for gid, d in dept_map.items()
     }
+
+    from backend.services.workflow_state import primary_responsibility
+    resp = primary_responsibility(ticket)
 
     raw_history = get_ticket_history(ticket_id)
     history = []
@@ -181,7 +190,7 @@ def get_overview_ticket(
         created_at=_fmt_dt(ticket.created_at),
         updated_at=_fmt_dt(ticket.updated_at) or None,
         owner_name=ticket.owner_name,
-        accountable_name=ticket.accountable_name,
+        accountable_name=resp.get("name") if resp else None,
         comment=ticket.comment or "",
         description=description,
         departments=departments,

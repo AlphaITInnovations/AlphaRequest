@@ -24,3 +24,11 @@ def init_db():
         backfill_owner_watchers()
     except Exception as e:
         logger.warning(f"Watcher-Backfill übersprungen: {e}")
+
+    # Bestehende Tickets: Zuständigkeit der Bearbeitungsphase in den Workflow
+    # migrieren (aus den Alt-Spalten assignee_*), damit diese nicht mehr nötig sind.
+    try:
+        from backend.services.workflow_state import backfill_phase_responsibility
+        backfill_phase_responsibility()
+    except Exception as e:
+        logger.warning(f"Responsibility-Backfill übersprungen: {e}")

@@ -73,6 +73,12 @@ export interface WorkflowState {
 
 // ── Tickets ───────────────────────────────────────────────────────────────────
 
+export interface Responsible {
+  kind: 'user' | 'group'
+  id:   string | null
+  name: string | null
+}
+
 export interface Ticket {
   id:                  number
   title:               string
@@ -85,13 +91,9 @@ export interface Ticket {
   priority:            TicketPriority
   created_at:          string
   updated_at:          string | null
-  assignee_id:         string | null
-  assignee_name:       string | null
-  accountable_id:      string | null
-  accountable_name:    string | null
-  assignee_group_id:   string | null
-  assignee_group_name: string | null
   workflow_state:      WorkflowState | null
+  // Verantwortliche(r) aus dem Workflow (ersetzt assignee/accountable)
+  responsible:         Responsible | null
   watchers?:           Watcher[]
 }
 
