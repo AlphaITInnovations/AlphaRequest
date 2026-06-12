@@ -23,7 +23,7 @@ const formCtx = entry?.useComposable('edit', ticketId)
 
 const { ticket, loading, submitting, phases, currentView,
         isDeptReviewPhase, isRejected,
-        description, activeDepartments, watchers,
+        description, activeDepartments, reviewDepartments, watchers,
         load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher } = useTicket(ticketId)
 
 const watcherBusy = ref(false)
@@ -62,6 +62,15 @@ const DEPT_STATUS_LABEL: Record<string, string> = {
   done: 'Ausgeführt', rejected: 'Abgelehnt', skipped: 'Übersprungen',
   open: 'Offen', in_progress: 'In Bearbeitung',
 }
+const DEPT_STATUS_CLASS: Record<string, string> = {
+  done:        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  skipped:     'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400',
+  open:        'bg-[#3EAAB8]/10 text-[#3EAAB8]',
+}
+// Object.keys im Template verfügbar machen
+const objectKeys = (o: Record<string, unknown>) => Object.keys(o ?? {})
 
 onMounted(async () => {
   if (!entry) { router.replace('/dashboard'); return }
@@ -174,62 +183,75 @@ function goToEdit() {
 
         <div class="flex flex-col lg:flex-row gap-6">
 
-          <!-- ── Sidebar: Fortschritt + Meta (ein Element) ── -->
+          <!-- ── Sidebar: Fortschritt + Meta ── -->
           <aside class="w-full lg:w-[320px] flex-shrink-0">
             <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                        rounded-2xl shadow-sm p-5 space-y-5 text-sm lg:sticky lg:top-4">
+                        rounded-2xl shadow-sm p-5 text-sm lg:sticky lg:top-4
+                        divide-y divide-gray-100 dark:divide-white/[0.06]">
 
               <!-- Fortschritt -->
-              <template v-if="phases.length">
+              <div v-if="phases.length" class="pb-5">
                 <PhaseProgress :phases="phases" />
-                <hr class="border-gray-100 dark:border-white/[0.06]" />
-              </template>
+              </div>
 
               <!-- Meta -->
-              <div>
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                <p class="font-medium text-gray-900 dark:text-white">
-                  {{ STATUS_LABEL[ticket.status] ?? ticket.status }}
-                </p>
-              </div>
-              <div>
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Priorität</p>
-                <p class="font-medium text-gray-900 dark:text-white">
-                  {{ PRIORITY_LABEL[ticket.priority] ?? ticket.priority }}
-                </p>
-              </div>
-              <div>
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Antragsteller</p>
-                <p class="font-medium text-gray-900 dark:text-white">{{ ticket.owner_name }}</p>
-              </div>
-              <div class="pt-3 border-t border-gray-100 dark:border-white/[0.06] space-y-3">
-                <div>
-                  <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Verantwortlicher</p>
-                  <p class="text-gray-900 dark:text-white">{{ ticket.accountable_name || '—' }}</p>
+              <div class="py-5 first:pt-0 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <p class="meta-label">Status</p>
+                    <p class="meta-value">{{ STATUS_LABEL[ticket.status] ?? ticket.status }}</p>
+                  </div>
+                  <div>
+                    <p class="meta-label">Priorität</p>
+                    <p class="meta-value">{{ PRIORITY_LABEL[ticket.priority] ?? ticket.priority }}</p>
+                  </div>
                 </div>
-                <!-- Beobachter direkt unter Verantwortlicher -->
-                <TicketWatchers :watchers="watchers" :busy="watcherBusy"
-                                @add="onAddWatcher" @remove="onRemoveWatcher" />
-                <div v-if="ticket.comment">
-                  <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Kommentar</p>
-                  <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ ticket.comment }}</p>
+                <div>
+                  <p class="meta-label">Antragsteller</p>
+                  <p class="meta-value">{{ ticket.owner_name }}</p>
+                </div>
+                <div>
+                  <p class="meta-label">Verantwortlicher</p>
+                  <p class="meta-value">{{ ticket.accountable_name || '—' }}</p>
                 </div>
               </div>
 
-              <!-- Dept status (dept-review mode) -->
-              <div v-if="isDeptReviewPhase && myDept()"
-                   class="pt-3 border-t border-gray-100 dark:border-white/[0.06]">
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Meine Fachabteilung</p>
-                <p class="font-semibold text-[#3EAAB8] mb-2">{{ myDept()!.name }}</p>
-                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Bearbeitungsstatus</p>
-                <span class="inline-flex items-center gap-1.5 text-sm font-medium"
-                      :class="{
-                        'text-green-600':  myDept()!.status === 'done',
-                        'text-red-500':    myDept()!.status === 'rejected',
-                        'text-[#3EAAB8]':  ['open','in_progress'].includes(myDept()!.status),
-                      }">
-                  {{ DEPT_STATUS_LABEL[myDept()!.status] ?? myDept()!.status }}
-                </span>
+              <!-- Beobachter -->
+              <div class="py-5">
+                <TicketWatchers :watchers="watchers" :busy="watcherBusy"
+                                @add="onAddWatcher" @remove="onRemoveWatcher" />
+              </div>
+
+              <!-- Fachabteilungen / Durchführung -->
+              <div v-if="objectKeys(reviewDepartments).length" class="py-5">
+                <p class="meta-label mb-2.5">Durchführung</p>
+                <ul class="space-y-2">
+                  <li v-for="(dept, gid) in reviewDepartments" :key="gid"
+                      class="flex items-center justify-between gap-2">
+                    <span class="flex items-center gap-1.5 min-w-0">
+                      <span class="text-sm truncate"
+                            :class="gid === deptId
+                              ? 'font-semibold text-[#3EAAB8]'
+                              : 'text-gray-900 dark:text-white'">
+                        {{ dept.name }}
+                      </span>
+                      <span v-if="gid === deptId"
+                            class="text-[10px] font-semibold uppercase tracking-wider text-[#3EAAB8]/70 flex-shrink-0">
+                        (du)
+                      </span>
+                    </span>
+                    <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                          :class="DEPT_STATUS_CLASS[dept.status] ?? DEPT_STATUS_CLASS.open">
+                      {{ DEPT_STATUS_LABEL[dept.status] ?? dept.status }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Kommentar -->
+              <div v-if="ticket.comment" class="py-5 last:pb-0">
+                <p class="meta-label mb-1">Kommentar</p>
+                <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ ticket.comment }}</p>
               </div>
             </div>
           </aside>
@@ -290,3 +312,9 @@ function goToEdit() {
 
   </AppLayout>
 </template>
+
+<style scoped>
+@reference "../../style.css";
+.meta-label { @apply text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1; }
+.meta-value { @apply font-medium text-gray-900 dark:text-white; }
+</style>

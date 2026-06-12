@@ -74,6 +74,8 @@ class TicketCreateRequest(BaseModel):
     accountable_name: str
     comment: str = ""
     priority: TicketPriority = TicketPriority.medium
+    # Beobachter (inkl. Ersteller). Leer = Backend trägt nur den Ersteller ein.
+    watchers: List[WatcherOut] = []
 
 
 class BasisTicketCreateRequest(BaseModel):
@@ -85,6 +87,7 @@ class BasisTicketCreateRequest(BaseModel):
     accountable_name: str
     comment: Optional[str] = ""
     priority: TicketPriority = TicketPriority.medium
+    watchers: List[WatcherOut] = []
 
 
 class TicketUpdateRequest(BaseModel):

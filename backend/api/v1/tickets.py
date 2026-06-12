@@ -79,6 +79,11 @@ def generate_title(ticket_type, user, desc):
 def validate_assignee(user_cache, assignee_id: str) -> bool:
     if not assignee_id:
         return False
+    # Platzhalter für Ticket-Typen ohne Bearbeitungsphase (z.B. Marketing,
+    # Hotelbuchung) – sie gehen direkt in die Durchführung; die Zuständigkeit
+    # steht im workflow_state.departments, nicht im assignee.
+    if assignee_id == "fachabteilung":
+        return True
     # Check if it's a valid group ID
     from backend.database.groups import get_groups
     group_ids = {g["id"] for g in get_groups()}
@@ -269,9 +274,13 @@ async def create_ticket(
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
 
-    # Ersteller automatisch als Beobachter
+    # Beobachter: vom Client übergebene Liste (inkl. Ersteller), sonst nur Ersteller
     from backend.database.ticket_watchers import add_watcher
-    add_watcher(ticket_id, user["id"], user["displayName"])
+    if data.watchers:
+        for w in data.watchers:
+            add_watcher(ticket_id, w.id, w.name)
+    else:
+        add_watcher(ticket_id, user["id"], user["displayName"])
 
     ticket = database.get_ticket(ticket_id)
     updated_workflow = _build_and_init_workflow(ticket)
@@ -365,9 +374,13 @@ async def create_basis_ticket(
         details={"priority": data.priority, "ticket_type": "basis-ticket"},
     )
 
-    # Ersteller automatisch als Beobachter
+    # Beobachter: vom Client übergebene Liste (inkl. Ersteller), sonst nur Ersteller
     from backend.database.ticket_watchers import add_watcher
-    add_watcher(ticket_id, user["id"], user["displayName"])
+    if data.watchers:
+        for w in data.watchers:
+            add_watcher(ticket_id, w.id, w.name)
+    else:
+        add_watcher(ticket_id, user["id"], user["displayName"])
 
     # Workflow aufbauen und an der Erstellungsphase vorbei in die Bearbeitung schieben.
     # Basis-Tickets haben Phasen [creation, assignment] – danach immer Assignment-Phase.
