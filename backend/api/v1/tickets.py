@@ -79,8 +79,6 @@ def generate_title(ticket_type, user, desc):
 def validate_assignee(user_cache, assignee_id: str) -> bool:
     if not assignee_id:
         return False
-    if assignee_id == "fachabteilung":
-        return True
     # Check if it's a valid group ID
     from backend.database.groups import get_groups
     group_ids = {g["id"] for g in get_groups()}
@@ -124,7 +122,8 @@ def _get_ticket_or_404(ticket_id: int):
 
 
 def _assert_ticket_access(ticket, user: dict):
-    """Owner, Assignee, Accountable, Gruppen-Mitglied, Manager/Admin dürfen zugreifen."""
+    """Owner, Assignee, Accountable, in der aktuellen Phase Zuständige (inkl.
+    Reviewing-Fachabteilungen), Gruppen-Mitglied oder Manager/Admin dürfen zugreifen."""
     user_id = user["id"]
 
     if ticket.owner_id == user_id:
@@ -135,10 +134,17 @@ def _assert_ticket_access(ticket, user: dict):
         return
     if PERM_MANAGE in user.get("permissions", []):
         return
-    if ticket.assignee_group_id:
-        from backend.database.groups import get_group_ids_for_user
-        if ticket.assignee_group_id in get_group_ids_for_user(user_id):
-            return
+
+    from backend.database.groups import get_group_ids_for_user
+    user_group_ids = get_group_ids_for_user(user_id)
+    if ticket.assignee_group_id and ticket.assignee_group_id in user_group_ids:
+        return
+
+    # In der aktuellen Phase zuständig? Deckt die Reviewing-Fachabteilungen ab,
+    # die früher (assignee="fachabteilung") fälschlich ausgesperrt wurden.
+    from backend.services.workflow_state import user_is_responsible
+    if user_is_responsible(ticket, user_id, user_group_ids):
+        return
 
     raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff auf dieses Ticket")
 
@@ -234,9 +240,9 @@ async def create_ticket(
     current_phase = phases[current_idx] if current_idx < len(phases) else None
 
     if current_phase and current_phase["type"] == WfPhaseType.department_review:
-        # No assignment phase — notify departments immediately
-        database.set_assignee(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
-        database.set_accountable(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
+        # Keine Assignment-Phase — direkt die Fachabteilungen benachrichtigen.
+        # Zuständigkeit steht im workflow_state.departments (kein "fachabteilung"-Sentinel
+        # mehr in assignee/accountable — die bleiben informativ).
         send_mail_to_all_fachabteilung(current_phase.get("departments", {}), ticket)
         add_history_event(
             ticket_id,
@@ -448,8 +454,8 @@ async def submit_ticket(
 
     if next_phase and next_phase["type"] == PhaseType.department_review:
         ticket = database.get_ticket(ticket_id)
-        database.set_assignee(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
-        database.set_accountable(ticket_id=ticket_id, user_id="fachabteilung", user_name="fachabteilung")
+        # Zuständigkeit steht im workflow_state.departments — kein "fachabteilung"-
+        # Sentinel mehr in assignee/accountable (die bleiben informativ).
         send_mail_to_all_fachabteilung(next_phase.get("departments", {}), ticket)
         add_history_event(
             ticket_id,
