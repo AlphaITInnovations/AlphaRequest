@@ -76,9 +76,9 @@ function dotClass(s: string) {
 }
 
 // ── Counts ────────────────────────────────────────────────────────────────────
-const mineCount    = computed(() => data.value.orders.filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
-const groupCount   = computed(() => data.value.department_board.reduce((s, g) => s + g.tickets.length, 0))
-const createdCount = computed(() => data.value.created_orders.filter(o => o.status !== 'archived').length)
+const mineCount    = computed(() => (data.value.orders ?? []).filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
+const groupCount   = computed(() => (data.value.department_board ?? []).reduce((s, g) => s + g.tickets.length, 0))
+const createdCount = computed(() => (data.value.created_orders ?? []).filter(o => o.status !== 'archived').length)
 const totalOpen    = computed(() => mineCount.value + groupCount.value)
 
 // ── Filtering ─────────────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ const showArchived = ref(false)
 // Vollständig vom Backend gruppiert: jede Abteilung genau einmal, jedes Ticket
 // genau einmal in seiner aktuellen Phase. Frontend filtert nur noch.
 const myDepartmentGroups = computed<DeptBoardGroup[]>(() =>
-  data.value.department_board
+  (data.value.department_board ?? [])
     .map(g => ({ ...g, tickets: applyFilter(g.tickets) }))
     .filter(g => g.tickets.length > 0)
 )
@@ -130,7 +130,14 @@ function toggleGroupDept(id: string) { openGroupDepts.value[id] = !openGroupDept
 onMounted(async () => {
   try {
     const res = await client.get<{ data: DashboardData }>('/dashboard')
-    data.value = res.data.data
+    const d = res.data.data
+    // Defensiv gegen fehlende Felder (z. B. veraltete Backend-Antwort)
+    data.value = {
+      orders:               d.orders ?? [],
+      created_orders:       d.created_orders ?? [],
+      department_board:     d.department_board ?? [],
+      allowed_ticket_types: d.allowed_ticket_types ?? [],
+    }
     // Auto-open department accordions
     for (const g of data.value.department_board) openGroupDepts.value[g.group_id] = true
     // Auto-select tab with most relevant content
