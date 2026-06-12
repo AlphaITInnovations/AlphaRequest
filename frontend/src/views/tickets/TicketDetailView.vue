@@ -38,6 +38,13 @@ async function onRemoveWatcher(id: string) {
 
 // Phasen an die geteilte TicketDetails-Sidebar (im Formular) durchreichen
 provide('workflowPhases', phases)
+// Beobachter (Liste + Aktionen) an die geteilte TicketDetails-Sidebar durchreichen
+provide('ticketWatchers', {
+  watchers,
+  busy: watcherBusy,
+  add: onAddWatcher,
+  remove: onRemoveWatcher,
+})
 
 // Reject modal state
 const showRejectModal   = ref(false)
@@ -132,20 +139,14 @@ function goToEdit() {
           </p>
         </div>
 
+        <!-- Beobachter erscheinen via provide() in der „Details"-Sidebar des Formulars,
+             direkt unter „Verantwortlicher". -->
         <component
           v-if="formCtx && !formCtx.loading?.value"
           :is="entry!.form"
           :ctx="formCtx"
           phase="edit"
         />
-
-        <!-- Beobachter -->
-        <div class="max-w-7xl mx-auto">
-          <div class="lg:w-[320px]">
-            <TicketWatchers :watchers="watchers" :busy="watcherBusy"
-                            @add="onAddWatcher" @remove="onRemoveWatcher" />
-          </div>
-        </div>
       </div>
 
       <!-- ═══════════════════════════════════════════════════════════════════
@@ -206,6 +207,9 @@ function goToEdit() {
                   <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Verantwortlicher</p>
                   <p class="text-gray-900 dark:text-white">{{ ticket.accountable_name || '—' }}</p>
                 </div>
+                <!-- Beobachter direkt unter Verantwortlicher -->
+                <TicketWatchers :watchers="watchers" :busy="watcherBusy"
+                                @add="onAddWatcher" @remove="onRemoveWatcher" />
                 <div v-if="ticket.comment">
                   <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Kommentar</p>
                   <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ ticket.comment }}</p>
@@ -228,10 +232,6 @@ function goToEdit() {
                 </span>
               </div>
             </div>
-
-            <!-- Beobachter -->
-            <TicketWatchers class="mt-4" :watchers="watchers" :busy="watcherBusy"
-                            @add="onAddWatcher" @remove="onRemoveWatcher" />
           </aside>
 
           <!-- ── Content: read-only panel ── -->

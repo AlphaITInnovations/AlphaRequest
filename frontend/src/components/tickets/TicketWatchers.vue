@@ -16,19 +16,18 @@ function onSelect(v: { id: string; name: string } | null) {
 </script>
 
 <template>
-  <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-              rounded-2xl shadow-sm p-5 text-sm">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Beobachter</p>
+  <!-- chrome-los: wird in die Details-/Meta-Karte eingebettet -->
+  <div>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Beobachter</p>
 
-    <div class="space-y-1.5 mb-3">
-      <div v-for="w in watchers" :key="w.id"
-           class="flex items-center justify-between gap-2 group">
+    <div v-if="watchers.length" class="space-y-1.5 mb-2.5">
+      <div v-for="w in watchers" :key="w.id" class="flex items-center justify-between gap-2">
         <span class="flex items-center gap-2 min-w-0">
           <span class="w-6 h-6 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] flex items-center justify-center
                        text-[11px] font-semibold flex-shrink-0">
             {{ (w.name || w.id).slice(0, 1).toUpperCase() }}
           </span>
-          <span class="text-gray-900 dark:text-white truncate">{{ w.name || w.id }}</span>
+          <span class="text-sm text-gray-900 dark:text-white truncate">{{ w.name || w.id }}</span>
         </span>
         <button @click="emit('remove', w.id)" :disabled="busy"
                 class="text-gray-300 dark:text-gray-600 hover:text-red-500 transition flex-shrink-0
@@ -39,8 +38,8 @@ function onSelect(v: { id: string; name: string } | null) {
           </svg>
         </button>
       </div>
-      <p v-if="!watchers.length" class="text-gray-400 italic">Noch keine Beobachter.</p>
     </div>
+    <p v-else class="text-sm text-gray-400 italic mb-2.5">Noch keine Beobachter.</p>
 
     <UserSelect
       placeholder="Beobachter hinzufügen…"
