@@ -1,10 +1,8 @@
 TODO:
 
-evtl zuordnung mehrere fachabteilungen weil workflow komisch ist
-phasensystem überarbeiten!
-beobachter funktionalität
 
-bug report knopf
+fachabteilungen ensure
+
 
 BasisTicket:
 Bug dass in der navigation beide Felder "Neues Prozess Ticket" und "neues Ticket " weiß leuchten sobald ich auf der neues ticket seite bin
