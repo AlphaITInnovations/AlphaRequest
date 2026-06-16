@@ -29,7 +29,7 @@ const ACTION_META: Record<string, { label: string; icon: string; color: string }
 
 const STATUS_LABEL: Record<string, string> = {
   in_request: 'Zu bearbeiten', in_progress: 'In Bearbeitung',
-  archived: 'Erledigt', rejected: 'Abgelehnt',
+  archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 
 const FIELD_LABEL: Record<string, string> = {
