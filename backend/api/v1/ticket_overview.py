@@ -146,8 +146,11 @@ def archive_overview_ticket(
     """Hart-Archivieren aus der Übersicht – nur für Admins."""
     _require_view(user)
     _require_admin(user)
-    if not database.get_ticket(ticket_id):
+    ticket = database.get_ticket(ticket_id)
+    if not ticket:
         raise HTTPException(404, "Ticket nicht gefunden")
+    if ticket.status == RequestStatus.archived:
+        raise HTTPException(400, "Ticket ist bereits archiviert")
     database.update_ticket(ticket_id, status=RequestStatus.archived.value)
 
 
