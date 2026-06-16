@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useTheme } from '@/composables/useTheme'
+import { client } from '@/api/client'
 
 const auth   = useAuthStore()
 const route  = useRoute()
@@ -20,6 +21,31 @@ function isActive(path: string) {
 function navigate(path: string) {
   router.push(path)
   mobileOpen.value = false
+}
+
+// ── Fehler melden / Feedback ───────────────────────────────────────────────
+const showFeedback    = ref(false)
+const feedbackText    = ref('')
+const feedbackSending = ref(false)
+const feedbackSent    = ref(false)
+
+function openFeedback() {
+  feedbackText.value = ''
+  feedbackSent.value = false
+  showFeedback.value = true
+  mobileOpen.value = false
+}
+async function submitFeedback() {
+  if (!feedbackText.value.trim()) return
+  feedbackSending.value = true
+  try {
+    await client.post('/feedback', { message: feedbackText.value.trim(), page: route.fullPath })
+    feedbackSent.value = true
+  } catch {
+    alert('Fehlerbericht konnte nicht gesendet werden. Bitte später erneut versuchen.')
+  } finally {
+    feedbackSending.value = false
+  }
 }
 
 defineProps<{ title?: string }>()
@@ -164,6 +190,17 @@ defineProps<{ title?: string }>()
 
       <!-- User Section -->
       <div class="border-t border-white/15 p-3 space-y-2">
+        <!-- Fehler melden / Feedback -->
+        <button @click="openFeedback" title="Fehler melden / Feedback"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition text-sm"
+                :class="sidebarOpen ? '' : 'justify-center'">
+          <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span v-if="sidebarOpen" class="truncate">Fehler melden</span>
+        </button>
+
         <!-- Dark mode toggle -->
         <button @click="toggleDark"
                 class="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition text-sm"
@@ -233,5 +270,57 @@ defineProps<{ title?: string }>()
         </div>
       </main>
     </div>
+
+    <!-- ── Fehler-melden-Modal ── -->
+    <Teleport to="body">
+      <div v-if="showFeedback"
+           class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+           @click.self="showFeedback = false">
+        <div class="bg-white dark:bg-[#1C2535] rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Fehler melden / Feedback</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Beschreibe kurz das Problem oder dein Feedback. Die aktuelle Seite wird automatisch mitgesendet.
+            </p>
+          </div>
+
+          <template v-if="!feedbackSent">
+            <textarea
+              v-model="feedbackText" rows="5" autofocus
+              placeholder="Was ist passiert? Was hast du erwartet?"
+              class="w-full rounded-xl border border-gray-200 dark:border-white/10 px-3.5 py-2.5 text-sm
+                     bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+                     placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
+            <div class="flex justify-end gap-3">
+              <button @click="showFeedback = false"
+                      class="px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10
+                             text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5">
+                Abbrechen
+              </button>
+              <button @click="submitFeedback" :disabled="!feedbackText.trim() || feedbackSending"
+                      class="px-4 py-2 text-sm rounded-xl bg-[#3EAAB8] hover:bg-[#2B7D89] text-white font-medium
+                             disabled:opacity-50 disabled:cursor-not-allowed transition">
+                {{ feedbackSending ? 'Wird gesendet…' : 'Senden' }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 py-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+              Danke! Dein Bericht wurde gesendet.
+            </div>
+            <div class="flex justify-end">
+              <button @click="showFeedback = false"
+                      class="px-4 py-2 text-sm rounded-xl bg-[#3EAAB8] hover:bg-[#2B7D89] text-white font-medium transition">
+                Schließen
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
