@@ -25,6 +25,7 @@ from backend.api.v1 import personalnummer as personalnummer_v1
 from backend.api.v1 import ticket_view as ticket_view_v1
 from backend.api.v1 import settings as settings_v1
 from backend.api.v1 import ticket_overview as ticket_overview_v1
+from backend.api.v1 import feedback as feedback_v1
 
 
 def get_ticket_type_dict():
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(ticket_view_v1.router, prefix="/api/v1")
     app.include_router(settings_v1.router, prefix="/api/v1")
     app.include_router(ticket_overview_v1.router, prefix="/api/v1")
+    app.include_router(feedback_v1.router, prefix="/api/v1")
 
     return app
 
