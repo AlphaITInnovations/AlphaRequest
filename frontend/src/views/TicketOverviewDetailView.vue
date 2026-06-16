@@ -39,7 +39,7 @@ const contentPanel = computed(() =>
 const STATUS_LABEL: Record<string, string> = {
   in_request:  'Zu bearbeiten',
   in_progress: 'In Bearbeitung',
-  archived:    'Erledigt',
+  archived:    'Archiviert',
   rejected:    'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {

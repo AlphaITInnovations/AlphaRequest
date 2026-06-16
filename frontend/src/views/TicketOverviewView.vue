@@ -41,7 +41,7 @@ const TYPE_LABEL: Record<string, string> = {
   'marketing-stellenanzeige': 'Stellenanzeige', 'hotelbuchung': 'Hotelbuchung', 'basis-ticket': 'Ticket',
 }
 const STATUS_LABEL: Record<string, string> = {
-  in_progress: 'Bearbeitung', in_request: 'Durchführung', archived: 'Erledigt', rejected: 'Abgelehnt',
+  in_progress: 'Bearbeitung', in_request: 'Durchführung', archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',

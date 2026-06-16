@@ -63,7 +63,7 @@ const TYPE_LABEL: Record<string, string> = Object.fromEntries(ticketTypes.map(t 
 // in_progress = Bearbeitung, in_request = Durchführung.
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'Bearbeitung', in_request: 'Durchführung',
-  archived: 'Erledigt', rejected: 'Abgelehnt',
+  archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -242,7 +242,7 @@ onMounted(async () => {
               <option value="all">Alle Phasen</option>
               <option value="in_progress">Bearbeitung</option>
               <option value="in_request">Durchführung</option>
-              <option value="archived">Erledigt</option>
+              <option value="archived">Archiviert</option>
               <option value="rejected">Abgelehnt</option>
             </select>
             <select v-model="filter.priority" class="fi">
@@ -357,11 +357,11 @@ onMounted(async () => {
               <li v-else-if="filteredWatchedActive.length === 0" class="px-5 py-8 text-center text-sm text-gray-400 italic">Keine offenen beobachteten Tickets.</li>
             </ul>
 
-            <!-- Erledigt -->
+            <!-- Archiviert -->
             <div v-if="filteredWatchedArchived.length > 0" class="border-t border-gray-200/80 dark:border-white/[0.09]">
               <button @click="showArchived = !showArchived"
                       class="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
-                <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Erledigt</span>
+                <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Archiviert</span>
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ filteredWatchedArchived.length }}</span>
                   <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" :class="showArchived ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -377,7 +377,7 @@ onMounted(async () => {
                     </div>
                   </div>
                   <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                    <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Erledigt</span>
+                    <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Archiviert</span>
                     <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                   </div>
                 </li>

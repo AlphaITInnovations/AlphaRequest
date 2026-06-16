@@ -68,7 +68,7 @@ async function handleArchive() {
 
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
-  archived: 'Erledigt', rejected: 'Abgelehnt',
+  archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 const PRIORITY_LABEL: Record<string, string> = {
   low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch',
