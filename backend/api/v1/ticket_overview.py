@@ -8,7 +8,7 @@ from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
 from backend.models.models import RequestStatus
 from backend.schemas.responses import DataResponse, ListResponse, Meta
-from backend.services.ticket_history import get_ticket_history
+from backend.services.ticket_history import get_ticket_history, add_history_event
 from backend.services.workflow_state import responsibility_label
 
 router = APIRouter()
@@ -151,7 +151,16 @@ def archive_overview_ticket(
         raise HTTPException(404, "Ticket nicht gefunden")
     if ticket.status == RequestStatus.archived:
         raise HTTPException(400, "Ticket ist bereits archiviert")
+
+    old_status = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
     database.update_ticket(ticket_id, status=RequestStatus.archived.value)
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_archived_manual",
+        details={"field": "status", "old_value": old_status, "new_value": RequestStatus.archived.value},
+    )
 
 
 @router.get("/overview/tickets/{ticket_id}", response_model=DataResponse[TicketOverviewDetail])
