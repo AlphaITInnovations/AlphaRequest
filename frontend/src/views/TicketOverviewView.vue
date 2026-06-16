@@ -110,6 +110,9 @@ function sortIcon(k: SortKey) { return sortKey.value !== k ? '' : sortDir.value 
 // ── Auswahl ────────────────────────────────────────────────────────────────────
 const allSelected = computed(() =>
   sorted.value.length > 0 && sorted.value.every(t => selected.value.includes(t.id)))
+// Ausgewählte, die sich (noch) archivieren lassen – bereits archivierte ausgenommen
+const selectedArchivable = computed(() =>
+  tickets.value.filter(t => selected.value.includes(t.id) && t.status !== 'archived').map(t => t.id))
 function toggleAll(e: Event) {
   selected.value = (e.target as HTMLInputElement).checked ? sorted.value.map(t => t.id) : []
 }
@@ -138,9 +141,10 @@ async function deleteSelected() {
 }
 
 async function archiveSelected() {
-  if (!selected.value.length) return
-  if (!confirm(`${selected.value.length} Ticket(s) archivieren?`)) return
-  await Promise.all(selected.value.map(id => client.post(`/overview/tickets/${id}/archive`)))
+  const ids = selectedArchivable.value
+  if (!ids.length) return
+  if (!confirm(`${ids.length} Ticket(s) archivieren?`)) return
+  await Promise.all(ids.map(id => client.post(`/overview/tickets/${id}/archive`)))
   await load()
 }
 
@@ -174,10 +178,11 @@ onMounted(load)
         </div>
         <!-- Aktionen: immer sichtbar, nur bei Auswahl aktiv -->
         <div class="flex items-center gap-2">
-          <button v-if="auth.isAdmin" @click="archiveSelected" :disabled="selected.length === 0"
+          <button v-if="auth.isAdmin" @click="archiveSelected" :disabled="selectedArchivable.length === 0"
                   class="px-4 py-2 rounded-xl bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium
-                         transition disabled:opacity-40 disabled:cursor-not-allowed">
-            Archivieren<span v-if="selected.length"> ({{ selected.length }})</span>
+                         transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Bereits archivierte Tickets werden übersprungen">
+            Archivieren<span v-if="selectedArchivable.length"> ({{ selectedArchivable.length }})</span>
           </button>
           <button v-if="auth.canManage" @click="deleteSelected" :disabled="selected.length === 0"
                   class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium
