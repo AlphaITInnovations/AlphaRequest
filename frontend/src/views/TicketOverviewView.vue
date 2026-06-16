@@ -168,7 +168,22 @@ onMounted(load)
       <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Ticket-Übersicht</h1>
-          <p class="text-sm text-gray-400 mt-0.5">{{ sorted.length }} von {{ tickets.length }} Tickets</p>
+          <p class="text-sm text-gray-400 mt-0.5">
+            {{ sorted.length }} von {{ tickets.length }} Tickets<span v-if="selected.length"> · {{ selected.length }} ausgewählt</span>
+          </p>
+        </div>
+        <!-- Aktionen: immer sichtbar, nur bei Auswahl aktiv -->
+        <div class="flex items-center gap-2">
+          <button v-if="auth.isAdmin" @click="archiveSelected" :disabled="selected.length === 0"
+                  class="px-4 py-2 rounded-xl bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium
+                         transition disabled:opacity-40 disabled:cursor-not-allowed">
+            Archivieren<span v-if="selected.length"> ({{ selected.length }})</span>
+          </button>
+          <button v-if="auth.canManage" @click="deleteSelected" :disabled="selected.length === 0"
+                  class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium
+                         transition disabled:opacity-40 disabled:cursor-not-allowed">
+            Löschen<span v-if="selected.length"> ({{ selected.length }})</span>
+          </button>
         </div>
       </div>
 
@@ -204,23 +219,6 @@ onMounted(load)
                   class="px-3 py-2 rounded-xl text-sm text-gray-500 dark:text-gray-400
                          border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition">
             Zurücksetzen
-          </button>
-        </div>
-      </div>
-
-      <!-- Bulk-Aktionsleiste -->
-      <div v-if="selected.length > 0"
-           class="flex items-center justify-between gap-3 rounded-2xl border border-[#3EAAB8]/30
-                  bg-[#3EAAB8]/5 px-4 py-2.5">
-        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ selected.length }} ausgewählt</span>
-        <div class="flex items-center gap-2">
-          <button v-if="auth.isAdmin" @click="archiveSelected"
-                  class="px-4 py-1.5 rounded-xl bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium transition">
-            Archivieren
-          </button>
-          <button v-if="auth.canManage" @click="deleteSelected"
-                  class="px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition">
-            Löschen
           </button>
         </div>
       </div>
