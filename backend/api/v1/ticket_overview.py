@@ -6,8 +6,10 @@ from pydantic import BaseModel
 
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
+from backend.models.models import RequestStatus
 from backend.schemas.responses import DataResponse, ListResponse, Meta
 from backend.services.ticket_history import get_ticket_history
+from backend.services.workflow_state import responsibility_label
 
 router = APIRouter()
 
@@ -22,6 +24,7 @@ class TicketOverviewItem(BaseModel):
     priority: str
     created_at: str
     creator: str
+    responsible: str = "—"   # aktuell zuständige Stelle (Person/Gruppe/Fachabteilung)
 
 
 class DepartmentStatus(BaseModel):
@@ -73,6 +76,12 @@ def _require_manage(user: dict) -> None:
         raise HTTPException(403, "Keine Berechtigung zum Bearbeiten")
 
 
+def _require_admin(user: dict) -> None:
+    """Nur Admins dürfen archivieren."""
+    if "admin" not in user.get("permissions", []):
+        raise HTTPException(403, "Nur Admins dürfen Tickets archivieren")
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _fmt_dt(val) -> str:
@@ -88,7 +97,8 @@ def _fmt_dt(val) -> str:
 @router.get("/overview/tickets", response_model=ListResponse[TicketOverviewItem])
 def list_overview_tickets(
     page:      int = Query(1,  ge=1),
-    page_size: int = Query(50, ge=10, le=100),
+    # Höheres Limit erlaubt clientseitiges Sortieren/Filtern über alle Tickets.
+    page_size: int = Query(50, ge=10, le=2000),
     user: dict = Depends(get_current_user),
 ):
     _require_view(user)
@@ -106,6 +116,7 @@ def list_overview_tickets(
             priority=t.priority    if isinstance(t.priority,      str) else t.priority.value,
             created_at=_fmt_dt(t.created_at),
             creator=t.owner_name,
+            responsible=responsibility_label(t),
         )
         for t in tickets
     ]
@@ -125,6 +136,19 @@ def delete_overview_ticket(
     _require_manage(user)
     if not database.delete_ticket(ticket_id):
         raise HTTPException(404, "Ticket nicht gefunden")
+
+
+@router.post("/overview/tickets/{ticket_id}/archive", status_code=204)
+def archive_overview_ticket(
+    ticket_id: int,
+    user: dict = Depends(get_current_user),
+):
+    """Hart-Archivieren aus der Übersicht – nur für Admins."""
+    _require_view(user)
+    _require_admin(user)
+    if not database.get_ticket(ticket_id):
+        raise HTTPException(404, "Ticket nicht gefunden")
+    database.update_ticket(ticket_id, status=RequestStatus.archived.value)
 
 
 @router.get("/overview/tickets/{ticket_id}", response_model=DataResponse[TicketOverviewDetail])

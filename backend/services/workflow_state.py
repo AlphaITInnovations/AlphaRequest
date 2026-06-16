@@ -334,6 +334,25 @@ def primary_responsibility(ticket) -> Optional[dict]:
     return None
 
 
+def responsibility_label(ticket) -> str:
+    """
+    Lesbarer Name der AKTUELL zuständigen Stelle (für Listen/Übersicht):
+    Person, Gruppe, Ersteller oder – in der Durchführung – die noch offenen
+    Fachabteilungen. '—', wenn niemand (mehr) zuständig ist (z. B. archiviert).
+    """
+    resp = current_responsibility(ticket)
+    kind = resp.get("kind")
+    if kind in ("user", "group", "owner"):
+        return resp.get("name") or "—"
+    if kind == "departments":
+        open_names = [
+            d.get("name") for d in resp.get("departments", {}).values()
+            if d.get("required") and d.get("status") != DEPARTMENT_STATUS_DONE
+        ]
+        return ", ".join(n for n in open_names if n) or "—"
+    return "—"
+
+
 def backfill_phase_responsibility() -> None:
     """
     Einmalige, idempotente Migration: trägt für bestehende Tickets die
