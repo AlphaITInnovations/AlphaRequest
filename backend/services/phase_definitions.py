@@ -14,6 +14,7 @@ class PhaseType(str, Enum):
 class PhaseView(str, Enum):
     form = "form"          # editierbares Formular
     readonly = "readonly"  # read-only Panel
+    export = "export"      # Export-Ansicht (Daten + PDF-Export)
 
 
 @dataclass
@@ -24,6 +25,9 @@ class PhaseDefinition:
     # Welche Ansicht das Frontend in dieser Phase zeigt. Default leitet sich aus
     # dem Typ ab (assignment -> Formular, sonst read-only).
     view: PhaseView | None = None
+    # Optional: feste Zuweisung einer assignment-Phase an eine Gruppe (per Name).
+    # build_workflow() löst den Namen auf und setzt die responsibility.
+    assign_group: str | None = None
 
     @property
     def effective_view(self) -> PhaseView:
@@ -50,6 +54,12 @@ TICKET_PHASES: dict[TicketType, List[PhaseDefinition]] = {
     TicketType.niederlassung_schliessen: _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),
     TicketType.niederlassung_umzug:    _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),
     TicketType.marketing_stellenanzeige: _flow(_ERSTELLUNG(), _DURCHFUEHRUNG()),
-    TicketType.hotelbuchung:           _flow(_ERSTELLUNG(), _DURCHFUEHRUNG()),
+    TicketType.hotelbuchung: _flow(
+        _ERSTELLUNG(),
+        _DURCHFUEHRUNG(),
+        # Custom-Phase: Zuweisung an die Reisestelle, PDF-Export, dann archivieren.
+        PhaseDefinition("reisestelle", "Reisestelle", PhaseType.assignment,
+                        view=PhaseView.export, assign_group="Reisestelle"),
+    ),
     TicketType.basis_ticket:           _flow(_ERSTELLUNG(), _BEARBEITUNG()),
 }

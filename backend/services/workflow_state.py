@@ -184,9 +184,14 @@ def build_workflow(ticket: Ticket) -> dict:
             builder = DEPARTMENT_BUILDERS.get(ticket.ticket_type)
             phase["departments"] = builder(description) if builder else {}
             phase["responsibility"] = {"kind": "departments"}
-        # assignment-Phasen: responsibility wird beim Aktivieren gesetzt
-        # (set_phase_responsibility); current_responsibility() leitet sonst aus
-        # dem Ticket ab (Fallback, deckt auch Alt-Tickets ab).
+        elif phase_def.assign_group:
+            # assignment-Phase mit fester Gruppen-Zuweisung (Name → Gruppe auflösen)
+            groups = {g["name"].lower(): g for g in get_groups()}
+            g = groups.get(phase_def.assign_group.lower())
+            if g:
+                phase["responsibility"] = {"kind": "group", "id": g["id"], "name": g["name"]}
+        # Sonstige assignment-Phasen: responsibility wird beim Aktivieren gesetzt
+        # (set_phase_responsibility / create_ticket).
         phases.append(phase)
 
     return {

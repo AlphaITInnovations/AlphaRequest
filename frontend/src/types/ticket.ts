@@ -29,7 +29,7 @@ export interface User {
 export type PhaseType   = 'creation' | 'assignment' | 'department_review'
 export type PhaseStatus = 'pending' | 'in_progress' | 'done'
 // Frontend-Darstellung einer Phase (datengetrieben vom Backend)
-export type PhaseView   = 'form' | 'readonly'
+export type PhaseView   = 'form' | 'readonly' | 'export'
 
 export type DeptStatus = 'open' | 'in_progress' | 'done' | 'skipped' | 'rejected'
 
