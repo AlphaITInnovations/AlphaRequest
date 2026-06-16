@@ -46,14 +46,25 @@ function exportPdf() {
 
     const ensure = (h = 12) => { if (y + h > pageH - 18) { doc.addPage(); y = 18 } }
 
-    // Feld (Label klein/grau, Wert dunkel) an x; ändert y NICHT, gibt Höhe zurück
+    const isEmpty = (v: any) => v === null || v === undefined || String(v).trim() === ''
+    // Feld (Label klein/grau, Wert dunkel) an x; ändert y NICHT, gibt Höhe zurück.
+    // Leere Felder werden als kursives, graues "Nicht angegeben" dargestellt.
     const drawField = (x: number, label: string, value: any, w: number): number => {
-      doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(150)
-      doc.text(clean(label).toUpperCase(), x, y)
+      let dy = 0
+      if (label) {
+        doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(150)
+        doc.text(clean(label).toUpperCase(), x, y)
+        dy = 4.6
+      }
+      if (isEmpty(value)) {
+        doc.setFontSize(9.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(175)
+        doc.text('Nicht angegeben', x, y + dy)
+        return dy + 4.7 + 4
+      }
       doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(35)
       const lines = doc.splitTextToSize(clean(value), w) as string[]
-      doc.text(lines, x, y + 4.6)
-      return 4.6 + lines.length * 4.7 + 4
+      doc.text(lines, x, y + dy)
+      return dy + lines.length * 4.7 + 4
     }
     const row2 = (l1: string, v1: any, l2?: string, v2?: any) => {
       ensure(16)
@@ -90,16 +101,16 @@ function exportPdf() {
 
     section('Reiseziel')
     row2('Ort / Stadt', b.ort_stadt, 'Partner-Hotel', b.partner_hotel)
-    if (b.hotelwunsch) rowFull('Hotelwunsch', b.hotelwunsch)
+    rowFull('Hotelwunsch', b.hotelwunsch)
 
     section('Reiseanlass')
-    rowFull('Art', ANLASS_LABEL[b.reiseanlass] ?? b.reiseanlass)
+    rowFull('Art', b.reiseanlass ? (ANLASS_LABEL[b.reiseanlass] ?? b.reiseanlass) : '')
     if (b.reiseanlass === 'kundentermin') {
       row2('Kundenname', b.kunde_name, 'Anschrift', b.kunde_anschrift)
       rowFull('Grund des Besuchs', b.kunde_grund)
     } else if (b.reiseanlass === 'besuch_niederlassung') {
       row2('Niederlassung', b.besuch_niederlassung)
-      if (b.besuch_begruendung) rowFull('Begründung', b.besuch_begruendung)
+      rowFull('Begründung', b.besuch_begruendung)
     } else if (b.reiseanlass === 'sonstiges') {
       rowFull('Begründung', b.sonstiges_grund)
       row2('Genehmigung durch', b.genehmigung_name)
@@ -108,16 +119,14 @@ function exportPdf() {
     section('Budget')
     rowFull('Bestätigung', b.budget_bestaetigung === 'unter_120'
       ? 'Kosten max. 120 EUR pro Nacht inkl. Frühstück'
-      : b.budget_bestaetigung === 'abweichung' ? 'Abweichung erforderlich' : '—')
+      : b.budget_bestaetigung === 'abweichung' ? 'Abweichung erforderlich' : '')
     if (b.budget_bestaetigung === 'abweichung') {
       rowFull('Begründung', b.budget_begruendung)
       row2('Genehmigung durch', b.budget_genehmigung_name)
     }
 
-    if (b.besondere_anforderungen) {
-      section('Besondere Anforderungen')
-      rowFull('', b.besondere_anforderungen)
-    }
+    section('Besondere Anforderungen')
+    rowFull('', b.besondere_anforderungen)
 
     // ── Fußzeile auf allen Seiten ──
     const pages = doc.getNumberOfPages()
