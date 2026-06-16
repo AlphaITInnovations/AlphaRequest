@@ -7,6 +7,7 @@ import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
 import TicketWatchers from '@/components/tickets/TicketWatchers.vue'
 import { TICKET_REGISTRY } from '@/utils/ticketRegistry'
 import { useTicket } from '@/composables/useTicket'
+import { ticketsApi } from '@/api/tickets'
 import type { TicketType } from '@/types/ticket'
 
 const route  = useRoute()
@@ -50,6 +51,20 @@ provide('ticketWatchers', {
 const showRejectModal   = ref(false)
 const rejectMessage     = ref('')
 const rejectSubmitting  = ref(false)
+
+// Export-Phase: Archivieren erst nach PDF-Export
+const exported  = ref(false)
+const archiving = ref(false)
+
+async function handleArchive() {
+  archiving.value = true
+  try {
+    await ticketsApi.submit(ticketId)   // schließt die letzte Phase ab → archiviert
+    router.push('/dashboard')
+  } finally {
+    archiving.value = false
+  }
+}
 
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
@@ -256,9 +271,17 @@ function goToEdit() {
             </div>
           </aside>
 
-          <!-- ── Content: read-only panel ── -->
+          <!-- ── Content: Export-Ansicht oder read-only Panel ── -->
           <section class="flex-1">
-            <component :is="entry!.panel" :description="description" />
+            <component
+              v-if="currentView === 'export' && entry!.exportPanel"
+              :is="entry!.exportPanel"
+              :description="description"
+              :owner-name="ticket.owner_name"
+              :created-at="ticket.created_at"
+              @exported="exported = true"
+            />
+            <component v-else :is="entry!.panel" :description="description" />
           </section>
         </div>
 
@@ -273,6 +296,21 @@ function goToEdit() {
           @department-done="handleDeptDone"
           @department-edit="goToEdit"
         />
+
+        <!-- Action bar (export mode): Archivieren nach dem Export -->
+        <div v-else-if="currentView === 'export'" class="sticky bottom-4 z-40 mt-4">
+          <div class="border border-gray-200 dark:border-white/[0.09] bg-white/95 dark:bg-[#212B3A]/95
+                      backdrop-blur rounded-2xl shadow-lg py-3 px-4 flex items-center justify-between gap-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              {{ exported ? 'PDF exportiert — bereit zum Archivieren.' : 'Bitte zuerst das PDF exportieren.' }}
+            </p>
+            <button @click="handleArchive" :disabled="!exported || archiving"
+                    class="px-6 py-2 rounded-xl text-sm font-medium bg-gray-700 hover:bg-gray-800 text-white
+                           disabled:opacity-50 disabled:cursor-not-allowed transition flex-shrink-0">
+              {{ archiving ? 'Wird archiviert…' : 'Archivieren' }}
+            </button>
+          </div>
+        </div>
       </div>
     </template>
 

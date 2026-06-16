@@ -16,6 +16,8 @@ export interface TicketRegistryEntry {
   label:         string
   form:          ReturnType<typeof defineAsyncComponent>
   panel:         ReturnType<typeof defineAsyncComponent>
+  // Optionale Export-Ansicht (für Phasen mit view='export', z.B. Hotelbuchung-Reisestelle)
+  exportPanel?:  ReturnType<typeof defineAsyncComponent>
   useComposable: (phase: ComposablePhase, ticketId?: number) => any
 }
 
@@ -66,6 +68,7 @@ export const TICKET_REGISTRY: Record<TicketType, TicketRegistryEntry> = {
     label: 'Hotelbuchung',
     form:  defineAsyncComponent(() => import('@/components/tickets/HotelbuchungForm.vue')),
     panel: defineAsyncComponent(() => import('@/components/tickets/HotelbuchungContentPanel.vue')),
+    exportPanel: defineAsyncComponent(() => import('@/components/tickets/HotelbuchungExportPanel.vue')),
     useComposable: useHotelbuchung,
   },
   'basis-ticket': {
