@@ -134,7 +134,7 @@ function userName(id: string) {
 }
 
 // ── Groups ─────────────────────────────────────────────────────────────────────
-interface Group { id: string; name: string; members: string[]; distributions: string[] }
+interface Group { id: string; name: string; members: string[]; distributions: string[]; required?: boolean }
 const groups       = ref<Group[]>([])
 const newGroupName = ref('')
 const editGroup    = ref<Record<string, boolean>>({})
@@ -172,11 +172,16 @@ async function saveGroupName(g: Group) {
     showToast('Gespeichert', true)
   } catch { showToast('Fehler', false) }
 }
-async function deleteGroup(id: string) {
-  if (!confirm('Gruppe löschen?')) return
-  await client.delete(`/settings/groups/${id}`)
-  await loadGroups()
-  showToast('Gelöscht', true)
+async function deleteGroup(g: Group) {
+  if (g.required) return  // Pflichtgruppe – serverseitig ohnehin gesperrt
+  if (!confirm(`Fachabteilung "${g.name}" wirklich löschen?`)) return
+  try {
+    await client.delete(`/settings/groups/${g.id}`)
+    await loadGroups()
+    showToast('Gelöscht', true)
+  } catch {
+    showToast('Löschen nicht möglich', false)
+  }
 }
 async function addMember(g: Group) {
   const m = groupMember.value[g.id]
@@ -610,18 +615,24 @@ const navGroups = computed(() => {
           <div class="space-y-4">
             <div v-for="g in groups" :key="g.id" class="card-section space-y-5">
               <div class="flex items-center justify-between">
-                <div>
+                <div class="flex items-center gap-2">
                   <h3 v-if="!editGroup[g.id]" class="text-lg font-semibold text-gray-900 dark:text-white">{{ g.name }}</h3>
                   <input v-else v-model="editName[g.id]" class="input w-72" />
+                  <span v-if="g.required"
+                        title="Diese Fachabteilung wird von den Workflows benötigt und kann nicht umbenannt oder gelöscht werden. Mitglieder und Verteiler lassen sich weiterhin bearbeiten."
+                        class="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/20
+                               text-amber-700 dark:text-amber-300 px-2.5 py-1 text-xs font-medium whitespace-nowrap">
+                    🔒 Pflichtgruppe
+                  </span>
                 </div>
-                <div class="flex items-center gap-2">
+                <div v-if="!g.required" class="flex items-center gap-2">
                   <button v-if="!editGroup[g.id]" @click="editGroup[g.id] = true"
                           class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 transition">✏️</button>
                   <button v-if="editGroup[g.id]" @click="saveGroupName(g)"
                           class="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition">✓</button>
                   <button v-if="editGroup[g.id]" @click="editGroup[g.id] = false"
                           class="p-2 rounded-xl bg-gray-400 hover:bg-gray-500 text-white transition">✕</button>
-                  <button @click="deleteGroup(g.id)"
+                  <button @click="deleteGroup(g)"
                           class="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition">🗑</button>
                 </div>
               </div>

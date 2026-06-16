@@ -19,6 +19,7 @@ from backend.services.ticket_permissions import (
     set_ticket_permissions_safe, load_ticket_permissions,
     load_group_ticket_permissions, set_group_ticket_permissions,
 )
+from backend.services.workflow_state import is_required_group_name
 from backend.utils.config import config
 from backend.utils.logger import logger
 from backend.utils.ticket_labels import TICKET_LABELS
@@ -312,6 +313,8 @@ class GroupOut(BaseModel):
     name: str
     members: list[str]
     distributions: list[str]
+    # True, wenn die Gruppe von den Workflows benötigt wird (nicht lösch-/umbenennbar).
+    required: bool = False
 
 class GroupCreate(BaseModel):
     name: str
@@ -336,13 +339,24 @@ def _validate_emails(emails: list[str]) -> list[str]:
     return list(set(cleaned))
 
 
+def _group_out(g: dict) -> GroupOut:
+    """GroupOut inkl. required-Flag aus einem gespeicherten Gruppen-Dict bauen."""
+    return GroupOut(
+        id=g["id"],
+        name=g["name"],
+        members=g.get("members", []),
+        distributions=g.get("distributions", []),
+        required=is_required_group_name(g["name"]),
+    )
+
+
 @router.get("/settings/groups", response_model=DataResponse[list[GroupOut]])
 def list_groups(user: dict = Depends(get_current_user)):
     require_admin(user)
     groups = get_groups()
     for g in groups:
         g.setdefault("distributions", [])
-    return DataResponse(data=[GroupOut(**g) for g in groups])
+    return DataResponse(data=[_group_out(g) for g in groups])
 
 
 @router.post("/settings/groups", response_model=DataResponse[GroupOut], status_code=201)
@@ -362,7 +376,7 @@ def create_group(payload: GroupCreate, user: dict = Depends(get_current_user)):
     }
     groups.append(new)
     save_groups(groups)
-    return DataResponse(data=GroupOut(**new))
+    return DataResponse(data=_group_out(new))
 
 
 @router.put("/settings/groups/{group_id}", response_model=DataResponse[GroupOut])
@@ -377,25 +391,41 @@ def update_group(
     for m in payload.members:
         if m not in valid_ids:
             raise HTTPException(400, f"Ungültige User-ID '{m}'")
+    new_name = payload.name.strip()
     groups = get_groups()
     for g in groups:
         if g["id"] == group_id:
-            g["name"]          = payload.name.strip()
+            # Pflichtgruppen dürfen nicht umbenannt werden – der Workflow löst sie
+            # über den Namen auf. Mitglieder/Verteiler bleiben editierbar.
+            if is_required_group_name(g["name"]) and new_name.lower() != g["name"].lower():
+                raise HTTPException(
+                    409,
+                    f"Die Fachabteilung '{g['name']}' wird von den Workflows benötigt "
+                    f"und kann nicht umbenannt werden.",
+                )
+            g["name"]          = new_name
             g["members"]       = payload.members
             g["distributions"] = _validate_emails(payload.distributions)
             save_groups(groups)
-            return DataResponse(data=GroupOut(**g))
+            return DataResponse(data=_group_out(g))
     raise HTTPException(404, "Gruppe nicht gefunden")
 
 
 @router.delete("/settings/groups/{group_id}", status_code=204)
 def delete_group(group_id: str, user: dict = Depends(get_current_user)):
     require_admin(user)
-    groups   = get_groups()
-    updated  = [g for g in groups if g["id"] != group_id]
-    if len(updated) == len(groups):
+    groups = get_groups()
+    target = next((g for g in groups if g["id"] == group_id), None)
+    if not target:
         raise HTTPException(404, "Gruppe nicht gefunden")
-    save_groups(updated)
+    # Workflow-Pflichtgruppen dürfen nicht gelöscht werden.
+    if is_required_group_name(target["name"]):
+        raise HTTPException(
+            409,
+            f"Die Fachabteilung '{target['name']}' wird von den Workflows benötigt "
+            f"und kann nicht gelöscht werden.",
+        )
+    save_groups([g for g in groups if g["id"] != group_id])
 
 
 @router.post("/settings/groups/{group_id}/members", response_model=DataResponse[GroupOut])

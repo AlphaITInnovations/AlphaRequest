@@ -154,6 +154,45 @@ DEPARTMENT_BUILDERS = {
 }
 
 
+# Fachabteilungen (Gruppen), die von den Workflow-Definitionen referenziert werden.
+# Diese Liste muss mit den oben in den DEPARTMENT_BUILDERS verwendeten Namen
+# synchron gehalten werden (die Namen stecken in den Builder-Closures und sind
+# nicht automatisch auslesbar). assign_group-Phasen werden dagegen automatisch
+# aus TICKET_PHASES ergänzt.
+_DEPARTMENT_GROUP_NAMES = [
+    "IT", "Personalabteilung", "Fuhrpark", "Miete", "Marketing", "Hotelbuchung",
+]
+
+
+def required_group_names() -> list[str]:
+    """
+    Namen aller Gruppen, die für die Workflows zwingend existieren müssen:
+    die Fachabteilungen aus den DEPARTMENT_BUILDERS plus alle fest zugewiesenen
+    Gruppen (assign_group) aus TICKET_PHASES. Diese Gruppen werden beim Start
+    angelegt (sofern sie fehlen) und dürfen nicht gelöscht/umbenannt werden –
+    unabhängig davon, ob Mitglieder vorhanden sind.
+    """
+    names = list(_DEPARTMENT_GROUP_NAMES)
+    for phase_defs in TICKET_PHASES.values():
+        for pd in phase_defs:
+            if getattr(pd, "assign_group", None):
+                names.append(pd.assign_group)
+
+    seen, out = set(), []
+    for n in names:
+        if n.lower() not in seen:
+            seen.add(n.lower())
+            out.append(n)
+    return out
+
+
+def is_required_group_name(name: str) -> bool:
+    """True, wenn eine Gruppe mit diesem Namen von den Workflows benötigt wird."""
+    if not name:
+        return False
+    return name.strip().lower() in {n.lower() for n in required_group_names()}
+
+
 # ============================================================
 # Workflow builder
 # ============================================================
