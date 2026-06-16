@@ -32,3 +32,14 @@ def init_db():
         backfill_phase_responsibility()
     except Exception as e:
         logger.warning(f"Responsibility-Backfill übersprungen: {e}")
+
+    # Workflow-Pflichtgruppen (Fachabteilungen) sicherstellen: fehlende werden
+    # leer angelegt, damit jeder Workflow eine zuständige Gruppe auflösen kann.
+    try:
+        from backend.services.workflow_state import required_group_names
+        from backend.database.groups import ensure_required_groups
+        created = ensure_required_groups(required_group_names())
+        if created:
+            logger.info("Fehlende Pflichtgruppen angelegt: %s", ", ".join(created))
+    except Exception as e:
+        logger.warning(f"Pflichtgruppen-Check übersprungen: {e}")

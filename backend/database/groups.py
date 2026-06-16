@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Optional
 
 from backend.database.settings import settings_get, settings_set
@@ -24,6 +25,32 @@ def save_groups(groups: List[dict]) -> None:
     if not isinstance(groups, list):
         raise ValueError("Groups must be list")
     settings_set("TICKET_GROUPS", groups)
+
+
+def ensure_required_groups(required_names: List[str]) -> List[str]:
+    """
+    Stellt sicher, dass für jeden geforderten Namen eine Gruppe existiert
+    (case-insensitive). Fehlende Gruppen werden leer angelegt (keine Mitglieder,
+    keine Verteiler). Idempotent. Gibt die Namen der neu angelegten Gruppen zurück.
+    """
+    groups = get_groups()
+    existing = {g.get("name", "").strip().lower() for g in groups}
+    created: List[str] = []
+    for name in required_names:
+        key = (name or "").strip().lower()
+        if not key or key in existing:
+            continue
+        groups.append({
+            "id": uuid.uuid4().hex,
+            "name": name,
+            "members": [],
+            "distributions": [],
+        })
+        existing.add(key)
+        created.append(name)
+    if created:
+        save_groups(groups)
+    return created
 
 
 # ── Lookups ───────────────────────────────────────────────────────────────────
