@@ -1,8 +1,6 @@
 TODO:
 
-
-fachabteilungen ensure
-
+personalnummer automatisch generieren wenn ticket erstellt wird
 
 BasisTicket:
 Bug dass in der navigation beide Felder "Neues Prozess Ticket" und "neues Ticket " weiß leuchten sobald ich auf der neues ticket seite bin
