@@ -249,10 +249,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       const { data: compData } = await companiesApi.list()
       companies.value = compData.data.companies
 
-      // Load department groups from API
+      // Load department groups from API (als 'hidden' markierte ausblenden)
       try {
-        const { data: groupsData } = await client.get<{ data: GroupOption[] }>('/settings/groups')
-        departments.value = groupsData.data
+        const { data: groupsData } =
+          await client.get<{ data: Array<GroupOption & { hidden?: boolean }> }>('/settings/groups')
+        departments.value = groupsData.data.filter(g => !g.hidden)
       } catch {
         departments.value = []
       }

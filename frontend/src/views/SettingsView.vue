@@ -149,7 +149,7 @@ function userName(id: string) {
 }
 
 // ── Groups ─────────────────────────────────────────────────────────────────────
-interface Group { id: string; name: string; members: string[]; distributions: string[]; required?: boolean }
+interface Group { id: string; name: string; members: string[]; distributions: string[]; required?: boolean; hidden?: boolean }
 const groups       = ref<Group[]>([])
 const newGroupName = ref('')
 const editGroup    = ref<Record<string, boolean>>({})
@@ -181,10 +181,21 @@ async function saveGroupName(g: Group) {
   try {
     const { data } = await client.put(`/settings/groups/${g.id}`, {
       name: editName.value[g.id], members: g.members, distributions: g.distributions,
+      hidden: g.hidden ?? false,
     })
     Object.assign(g, data.data)
     editGroup.value[g.id] = false
     showToast('Gespeichert', true)
+  } catch { showToast('Fehler', false) }
+}
+async function toggleHidden(g: Group) {
+  const next = !g.hidden
+  try {
+    const { data } = await client.put(`/settings/groups/${g.id}`, {
+      name: g.name, members: g.members, distributions: g.distributions, hidden: next,
+    })
+    Object.assign(g, data.data)
+    showToast(next ? 'In Dropdowns ausgeblendet' : 'In Dropdowns sichtbar', true)
   } catch { showToast('Fehler', false) }
 }
 async function deleteGroup(g: Group) {
@@ -219,6 +230,7 @@ async function addDistribution(g: Group) {
   try {
     const { data } = await client.put(`/settings/groups/${g.id}`, {
       name: g.name, members: g.members, distributions: [...g.distributions, mail],
+      hidden: g.hidden ?? false,
     })
     Object.assign(g, data.data)
     distInput.value[g.id] = ''
@@ -229,6 +241,7 @@ async function removeDistribution(g: Group, mail: string) {
   const { data } = await client.put(`/settings/groups/${g.id}`, {
     name: g.name, members: g.members,
     distributions: g.distributions.filter(m => m !== mail),
+    hidden: g.hidden ?? false,
   })
   Object.assign(g, data.data)
 }
@@ -671,6 +684,15 @@ const navGroups = computed(() => {
                           class="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition">🗑</button>
                 </div>
               </div>
+              <!-- Sichtbarkeit in Auswahl-Dropdowns -->
+              <label class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300 cursor-pointer select-none w-fit">
+                <input type="checkbox" :checked="!!g.hidden" @change="toggleHidden(g)"
+                       class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]
+                              focus:ring-[#3EAAB8]/30 cursor-pointer" />
+                <span>Nicht in Auswahl-Dropdowns anzeigen</span>
+                <span class="text-xs text-gray-400 hidden sm:inline">– für Gruppen, die nur über spezielle Phasen automatisch zugewiesen werden</span>
+              </label>
+
               <div class="grid md:grid-cols-2 gap-6">
                 <div class="space-y-3">
                   <div class="flex items-center justify-between">

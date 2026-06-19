@@ -315,6 +315,9 @@ class GroupOut(BaseModel):
     distributions: list[str]
     # True, wenn die Gruppe von den Workflows benötigt wird (nicht lösch-/umbenennbar).
     required: bool = False
+    # True → Gruppe wird in Auswahl-Dropdowns im Frontend nicht angezeigt
+    # (z.B. Gruppen, die nur über spezielle Phasen automatisch zugewiesen werden).
+    hidden: bool = False
 
 class GroupCreate(BaseModel):
     name: str
@@ -324,6 +327,7 @@ class GroupUpdate(BaseModel):
     name: str
     members: list[str]
     distributions: list[str]
+    hidden: bool = False
 
 class MemberIn(BaseModel):
     user_id: str
@@ -340,13 +344,14 @@ def _validate_emails(emails: list[str]) -> list[str]:
 
 
 def _group_out(g: dict) -> GroupOut:
-    """GroupOut inkl. required-Flag aus einem gespeicherten Gruppen-Dict bauen."""
+    """GroupOut inkl. required-/hidden-Flag aus einem gespeicherten Gruppen-Dict bauen."""
     return GroupOut(
         id=g["id"],
         name=g["name"],
         members=g.get("members", []),
         distributions=g.get("distributions", []),
         required=is_required_group_name(g["name"]),
+        hidden=bool(g.get("hidden", False)),
     )
 
 
@@ -406,6 +411,7 @@ def update_group(
             g["name"]          = new_name
             g["members"]       = payload.members
             g["distributions"] = _validate_emails(payload.distributions)
+            g["hidden"]        = bool(payload.hidden)
             save_groups(groups)
             return DataResponse(data=_group_out(g))
     raise HTTPException(404, "Gruppe nicht gefunden")
@@ -476,11 +482,15 @@ class GroupSimpleOut(BaseModel):
 
 @router.get("/groups", response_model=DataResponse[list[GroupSimpleOut]])
 def list_groups_public(user: dict = Depends(get_current_user)):
-    """Gibt alle Fachabteilungen zurück (id + name). Kein Admin nötig."""
+    """
+    Gibt die in Dropdowns auswählbaren Fachabteilungen zurück (id + name).
+    Als 'hidden' markierte Gruppen werden hier ausgeblendet. Kein Admin nötig.
+    """
     groups = get_groups()
     return DataResponse(data=[
         GroupSimpleOut(id=g["id"], name=g["name"])
         for g in groups
+        if not g.get("hidden", False)
     ])
 
 

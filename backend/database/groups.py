@@ -17,6 +17,8 @@ def get_groups() -> List[dict]:
             g["members"] = []
         if "distributions" not in g:
             g["distributions"] = []
+        if "hidden" not in g:
+            g["hidden"] = False
 
     return groups
 
