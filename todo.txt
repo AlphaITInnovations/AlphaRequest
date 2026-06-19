@@ -1,9 +1,10 @@
 TODO:
 Feature add: Im settings fachabteilungen soll es die möglichkeit geben im dropdown jeder auszuwählen, sodass JEDER eingeloggte user diesen tickettyp erstellen darf
-
-
+fachabteilung soll einen haken im frontend bekommen "nicht im dropdown anzeigen" -> dann sollen diese fachabtielungen nicht im frontend angezeigt werden (sinnvoll für spezielle phasen
 personalnummer automatisch generieren wenn ticket erstellt wird
-basisc ticket NUR an fachabteilungen zuweisbar, also im dropdown nur fachabteilungen
+
+
+FEATURE ADD: basisc ticket NUR an fachabteilungen zuweisbar, also im dropdown nur fachabteilungen
 
 
 neuer workflow für onboarding mitarbeider:
