@@ -10,11 +10,13 @@ const props = withDefaults(defineProps<{
   placeholder?:  string
   modelValue?:   { id: string; name: string } | null
   showGroups?:   boolean
+  showUsers?:    boolean
 }>(), {
   label:       'Benutzer',
   placeholder: 'Mitarbeiter:in auswählen…',
   modelValue:  null,
   showGroups:  false,
+  showUsers:   true,
 })
 
 const emit = defineEmits<{
@@ -38,8 +40,9 @@ const filteredGroups = computed(() => {
     : groups.value
 })
 
-// Filtered users
+// Filtered users (only when showUsers is true)
 const filteredUsers = computed(() => {
+  if (!props.showUsers) return []
   const q = search.value.toLowerCase().trim()
   return q
     ? users.value.filter(u => u.displayName.toLowerCase().includes(q))
@@ -53,12 +56,16 @@ onMounted(async () => {
   loading.value = true
   try {
     const [usersRes, groupsRes] = await Promise.all([
-      usersApi.list(),
+      props.showUsers
+        ? usersApi.list()
+        : Promise.resolve(null),
       props.showGroups
         ? client.get<{ data: GroupEntry[] }>('/groups')
         : Promise.resolve(null),
     ])
-    users.value = usersRes.data.data.users
+    if (usersRes) {
+      users.value = usersRes.data.data.users
+    }
     if (groupsRes) {
       groups.value = groupsRes.data.data
     }
@@ -180,7 +187,8 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
           <!-- ── Fachabteilungen ── -->
           <template v-if="filteredGroups.length > 0">
-            <div class="px-3.5 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-[#1A2130] sticky top-0">
+            <div v-if="showUsers"
+                 class="px-3.5 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-[#1A2130] sticky top-0">
               Fachabteilungen
             </div>
             <div

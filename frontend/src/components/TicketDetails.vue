@@ -5,13 +5,17 @@ import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
 import TicketWatchers from '@/components/tickets/TicketWatchers.vue'
 import type { TicketPriority, WorkflowPhase, Watcher } from '@/types/ticket'
 
-defineProps<{
+withDefaults(defineProps<{
   phase: 'create' | 'edit' | 'view'
   priority?: TicketPriority
   comment?: string
   accountable?: { id: string; name: string } | null
   accountableError?: boolean
-}>()
+  // Nur Fachabteilungen zuweisbar (keine Personen) – z.B. Basis-Tickets.
+  groupsOnly?: boolean
+}>(), {
+  groupsOnly: false,
+})
 
 // Phasen werden vom Detail-View bereitgestellt (nur im Edit-/View-Kontext vorhanden)
 const injectedPhases = inject<ComputedRef<WorkflowPhase[]> | null>('workflowPhases', null)
@@ -58,14 +62,16 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
       <template v-if="phase === 'create'">
         <div :class="accountableError ? 'ring-1 ring-red-400 rounded-xl' : ''">
           <UserSelect
-            label="Nächster Bearbeiter / Verantwortlicher *"
+            :label="groupsOnly ? 'Zuständige Fachabteilung *' : 'Nächster Bearbeiter / Verantwortlicher *'"
+            :placeholder="groupsOnly ? 'Fachabteilung auswählen…' : 'Mitarbeiter:in auswählen…'"
             :model-value="accountable"
             :show-groups="true"
+            :show-users="!groupsOnly"
             @update:model-value="emit('update:accountable', $event)"
           />
         </div>
         <p v-if="accountableError" class="mt-1 text-xs text-red-500">
-          Pflichtfeld – bitte einen Verantwortlichen auswählen.
+          {{ groupsOnly ? 'Pflichtfeld – bitte eine Fachabteilung auswählen.' : 'Pflichtfeld – bitte einen Verantwortlichen auswählen.' }}
         </p>
       </template>
 

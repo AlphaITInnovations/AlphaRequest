@@ -361,6 +361,13 @@ async def create_basis_ticket(
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
                         "description muss gültiges JSON sein")
 
+    # Basis-Tickets sind ausschließlich Fachabteilungen zuweisbar (keine Personen).
+    from backend.database.groups import get_groups
+    group_map = {g["id"]: g["name"] for g in get_groups()}
+    if data.assignee_id not in group_map:
+        raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                        "Basis-Tickets können nur einer Fachabteilung zugewiesen werden")
+
     now_str = datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M")
     title = f"{data.title.strip()} – {now_str}" if data.title.strip() else f"Basis-Ticket – {user['displayName']} – {now_str}"
 
@@ -396,26 +403,17 @@ async def create_basis_ticket(
     updated_workflow = _build_and_init_workflow(ticket)
     current_idx = updated_workflow.get("current_phase_index", 0)
 
-    # Zuständigkeit der Bearbeitungsphase in den Workflow schreiben (Person/Gruppe)
-    from backend.database.groups import get_groups
+    # Zuständigkeit der Bearbeitungsphase (immer eine Fachabteilung) in den
+    # Workflow schreiben + Verteiler der Gruppe benachrichtigen.
     from backend.services.workflow_state import set_phase_responsibility
-    group_map = {g["id"]: g["name"] for g in get_groups()}
-    if data.assignee_id in group_map:
-        group_name = group_map[data.assignee_id]
-        set_phase_responsibility(ticket_id, current_idx,
-            {"kind": "group", "id": data.assignee_id, "name": group_name})
-        for g in get_groups():
-            if g["id"] == data.assignee_id:
-                for mail in g.get("distributions", []):
-                    if mail:
-                        send_newrequest_mail(mail.strip(), data.priority, title, TicketType.basis_ticket, ticket_id)
-                break
-    else:
-        set_phase_responsibility(ticket_id, current_idx,
-            {"kind": "user", "id": data.assignee_id, "name": data.assignee_name})
-        mail_to = get_cached_user_mail(request.app, data.assignee_id)
-        if mail_to:
-            send_newrequest_mail(mail_to, data.priority, title, TicketType.basis_ticket, ticket_id)
+    set_phase_responsibility(ticket_id, current_idx,
+        {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]})
+    for g in get_groups():
+        if g["id"] == data.assignee_id:
+            for mail in g.get("distributions", []):
+                if mail:
+                    send_newrequest_mail(mail.strip(), data.priority, title, TicketType.basis_ticket, ticket_id)
+            break
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
