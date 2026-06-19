@@ -241,16 +241,36 @@ async def create_ticket(
         raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
                         f"Unbekannter Assignee '{data.assignee_id}'")
     try:
-        json.loads(data.description)
+        desc_obj = json.loads(data.description)
     except Exception:
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
                         "description muss gültiges JSON sein")
 
-    title = generate_title(data.ticket_type, user, data.description)
+    description = data.description
+    # Onboarding: Personalnummer wird automatisch bei der Auftragserstellung
+    # vergeben (kein manueller Button mehr im Formular). Erst hier verbrauchen,
+    # damit abgebrochene Formulare keine Nummern „verbrennen". Nur wenn noch
+    # keine gesetzt ist.
+    if data.ticket_type == TicketType.zugang_beantragen:
+        personal = desc_obj.get("personal") or {}
+        if not str(personal.get("personal_number") or "").strip():
+            from backend.services.personalnummer_generator import next_personalnummer
+            try:
+                personal["personal_number"] = str(next_personalnummer())
+            except RuntimeError as e:
+                raise api_error(409, "PERSONALNUMMER_FAILED", str(e))
+            except Exception:
+                logger.exception("Personalnummer-Vergabe fehlgeschlagen")
+                raise api_error(500, "PERSONALNUMMER_FAILED",
+                                "Personalnummer konnte nicht vergeben werden")
+            desc_obj["personal"] = personal
+            description = json.dumps(desc_obj, ensure_ascii=False)
+
+    title = generate_title(data.ticket_type, user, description)
     ticket_id = request.app.state.manager.create_ticket(
         title=title,
         ticket_type=data.ticket_type,
-        description=data.description,
+        description=description,
         owner_id=user["id"],
         owner_name=user["displayName"],
         owner_info=json.dumps(user, ensure_ascii=False),

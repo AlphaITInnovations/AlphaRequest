@@ -1,7 +1,6 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { client } from '@/api/client'
 import { companiesApi } from '@/api/companies'
-import { personalnummerApi } from '@/api/personalnummer'
 import { useRouter } from 'vue-router'
 import type { TicketPriority } from '@/types/ticket'
 
@@ -110,7 +109,7 @@ const RULES_CREATE: Record<string, Rule> = {
   'personal.cost_center':      { required: true },
   'personal.location':         { required: true },
   'personal.contract_company': { required: true },
-  'personal.personal_number':  { required: true },
+  // personal_number wird beim Erstellen automatisch vergeben (Backend) – kein Pflichtfeld.
   'personal.supervisor_hr_id': { required: true },
   'personal.contact_person_id':{ required: true },
   'it.timebutler.vacation_year':  { required: true },
@@ -306,18 +305,6 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     }
   }
 
-  // ── Personalnummer ──────────────────────────────────────────────────────────
-
-  async function generatePersonalnummer() {
-    if (form.personal.personal_number) return
-    try {
-      const { data } = await personalnummerApi.next()
-      form.personal.personal_number = String(data.data.personalnummer)
-    } catch {
-      alert('Fehler beim Generieren der Personalnummer')
-    }
-  }
-
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   function buildDescription(): string {
@@ -414,6 +401,6 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     form, companies, departments, loading, submitting, pendingConfirm, pendingComplete,
     validationTriggered, errors,
     init, validate, isInvalid, fieldClass, onSignatureTitleInput,
-    generatePersonalnummer, submitCreate, confirmCreate, submitEdit, confirmComplete,
+    submitCreate, confirmCreate, submitEdit, confirmComplete,
   }
 }
