@@ -42,6 +42,7 @@ function handleCreate() {
             :comment="form.comment"
             :accountable="form.accountable"
             :accountable-error="validationTriggered && isInvalid('accountable')"
+            :groups-only="true"
             @update:priority="form.priority = $event"
             @update:comment="form.comment = $event"
             @update:accountable="form.accountable = $event"
