@@ -1,33 +1,16 @@
 TODO:
+Feature add: Im settings fachabteilungen soll es die möglichkeit geben im dropdown jeder auszuwählen, sodass JEDER eingeloggte user diesen tickettyp erstellen darf
+
 
 personalnummer automatisch generieren wenn ticket erstellt wird
-
-BasisTicket:
-Bug dass in der navigation beide Felder "Neues Prozess Ticket" und "neues Ticket " weiß leuchten sobald ich auf der neues ticket seite bin
-im edit view soll erst neuer eintrag und darunter verlauf stehen sodass es zeitluch richtig sortiert ist
-Im Edit view soll der verantworliche weiterhin anpassbar sein, also dass man das ticket auch wieder weitergeben kann
-Grundsätzlicher Bug in der Navigation sobald ich im edit view oder im view view eines tickets bin dann wird es in der navigation so angezeigt wie wenn ich unter "Alle Aufträge bin", da soll dann einfach gar nicht ausgewählt sein
-In dashboardview anderes icon für prozess und basis ticket
-basis ticket NUR an abteilungen
+basisc ticket NUR an fachabteilungen zuweisbar, also im dropdown nur fachabteilungen
 
 
+neuer workflow für onboarding mitarbeider:
+nach erstellung spezielle phase wo mail an herrn lutz (auch über fachabteilung auswählbar) und in der mail dann
+ein ja und nein knopf ob genehmigt oder abgelehnt (evtl über webhooks oder so) und jenachdem ob ja oder nach in phase3 oder
+ticket status auf abgelehnt
 
-Dashbaord anpassungen:
-Fachabteilungen weg
-Meiner Abteilung beides phase2 und phase3 (irgendwie visuell abgrenzen)
-von mir erstellt -> von mir beobachtet (beobachtung feature hinzufügen, erstellen = automtaisch beobachten, cc im ticket ebenfalls beobachtung)
-
-
-
-antrag hotelbuchung
-Beantragung Buchung
-    -> an buchungsabteilung
-    -> nach Buchung nochma zu frau Alina Merica 
-    -> Export pdf mit angabe (beantrager und alle Infos, reisegrund, Niederlassung, zeitstem)
-
-
-bei auswahl im dark mode schrift schlecht leserlicht
-kompletter audit log als neue datenbank tabelle mit alles wichtigen sachen: edit, remove,
 
 
 
