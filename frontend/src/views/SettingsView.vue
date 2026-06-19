@@ -53,10 +53,15 @@ interface PermType { key: string; label: string; allowed_users: string[]; allowe
 const permissions  = ref<PermType[]>([])
 const permSelected = ref<Record<string, { id: string; name: string } | null>>({})
 
+// Sentinel (muss mit backend ticket_permissions.EVERYONE übereinstimmen):
+// ist dieser Wert in allowed_groups, darf JEDER eingeloggte Nutzer den Typ erstellen.
+const EVERYONE = '__everyone__'
+
 // AD-Gruppen für Dropdown
 interface AdGroup { id: string; displayName: string; description: string }
 const adGroups = ref<AdGroup[]>([])
 const adGroupSearch = ref<Record<string, string>>({})
+const adGroupOpen   = ref<Record<string, boolean>>({})
 
 async function loadAdGroups() {
   try {
@@ -75,7 +80,16 @@ function filteredAdGroups(key: string): AdGroup[] {
 }
 
 function adGroupName(id: string): string {
+  if (id === EVERYONE) return 'Jeder (alle eingeloggten Nutzer)'
   return adGroups.value.find(g => g.id === id)?.displayName ?? id
+}
+
+// "Jeder"-Eintrag im Dropdown anzeigen, solange er noch nicht gesetzt ist und
+// (kein Suchtext oder passend zu „jeder"/„alle").
+function showEveryoneOption(t: PermType): boolean {
+  if (t.allowed_groups.includes(EVERYONE)) return false
+  const q = (adGroupSearch.value[t.key] ?? '').toLowerCase().trim()
+  return q === '' || 'jeder'.includes(q) || 'alle'.includes(q)
 }
 
 async function loadPermissions() {
@@ -84,6 +98,7 @@ async function loadPermissions() {
   permissions.value.forEach(t => {
     permSelected.value[t.key] = null
     adGroupSearch.value[t.key] = ''
+    adGroupOpen.value[t.key]   = false
   })
 }
 async function addPermUser(key: string) {
@@ -537,6 +552,13 @@ const navGroups = computed(() => {
                 ⚠ Niemand darf diesen Auftragstyp erstellen
               </div>
 
+              <!-- Hinweis wenn "Jeder" aktiv ist -->
+              <div v-if="t.allowed_groups.includes(EVERYONE)"
+                   class="text-xs rounded-lg border border-emerald-300/60 bg-emerald-50 dark:bg-emerald-900/20
+                          text-emerald-700 dark:text-emerald-300 px-3 py-2">
+                🌐 Jeder eingeloggte Nutzer darf diesen Auftragstyp erstellen – zusätzliche Benutzer/Gruppen sind dafür nicht nötig.
+              </div>
+
               <div class="grid md:grid-cols-2 gap-6">
 
                 <!-- Benutzer -->
@@ -571,9 +593,11 @@ const navGroups = computed(() => {
                   </div>
                   <div class="flex flex-wrap gap-2 min-h-[36px]">
                     <span v-for="gid in t.allowed_groups" :key="gid"
-                          class="inline-flex items-center gap-1.5 rounded-full bg-purple-100 dark:bg-purple-900/20
-                                 text-purple-700 dark:text-purple-300 px-3 py-1 text-sm">
-                      {{ adGroupName(gid) }}
+                          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm"
+                          :class="gid === EVERYONE
+                            ? 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 font-medium'
+                            : 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300'">
+                      <span v-if="gid === EVERYONE">🌐</span>{{ adGroupName(gid) }}
                       <button @click="removePermGroup(t.key, gid)" class="hover:text-red-500 transition">✕</button>
                     </span>
                     <span v-if="t.allowed_groups.length === 0"
@@ -581,21 +605,32 @@ const navGroups = computed(() => {
                   </div>
                   <div class="relative">
                     <input v-model="adGroupSearch[t.key]"
-       placeholder="AD-Gruppe suchen…"
+       placeholder="AD-Gruppe oder „Jeder“ hinzufügen…"
        class="input w-full"
-       @focus="adGroupSearch[t.key] = adGroupSearch[t.key] ?? ''"
-       @blur="(adGroupSearch[t.key] = '', undefined)" />
+       @focus="adGroupOpen[t.key] = true"
+       @blur="adGroupOpen[t.key] = false; adGroupSearch[t.key] = ''" />
                     <!-- Dropdown -->
-                    <div v-if="adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0"
+                    <div v-if="adGroupOpen[t.key] && (showEveryoneOption(t) || (adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0))"
                          class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
                                 dark:border-white/10 bg-white dark:bg-[#263040] shadow-lg">
-                      <button v-for="g in filteredAdGroups(t.key).slice(0, 15)" :key="g.id"
-                              @mousedown.prevent="addPermGroup(t.key, g.id)"
-                              class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-[#3EAAB8]/10 transition
-                                     text-gray-900 dark:text-gray-100 flex items-center justify-between">
-                        <span>{{ g.displayName }}</span>
-                        <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[200px]">{{ g.description }}</span>
+                      <!-- „Jeder“ – alle eingeloggten Nutzer -->
+                      <button v-if="showEveryoneOption(t)"
+                              @mousedown.prevent="addPermGroup(t.key, EVERYONE)"
+                              class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-emerald-500/10 transition
+                                     text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-2
+                                     border-b border-gray-100 dark:border-white/5">
+                        🌐 Jeder (alle eingeloggten Nutzer)
                       </button>
+                      <!-- AD-Gruppen (nur bei Suchtext) -->
+                      <template v-if="adGroupSearch[t.key]?.length > 0">
+                        <button v-for="g in filteredAdGroups(t.key).slice(0, 15)" :key="g.id"
+                                @mousedown.prevent="addPermGroup(t.key, g.id)"
+                                class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-[#3EAAB8]/10 transition
+                                       text-gray-900 dark:text-gray-100 flex items-center justify-between">
+                          <span>{{ g.displayName }}</span>
+                          <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[200px]">{{ g.description }}</span>
+                        </button>
+                      </template>
                     </div>
                   </div>
                 </div>

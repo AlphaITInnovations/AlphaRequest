@@ -27,6 +27,11 @@ from backend.models.models import TicketType
 
 VALID_TICKET_TYPES: frozenset[str] = frozenset(t.value for t in TicketType)
 
+# Sentinel in den Gruppen-Permissions: ist dieser Wert für einen Tickettyp
+# gesetzt, darf JEDER eingeloggte Nutzer diesen Typ erstellen (unabhängig von
+# konkreten Usern/Gruppen). Wird wie eine "Gruppe" gespeichert/übertragen.
+EVERYONE: str = "__everyone__"
+
 
 def _perm(ticket_type: str) -> str:
     return f"create_{ticket_type}"
@@ -74,6 +79,15 @@ def can_user_create_ticket(
     if not ticket_type or not user_id:
         return False
 
+    group_perms = load_group_ticket_permissions()
+    allowed_groups = set(group_perms.get(ticket_type, []))
+
+    # 0. "Jeder": jeder eingeloggte Nutzer darf diesen Typ erstellen.
+    #    Bewusst vor dem get_user-Check, damit auch ein gerade erst eingeloggter
+    #    (noch nicht in der DB angelegter) Nutzer erstellen darf.
+    if EVERYONE in allowed_groups:
+        return True
+
     user = get_user(user_id)
     if not user:
         return False
@@ -83,11 +97,8 @@ def can_user_create_ticket(
         return True
 
     # 2. Gruppen-Permission
-    if user_group_ids:
-        group_perms = load_group_ticket_permissions()
-        allowed_groups = set(group_perms.get(ticket_type, []))
-        if allowed_groups & set(user_group_ids):
-            return True
+    if user_group_ids and (allowed_groups & set(user_group_ids)):
+        return True
 
     return False
 
@@ -100,12 +111,19 @@ def get_allowed_ticket_types_for_user(
     if not user_id:
         return []
 
-    user = get_user(user_id)
-    if not user:
-        return []
-
     valid = {t.value for t in TicketType}
     allowed = set()
+
+    group_perms = load_group_ticket_permissions()
+
+    # "Jeder"-Typen: für jeden eingeloggten Nutzer erlaubt
+    for ticket_type, group_ids in group_perms.items():
+        if ticket_type in valid and EVERYONE in group_ids:
+            allowed.add(ticket_type)
+
+    user = get_user(user_id)
+    if not user:
+        return sorted(allowed)
 
     # Direkte Permissions
     for perm in user.extra_permissions:
@@ -114,7 +132,6 @@ def get_allowed_ticket_types_for_user(
 
     # Gruppen-Permissions
     if user_group_ids:
-        group_perms = load_group_ticket_permissions()
         user_groups_set = set(user_group_ids)
         for ticket_type, group_ids in group_perms.items():
             if ticket_type in valid and user_groups_set & set(group_ids):
