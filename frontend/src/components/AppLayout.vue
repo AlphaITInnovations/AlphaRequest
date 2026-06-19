@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useTheme } from '@/composables/useTheme'
@@ -17,6 +17,14 @@ function isActive(path: string) {
   if (path === '/dashboard') return route.path === '/dashboard'
   return route.path.startsWith(path)
 }
+
+// Prozess-Ticket = /tickets/new und alle /tickets/new/:type AUSSER basis-ticket.
+// (Sonst würde /tickets/new/basis-ticket auch hier matchen, weil es mit
+//  /tickets/new beginnt – dann leuchten beide Buttons.)
+const isBasisTicketActive   = computed(() => route.path === '/tickets/new/basis-ticket')
+const isProcessTicketActive = computed(
+  () => route.path.startsWith('/tickets/new') && !isBasisTicketActive.value,
+)
 
 function navigate(path: string) {
   router.push(path)
@@ -102,7 +110,7 @@ defineProps<{ title?: string }>()
                 class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
                 :class="[
                   sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
-                  isActive('/tickets/new')
+                  isProcessTicketActive
                     ? 'bg-white text-[#3EAAB8] font-semibold shadow-sm'
                     : 'bg-white/20 hover:bg-white/30 text-white'
                 ]">
@@ -115,7 +123,7 @@ defineProps<{ title?: string }>()
                 class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
                 :class="[
                   sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
-                  isActive('/tickets/new/basis-ticket')
+                  isBasisTicketActive
                     ? 'bg-white text-[#3EAAB8] font-semibold shadow-sm'
                     : 'bg-white/20 hover:bg-white/30 text-white'
                 ]">
@@ -280,7 +288,7 @@ defineProps<{ title?: string }>()
           <div>
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Fehler melden / Feedback</h2>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Beschreibe kurz das Problem oder dein Feedback. Die aktuelle Seite wird automatisch mitgesendet.
+              Beschreibe kurz das Problem oder dein Feedback.
             </p>
           </div>
 
