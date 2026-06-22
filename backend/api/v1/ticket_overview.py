@@ -25,6 +25,7 @@ class TicketOverviewItem(BaseModel):
     created_at: str
     creator: str
     responsible: str = "—"   # aktuell zuständige Stelle (Person/Gruppe/Fachabteilung)
+    phase: str = "—"         # Label der aktuellen Workflow-Phase
 
 
 class DepartmentStatus(BaseModel):
@@ -60,6 +61,7 @@ class TicketOverviewDetail(BaseModel):
     description: dict
     departments: dict[str, DepartmentStatus]
     history: list[HistoryEvent]
+    phase: str = "—"   # Label der aktuellen Workflow-Phase
 
 
 # ── Permission helpers ─────────────────────────────────────────────────────────
@@ -92,6 +94,22 @@ def _fmt_dt(val) -> str:
     return str(val)
 
 
+def _current_phase_label(workflow: dict) -> str:
+    """Label der aktuell aktiven Phase, oder '—' (z.B. nach Archivierung)."""
+    phases = workflow.get("phases", [])
+    idx = workflow.get("current_phase_index", 0)
+    if 0 <= idx < len(phases):
+        return phases[idx].get("label") or "—"
+    return "—"
+
+
+def _dept_review_phase(workflow: dict) -> Optional[dict]:
+    for p in workflow.get("phases", []):
+        if p.get("type") == "department_review":
+            return p
+    return None
+
+
 # ── Endpunkte ──────────────────────────────────────────────────────────────────
 
 @router.get("/overview/tickets", response_model=ListResponse[TicketOverviewItem])
@@ -117,6 +135,7 @@ def list_overview_tickets(
             created_at=_fmt_dt(t.created_at),
             creator=t.owner_name,
             responsible=responsibility_label(t),
+            phase=_current_phase_label(t.workflow_state_parsed or {}),
         )
         for t in tickets
     ]
@@ -180,12 +199,16 @@ def get_overview_ticket(
         description = {}
 
     workflow = ticket.workflow_state_parsed or {}
-    # departments aus der department_review-Phase (neues Format), Fallback altes Format
-    dept_map = workflow.get("departments", {})
-    for phase in workflow.get("phases", []):
-        if phase.get("type") == "department_review":
-            dept_map = phase.get("departments", {})
-            break
+    # departments aus der department_review-Phase (neues Format), Fallback altes Format.
+    # Erst anzeigen, wenn die Durchführungs-Phase auch erreicht ist (nicht 'pending') –
+    # vorher (z.B. in Freigabe/BackOffice) sind die Fachabteilungen noch nicht „offen".
+    dept_phase = _dept_review_phase(workflow)
+    if dept_phase is not None:
+        dept_reached = dept_phase.get("status") != "pending"
+        dept_map = dept_phase.get("departments", {}) if dept_reached else {}
+    else:
+        # Altformat ohne Phasen: wie bisher anzeigen
+        dept_map = workflow.get("departments", {})
     departments = {
         gid: DepartmentStatus(
             name=d.get("name", gid),
@@ -231,4 +254,5 @@ def get_overview_ticket(
         description=description,
         departments=departments,
         history=history,
+        phase=_current_phase_label(workflow),
     ))

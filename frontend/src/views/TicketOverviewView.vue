@@ -11,7 +11,7 @@ const auth   = useAuthStore()
 interface TicketItem {
   id: number; title: string; type_key: string
   status: string; priority: string; created_at: string
-  creator: string; responsible: string
+  creator: string; responsible: string; phase: string
 }
 
 const tickets  = ref<TicketItem[]>([])
@@ -246,6 +246,7 @@ onMounted(load)
               <th class="th" @click="setSort('title')">Titel <span class="ico">{{ sortIcon('title') }}</span></th>
               <th class="th" @click="setSort('creator')">Ersteller <span class="ico">{{ sortIcon('creator') }}</span></th>
               <th class="th" @click="setSort('responsible')">Zuständig <span class="ico">{{ sortIcon('responsible') }}</span></th>
+              <th class="px-4 py-3 text-left whitespace-nowrap">Phase</th>
               <th class="th" @click="setSort('status')">Status <span class="ico">{{ sortIcon('status') }}</span></th>
               <th class="th" @click="setSort('priority')">Priorität <span class="ico">{{ sortIcon('priority') }}</span></th>
               <th class="px-4 py-3 text-right">Aktion</th>
@@ -265,6 +266,13 @@ onMounted(load)
               </td>
               <td class="px-4 py-3.5 text-gray-600 dark:text-gray-300">{{ t.creator }}</td>
               <td class="px-4 py-3.5 text-gray-600 dark:text-gray-300">{{ t.responsible }}</td>
+              <td class="px-4 py-3.5">
+                <span v-if="t.phase && t.phase !== '—'"
+                      class="text-xs font-medium px-2.5 py-1 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] whitespace-nowrap">
+                  {{ t.phase }}
+                </span>
+                <span v-else class="text-xs text-gray-400">—</span>
+              </td>
               <td class="px-4 py-3.5">
                 <span class="text-xs font-medium px-2.5 py-1 rounded-full"
                       :class="STATUS_CLASS[t.status] ?? 'bg-gray-100 text-gray-500'">
@@ -286,7 +294,7 @@ onMounted(load)
               </td>
             </tr>
             <tr v-if="paged.length === 0">
-              <td :colspan="auth.canManage ? 7 : 6" class="px-4 py-12 text-center text-sm text-gray-400 italic">
+              <td :colspan="auth.canManage ? 8 : 7" class="px-4 py-12 text-center text-sm text-gray-400 italic">
                 Keine Tickets gefunden
               </td>
             </tr>

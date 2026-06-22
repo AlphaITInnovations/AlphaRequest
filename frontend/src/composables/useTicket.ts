@@ -48,6 +48,14 @@ export function useTicket(ticketId: number) {
     return p?.departments ?? {}
   })
 
+  // Fachabteilungen erst anzeigen, wenn die Durchführungs-Phase erreicht ist
+  // (nicht mehr 'pending') – vorher (z.B. Freigabe/BackOffice) sind sie noch
+  // nicht „offen" und sollen nicht angezeigt werden.
+  const showReviewDepartments = computed(() => {
+    const p = phases.value.find(ph => ph.type === 'department_review')
+    return !!p && p.status !== 'pending'
+  })
+
   // Beobachter
   const watchers = computed<Watcher[]>(() => ticket.value?.watchers ?? [])
 
@@ -95,7 +103,7 @@ export function useTicket(ticketId: number) {
     ticket, loading, submitting,
     workflow, phases, currentPhase, currentView,
     isAssignmentPhase, isDeptReviewPhase, isRejected, isCompleted,
-    description, activeDepartments, reviewDepartments, watchers,
+    description, activeDepartments, reviewDepartments, showReviewDepartments, watchers,
     load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher,
   }
 }
