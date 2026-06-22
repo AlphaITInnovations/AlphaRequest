@@ -24,6 +24,7 @@ from backend.services.workflow_state import (
 )
 from backend.utils.ticket_labels import TICKET_LABELS
 from backend.utils.logger import logger
+from backend.metrics.ticket_metrics import tickets_created_total
 from datetime import datetime
 from zoneinfo import ZoneInfo
 router = APIRouter()
@@ -329,6 +330,7 @@ async def create_ticket(
         action="ticket_created",
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
+    tickets_created_total.labels(type=data.ticket_type.value).inc()
 
     # Beobachter: vom Client übergebene Liste (inkl. Ersteller), sonst nur Ersteller
     from backend.database.ticket_watchers import add_watcher
@@ -433,6 +435,7 @@ async def create_basis_ticket(
         action="ticket_created",
         details={"priority": data.priority, "ticket_type": "basis-ticket"},
     )
+    tickets_created_total.labels(type="basis-ticket").inc()
 
     # Beobachter: vom Client übergebene Liste (inkl. Ersteller), sonst nur Ersteller
     from backend.database.ticket_watchers import add_watcher
