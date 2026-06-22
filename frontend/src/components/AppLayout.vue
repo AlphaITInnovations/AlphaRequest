@@ -26,6 +26,13 @@ const isProcessTicketActive = computed(
   () => route.path.startsWith('/tickets/new') && !isBasisTicketActive.value,
 )
 
+// „Alle Aufträge" = die Liste selbst und ihre Detailansicht (/tickets/overview/:id).
+// NICHT die Arbeitsansicht /tickets/view/:type/:id (kommt vom Dashboard) und
+// nicht /tickets/new*.
+const isAuftraegeActive = computed(
+  () => route.path === '/tickets' || route.path.startsWith('/tickets/overview'),
+)
+
 function navigate(path: string) {
   router.push(path)
   mobileOpen.value = false
@@ -161,10 +168,10 @@ defineProps<{ title?: string }>()
            href="/tickets"
            class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
            :class="[
-             isActive('/tickets') && !isActive('/tickets/new') ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
+             isAuftraegeActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
              sidebarOpen ? '' : 'justify-center'
            ]">
-          <div v-if="isActive('/tickets') && !isActive('/tickets/new')" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
+          <div v-if="isAuftraegeActive" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
           <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
