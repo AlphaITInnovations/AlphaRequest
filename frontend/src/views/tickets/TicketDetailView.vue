@@ -24,7 +24,7 @@ const formCtx = entry?.useComposable('edit', ticketId)
 
 const { ticket, loading, submitting, phases, currentView,
         isDeptReviewPhase, isRejected,
-        description, activeDepartments, reviewDepartments, watchers,
+        description, activeDepartments, reviewDepartments, showReviewDepartments, watchers,
         load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher } = useTicket(ticketId)
 
 const watcherBusy = ref(false)
@@ -249,8 +249,8 @@ function goToEdit() {
                                 @add="onAddWatcher" @remove="onRemoveWatcher" />
               </div>
 
-              <!-- Fachabteilungen / Durchführung -->
-              <div v-if="objectKeys(reviewDepartments).length" class="py-5">
+              <!-- Fachabteilungen / Durchführung (erst ab Erreichen der Phase) -->
+              <div v-if="showReviewDepartments && objectKeys(reviewDepartments).length" class="py-5">
                 <p class="meta-label mb-2.5">Durchführung</p>
                 <ul class="space-y-2">
                   <li v-for="(dept, gid) in reviewDepartments" :key="gid"

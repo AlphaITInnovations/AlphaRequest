@@ -122,6 +122,12 @@ onMounted(async () => {
                 {{ STATUS_LABEL[data.status] ?? data.status }}
               </span>
             </div>
+            <div v-if="data.phase && data.phase !== '—'">
+              <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Phase</p>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8]">
+                {{ data.phase }}
+              </span>
+            </div>
             <div>
               <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Priorität</p>
               <p class="font-medium text-gray-900 dark:text-white capitalize">{{ data.priority }}</p>
