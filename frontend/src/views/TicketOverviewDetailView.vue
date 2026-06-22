@@ -100,7 +100,7 @@ onMounted(async () => {
           <p class="text-sm text-gray-400">Ticket #{{ data.id }}</p>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white mt-0.5">{{ data.title }}</h1>
         </div>
-        <button @click="router.push('/tickets')"
+        <button @click="router.push('/dashboard')"
                 class="px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10
                        text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition">
           ← Zur Übersicht
