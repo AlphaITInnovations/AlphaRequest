@@ -68,10 +68,13 @@ class TicketListResponse(BaseModel):
 class TicketCreateRequest(BaseModel):
     ticket_type: TicketType
     description: str
-    assignee_id: str
-    assignee_name: str
-    accountable_id: str
-    accountable_name: str
+    # Optional: Tickettypen, deren erste Phase eine feste Zuständigkeit hat
+    # (z.B. Onboarding → Freigabe Herr Lutz), kommen ohne Assignee aus. Andere
+    # Typen liefern weiterhin einen Assignee; create_ticket prüft das bei Bedarf.
+    assignee_id: Optional[str] = None
+    assignee_name: Optional[str] = None
+    accountable_id: Optional[str] = None
+    accountable_name: Optional[str] = None
     comment: str = ""
     priority: TicketPriority = TicketPriority.medium
     # Beobachter (inkl. Ersteller). Leer = Backend trägt nur den Ersteller ein.
