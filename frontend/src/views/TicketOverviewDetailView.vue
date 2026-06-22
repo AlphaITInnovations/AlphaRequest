@@ -14,6 +14,7 @@ import NiederlassungUmzugContentPanel from '@/components/tickets/NiederlassungUm
 import NiederlassungSchliessenContentPanel from '@/components/tickets/NiederlassungSchliessenContentPanel.vue'
 import MarketingStelleContentPanel from '@/components/tickets/MarketingStelleContentPanel.vue'
 import HotelbuchungContentPanel from '@/components/tickets/HotelbuchungContentPanel.vue'
+import BasisTicketContentPanel from '@/components/tickets/BasisTicketContentPanel.vue'
 
 const route  = useRoute()
 const router = useRouter()
@@ -31,6 +32,7 @@ const PANEL_MAP: Record<string, Component> = {
   'niederlassung-schliessen': NiederlassungSchliessenContentPanel,
   'marketing-stellenanzeige': MarketingStelleContentPanel,
   'hotelbuchung':             HotelbuchungContentPanel,
+  'basis-ticket':             BasisTicketContentPanel,
 }
 
 const contentPanel = computed(() =>
