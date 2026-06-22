@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-defineProps<{
+withDefaults(defineProps<{
   phase: 'create' | 'edit' | 'view'
   loading?: boolean
   confirmCreateOpen?:   boolean
@@ -10,7 +10,11 @@ defineProps<{
   departmentStatus?: string
   canComplete?:      boolean
   isAdmin?:          boolean
-}>()
+  // Beschriftung des „Abschließen"-Buttons (z.B. „Weitergeben" im BackOffice).
+  completeLabel?:    string
+}>(), {
+  completeLabel: 'Abschließen',
+})
 
 const emit = defineEmits<{
   'create':             []
@@ -111,7 +115,7 @@ const DEPT_STATUS_CLASS: Record<string, string> = {
                        bg-green-600 hover:bg-green-700 text-white
                        disabled:opacity-60 transition"
               >
-                Abschließen
+                {{ completeLabel }}
               </button>
             </template>
 
@@ -196,10 +200,10 @@ const DEPT_STATUS_CLASS: Record<string, string> = {
         <div class="bg-white dark:bg-[#212B3A] rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4
                     border border-gray-200 dark:border-white/[0.09]">
           <h3 class="text-base font-semibold text-gray-900 dark:text-white">
-            Auftrag abschließen
+            Auftrag {{ completeLabel.toLowerCase() }}
           </h3>
           <p class="text-sm text-gray-600 dark:text-gray-300">
-            Wollen Sie den Auftrag wirklich abschließen?
+            Wollen Sie den Auftrag wirklich {{ completeLabel.toLowerCase() }}?
             <br><br>
             Eine Bearbeitung ist danach nicht mehr möglich.
           </p>
@@ -213,7 +217,7 @@ const DEPT_STATUS_CLASS: Record<string, string> = {
             <button @click="emit('complete-confirmed')"
                     class="px-4 py-2 rounded-xl text-sm font-medium
                            bg-red-600 hover:bg-red-700 text-white transition">
-              Abschließen
+              {{ completeLabel }}
             </button>
           </div>
         </div>

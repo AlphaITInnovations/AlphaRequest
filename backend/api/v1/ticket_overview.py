@@ -62,6 +62,7 @@ class TicketOverviewDetail(BaseModel):
     departments: dict[str, DepartmentStatus]
     history: list[HistoryEvent]
     phase: str = "—"   # Label der aktuellen Workflow-Phase
+    phases: list[dict] = []   # Workflow-Phasen (für die Fortschritts-Anzeige)
 
 
 # ── Permission helpers ─────────────────────────────────────────────────────────
@@ -255,4 +256,5 @@ def get_overview_ticket(
         departments=departments,
         history=history,
         phase=_current_phase_label(workflow),
+        phases=workflow.get("phases", []),
     ))

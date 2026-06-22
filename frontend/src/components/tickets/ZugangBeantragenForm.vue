@@ -502,6 +502,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
     <TicketActionBar
       :phase="phase"
       :loading="submitting"
+      :complete-label="stage === 'backoffice' ? 'Weitergeben' : 'Abschließen'"
       :confirm-create-open="ctx.pendingConfirm.value"
       :confirm-complete-open="ctx.pendingComplete.value"
       @create="ctx.submitCreate()"

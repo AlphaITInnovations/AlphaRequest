@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketHistoryTimeline from '@/views/TicketHistoryTimeline.vue'
+import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
 import ZugangBeantragenContentPanel from '@/components/tickets/ZugangBeantragenContentPanel.vue'
 // Weitere Panels hier importieren sobald sie erstellt wurden:
 import ZugangSperrenContentPanel from '@/components/tickets/ZugangSperrenContentPanel.vue'
@@ -110,6 +111,13 @@ onMounted(async () => {
 
         <!-- ── Sidebar ── -->
         <aside class="space-y-4">
+
+          <!-- Fortschritt -->
+          <div v-if="(data.phases ?? []).length"
+               class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                      rounded-2xl shadow-sm p-5">
+            <PhaseProgress :phases="data.phases" />
+          </div>
 
           <!-- Übersicht -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
