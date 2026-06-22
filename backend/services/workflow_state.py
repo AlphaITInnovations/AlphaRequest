@@ -193,6 +193,22 @@ def is_required_group_name(name: str) -> bool:
     return name.strip().lower() in {n.lower() for n in required_group_names()}
 
 
+def assign_group_names() -> list[str]:
+    """
+    Namen aller Gruppen, die einer Phase fest zugewiesen sind (assign_group).
+    Diese Gruppen werden nur automatisch über den Workflow zugewiesen und sollen
+    daher in Auswahl-Dropdowns nicht auftauchen (hidden).
+    """
+    seen, out = set(), []
+    for phase_defs in TICKET_PHASES.values():
+        for pd in phase_defs:
+            name = getattr(pd, "assign_group", None)
+            if name and name.lower() not in seen:
+                seen.add(name.lower())
+                out.append(name)
+    return out
+
+
 # ============================================================
 # Workflow builder
 # ============================================================

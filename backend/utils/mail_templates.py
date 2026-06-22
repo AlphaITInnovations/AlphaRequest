@@ -79,6 +79,8 @@ BASE_TEMPLATE = """\
                 {content_html}
               </div>
 
+              {action_html}
+
               <div style="padding-top:16px; border-top:1px solid {border}; margin-top:18px;"></div>
             </td>
           </tr>
@@ -119,6 +121,7 @@ def render_corporate_email(
     info_box_url: Optional[str] = None,  # HEADLINE link
     footer_text: Optional[str] = None,
     legal_hint: str = "Bitte nicht auf diese E-Mail antworten.",
+    action_html: str = "",  # optionaler ROH-HTML-Block (z.B. Aktions-Buttons) – NICHT escaped
 ) -> str:
     """
     Corporate email template.
@@ -161,6 +164,7 @@ def render_corporate_email(
         headline_html=headline_html,
         intro_html=intro_html,
         content_html=content_html,
+        action_html=action_html or "",
         footer_text=_esc(footer_text or b.footer_text),
         legal_hint=_esc(legal_hint),
     )

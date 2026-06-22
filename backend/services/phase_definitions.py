@@ -15,6 +15,7 @@ class PhaseView(str, Enum):
     form = "form"          # editierbares Formular
     readonly = "readonly"  # read-only Panel
     export = "export"      # Export-Ansicht (Daten + PDF-Export)
+    approval = "approval"  # Freigabe-Ansicht (read-only Daten + Freigeben/Ablehnen)
 
 
 @dataclass
@@ -47,7 +48,18 @@ _DURCHFUEHRUNG = lambda: PhaseDefinition("durchfuehrung", "Durchführung", Phase
 
 
 TICKET_PHASES: dict[TicketType, List[PhaseDefinition]] = {
-    TicketType.zugang_beantragen:      _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),
+    # Onboarding Mitarbeiter:innen – mehrstufig:
+    #   Erstellung (Basisfelder) → Freigabe Herr Lutz (Mail JA/NEIN + In-App)
+    #   → BackOffice (Felder + nächsten Bearbeiter wählen) → Bearbeitung → Durchführung
+    TicketType.zugang_beantragen: _flow(
+        _ERSTELLUNG(),
+        PhaseDefinition("freigabe", "Freigabe Herr Lutz", PhaseType.assignment,
+                        view=PhaseView.approval, assign_group="FreigabeHerrLutz"),
+        PhaseDefinition("backoffice", "BackOffice", PhaseType.assignment,
+                        assign_group="BackOffice"),
+        _BEARBEITUNG(),
+        _DURCHFUEHRUNG(),
+    ),
     TicketType.zugang_sperren:         _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),
     TicketType.hardware:               _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),
     TicketType.niederlassung_anmelden: _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),

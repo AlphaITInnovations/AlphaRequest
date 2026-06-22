@@ -29,14 +29,18 @@ def save_groups(groups: List[dict]) -> None:
     settings_set("TICKET_GROUPS", groups)
 
 
-def ensure_required_groups(required_names: List[str]) -> List[str]:
+def ensure_required_groups(required_names: List[str], hidden_names: Optional[List[str]] = None) -> List[str]:
     """
     Stellt sicher, dass für jeden geforderten Namen eine Gruppe existiert
     (case-insensitive). Fehlende Gruppen werden leer angelegt (keine Mitglieder,
-    keine Verteiler). Idempotent. Gibt die Namen der neu angelegten Gruppen zurück.
+    keine Verteiler). Neu angelegte Gruppen, deren Name in hidden_names steht,
+    werden als 'hidden' markiert (nicht in Auswahl-Dropdowns sichtbar) – nur bei
+    Neuanlage, ein Admin kann das später ändern. Idempotent. Gibt die Namen der
+    neu angelegten Gruppen zurück.
     """
     groups = get_groups()
     existing = {g.get("name", "").strip().lower() for g in groups}
+    hidden_set = {(n or "").strip().lower() for n in (hidden_names or [])}
     created: List[str] = []
     for name in required_names:
         key = (name or "").strip().lower()
@@ -47,6 +51,7 @@ def ensure_required_groups(required_names: List[str]) -> List[str]:
             "name": name,
             "members": [],
             "distributions": [],
+            "hidden": key in hidden_set,
         })
         existing.add(key)
         created.append(name)
