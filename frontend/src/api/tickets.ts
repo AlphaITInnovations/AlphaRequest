@@ -13,7 +13,8 @@ export const ticketsApi = {
   get:     (id: number)                     => client.get<DataResponse<Ticket>>(`/tickets/${id}`),
   create:  (data: TicketCreateRequest)      => client.post<DataResponse<Ticket>>('/tickets', data),
   update:  (id: number, data: TicketUpdateRequest) => client.patch<DataResponse<Ticket>>(`/tickets/${id}`, data),
-  submit:  (id: number)                     => client.post<DataResponse<Ticket>>(`/tickets/${id}/submit`),
+  submit:  (id: number, body?: { assignee_id?: string; assignee_name?: string }) =>
+    client.post<DataResponse<Ticket>>(`/tickets/${id}/submit`, body ?? {}),
   reject:  (id: number, message: string)    => client.post<DataResponse<Ticket>>(`/tickets/${id}/reject`, { message }),
   archive: (id: number)                     => client.post<DataResponse<Ticket>>(`/admin/tickets/${id}/archive`),
   remove:  (id: number)                     => client.delete(`/tickets/${id}`),

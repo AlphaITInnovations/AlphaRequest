@@ -66,6 +66,18 @@ async function handleArchive() {
   }
 }
 
+// Freigabe-Phase: Freigeben (= Phase abschließen → BackOffice) bzw. Ablehnen.
+const approving = ref(false)
+async function handleApprove() {
+  approving.value = true
+  try {
+    await ticketsApi.submit(ticketId)
+    router.push('/dashboard')
+  } finally {
+    approving.value = false
+  }
+}
+
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
   archived: 'Archiviert', rejected: 'Abgelehnt',
@@ -309,6 +321,28 @@ function goToEdit() {
                            disabled:opacity-50 disabled:cursor-not-allowed transition flex-shrink-0">
               {{ archiving ? 'Wird archiviert…' : 'Archivieren' }}
             </button>
+          </div>
+        </div>
+
+        <!-- Action bar (approval mode): Freigeben / Ablehnen -->
+        <div v-else-if="currentView === 'approval' && !isRejected" class="sticky bottom-4 z-40 mt-4">
+          <div class="border border-gray-200 dark:border-white/[0.09] bg-white/95 dark:bg-[#212B3A]/95
+                      backdrop-blur rounded-2xl shadow-lg py-3 px-4 flex items-center justify-between gap-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Antrag prüfen und freigeben oder ablehnen.
+            </p>
+            <div class="flex items-center gap-3 flex-shrink-0">
+              <button @click="showRejectModal = true"
+                      class="px-6 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-700 text-white
+                             transition">
+                ✗ Ablehnen
+              </button>
+              <button @click="handleApprove" :disabled="approving"
+                      class="px-6 py-2 rounded-xl text-sm font-medium bg-green-600 hover:bg-green-700 text-white
+                             disabled:opacity-50 disabled:cursor-not-allowed transition">
+                {{ approving ? 'Wird freigegeben…' : '✓ Freigeben' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

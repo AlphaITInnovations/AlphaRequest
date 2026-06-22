@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const {
   form, companies, departments, submitting, fieldClass, isInvalid,
-  validationTriggered, onSignatureTitleInput,
+  validationTriggered, onSignatureTitleInput, stage,
 } = props.ctx
 
 const BUNDESLAENDER = [
@@ -50,6 +50,9 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
             :accountable="form.accountable"
             :accountable-name="form.accountable?.name"
             :accountable-error="validationTriggered && isInvalid('accountable')"
+            :accountable-locked="stage === 'erstellung'"
+            accountable-locked-hint="Wird automatisch Herrn Lutz zur Freigabe vorgelegt."
+            :accountable-editable="stage === 'backoffice'"
             @update:priority="form.priority = $event"
             @update:comment="form.comment = $event"
             @update:accountable="form.accountable = $event"
@@ -61,9 +64,49 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
       <section class="flex-1 space-y-6">
 
         <!-- ═══════════════════════════════
-             A. BASISDATEN
+             ERSTELLUNG: nur Basisfelder (Rest folgt im BackOffice)
         ═══════════════════════════════ -->
-        <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+        <div v-if="stage === 'erstellung'"
+             class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                    rounded-2xl shadow-sm p-6 space-y-6">
+          <div>
+            <h2 class="text-lg font-semibold text-[#3EAAB8]">Basisdaten</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Es werden zunächst nur die Basisangaben erfasst. Nach der Freigabe ergänzt das BackOffice die übrigen Daten.
+            </p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">Vorname *</label>
+              <input v-model="form.personal.first_name" :class="fieldClass('personal.first_name')" placeholder="Max" />
+            </div>
+            <div>
+              <label class="label">Nachname *</label>
+              <input v-model="form.personal.last_name" :class="fieldClass('personal.last_name')" placeholder="Mustermann" />
+            </div>
+            <div>
+              <label class="label">Firma *</label>
+              <select v-model="form.personal.contract_company" :class="selectClass('personal.contract_company')">
+                <option value="">Bitte wählen</option>
+                <option v-for="c in companies" :key="c">{{ c }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Niederlassung *</label>
+              <input v-model="form.personal.location" :class="fieldClass('personal.location')" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="label">Titel *</label>
+              <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════
+             A. BASISDATEN (BackOffice + Bearbeitung)
+        ═══════════════════════════════ -->
+        <div v-if="stage !== 'erstellung'"
+             class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                     rounded-2xl shadow-sm p-6 space-y-8">
 
           <h2 class="text-lg font-semibold text-[#3EAAB8]">Basisdaten</h2>
@@ -277,9 +320,9 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
         </div>
 
         <!-- ═══════════════════════════════
-             B. IT / SYSTEMDATEN (nur edit)
+             B. IT / SYSTEMDATEN (nur in der Bearbeitung)
         ═══════════════════════════════ -->
-        <template v-if="phase === 'edit'">
+        <template v-if="stage === 'bearbeitung'">
 
           <!-- IT Systemdaten -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]

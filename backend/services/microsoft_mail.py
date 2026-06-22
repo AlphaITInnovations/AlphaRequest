@@ -419,3 +419,94 @@ def send_mail_to_all_fachabteilung(departments: dict, ticket: Ticket):
             ttype=ticket.ticket_type,
             ticketid=ticket.id,
         )
+
+
+def _freigabe_buttons_html(approve_url: str, reject_url: str) -> str:
+    """Zwei E-Mail-sichere Aktions-Buttons (grün Freigeben / rot Ablehnen)."""
+    return f"""
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;">
+      <tr>
+        <td style="padding-right:12px;">
+          <a href="{approve_url}"
+             style="display:inline-block; background:#16A34A; color:#ffffff;
+                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
+                    text-decoration:none; padding:12px 28px; border-radius:10px;">
+            &#10003;&nbsp; Freigeben
+          </a>
+        </td>
+        <td>
+          <a href="{reject_url}"
+             style="display:inline-block; background:#DC2626; color:#ffffff;
+                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
+                    text-decoration:none; padding:12px 28px; border-radius:10px;">
+            &#10007;&nbsp; Ablehnen
+          </a>
+        </td>
+      </tr>
+    </table>
+    """
+
+
+def send_freigabe_mail(ticket, approve_url: str, reject_url: str, to_recipients: List[str]):
+    """
+    Freigabe-Mail an die Verteiler der Gruppe FreigabeHerrLutz: Auftragsübersicht
+    plus JA/NEIN-Buttons, die per signiertem Link freigeben oder ablehnen.
+    """
+    if not to_recipients:
+        logger.warning(
+            "Freigabe-Mail: keine Verteiler-Adresse (FreigabeHerrLutz) für Ticket %s", ticket.id
+        )
+        return
+
+    intro = (
+        f"Hallo,\n\n"
+        f"ein neuer Antrag für neue Mitarbeiter:innen liegt zur Freigabe vor:\n\n"
+        f"Auftrag: {ticket.title}\n"
+        f"Erstellt von: {ticket.owner_name}\n\n"
+        f"Bitte geben Sie den Antrag frei oder lehnen Sie ihn ab:"
+    )
+
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
+        subject=f"Freigabe erforderlich: {ticket.title}",
+        body=render_corporate_email(
+            subject=ticket.title,
+            headline="Antrag neue Mitarbeiter:innen – Freigabe",
+            intro=intro,
+            content="",
+            action_html=_freigabe_buttons_html(approve_url, reject_url),
+            info_box_url=config.FRONTEND_URL + "/dashboard",
+        ),
+        to_recipients=to_recipients,
+        body_type="HTML",
+        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
+    )
+
+
+def send_rejection_mail(ticket, reason: str, to: str):
+    """Benachrichtigt den Ersteller, dass sein Auftrag abgelehnt wurde."""
+    if not to:
+        logger.warning("Ablehnungs-Mail: keine Empfängeradresse für Ticket %s", ticket.id)
+        return
+
+    reason_txt = f"\n\nGrund:\n{reason.strip()}" if (reason or "").strip() else ""
+    intro = (
+        f"Hallo,\n\n"
+        f"Ihr Auftrag „{ticket.title}“ (#{ticket.id}) wurde abgelehnt."
+        f"{reason_txt}"
+    )
+
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
+        subject=f"Auftrag #{ticket.id} wurde abgelehnt",
+        body=render_corporate_email(
+            subject=ticket.title,
+            headline="Auftrag abgelehnt",
+            intro=intro,
+            content="",
+            info_box_url=config.FRONTEND_URL + "/dashboard",
+        ),
+        to_recipients=[to],
+        body_type="HTML",
+        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
+    )

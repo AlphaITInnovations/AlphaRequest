@@ -21,13 +21,13 @@ export function useTicket(ticketId: number) {
   const isRejected         = computed(() => !!workflow.value?.rejected)
   const isCompleted        = computed(() => ticket.value?.status === 'archived')
 
-  // Datengetriebene Frontend-Ansicht der aktuellen Phase: 'form' | 'readonly' | 'export'.
+  // Datengetriebene Frontend-Ansicht der aktuellen Phase.
   // rejected/archived erzwingen read-only; sonst phase.view (Fallback aus type).
-  const currentView = computed<'form' | 'readonly' | 'export'>(() => {
+  const currentView = computed<'form' | 'readonly' | 'export' | 'approval'>(() => {
     if (isRejected.value || isCompleted.value) return 'readonly'
     const p = currentPhase.value
     if (!p) return 'readonly'
-    if (p.view === 'form' || p.view === 'readonly' || p.view === 'export') return p.view
+    if (p.view === 'form' || p.view === 'readonly' || p.view === 'export' || p.view === 'approval') return p.view
     return p.type === 'assignment' ? 'form' : 'readonly'
   })
 

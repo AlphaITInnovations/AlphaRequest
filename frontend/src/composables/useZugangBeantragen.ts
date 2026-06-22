@@ -1,6 +1,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { client } from '@/api/client'
 import { companiesApi } from '@/api/companies'
+import { ticketsApi } from '@/api/tickets'
 import { useRouter } from 'vue-router'
 import type { TicketPriority } from '@/types/ticket'
 
@@ -130,6 +131,20 @@ const RULES_EDIT: Record<string, Rule> = {
   'it.mailboxes.notes':       { requiredIf: f => f.it.mailboxes.additional === 'Ja' },
 }
 
+// Erstellung: nur die Basisfelder; der „Nächster Bearbeiter" geht automatisch
+// an die Freigabe (Herr Lutz) und ist daher gesperrt (kein Pflichtfeld).
+const RULES_ERSTELLUNG: Record<string, Rule> = {
+  'personal.first_name':       { required: true },
+  'personal.last_name':        { required: true },
+  'personal.title':            { required: true },
+  'personal.contract_company': { required: true },
+  'personal.location':         { required: true },
+}
+
+// Mehrstufiger Onboarding-Workflow: Erstellung (Basis) → Freigabe → BackOffice
+// (voller Erstellungs-Feldsatz + nächsten Bearbeiter wählen) → Bearbeitung (alle Felder).
+export type ZugangStage = 'erstellung' | 'backoffice' | 'bearbeitung'
+
 // ── Hilfsfunktion: tief lesen ─────────────────────────────────────────────────
 
 function getDeep(obj: Record<string, unknown>, path: string): unknown {
@@ -150,6 +165,10 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
   const submitting      = ref(false)
   const validationTriggered = ref(false)
   const errors          = ref<string[]>([])
+
+  // Aktuelle Stufe: im Create immer 'erstellung'; im Edit aus der Workflow-Phase
+  // ('backoffice' oder 'bearbeitung') – wird in init() gesetzt.
+  const stage = ref<ZugangStage>(phase === 'create' ? 'erstellung' : 'bearbeitung')
 
   const form = reactive<ZugangForm>({
     accountable: null,
@@ -197,7 +216,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
-  const rules = computed(() => phase === 'create' ? RULES_CREATE : RULES_EDIT)
+  const rules = computed(() => {
+    if (stage.value === 'erstellung') return RULES_ERSTELLUNG
+    if (stage.value === 'bearbeitung') return RULES_EDIT
+    return RULES_CREATE  // backoffice: voller Erstellungs-Feldsatz inkl. accountable
+  })
 
   function isEmpty(v: unknown): boolean {
     return v === null || v === undefined || v === ''
@@ -263,6 +286,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         const t = res.data.data
         const desc = JSON.parse(t.description || '{}')
 
+        // Stufe aus der aktuellen Workflow-Phase ableiten
+        const wf = t.workflow_state
+        const curKey = wf?.phases?.[wf?.current_phase_index ?? 0]?.key
+        stage.value = curKey === 'backoffice' ? 'backoffice' : 'bearbeitung'
+
         if (desc.personal) Object.assign(form.personal, desc.personal)
 
         // Leere Fachabteilung → "Keine" (wird als '' gespeichert)
@@ -294,7 +322,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         form.priority    = t.priority as TicketPriority
         form.comment     = t.comment ?? ''
         form.assignee    = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
-        form.accountable = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
+        // BackOffice wählt den nächsten Bearbeiter frisch → Feld leer lassen.
+        // Sonst (Bearbeitung) den bereits Zuständigen anzeigen.
+        form.accountable = stage.value === 'backoffice'
+          ? null
+          : (t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null)
 
         // Mark signature title as manually edited if it differs from personal title
         if (form.it.signature.title && form.it.signature.title !== form.personal.title) {
@@ -332,22 +364,18 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
   async function submitCreate() {
     if (!validate()) return
-    if (!form.accountable) return
     pendingConfirm.value = true
   }
 
   async function confirmCreate() {
-    if (!form.accountable) return
     submitting.value = true
     pendingConfirm.value = false
     try {
+      // Erstellung: kein Assignee – das Ticket geht automatisch in die Freigabe
+      // (Herr Lutz). Zuständigkeit kommt aus der Workflow-Phase (assign_group).
       await client.post('/tickets', {
         ticket_type:      'zugang-beantragen',
         description:      buildDescription(),
-        assignee_id:      form.accountable.id,
-        assignee_name:    form.accountable.name,
-        accountable_id:   form.accountable.id,
-        accountable_name: form.accountable.name,
         priority:         form.priority,
         comment:          form.comment,
       })
@@ -378,17 +406,21 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     if (!ticketId) return
     submitting.value = true
     try {
+      // assignee_id = aktuelle Zuständigkeit (No-op fürs Backend); der GEWÄHLTE
+      // nächste Bearbeiter wird im BackOffice erst beim Abschluss (submit) gesetzt.
       await client.patch(`/tickets/${ticketId}`, {
         description:      buildDescription(),
         priority:         form.priority,
         comment:          form.comment,
         assignee_id:      form.assignee?.id,
         assignee_name:    form.assignee?.name,
-        accountable_id:   form.accountable?.id,
-        accountable_name: form.accountable?.name,
       })
       if (action === 'complete') {
-        await client.post(`/tickets/${ticketId}/submit`)
+        // BackOffice: gewählten nächsten Bearbeiter mitgeben (Person/Fachabteilung).
+        const body = stage.value === 'backoffice' && form.accountable
+          ? { assignee_id: form.accountable.id, assignee_name: form.accountable.name }
+          : undefined
+        await ticketsApi.submit(ticketId, body)
       }
       router.push('/dashboard')
     } catch {
@@ -400,7 +432,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
   return {
     form, companies, departments, loading, submitting, pendingConfirm, pendingComplete,
-    validationTriggered, errors,
+    validationTriggered, errors, stage,
     init, validate, isInvalid, fieldClass, onSignatureTitleInput,
     submitCreate, confirmCreate, submitEdit, confirmComplete,
   }

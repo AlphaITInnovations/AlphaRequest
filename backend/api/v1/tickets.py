@@ -99,6 +99,50 @@ def _build_and_init_workflow(ticket) -> dict:
     return advance_phase(ticket.id)
 
 
+def notify_phase_entry(request, ticket, phase: Optional[dict]) -> None:
+    """
+    Benachrichtigt die für die (gerade aktiv gewordene) Phase Zuständigen –
+    zentral genutzt von create_ticket und submit_ticket.
+      - department_review        → Mail an alle Fachabteilungs-Verteiler
+      - assignment + view=approval → Freigabe-Mail (JA/NEIN) an Gruppen-Verteiler
+      - assignment + kind=group  → Mail an Gruppen-Verteiler
+      - assignment + kind=user   → Mail an die Person
+    """
+    if not phase:
+        return
+    from backend.services.phase_definitions import PhaseType, PhaseView
+    from backend.database.groups import get_distributions_from_group
+
+    ptype = phase.get("type")
+    if ptype == PhaseType.department_review.value:
+        send_mail_to_all_fachabteilung(phase.get("departments", {}), ticket)
+        return
+
+    resp = phase.get("responsibility") or {}
+    kind = resp.get("kind")
+
+    # Freigabe-Phase: Mail mit JA/NEIN-Buttons (signierte Links) an die Verteiler
+    if phase.get("view") == PhaseView.approval.value and kind == "group":
+        from backend.services.freigabe_token import make_token
+        from backend.services.microsoft_mail import send_freigabe_mail
+        from backend.utils.config import config
+        base = config.FRONTEND_URL.rstrip("/")
+        approve_url = f"{base}/api/v1/freigabe?token={make_token(ticket.id, 'approve')}"
+        reject_url  = f"{base}/api/v1/freigabe?token={make_token(ticket.id, 'reject')}"
+        recipients = [m.strip() for m in get_distributions_from_group(resp.get("id")) if m]
+        send_freigabe_mail(ticket, approve_url, reject_url, recipients)
+        return
+
+    if kind == "group":
+        for mail in get_distributions_from_group(resp.get("id")):
+            if mail:
+                send_newrequest_mail(mail.strip(), ticket.priority, ticket.title, ticket.ticket_type, ticket.id)
+    elif kind == "user":
+        mail_to = get_cached_user_mail(request.app, resp.get("id"))
+        if mail_to:
+            send_newrequest_mail(mail_to, ticket.priority, ticket.title, ticket.ticket_type, ticket.id)
+
+
 # ── Permission helpers ────────────────────────────────────────────────────────
 
 def _require_admin(user: dict) -> dict:
@@ -237,9 +281,10 @@ async def create_ticket(
     if not can_user_create_ticket(data.ticket_type.value, user["id"], user.get("groups")):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                         f"Kein Recht zum Erstellen von '{data.ticket_type.value}'-Tickets")
-    if not validate_assignee(request.app.state.user_cache, data.assignee_id):
-        raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
-                        f"Unbekannter Assignee '{data.assignee_id}'")
+    # Assignee wird erst geprüft, wenn die erste Phase nach der Erstellung wirklich
+    # einen frei wählbaren Bearbeiter braucht (siehe unten). Tickettypen mit fester
+    # Zuständigkeit der ersten Phase (assign_group/Freigabe/Fachabteilungen) kommen
+    # ohne Assignee aus.
     try:
         desc_obj = json.loads(data.description)
     except Exception:
@@ -297,16 +342,35 @@ async def create_ticket(
     updated_workflow = _build_and_init_workflow(ticket)
     ticket = database.get_ticket(ticket_id)
 
-    # Check what phase we're now in after advancing past creation
+    # Phase nach dem Vorbei-Advancen der Erstellung
     from backend.services.workflow_state import PhaseType as WfPhaseType, set_phase_responsibility
     phases = updated_workflow.get("phases", [])
     current_idx = updated_workflow.get("current_phase_index", 0)
     current_phase = phases[current_idx] if current_idx < len(phases) else None
 
-    if current_phase and current_phase["type"] == WfPhaseType.department_review:
-        # Keine Assignment-Phase — direkt die Fachabteilungen benachrichtigen.
-        # Zuständigkeit steht im workflow_state.departments.
-        send_mail_to_all_fachabteilung(current_phase.get("departments", {}), ticket)
+    # Nur wenn die erste Phase eine assignment-Phase OHNE feste Zuständigkeit ist
+    # (kein assign_group), muss der Client einen Bearbeiter mitliefern.
+    needs_assignee = (
+        current_phase is not None
+        and current_phase.get("type") == WfPhaseType.assignment.value
+        and not (current_phase.get("responsibility") or {}).get("kind")
+    )
+    if needs_assignee:
+        if not validate_assignee(request.app.state.user_cache, data.assignee_id):
+            raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                            f"Unbekannter Assignee '{data.assignee_id}'")
+        from backend.database.groups import get_groups
+        group_map = {g["id"]: g["name"] for g in get_groups()}
+        if data.assignee_id in group_map:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]})
+        else:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "user", "id": data.assignee_id, "name": data.assignee_name})
+        ticket = database.get_ticket(ticket_id)
+        current_phase = ticket.workflow_state_parsed.get("phases", [])[current_idx]
+
+    if current_phase and current_phase.get("type") == WfPhaseType.department_review.value:
         add_history_event(
             ticket_id,
             actor_id=user["id"],
@@ -314,27 +378,8 @@ async def create_ticket(
             action="ticket_submitted",
             details={"status_new": RequestStatus.in_request.value},
         )
-    else:
-        # Bearbeitungsphase: Zuständigkeit in den Workflow schreiben (Person oder
-        # Gruppe) statt in die assignee-Spalten. Mailversand nutzt data.assignee_id.
-        from backend.database.groups import get_groups
-        group_map = {g["id"]: g["name"] for g in get_groups()}
-        if data.assignee_id in group_map:
-            group_name = group_map[data.assignee_id]
-            set_phase_responsibility(ticket_id, current_idx,
-                {"kind": "group", "id": data.assignee_id, "name": group_name})
-            for g in get_groups():
-                if g["id"] == data.assignee_id:
-                    for mail in g.get("distributions", []):
-                        if mail:
-                            send_newrequest_mail(mail.strip(), data.priority, title, data.ticket_type, ticket_id)
-                    break
-        else:
-            set_phase_responsibility(ticket_id, current_idx,
-                {"kind": "user", "id": data.assignee_id, "name": data.assignee_name})
-            mail_to = get_cached_user_mail(request.app, data.assignee_id)
-            if mail_to:
-                send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
+
+    notify_phase_entry(request, ticket, current_phase)
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
@@ -513,17 +558,44 @@ async def submit_ticket(
     if current_phase["type"] != PhaseType.assignment:
         raise api_error(400, ErrorCode.INVALID_STATUS, "Aktuelle Phase kann nicht über Submit abgeschlossen werden")
 
+    # Optionaler „nächster Bearbeiter" (z.B. BackOffice wählt Person/Fachabteilung,
+    # Zuständigkeit wird erst beim Abschluss aktiviert).
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    next_assignee_id   = (body or {}).get("assignee_id")
+    next_assignee_name = (body or {}).get("assignee_name")
+
+    completed_key = current_phase["key"]
     updated_workflow = advance_phase(ticket_id)
 
     phases = updated_workflow.get("phases", [])
     current_idx = updated_workflow.get("current_phase_index", 0)
     next_phase = phases[current_idx] if current_idx < len(phases) else None
 
-    if next_phase and next_phase["type"] == PhaseType.department_review:
-        ticket = database.get_ticket(ticket_id)
-        # Zuständigkeit steht im workflow_state.departments — kein "fachabteilung"-
-        # Sentinel mehr in assignee/accountable (die bleiben informativ).
-        send_mail_to_all_fachabteilung(next_phase.get("departments", {}), ticket)
+    # Nächste assignment-Phase ohne feste Zuständigkeit → gewählten Bearbeiter setzen.
+    from backend.services.workflow_state import set_phase_responsibility
+    if (next_phase is not None
+            and next_phase.get("type") == PhaseType.assignment.value
+            and not (next_phase.get("responsibility") or {}).get("kind")
+            and next_assignee_id):
+        if not validate_assignee(request.app.state.user_cache, next_assignee_id):
+            raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                            f"Unbekannter Assignee '{next_assignee_id}'")
+        from backend.database.groups import get_groups
+        group_map = {g["id"]: g["name"] for g in get_groups()}
+        if next_assignee_id in group_map:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "group", "id": next_assignee_id, "name": group_map[next_assignee_id]})
+        else:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "user", "id": next_assignee_id, "name": next_assignee_name or next_assignee_id})
+        next_phase = database.get_ticket(ticket_id).workflow_state_parsed["phases"][current_idx]
+
+    ticket = database.get_ticket(ticket_id)
+
+    if next_phase and next_phase["type"] == PhaseType.department_review.value:
         add_history_event(
             ticket_id,
             actor_id=user["id"],
@@ -538,8 +610,10 @@ async def submit_ticket(
             actor_id=user["id"],
             actor_name=user["displayName"],
             action=action,
-            details={"phase_completed": current_phase["key"]},
+            details={"phase_completed": completed_key},
         )
+
+    notify_phase_entry(request, ticket, next_phase)
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
@@ -572,6 +646,14 @@ async def reject_ticket(
         action="ticket_rejected",
         details={"message": message},
     )
+
+    # Ersteller über die Ablehnung informieren (Mailfehler darf den Reject nicht kippen).
+    try:
+        from backend.services.microsoft_mail import send_rejection_mail
+        owner_mail = ticket.owner_info_parsed.get("mail") or get_cached_user_mail(request.app, ticket.owner_id)
+        send_rejection_mail(ticket, message, owner_mail)
+    except Exception:
+        logger.exception("Ablehnungs-Mail an Ersteller fehlgeschlagen (Ticket %s)", ticket_id)
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 

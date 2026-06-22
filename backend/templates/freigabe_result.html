@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AlphaRequest – Freigabe</title>
+  <style>
+    :root { --teal:#3EACB6; --teal-dark:#084C59; --bg:#ECF7F8; --text:#101924; --muted:#4B5563; --border:#CFE9EC; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); font-family: Arial, Helvetica, sans-serif; color:var(--text);
+           min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .card { background:#fff; width:100%; max-width:520px; border:1px solid var(--border); border-radius:16px;
+            box-shadow:0 10px 26px rgba(16,25,36,.10); overflow:hidden; }
+    .bar { height:6px; background:var(--teal); }
+    .body { padding:28px 28px 32px; text-align:center; }
+    .logo { width:52px; height:52px; border-radius:12px; border:1px solid var(--border); padding:6px; background:#fff; }
+    .icon { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+            margin:18px auto 8px; font-size:32px; color:#fff; }
+    .ok { background:#16A34A; } .no { background:#DC2626; } .neutral { background:var(--teal); }
+    h1 { font-size:20px; margin:10px 0 6px; }
+    p { color:var(--muted); font-size:14px; line-height:1.6; margin:6px 0; }
+    .ticket { margin-top:14px; padding:12px 14px; background:var(--bg); border:1px solid var(--border);
+              border-radius:10px; font-size:14px; }
+    .foot { margin-top:20px; font-size:12px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="bar"></div>
+    <div class="body">
+      <img class="logo" src="/static/logo.png" alt="Alpha-IT-Innovations">
+
+      {% if status == "approved" %}
+        <div class="icon ok">&#10003;</div>
+        <h1>Antrag freigegeben</h1>
+        <p>Der Antrag wurde freigegeben und an das BackOffice weitergeleitet.</p>
+      {% elif status == "rejected" %}
+        <div class="icon no">&#10007;</div>
+        <h1>Antrag abgelehnt</h1>
+        <p>Der Antrag wurde abgelehnt. Der Ersteller wurde per E-Mail informiert.</p>
+      {% elif status == "already" %}
+        <div class="icon neutral">&#8505;</div>
+        <h1>Bereits bearbeitet</h1>
+        <p>Dieser Antrag wurde bereits freigegeben oder abgelehnt. Es ist keine weitere Aktion nötig.</p>
+      {% else %}
+        <div class="icon no">!</div>
+        <h1>Link ungültig</h1>
+        <p>Dieser Freigabe-Link ist ungültig oder abgelaufen.</p>
+      {% endif %}
+
+      {% if ticket %}
+        <div class="ticket"><strong>{{ ticket.title }}</strong><br>Auftrag #{{ ticket.id }}</div>
+      {% endif %}
+
+      <div class="foot">AlphaRequest · Alpha-IT-Innovations</div>
+    </div>
+  </div>
+</body>
+</html>

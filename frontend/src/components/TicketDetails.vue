@@ -13,8 +13,16 @@ withDefaults(defineProps<{
   accountableError?: boolean
   // Nur Fachabteilungen zuweisbar (keine Personen) – z.B. Basis-Tickets.
   groupsOnly?: boolean
+  // Zuständigen-Auswahl gesperrt (z.B. Onboarding-Erstellung: automatisch Freigabe).
+  accountableLocked?: boolean
+  accountableLockedHint?: string
+  // Auswahl auch außerhalb der Erstellungsphase editierbar (z.B. BackOffice wählt
+  // den nächsten Bearbeiter).
+  accountableEditable?: boolean
 }>(), {
   groupsOnly: false,
+  accountableLocked: false,
+  accountableEditable: false,
 })
 
 // Phasen werden vom Detail-View bereitgestellt (nur im Edit-/View-Kontext vorhanden)
@@ -59,7 +67,24 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
 
     <!-- Verantwortlicher -->
     <div>
-      <template v-if="phase === 'create'">
+      <!-- Gesperrt: Zuständigkeit wird automatisch gesetzt (z.B. Freigabe Herr Lutz) -->
+      <template v-if="accountableLocked">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+          Nächster Bearbeiter / Verantwortlicher
+        </label>
+        <div class="flex items-center gap-2 w-full rounded-xl border border-dashed
+                    border-[#3EAAB8]/40 bg-[#3EAAB8]/5 px-3.5 py-2.5 text-sm
+                    text-gray-600 dark:text-gray-300">
+          <svg class="w-4 h-4 flex-shrink-0 text-[#3EAAB8]" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+          {{ accountableLockedHint || 'Wird automatisch zugewiesen.' }}
+        </div>
+      </template>
+
+      <!-- Editierbar: in der Erstellungsphase oder explizit (BackOffice) -->
+      <template v-else-if="phase === 'create' || accountableEditable">
         <div :class="accountableError ? 'ring-1 ring-red-400 rounded-xl' : ''">
           <UserSelect
             :label="groupsOnly ? 'Zuständige Fachabteilung *' : 'Nächster Bearbeiter / Verantwortlicher *'"

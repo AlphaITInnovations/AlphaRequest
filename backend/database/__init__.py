@@ -36,9 +36,9 @@ def init_db():
     # Workflow-Pflichtgruppen (Fachabteilungen) sicherstellen: fehlende werden
     # leer angelegt, damit jeder Workflow eine zuständige Gruppe auflösen kann.
     try:
-        from backend.services.workflow_state import required_group_names
+        from backend.services.workflow_state import required_group_names, assign_group_names
         from backend.database.groups import ensure_required_groups
-        created = ensure_required_groups(required_group_names())
+        created = ensure_required_groups(required_group_names(), hidden_names=assign_group_names())
         if created:
             logger.info("Fehlende Pflichtgruppen angelegt: %s", ", ".join(created))
     except Exception as e:
