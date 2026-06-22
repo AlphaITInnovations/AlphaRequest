@@ -1,5 +1,7 @@
 TODO:
 
+overview page von einem basic ticket, da wird der content nicht richtig dargestellt, der verlauf soll schön formatiert sein
+
 PROBLEM: HERR LUTZ ARBEITER NICHT AM SERVER
 
 neuer workflow für onboarding mitarbeider:
