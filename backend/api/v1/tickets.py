@@ -268,6 +268,19 @@ def remove_ticket_watcher(ticket_id: int, watcher_id: str, user: dict = Depends(
     return DataResponse(data={"watchers": list_watchers(ticket_id)})
 
 
+@router.get("/ticket-phases/{ticket_type}")
+def get_ticket_phases(ticket_type: TicketType, user: dict = Depends(get_current_user)):
+    """
+    Phasen-Vorschau für einen Tickettyp (statische Definition aus TICKET_PHASES,
+    ohne dass ein Ticket existiert) – für die Ablauf-Anzeige beim Erstellen.
+    """
+    from backend.services.phase_definitions import TICKET_PHASES
+    defs = TICKET_PHASES.get(ticket_type, [])
+    return DataResponse(data=[
+        {"key": p.key, "label": p.label, "type": p.type.value} for p in defs
+    ])
+
+
 @router.post("/tickets", response_model=DataResponse[TicketOut], status_code=201)
 async def create_ticket(
     data: TicketCreateRequest,
