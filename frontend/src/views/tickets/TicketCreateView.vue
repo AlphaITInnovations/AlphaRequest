@@ -3,7 +3,9 @@ import { ref, computed, provide, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import AppLayout from '@/components/AppLayout.vue'
+import PhasePreview from '@/components/tickets/PhasePreview.vue'
 import { TICKET_REGISTRY } from '@/utils/ticketRegistry'
+import { ticketsApi } from '@/api/tickets'
 import {
   createWatchers, resetCreateWatchers, addCreateWatcher, removeCreateWatcher,
 } from '@/composables/createWatchers'
@@ -30,7 +32,10 @@ provide('ticketWatchers', {
   remove: removeCreateWatcher,
 })
 
-onMounted(() => {
+// Phasen-Ablauf zur Vorschau (welche Phasen der Auftrag durchläuft)
+const phases = ref<{ key: string; label: string; type: string }[]>([])
+
+onMounted(async () => {
   if (!entry) { router.replace('/dashboard'); return }
   // Basis-Tickets darf jeder eingeloggte User erstellen (keine create_-Permission).
   // Für Prozess-Tickets greift die clientseitige Berechtigungsprüfung; der Server erzwingt sie ohnehin.
@@ -40,6 +45,11 @@ onMounted(() => {
   // Ersteller vorausgewählt (entfernbar)
   resetCreateWatchers(auth.user ? { id: auth.user.id, name: auth.user.displayName } : null)
   ctx.init()
+
+  try {
+    const { data } = await ticketsApi.phases(ticketType)
+    phases.value = data.data
+  } catch { phases.value = [] }
 })
 </script>
 
@@ -48,6 +58,9 @@ onMounted(() => {
     <div v-if="!entry" class="flex items-center justify-center py-24 text-gray-400">
       Unbekannter Ticket-Typ.
     </div>
-    <component v-else :is="entry.form" :ctx="ctx" phase="create" />
+    <template v-else>
+      <PhasePreview v-if="phases.length" :phases="phases" class="max-w-7xl mx-auto mb-6" />
+      <component :is="entry.form" :ctx="ctx" phase="create" />
+    </template>
   </AppLayout>
 </template>

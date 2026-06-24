@@ -11,6 +11,7 @@ export const ticketsApi = {
   list:    ()                               => client.get<ListResponse<Ticket>>('/tickets'),
   listAll: (limit = 50, offset = 0)         => client.get<ListResponse<Ticket>>('/admin/tickets', { params: { limit, offset } }),
   get:     (id: number)                     => client.get<DataResponse<Ticket>>(`/tickets/${id}`),
+  phases:  (type: string)                   => client.get<DataResponse<{ key: string; label: string; type: string }[]>>(`/ticket-phases/${type}`),
   create:  (data: TicketCreateRequest)      => client.post<DataResponse<Ticket>>('/tickets', data),
   update:  (id: number, data: TicketUpdateRequest) => client.patch<DataResponse<Ticket>>(`/tickets/${id}`, data),
   submit:  (id: number, body?: { assignee_id?: string; assignee_name?: string }) =>
