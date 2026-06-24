@@ -1,34 +1,9 @@
 TODO:
 
-migration tickets auf neue struktur
 PROBLEM: HERR LUTZ ARBEITER NICHT AM SERVER
 
-neuer workflow für onboarding mitarbeider:
-basisfelder
-vorname nachnache
-frima niederlassung titel
-nach erstellung spezielle phase wo mail an herrn lutz (auch über fachabteilung auswählbar) und in der mail dann
-ein ja und nein knopf ob genehmigt oder abgelehnt (evtl über webhooks oder so) und jenachdem ob ja oder nach in phase3 oder
-ticket status auf abgelehnt
-danach zu backoffice (klemm und wolf) und die
-dann phase1 felder
-danach niederlassungsleiter
-
-
-Ok wir müssen den Onboarding Mitarbeiter Prozess grundlegend abändern:
-Der Auftrag wird mit folgenden basisfeldern erstellt:
-vorname nachnache firma niederlassung titel
-Beime erstellen ist das Nächster Bearbeiter Feld gesperrt, weil es wird automtaisch an Herrn Lutz zur freigabe vorgelegt
-
-Dann phase2, Zuständig ist die Fachabteilung "FreigabeHerrLutz" und kommt jetzt etwas sehr spezielles.
-An die Fachabteilung mailadresse, soll eine mail versendet werden mit Antrang neuer mitarbeier:innen (schön formulieren in cooperate design)
-und hauptsächlich soll dort ein ja / nein knopf in grün und in rot stehen und dort kann er den auftrag bestätigen oder ablehenen
-logisch: bei ablehnung soll direkt der auftrag auf rejected gestellt werden (und ersteller erhält eine mail: Auftrag wurde abgelehnt)
-und bei annahme soll es an die fachabteilung "BackOffice" gehen und dort sind dann alle felder freigeschalten die in der jetzigen phase1 sind und das nächster bearbeiter feld soll leer sein, also quasi damit man den nöchsten bearbeiten dann auswöhlen kann( zuständigkeit wird erst bei abschluss aktiviert)
-und dann bei auftrag erstellen geht es zur ausgewählen person mit den felder aus der akteullen phase2 (also alle felder die es gibt) und von dort an ist es wie bisher -> feder ausfüllen -> an fachabteilungen -> fachabteilungen bearbeiten und bestätigen -> archivierung
-
-
-
+Phasen auch bei ticket erstellung anzeigen
+Ticket sperren, damit nicht doppelte bearbeitung
 
 
 TODO Technische Überlegungen:
