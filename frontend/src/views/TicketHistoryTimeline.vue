@@ -151,6 +151,11 @@ function descriptionDiff(
   const result: { key: string; label: string; oldVal: any; newVal: any }[] = []
 
   for (const key of allKeys) {
+    // ID-Felder (z.B. supervisor_hr_id) nicht anzeigen – die rohen GUIDs sind
+    // nichtssagend; die lesbare Änderung steht im jeweiligen *_name-Feld.
+    const seg = key.split('.').pop() ?? key
+    if (seg === 'id' || seg.endsWith('_id')) continue
+
     const o = flatOld[key]
     const n = flatNext[key]
     if (JSON.stringify(o) !== JSON.stringify(n)) {
