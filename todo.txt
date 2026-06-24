@@ -2,7 +2,7 @@ TODO:
 
 PROBLEM: HERR LUTZ ARBEITER NICHT AM SERVER
 
-Phasen auch bei ticket erstellung anzeigen
+
 Ticket sperren, damit nicht doppelte bearbeitung
 
 
