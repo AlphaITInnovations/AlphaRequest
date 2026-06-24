@@ -44,6 +44,37 @@ const FIELD_LABEL: Record<string, string> = {
   accountable: 'Verantwortlich',
 }
 
+// Deutsche Beschriftungen der Formularfelder (für die Verlaufs-Diffs).
+// Keyed nach dem letzten Pfadsegment des geflatteten description-Keys.
+const DE_FIELD_LABELS: Record<string, string> = {
+  // Stammdaten
+  first_name: 'Vorname', last_name: 'Nachname', title: 'Titel',
+  private_street: 'Straße (privat)', private_zip: 'PLZ (privat)', private_city: 'Ort (privat)',
+  private_address: 'Adresse (privat)',
+  start_date: 'Eintrittsdatum', homeoffice: 'Homeoffice', weekly_hours: 'Wochenstunden',
+  personal_number: 'Personalnummer',
+  // Organisation
+  federal_state: 'Bundesland', department: 'Fachabteilung', department_other: 'Fachabteilung (sonstige)',
+  cost_center: 'Kostenstelle', location: 'Niederlassung', contract_company: 'Firma (Vertrag)',
+  // Beziehungen
+  supervisor_hr_id: 'Vorgesetzter', supervisor_hr_name: 'Vorgesetzter',
+  contact_person_id: 'Ansprechpartner', contact_person_name: 'Ansprechpartner',
+  // IT / Signatur
+  appearance_company: 'Firma (Signatur)', street: 'Straße', zip: 'PLZ', city: 'Ort',
+  // Timebutler
+  vacation_year: 'Urlaubsanspruch', supervisor_id: 'Urlaubsfreigabe', supervisor_name: 'Urlaubsfreigabe',
+  // Software
+  datev: 'DATEV', datev_rights: 'DATEV-Rechte', persopro: 'PersoPro', timejob: 'TimeJob', zvoove: 'Zvoove',
+  enabled: 'Festnetz beantragen', other_systems: 'Weitere Software',
+  // Postfächer
+  info_mailbox: 'Infopostfach', additional: 'Zusätzliche Postfächer', notes: 'Postfächer (Notiz)',
+  additional_cost_centers: 'Zusätzliche Kostenstellen',
+  // Fuhrpark
+  car: 'Dienstwagen', car_class: 'Fahrzeuggruppe', car_from: 'Dienstwagen ab',
+  // Basis-Ticket
+  titel: 'Titel', beschreibung: 'Beschreibung',
+}
+
 const DEPT_STATUS_LABEL: Record<string, string> = {
   done: 'Erledigt', rejected: 'Abgelehnt', skipped: 'Übersprungen',
   open: 'Offen', in_progress: 'In Bearbeitung',
@@ -75,6 +106,14 @@ function getMeta(action: string) {
 
 function labelize(s: string) {
   return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+// Deutsche Beschriftung für ein (ggf. geflattetes) Feld: erst ganzer Pfad,
+// dann letztes Segment, sonst aufgehübschter Schlüssel.
+function fieldLabel(key: string): string {
+  if (FIELD_LABEL[key]) return FIELD_LABEL[key]
+  const seg = key.split('.').pop() ?? key
+  return DE_FIELD_LABELS[seg] ?? FIELD_LABEL[seg] ?? labelize(seg)
 }
 
 function formatVal(v: any): string {
@@ -120,9 +159,7 @@ function descriptionDiff(
       const oldMeaningful = o !== null && o !== undefined && o !== '' && o !== false
       if (!newMeaningful && !oldMeaningful) continue
 
-      // Label aus dem letzten Segment des Pfads
-      const lastSegment = key.split('.').pop() ?? key
-      result.push({ key, label: labelize(lastSegment), oldVal: o, newVal: n })
+      result.push({ key, label: fieldLabel(key), oldVal: o, newVal: n })
     }
   }
   return result
@@ -174,15 +211,19 @@ function descriptionDiff(
 
             <!-- description snapshot diff (rekursiv geflattened) -->
             <template v-if="e.details.changes.description">
-              <div class="space-y-1.5">
+              <div class="space-y-2">
                 <p class="text-xs text-gray-400 font-medium uppercase tracking-wider">Formular-Änderungen</p>
                 <template v-if="descriptionDiff(e.details.changes.description.old, e.details.changes.description.new).length > 0">
                   <div v-for="diff in descriptionDiff(e.details.changes.description.old, e.details.changes.description.new)"
                        :key="diff.key"
-                       class="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-0.5 text-xs items-baseline">
-                    <span class="text-gray-400 truncate">{{ diff.label }}</span>
-                    <span class="line-through text-red-400 truncate">{{ formatVal(diff.oldVal) }}</span>
-                    <span class="text-green-600 dark:text-green-400 font-medium truncate">{{ formatVal(diff.newVal) }}</span>
+                       class="text-xs rounded-lg bg-white dark:bg-white/[0.03]
+                              border border-gray-100 dark:border-white/[0.06] px-2.5 py-1.5">
+                    <p class="text-gray-500 dark:text-gray-400 font-medium mb-0.5">{{ diff.label }}</p>
+                    <div class="leading-relaxed break-words">
+                      <span class="line-through text-red-400">{{ formatVal(diff.oldVal) }}</span>
+                      <span class="mx-1 text-gray-400">→</span>
+                      <span class="text-green-600 dark:text-green-400 font-medium">{{ formatVal(diff.newVal) }}</span>
+                    </div>
                   </div>
                 </template>
                 <p v-else class="text-xs text-gray-400 italic">Keine sichtbaren Änderungen</p>
@@ -190,16 +231,20 @@ function descriptionDiff(
             </template>
 
             <!-- einfache Felder (priority, comment, assignee, accountable) -->
-            <template v-for="(change, field) in e.details.changes" :key="field">
-              <div v-if="field !== 'description'"
-                   class="grid grid-cols-[100px_1fr] gap-x-3 text-xs items-baseline">
-                <span class="text-gray-400">{{ FIELD_LABEL[field] ?? labelize(String(field)) }}</span>
-                <span>
-                  <span class="line-through text-red-400 mr-1.5">{{ formatVal(change.old) }}</span>
-                  <span class="text-green-600 dark:text-green-400 font-medium">{{ formatVal(change.new) }}</span>
-                </span>
-              </div>
-            </template>
+            <div class="space-y-2 mt-2">
+              <template v-for="(change, field) in e.details.changes" :key="field">
+                <div v-if="field !== 'description'"
+                     class="text-xs rounded-lg bg-white dark:bg-white/[0.03]
+                            border border-gray-100 dark:border-white/[0.06] px-2.5 py-1.5">
+                  <p class="text-gray-500 dark:text-gray-400 font-medium mb-0.5">{{ fieldLabel(String(field)) }}</p>
+                  <div class="leading-relaxed break-words">
+                    <span class="line-through text-red-400">{{ formatVal(change.old) }}</span>
+                    <span class="mx-1 text-gray-400">→</span>
+                    <span class="text-green-600 dark:text-green-400 font-medium">{{ formatVal(change.new) }}</span>
+                  </div>
+                </div>
+              </template>
+            </div>
 
           </template>
 
