@@ -6,8 +6,10 @@ from pydantic import BaseModel
 
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
+from backend.models.models import RequestStatus
 from backend.schemas.responses import DataResponse, ListResponse, Meta
-from backend.services.ticket_history import get_ticket_history
+from backend.services.ticket_history import get_ticket_history, add_history_event
+from backend.services.workflow_state import responsibility_label
 
 router = APIRouter()
 
@@ -22,6 +24,8 @@ class TicketOverviewItem(BaseModel):
     priority: str
     created_at: str
     creator: str
+    responsible: str = "—"   # aktuell zuständige Stelle (Person/Gruppe/Fachabteilung)
+    phase: str = "—"         # Label der aktuellen Workflow-Phase
 
 
 class DepartmentStatus(BaseModel):
@@ -57,6 +61,8 @@ class TicketOverviewDetail(BaseModel):
     description: dict
     departments: dict[str, DepartmentStatus]
     history: list[HistoryEvent]
+    phase: str = "—"   # Label der aktuellen Workflow-Phase
+    phases: list[dict] = []   # Workflow-Phasen (für die Fortschritts-Anzeige)
 
 
 # ── Permission helpers ─────────────────────────────────────────────────────────
@@ -73,6 +79,12 @@ def _require_manage(user: dict) -> None:
         raise HTTPException(403, "Keine Berechtigung zum Bearbeiten")
 
 
+def _require_admin(user: dict) -> None:
+    """Nur Admins dürfen archivieren."""
+    if "admin" not in user.get("permissions", []):
+        raise HTTPException(403, "Nur Admins dürfen Tickets archivieren")
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _fmt_dt(val) -> str:
@@ -83,12 +95,29 @@ def _fmt_dt(val) -> str:
     return str(val)
 
 
+def _current_phase_label(workflow: dict) -> str:
+    """Label der aktuell aktiven Phase, oder '—' (z.B. nach Archivierung)."""
+    phases = workflow.get("phases", [])
+    idx = workflow.get("current_phase_index", 0)
+    if 0 <= idx < len(phases):
+        return phases[idx].get("label") or "—"
+    return "—"
+
+
+def _dept_review_phase(workflow: dict) -> Optional[dict]:
+    for p in workflow.get("phases", []):
+        if p.get("type") == "department_review":
+            return p
+    return None
+
+
 # ── Endpunkte ──────────────────────────────────────────────────────────────────
 
 @router.get("/overview/tickets", response_model=ListResponse[TicketOverviewItem])
 def list_overview_tickets(
     page:      int = Query(1,  ge=1),
-    page_size: int = Query(50, ge=10, le=100),
+    # Höheres Limit erlaubt clientseitiges Sortieren/Filtern über alle Tickets.
+    page_size: int = Query(50, ge=10, le=2000),
     user: dict = Depends(get_current_user),
 ):
     _require_view(user)
@@ -106,6 +135,8 @@ def list_overview_tickets(
             priority=t.priority    if isinstance(t.priority,      str) else t.priority.value,
             created_at=_fmt_dt(t.created_at),
             creator=t.owner_name,
+            responsible=responsibility_label(t),
+            phase=_current_phase_label(t.workflow_state_parsed or {}),
         )
         for t in tickets
     ]
@@ -127,6 +158,31 @@ def delete_overview_ticket(
         raise HTTPException(404, "Ticket nicht gefunden")
 
 
+@router.post("/overview/tickets/{ticket_id}/archive", status_code=204)
+def archive_overview_ticket(
+    ticket_id: int,
+    user: dict = Depends(get_current_user),
+):
+    """Hart-Archivieren aus der Übersicht – nur für Admins."""
+    _require_view(user)
+    _require_admin(user)
+    ticket = database.get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(404, "Ticket nicht gefunden")
+    if ticket.status == RequestStatus.archived:
+        raise HTTPException(400, "Ticket ist bereits archiviert")
+
+    old_status = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
+    database.update_ticket(ticket_id, status=RequestStatus.archived.value)
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_archived_manual",
+        details={"field": "status", "old_value": old_status, "new_value": RequestStatus.archived.value},
+    )
+
+
 @router.get("/overview/tickets/{ticket_id}", response_model=DataResponse[TicketOverviewDetail])
 def get_overview_ticket(
     ticket_id: int,
@@ -143,15 +199,28 @@ def get_overview_ticket(
     except Exception:
         description = {}
 
-    workflow    = ticket.workflow_state_parsed or {}
+    workflow = ticket.workflow_state_parsed or {}
+    # departments aus der department_review-Phase (neues Format), Fallback altes Format.
+    # Erst anzeigen, wenn die Durchführungs-Phase auch erreicht ist (nicht 'pending') –
+    # vorher (z.B. in Freigabe/BackOffice) sind die Fachabteilungen noch nicht „offen".
+    dept_phase = _dept_review_phase(workflow)
+    if dept_phase is not None:
+        dept_reached = dept_phase.get("status") != "pending"
+        dept_map = dept_phase.get("departments", {}) if dept_reached else {}
+    else:
+        # Altformat ohne Phasen: wie bisher anzeigen
+        dept_map = workflow.get("departments", {})
     departments = {
         gid: DepartmentStatus(
             name=d.get("name", gid),
             status=d.get("status", "open"),
             required=d.get("required", True),
         )
-        for gid, d in workflow.get("departments", {}).items()
+        for gid, d in dept_map.items()
     }
+
+    from backend.services.workflow_state import primary_responsibility
+    resp = primary_responsibility(ticket)
 
     raw_history = get_ticket_history(ticket_id)
     history = []
@@ -181,9 +250,11 @@ def get_overview_ticket(
         created_at=_fmt_dt(ticket.created_at),
         updated_at=_fmt_dt(ticket.updated_at) or None,
         owner_name=ticket.owner_name,
-        accountable_name=ticket.accountable_name,
+        accountable_name=resp.get("name") if resp else None,
         comment=ticket.comment or "",
         description=description,
         departments=departments,
         history=history,
+        phase=_current_phase_label(workflow),
+        phases=workflow.get("phases", []),
     ))

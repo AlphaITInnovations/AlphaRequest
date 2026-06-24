@@ -53,10 +53,15 @@ interface PermType { key: string; label: string; allowed_users: string[]; allowe
 const permissions  = ref<PermType[]>([])
 const permSelected = ref<Record<string, { id: string; name: string } | null>>({})
 
+// Sentinel (muss mit backend ticket_permissions.EVERYONE übereinstimmen):
+// ist dieser Wert in allowed_groups, darf JEDER eingeloggte Nutzer den Typ erstellen.
+const EVERYONE = '__everyone__'
+
 // AD-Gruppen für Dropdown
 interface AdGroup { id: string; displayName: string; description: string }
 const adGroups = ref<AdGroup[]>([])
 const adGroupSearch = ref<Record<string, string>>({})
+const adGroupOpen   = ref<Record<string, boolean>>({})
 
 async function loadAdGroups() {
   try {
@@ -75,7 +80,16 @@ function filteredAdGroups(key: string): AdGroup[] {
 }
 
 function adGroupName(id: string): string {
+  if (id === EVERYONE) return 'Jeder (alle eingeloggten Nutzer)'
   return adGroups.value.find(g => g.id === id)?.displayName ?? id
+}
+
+// "Jeder"-Eintrag im Dropdown anzeigen, solange er noch nicht gesetzt ist und
+// (kein Suchtext oder passend zu „jeder"/„alle").
+function showEveryoneOption(t: PermType): boolean {
+  if (t.allowed_groups.includes(EVERYONE)) return false
+  const q = (adGroupSearch.value[t.key] ?? '').toLowerCase().trim()
+  return q === '' || 'jeder'.includes(q) || 'alle'.includes(q)
 }
 
 async function loadPermissions() {
@@ -84,6 +98,7 @@ async function loadPermissions() {
   permissions.value.forEach(t => {
     permSelected.value[t.key] = null
     adGroupSearch.value[t.key] = ''
+    adGroupOpen.value[t.key]   = false
   })
 }
 async function addPermUser(key: string) {
@@ -134,7 +149,7 @@ function userName(id: string) {
 }
 
 // ── Groups ─────────────────────────────────────────────────────────────────────
-interface Group { id: string; name: string; members: string[]; distributions: string[] }
+interface Group { id: string; name: string; members: string[]; distributions: string[]; required?: boolean; hidden?: boolean }
 const groups       = ref<Group[]>([])
 const newGroupName = ref('')
 const editGroup    = ref<Record<string, boolean>>({})
@@ -166,17 +181,33 @@ async function saveGroupName(g: Group) {
   try {
     const { data } = await client.put(`/settings/groups/${g.id}`, {
       name: editName.value[g.id], members: g.members, distributions: g.distributions,
+      hidden: g.hidden ?? false,
     })
     Object.assign(g, data.data)
     editGroup.value[g.id] = false
     showToast('Gespeichert', true)
   } catch { showToast('Fehler', false) }
 }
-async function deleteGroup(id: string) {
-  if (!confirm('Gruppe löschen?')) return
-  await client.delete(`/settings/groups/${id}`)
-  await loadGroups()
-  showToast('Gelöscht', true)
+async function toggleHidden(g: Group) {
+  const next = !g.hidden
+  try {
+    const { data } = await client.put(`/settings/groups/${g.id}`, {
+      name: g.name, members: g.members, distributions: g.distributions, hidden: next,
+    })
+    Object.assign(g, data.data)
+    showToast(next ? 'In Dropdowns ausgeblendet' : 'In Dropdowns sichtbar', true)
+  } catch { showToast('Fehler', false) }
+}
+async function deleteGroup(g: Group) {
+  if (g.required) return  // Pflichtgruppe – serverseitig ohnehin gesperrt
+  if (!confirm(`Fachabteilung "${g.name}" wirklich löschen?`)) return
+  try {
+    await client.delete(`/settings/groups/${g.id}`)
+    await loadGroups()
+    showToast('Gelöscht', true)
+  } catch {
+    showToast('Löschen nicht möglich', false)
+  }
 }
 async function addMember(g: Group) {
   const m = groupMember.value[g.id]
@@ -199,6 +230,7 @@ async function addDistribution(g: Group) {
   try {
     const { data } = await client.put(`/settings/groups/${g.id}`, {
       name: g.name, members: g.members, distributions: [...g.distributions, mail],
+      hidden: g.hidden ?? false,
     })
     Object.assign(g, data.data)
     distInput.value[g.id] = ''
@@ -209,6 +241,7 @@ async function removeDistribution(g: Group, mail: string) {
   const { data } = await client.put(`/settings/groups/${g.id}`, {
     name: g.name, members: g.members,
     distributions: g.distributions.filter(m => m !== mail),
+    hidden: g.hidden ?? false,
   })
   Object.assign(g, data.data)
 }
@@ -532,6 +565,13 @@ const navGroups = computed(() => {
                 ⚠ Niemand darf diesen Auftragstyp erstellen
               </div>
 
+              <!-- Hinweis wenn "Jeder" aktiv ist -->
+              <div v-if="t.allowed_groups.includes(EVERYONE)"
+                   class="text-xs rounded-lg border border-emerald-300/60 bg-emerald-50 dark:bg-emerald-900/20
+                          text-emerald-700 dark:text-emerald-300 px-3 py-2">
+                🌐 Jeder eingeloggte Nutzer darf diesen Auftragstyp erstellen – zusätzliche Benutzer/Gruppen sind dafür nicht nötig.
+              </div>
+
               <div class="grid md:grid-cols-2 gap-6">
 
                 <!-- Benutzer -->
@@ -566,9 +606,11 @@ const navGroups = computed(() => {
                   </div>
                   <div class="flex flex-wrap gap-2 min-h-[36px]">
                     <span v-for="gid in t.allowed_groups" :key="gid"
-                          class="inline-flex items-center gap-1.5 rounded-full bg-purple-100 dark:bg-purple-900/20
-                                 text-purple-700 dark:text-purple-300 px-3 py-1 text-sm">
-                      {{ adGroupName(gid) }}
+                          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm"
+                          :class="gid === EVERYONE
+                            ? 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 font-medium'
+                            : 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300'">
+                      <span v-if="gid === EVERYONE">🌐</span>{{ adGroupName(gid) }}
                       <button @click="removePermGroup(t.key, gid)" class="hover:text-red-500 transition">✕</button>
                     </span>
                     <span v-if="t.allowed_groups.length === 0"
@@ -576,21 +618,32 @@ const navGroups = computed(() => {
                   </div>
                   <div class="relative">
                     <input v-model="adGroupSearch[t.key]"
-       placeholder="AD-Gruppe suchen…"
+       placeholder="AD-Gruppe oder „Jeder“ hinzufügen…"
        class="input w-full"
-       @focus="adGroupSearch[t.key] = adGroupSearch[t.key] ?? ''"
-       @blur="(adGroupSearch[t.key] = '', undefined)" />
+       @focus="adGroupOpen[t.key] = true"
+       @blur="adGroupOpen[t.key] = false; adGroupSearch[t.key] = ''" />
                     <!-- Dropdown -->
-                    <div v-if="adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0"
+                    <div v-if="adGroupOpen[t.key] && (showEveryoneOption(t) || (adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0))"
                          class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
                                 dark:border-white/10 bg-white dark:bg-[#263040] shadow-lg">
-                      <button v-for="g in filteredAdGroups(t.key).slice(0, 15)" :key="g.id"
-                              @mousedown.prevent="addPermGroup(t.key, g.id)"
-                              class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-[#3EAAB8]/10 transition
-                                     text-gray-900 dark:text-gray-100 flex items-center justify-between">
-                        <span>{{ g.displayName }}</span>
-                        <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[200px]">{{ g.description }}</span>
+                      <!-- „Jeder“ – alle eingeloggten Nutzer -->
+                      <button v-if="showEveryoneOption(t)"
+                              @mousedown.prevent="addPermGroup(t.key, EVERYONE)"
+                              class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-emerald-500/10 transition
+                                     text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-2
+                                     border-b border-gray-100 dark:border-white/5">
+                        🌐 Jeder (alle eingeloggten Nutzer)
                       </button>
+                      <!-- AD-Gruppen (nur bei Suchtext) -->
+                      <template v-if="adGroupSearch[t.key]?.length > 0">
+                        <button v-for="g in filteredAdGroups(t.key).slice(0, 15)" :key="g.id"
+                                @mousedown.prevent="addPermGroup(t.key, g.id)"
+                                class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-[#3EAAB8]/10 transition
+                                       text-gray-900 dark:text-gray-100 flex items-center justify-between">
+                          <span>{{ g.displayName }}</span>
+                          <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[200px]">{{ g.description }}</span>
+                        </button>
+                      </template>
                     </div>
                   </div>
                 </div>
@@ -610,21 +663,36 @@ const navGroups = computed(() => {
           <div class="space-y-4">
             <div v-for="g in groups" :key="g.id" class="card-section space-y-5">
               <div class="flex items-center justify-between">
-                <div>
+                <div class="flex items-center gap-2">
                   <h3 v-if="!editGroup[g.id]" class="text-lg font-semibold text-gray-900 dark:text-white">{{ g.name }}</h3>
                   <input v-else v-model="editName[g.id]" class="input w-72" />
+                  <span v-if="g.required"
+                        title="Diese Fachabteilung wird von den Workflows benötigt und kann nicht umbenannt oder gelöscht werden. Mitglieder und Verteiler lassen sich weiterhin bearbeiten."
+                        class="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/20
+                               text-amber-700 dark:text-amber-300 px-2.5 py-1 text-xs font-medium whitespace-nowrap">
+                    🔒 Pflichtgruppe
+                  </span>
                 </div>
-                <div class="flex items-center gap-2">
+                <div v-if="!g.required" class="flex items-center gap-2">
                   <button v-if="!editGroup[g.id]" @click="editGroup[g.id] = true"
                           class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 transition">✏️</button>
                   <button v-if="editGroup[g.id]" @click="saveGroupName(g)"
                           class="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition">✓</button>
                   <button v-if="editGroup[g.id]" @click="editGroup[g.id] = false"
                           class="p-2 rounded-xl bg-gray-400 hover:bg-gray-500 text-white transition">✕</button>
-                  <button @click="deleteGroup(g.id)"
+                  <button @click="deleteGroup(g)"
                           class="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition">🗑</button>
                 </div>
               </div>
+              <!-- Sichtbarkeit in Auswahl-Dropdowns -->
+              <label class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300 cursor-pointer select-none w-fit">
+                <input type="checkbox" :checked="!!g.hidden" @change="toggleHidden(g)"
+                       class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]
+                              focus:ring-[#3EAAB8]/30 cursor-pointer" />
+                <span>Nicht in Auswahl-Dropdowns anzeigen</span>
+                <span class="text-xs text-gray-400 hidden sm:inline">– für Gruppen, die nur über spezielle Phasen automatisch zugewiesen werden</span>
+              </label>
+
               <div class="grid md:grid-cols-2 gap-6">
                 <div class="space-y-3">
                   <div class="flex items-center justify-between">

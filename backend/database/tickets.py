@@ -182,6 +182,21 @@ def list_tickets_by_assignee_or_group(user_id: str, group_ids: list[str]) -> Lis
     )
 
 
+def list_tickets_by_groups(group_ids: list[str]) -> List[Ticket]:
+    """
+    Gibt Tickets zurück die einer der angegebenen Gruppen zugewiesen sind.
+    (Nur Gruppen-Zuweisung, nicht direkt an einen User.)
+    """
+    if not group_ids:
+        return []
+
+    placeholders = ", ".join(["%s"] * len(group_ids))
+    return _select_tickets(
+        f"WHERE assignee_group_id IN ({placeholders})",
+        tuple(group_ids),
+    )
+
+
 def list_tickets_by_assignee_group(group_id: str) -> List[Ticket]:
     return _select_tickets(
         "WHERE assignee_group_id = %s AND status = %s",

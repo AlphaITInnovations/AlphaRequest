@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Optional
 
 from backend.database.settings import settings_get, settings_set
@@ -16,6 +17,8 @@ def get_groups() -> List[dict]:
             g["members"] = []
         if "distributions" not in g:
             g["distributions"] = []
+        if "hidden" not in g:
+            g["hidden"] = False
 
     return groups
 
@@ -24,6 +27,37 @@ def save_groups(groups: List[dict]) -> None:
     if not isinstance(groups, list):
         raise ValueError("Groups must be list")
     settings_set("TICKET_GROUPS", groups)
+
+
+def ensure_required_groups(required_names: List[str], hidden_names: Optional[List[str]] = None) -> List[str]:
+    """
+    Stellt sicher, dass für jeden geforderten Namen eine Gruppe existiert
+    (case-insensitive). Fehlende Gruppen werden leer angelegt (keine Mitglieder,
+    keine Verteiler). Neu angelegte Gruppen, deren Name in hidden_names steht,
+    werden als 'hidden' markiert (nicht in Auswahl-Dropdowns sichtbar) – nur bei
+    Neuanlage, ein Admin kann das später ändern. Idempotent. Gibt die Namen der
+    neu angelegten Gruppen zurück.
+    """
+    groups = get_groups()
+    existing = {g.get("name", "").strip().lower() for g in groups}
+    hidden_set = {(n or "").strip().lower() for n in (hidden_names or [])}
+    created: List[str] = []
+    for name in required_names:
+        key = (name or "").strip().lower()
+        if not key or key in existing:
+            continue
+        groups.append({
+            "id": uuid.uuid4().hex,
+            "name": name,
+            "members": [],
+            "distributions": [],
+            "hidden": key in hidden_set,
+        })
+        existing.add(key)
+        created.append(name)
+    if created:
+        save_groups(groups)
+    return created
 
 
 # ── Lookups ───────────────────────────────────────────────────────────────────

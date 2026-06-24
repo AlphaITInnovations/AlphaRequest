@@ -22,6 +22,10 @@ const ACTION_META: Record<string, { label: string; icon: string; color: string }
   ticket_submitted:         { label: 'An Fachabteilungen übergeben', icon: '📤', color: 'bg-blue-500' },
   ticket_archived:          { label: 'Ticket archiviert',            icon: '📦', color: 'bg-gray-400' },
   ticket_archived_manual:   { label: 'Manuell archiviert',           icon: '📦', color: 'bg-gray-400' },
+  ticket_rejected:          { label: 'Abgelehnt',                    icon: '⛔', color: 'bg-red-500' },
+  phase_advanced:           { label: 'Phase abgeschlossen',          icon: '➡️', color: 'bg-blue-500' },
+  freigabe_approved_mail:   { label: 'Freigegeben (per Mail)',       icon: '✅', color: 'bg-green-500' },
+  freigabe_rejected_mail:   { label: 'Abgelehnt (per Mail)',         icon: '⛔', color: 'bg-red-500' },
   status_changed:           { label: 'Status geändert',              icon: '🔄', color: 'bg-purple-500' },
   department_status_changed:{ label: 'Fachabteilung',                icon: '🏢', color: 'bg-teal-500' },
   description_changed:      { label: 'Formular bearbeitet',          icon: '📋', color: 'bg-amber-400' },
@@ -29,7 +33,7 @@ const ACTION_META: Record<string, { label: string; icon: string; color: string }
 
 const STATUS_LABEL: Record<string, string> = {
   in_request: 'Zu bearbeiten', in_progress: 'In Bearbeitung',
-  archived: 'Erledigt', rejected: 'Abgelehnt',
+  archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 
 const FIELD_LABEL: Record<string, string> = {
@@ -206,6 +210,13 @@ function descriptionDiff(
               <span class="font-medium text-[#3EAAB8]">
                 {{ STATUS_LABEL[e.details?.status_new] ?? 'Zu bearbeiten' }}
               </span>
+            </p>
+          </template>
+
+          <!-- ticket_rejected: Grund anzeigen -->
+          <template v-if="e.action === 'ticket_rejected' && e.details?.message">
+            <p class="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
+              Grund: {{ e.details.message }}
             </p>
           </template>
 

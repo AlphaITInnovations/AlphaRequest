@@ -1,7 +1,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { client } from '@/api/client'
 import { companiesApi } from '@/api/companies'
-import { personalnummerApi } from '@/api/personalnummer'
+import { ticketsApi } from '@/api/tickets'
 import { useRouter } from 'vue-router'
 import type { TicketPriority } from '@/types/ticket'
 
@@ -110,7 +110,7 @@ const RULES_CREATE: Record<string, Rule> = {
   'personal.cost_center':      { required: true },
   'personal.location':         { required: true },
   'personal.contract_company': { required: true },
-  'personal.personal_number':  { required: true },
+  // personal_number wird beim Erstellen automatisch vergeben (Backend) – kein Pflichtfeld.
   'personal.supervisor_hr_id': { required: true },
   'personal.contact_person_id':{ required: true },
   'it.timebutler.vacation_year':  { required: true },
@@ -130,6 +130,20 @@ const RULES_EDIT: Record<string, Rule> = {
   'it.signature.city':        { required: true },
   'it.mailboxes.notes':       { requiredIf: f => f.it.mailboxes.additional === 'Ja' },
 }
+
+// Erstellung: nur die Basisfelder; der „Nächster Bearbeiter" geht automatisch
+// an die Freigabe (Herr Lutz) und ist daher gesperrt (kein Pflichtfeld).
+const RULES_ERSTELLUNG: Record<string, Rule> = {
+  'personal.first_name':       { required: true },
+  'personal.last_name':        { required: true },
+  'personal.title':            { required: true },
+  'personal.contract_company': { required: true },
+  'personal.location':         { required: true },
+}
+
+// Mehrstufiger Onboarding-Workflow: Erstellung (Basis) → Freigabe → BackOffice
+// (voller Erstellungs-Feldsatz + nächsten Bearbeiter wählen) → Bearbeitung (alle Felder).
+export type ZugangStage = 'erstellung' | 'backoffice' | 'bearbeitung'
 
 // ── Hilfsfunktion: tief lesen ─────────────────────────────────────────────────
 
@@ -151,6 +165,10 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
   const submitting      = ref(false)
   const validationTriggered = ref(false)
   const errors          = ref<string[]>([])
+
+  // Aktuelle Stufe: im Create immer 'erstellung'; im Edit aus der Workflow-Phase
+  // ('backoffice' oder 'bearbeitung') – wird in init() gesetzt.
+  const stage = ref<ZugangStage>(phase === 'create' ? 'erstellung' : 'bearbeitung')
 
   const form = reactive<ZugangForm>({
     accountable: null,
@@ -198,7 +216,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
-  const rules = computed(() => phase === 'create' ? RULES_CREATE : RULES_EDIT)
+  const rules = computed(() => {
+    if (stage.value === 'erstellung') return RULES_ERSTELLUNG
+    if (stage.value === 'bearbeitung') return RULES_EDIT
+    return RULES_CREATE  // backoffice: voller Erstellungs-Feldsatz inkl. accountable
+  })
 
   function isEmpty(v: unknown): boolean {
     return v === null || v === undefined || v === ''
@@ -250,18 +272,24 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       const { data: compData } = await companiesApi.list()
       companies.value = compData.data.companies
 
-      // Load department groups from API
+      // Load department groups from API (als 'hidden' markierte ausblenden)
       try {
-        const { data: groupsData } = await client.get<{ data: GroupOption[] }>('/settings/groups')
-        departments.value = groupsData.data
+        const { data: groupsData } =
+          await client.get<{ data: Array<GroupOption & { hidden?: boolean }> }>('/settings/groups')
+        departments.value = groupsData.data.filter(g => !g.hidden)
       } catch {
         departments.value = []
       }
 
       if (phase === 'edit' && ticketId) {
-        const res = await client.get<{ data: { description: string; priority: string; comment: string; assignee_id: string; assignee_name: string; accountable_id: string; accountable_name: string } }>(`/tickets/${ticketId}`)
+        const res = await client.get<{ data: any }>(`/tickets/${ticketId}`)
         const t = res.data.data
         const desc = JSON.parse(t.description || '{}')
+
+        // Stufe aus der aktuellen Workflow-Phase ableiten
+        const wf = t.workflow_state
+        const curKey = wf?.phases?.[wf?.current_phase_index ?? 0]?.key
+        stage.value = curKey === 'backoffice' ? 'backoffice' : 'bearbeitung'
 
         if (desc.personal) Object.assign(form.personal, desc.personal)
 
@@ -293,8 +321,12 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
         form.priority    = t.priority as TicketPriority
         form.comment     = t.comment ?? ''
-        form.assignee    = t.assignee_id    ? { id: t.assignee_id,    name: t.assignee_name }    : null
-        form.accountable = t.accountable_id ? { id: t.accountable_id, name: t.accountable_name } : null
+        form.assignee    = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
+        // BackOffice wählt den nächsten Bearbeiter frisch → Feld leer lassen.
+        // Sonst (Bearbeitung) den bereits Zuständigen anzeigen.
+        form.accountable = stage.value === 'backoffice'
+          ? null
+          : (t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null)
 
         // Mark signature title as manually edited if it differs from personal title
         if (form.it.signature.title && form.it.signature.title !== form.personal.title) {
@@ -303,18 +335,6 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       }
     } finally {
       loading.value = false
-    }
-  }
-
-  // ── Personalnummer ──────────────────────────────────────────────────────────
-
-  async function generatePersonalnummer() {
-    if (form.personal.personal_number) return
-    try {
-      const { data } = await personalnummerApi.next()
-      form.personal.personal_number = String(data.data.personalnummer)
-    } catch {
-      alert('Fehler beim Generieren der Personalnummer')
     }
   }
 
@@ -344,22 +364,18 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
   async function submitCreate() {
     if (!validate()) return
-    if (!form.accountable) return
     pendingConfirm.value = true
   }
 
   async function confirmCreate() {
-    if (!form.accountable) return
     submitting.value = true
     pendingConfirm.value = false
     try {
+      // Erstellung: kein Assignee – das Ticket geht automatisch in die Freigabe
+      // (Herr Lutz). Zuständigkeit kommt aus der Workflow-Phase (assign_group).
       await client.post('/tickets', {
         ticket_type:      'zugang-beantragen',
         description:      buildDescription(),
-        assignee_id:      form.accountable.id,
-        assignee_name:    form.accountable.name,
-        accountable_id:   form.accountable.id,
-        accountable_name: form.accountable.name,
         priority:         form.priority,
         comment:          form.comment,
       })
@@ -390,17 +406,21 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     if (!ticketId) return
     submitting.value = true
     try {
+      // assignee_id = aktuelle Zuständigkeit (No-op fürs Backend); der GEWÄHLTE
+      // nächste Bearbeiter wird im BackOffice erst beim Abschluss (submit) gesetzt.
       await client.patch(`/tickets/${ticketId}`, {
         description:      buildDescription(),
         priority:         form.priority,
         comment:          form.comment,
         assignee_id:      form.assignee?.id,
         assignee_name:    form.assignee?.name,
-        accountable_id:   form.accountable?.id,
-        accountable_name: form.accountable?.name,
       })
       if (action === 'complete') {
-        await client.post(`/tickets/${ticketId}/submit`)
+        // BackOffice: gewählten nächsten Bearbeiter mitgeben (Person/Fachabteilung).
+        const body = stage.value === 'backoffice' && form.accountable
+          ? { assignee_id: form.accountable.id, assignee_name: form.accountable.name }
+          : undefined
+        await ticketsApi.submit(ticketId, body)
       }
       router.push('/dashboard')
     } catch {
@@ -412,8 +432,8 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
   return {
     form, companies, departments, loading, submitting, pendingConfirm, pendingComplete,
-    validationTriggered, errors,
+    validationTriggered, errors, stage,
     init, validate, isInvalid, fieldClass, onSignatureTitleInput,
-    generatePersonalnummer, submitCreate, confirmCreate, submitEdit, confirmComplete,
+    submitCreate, confirmCreate, submitEdit, confirmComplete,
   }
 }

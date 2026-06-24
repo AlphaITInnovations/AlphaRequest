@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
@@ -15,6 +15,10 @@ const departmentId = route.query.department as string
 const loading    = ref(true)
 const submitting = ref(false)
 const data       = ref<any>(null)
+const rawMode    = ref(false)
+const copied     = ref(false)
+
+const rawJson = computed(() => JSON.stringify(data.value, null, 2))
 
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
@@ -60,6 +64,18 @@ function goToEdit() {
   if (!ok) return
   router.push(`/tickets/edit/${data.value.ticket.ticket_type}/${ticketId}`)
 }
+
+async function copyRawJson() {
+  try {
+    await navigator.clipboard.writeText(rawJson.value)
+    copied.value = true
+    window.setTimeout(() => {
+      copied.value = false
+    }, 1800)
+  } catch {
+    alert('JSON konnte nicht kopiert werden')
+  }
+}
 </script>
 
 <template>
@@ -71,14 +87,40 @@ function goToEdit() {
     <div v-else-if="data" class="max-w-7xl mx-auto space-y-6 pb-24">
 
       <!-- Header -->
-      <div>
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
-          {{ data.ticket.title }}
-        </h1>
-        <p class="text-sm text-gray-400 mt-1">Erstellt am {{ data.ticket.created_at }}</p>
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+            {{ data.ticket.title }}
+          </h1>
+          <p class="text-sm text-gray-400 mt-1">Erstellt am {{ data.ticket.created_at }}</p>
+        </div>
+
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-lg border border-gray-200/80 dark:border-white/[0.09]
+                 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition
+                 hover:bg-gray-50 dark:bg-[#212B3A] dark:text-gray-200 dark:hover:bg-white/[0.06]"
+          @click="rawMode = !rawMode"
+        >
+          {{ rawMode ? 'Normalansicht' : 'Raw JSON' }}
+        </button>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div v-if="rawMode" class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between gap-3 border-b border-gray-100 dark:border-white/[0.06] px-5 py-3">
+          <p class="text-sm font-semibold text-gray-900 dark:text-white">Raw JSON</p>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-lg bg-[#3EAAB8] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+            @click="copyRawJson"
+          >
+            {{ copied ? 'Kopiert' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="max-h-[70vh] overflow-auto p-5 text-xs leading-relaxed text-gray-800 dark:text-gray-100 whitespace-pre-wrap"><code>{{ rawJson }}</code></pre>
+      </div>
+
+      <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         <!-- Meta Sidebar -->
         <aside class="space-y-4">

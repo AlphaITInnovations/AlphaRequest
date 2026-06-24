@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const {
   form, companies, departments, submitting, fieldClass, isInvalid,
-  validationTriggered, generatePersonalnummer, onSignatureTitleInput,
+  validationTriggered, onSignatureTitleInput, stage,
 } = props.ctx
 
 const BUNDESLAENDER = [
@@ -50,6 +50,9 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
             :accountable="form.accountable"
             :accountable-name="form.accountable?.name"
             :accountable-error="validationTriggered && isInvalid('accountable')"
+            :accountable-locked="stage === 'erstellung'"
+            accountable-locked-hint="Wird automatisch Herrn Lutz zur Freigabe vorgelegt."
+            :accountable-editable="stage === 'backoffice'"
             @update:priority="form.priority = $event"
             @update:comment="form.comment = $event"
             @update:accountable="form.accountable = $event"
@@ -61,9 +64,49 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
       <section class="flex-1 space-y-6">
 
         <!-- ═══════════════════════════════
-             A. BASISDATEN
+             ERSTELLUNG: nur Basisfelder (Rest folgt im BackOffice)
         ═══════════════════════════════ -->
-        <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+        <div v-if="stage === 'erstellung'"
+             class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                    rounded-2xl shadow-sm p-6 space-y-6">
+          <div>
+            <h2 class="text-lg font-semibold text-[#3EAAB8]">Basisdaten</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Es werden zunächst nur die Basisangaben erfasst. Nach der Freigabe ergänzt das BackOffice die übrigen Daten.
+            </p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">Vorname *</label>
+              <input v-model="form.personal.first_name" :class="fieldClass('personal.first_name')" placeholder="Max" />
+            </div>
+            <div>
+              <label class="label">Nachname *</label>
+              <input v-model="form.personal.last_name" :class="fieldClass('personal.last_name')" placeholder="Mustermann" />
+            </div>
+            <div>
+              <label class="label">Firma *</label>
+              <select v-model="form.personal.contract_company" :class="selectClass('personal.contract_company')">
+                <option value="">Bitte wählen</option>
+                <option v-for="c in companies" :key="c">{{ c }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Niederlassung *</label>
+              <input v-model="form.personal.location" :class="fieldClass('personal.location')" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="label">Titel *</label>
+              <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════
+             A. BASISDATEN (BackOffice + Bearbeitung)
+        ═══════════════════════════════ -->
+        <div v-if="stage !== 'erstellung'"
+             class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                     rounded-2xl shadow-sm p-6 space-y-8">
 
           <h2 class="text-lg font-semibold text-[#3EAAB8]">Basisdaten</h2>
@@ -124,29 +167,16 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
 
               <!-- Personalnummer -->
               <div class="md:col-span-2">
-                <label class="label">Personalnummer *</label>
-                <div v-if="phase === 'create'" class="space-y-2">
-                  <button
-                    type="button"
-                    @click="generatePersonalnummer"
-                    :disabled="!!form.personal.personal_number"
-                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border
-                           border-[#3EAAB8]/30 text-[#3EAAB8] bg-[#3EAAB8]/5
-                           hover:bg-[#3EAAB8]/10 text-sm font-medium transition
-                           disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Personalnummer generieren
-                  </button>
-                  <div v-if="form.personal.personal_number"
-                       class="flex items-center justify-between px-4 py-2 rounded-xl
-                              bg-[#3EAAB8]/5 border border-[#3EAAB8]/30">
-                    <span class="font-mono text-sm text-[#3EAAB8]">{{ form.personal.personal_number }}</span>
-                    <span class="text-xs font-medium text-[#3EAAB8]">generiert</span>
-                  </div>
-                  <p v-if="validationTriggered && isInvalid('personal.personal_number')"
-                     class="text-xs text-red-500">
-                    Pflichtfeld – bitte Personalnummer generieren.
-                  </p>
+                <label class="label">Personalnummer</label>
+                <div v-if="phase === 'create'"
+                     class="flex items-center gap-2 px-4 py-2.5 rounded-xl
+                            bg-[#3EAAB8]/5 border border-dashed border-[#3EAAB8]/40
+                            text-sm text-gray-600 dark:text-gray-300">
+                  <svg class="w-4 h-4 flex-shrink-0 text-[#3EAAB8]" viewBox="0 0 24 24" fill="none"
+                       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                  Wird beim Erstellen des Auftrags automatisch vergeben.
                 </div>
                 <input v-else v-model="form.personal.personal_number"
                        :class="fieldClass('personal.personal_number')"
@@ -290,9 +320,9 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
         </div>
 
         <!-- ═══════════════════════════════
-             B. IT / SYSTEMDATEN (nur edit)
+             B. IT / SYSTEMDATEN (nur in der Bearbeitung)
         ═══════════════════════════════ -->
-        <template v-if="phase === 'edit'">
+        <template v-if="stage === 'bearbeitung'">
 
           <!-- IT Systemdaten -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
@@ -472,6 +502,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
     <TicketActionBar
       :phase="phase"
       :loading="submitting"
+      :complete-label="stage === 'backoffice' ? 'Weitergeben' : 'Abschließen'"
       :confirm-create-open="ctx.pendingConfirm.value"
       :confirm-complete-open="ctx.pendingComplete.value"
       @create="ctx.submitCreate()"

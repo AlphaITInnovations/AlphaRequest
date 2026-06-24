@@ -6,6 +6,18 @@ from backend.models.models import (
 )
 
 
+class WatcherOut(BaseModel):
+    id: str
+    name: Optional[str] = None
+
+
+class ResponsibleOut(BaseModel):
+    """Verantwortliche(r) für die Anzeige – aus der Bearbeitungsphase des Workflows."""
+    kind: str                       # user | group
+    id: Optional[str] = None
+    name: Optional[str] = None
+
+
 class TicketOut(BaseModel):
     id: int
     title: str
@@ -18,17 +30,18 @@ class TicketOut(BaseModel):
     priority: TicketPriority
     created_at: datetime
     updated_at: Optional[datetime] = None
-    assignee_id: Optional[str] = None
-    assignee_name: Optional[str] = None
-    accountable_id: Optional[str] = None
-    accountable_name: Optional[str] = None
-    assignee_group_id: Optional[str] = None
-    assignee_group_name: Optional[str] = None
+    workflow_state: Optional[dict] = None
+    # Verantwortliche(r) (Person/Gruppe) aus dem Workflow – ersetzt assignee/accountable.
+    responsible: Optional[ResponsibleOut] = None
+    # Nur im Detail-Endpoint befüllt (Listen vermeiden so N+1-Queries).
+    watchers: List[WatcherOut] = []
 
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_ticket(cls, t: Ticket) -> "TicketOut":
+    def from_ticket(cls, t: Ticket, watchers: Optional[list] = None) -> "TicketOut":
+        from backend.services.workflow_state import primary_responsibility
+        resp = primary_responsibility(t)
         return cls(
             id=t.id,
             title=t.title,
@@ -41,12 +54,9 @@ class TicketOut(BaseModel):
             priority=t.priority,
             created_at=t.created_at,
             updated_at=t.updated_at,
-            assignee_id=t.assignee_id,
-            assignee_name=t.assignee_name,
-            accountable_id=t.accountable_id,
-            accountable_name=t.accountable_name,
-            assignee_group_id=t.assignee_group_id,
-            assignee_group_name=t.assignee_group_name,
+            workflow_state=t.workflow_state_parsed or None,
+            responsible=ResponsibleOut(**resp) if resp else None,
+            watchers=[WatcherOut(**w) for w in (watchers or [])],
         )
 
 
@@ -58,12 +68,29 @@ class TicketListResponse(BaseModel):
 class TicketCreateRequest(BaseModel):
     ticket_type: TicketType
     description: str
+    # Optional: Tickettypen, deren erste Phase eine feste Zuständigkeit hat
+    # (z.B. Onboarding → Freigabe Herr Lutz), kommen ohne Assignee aus. Andere
+    # Typen liefern weiterhin einen Assignee; create_ticket prüft das bei Bedarf.
+    assignee_id: Optional[str] = None
+    assignee_name: Optional[str] = None
+    accountable_id: Optional[str] = None
+    accountable_name: Optional[str] = None
+    comment: str = ""
+    priority: TicketPriority = TicketPriority.medium
+    # Beobachter (inkl. Ersteller). Leer = Backend trägt nur den Ersteller ein.
+    watchers: List[WatcherOut] = []
+
+
+class BasisTicketCreateRequest(BaseModel):
+    title: str
+    description: str
     assignee_id: str
     assignee_name: str
     accountable_id: str
     accountable_name: str
-    comment: str = ""
+    comment: Optional[str] = ""
     priority: TicketPriority = TicketPriority.medium
+    watchers: List[WatcherOut] = []
 
 
 class TicketUpdateRequest(BaseModel):

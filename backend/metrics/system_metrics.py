@@ -19,16 +19,6 @@ process_uptime_seconds = Gauge(
     "Application uptime in seconds"
 )
 
-background_jobs_running = Gauge(
-    "background_jobs_running",
-    "Currently running background jobs"
-)
-
-background_jobs_total = Gauge(
-    "background_jobs_total",
-    "Total background jobs executed"
-)
-
 
 # ---------------------------------------------------------
 # INTERNAL STATE

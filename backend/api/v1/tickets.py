@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
 from backend.models.models import RequestStatus, TicketType
@@ -10,15 +12,19 @@ from backend.services.microsoft_graph import get_cached_user_mail
 from backend.services.microsoft_mail import send_newrequest_mail, send_mail_to_all_fachabteilung
 from backend.services.ticket_permissions import can_user_create_ticket
 from backend.schemas.ticket import (
-    TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut,
+    TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut, BasisTicketCreateRequest,
 )
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
 )
 from backend.database.users import PERM_MANAGE, PERM_ADMIN
-from backend.services.workflow_state import build_workflow, set_workflow_state
+from backend.services.workflow_state import (
+    build_workflow, set_workflow_state, advance_phase,
+    reject_workflow, get_current_phase, all_required_departments_done,
+)
 from backend.utils.ticket_labels import TICKET_LABELS
 from backend.utils.logger import logger
+from backend.metrics.ticket_metrics import tickets_created_total
 from datetime import datetime
 from zoneinfo import ZoneInfo
 router = APIRouter()
@@ -61,6 +67,10 @@ def generate_title(ticket_type, user, desc):
         label = f"{unit}_{Niederlassung}_{Job}"
     elif ticket_type == TicketType.hotelbuchung:
         label = f"Hotelbuchung – {user['displayName']}"
+    elif ticket_type == TicketType.basis_ticket:
+        ticket_data = desc.get("ticket", {})
+        betreff = ticket_data.get("betreff", "").strip()
+        label = f"Basis-Ticket – {betreff}" if betreff else f"Basis-Ticket – {user['displayName']}"
     else:
         label = TICKET_LABELS.get(ticket_type, ticket_type.value)
 
@@ -70,6 +80,9 @@ def generate_title(ticket_type, user, desc):
 def validate_assignee(user_cache, assignee_id: str) -> bool:
     if not assignee_id:
         return False
+    # Platzhalter für Ticket-Typen ohne Bearbeitungsphase (z.B. Marketing,
+    # Hotelbuchung) – sie gehen direkt in die Durchführung; die Zuständigkeit
+    # steht im workflow_state.departments, nicht im assignee.
     if assignee_id == "fachabteilung":
         return True
     # Check if it's a valid group ID
@@ -80,32 +93,55 @@ def validate_assignee(user_cache, assignee_id: str) -> bool:
     return any(u.get("id") == assignee_id for u in user_cache)
 
 
-def complete_ticket_internal(ticket, request, user):
-    if not ticket.priority:
-        raise HTTPException(400, "Priorität fehlt")
-    try:
-        json.loads(ticket.description or "{}")
-    except Exception:
-        raise HTTPException(400, "Ticketbeschreibung ungültig")
-
+def _build_and_init_workflow(ticket) -> dict:
+    """Builds workflow, saves it, advances past the creation phase. Returns updated workflow."""
     workflow = build_workflow(ticket)
-    if not workflow or "departments" not in workflow:
-        raise HTTPException(500, "Workflow konnte nicht erstellt werden")
-
-    request.app.state.manager.update_ticket(
-        ticket_id=ticket.id,
-        status=RequestStatus.in_request,
-    )
-    database.set_assignee(ticket_id=ticket.id, user_id="fachabteilung", user_name="fachabteilung")
-    database.set_accountable(ticket_id=ticket.id, user_id="fachabteilung", user_name="fachabteilung")
     set_workflow_state(ticket.id, workflow)
-    send_mail_to_all_fachabteilung(workflow, ticket)
+    return advance_phase(ticket.id)
 
-    logger.info(
-        "Ticket %s in in_request überführt | Departments=%s",
-        ticket.id,
-        list(workflow["departments"].keys()),
-    )
+
+def notify_phase_entry(request, ticket, phase: Optional[dict]) -> None:
+    """
+    Benachrichtigt die für die (gerade aktiv gewordene) Phase Zuständigen –
+    zentral genutzt von create_ticket und submit_ticket.
+      - department_review        → Mail an alle Fachabteilungs-Verteiler
+      - assignment + view=approval → Freigabe-Mail (JA/NEIN) an Gruppen-Verteiler
+      - assignment + kind=group  → Mail an Gruppen-Verteiler
+      - assignment + kind=user   → Mail an die Person
+    """
+    if not phase:
+        return
+    from backend.services.phase_definitions import PhaseType, PhaseView
+    from backend.database.groups import get_distributions_from_group
+
+    ptype = phase.get("type")
+    if ptype == PhaseType.department_review.value:
+        send_mail_to_all_fachabteilung(phase.get("departments", {}), ticket)
+        return
+
+    resp = phase.get("responsibility") or {}
+    kind = resp.get("kind")
+
+    # Freigabe-Phase: Mail mit JA/NEIN-Buttons (signierte Links) an die Verteiler
+    if phase.get("view") == PhaseView.approval.value and kind == "group":
+        from backend.services.freigabe_token import make_token
+        from backend.services.microsoft_mail import send_freigabe_mail
+        from backend.utils.config import config
+        base = config.FRONTEND_URL.rstrip("/")
+        approve_url = f"{base}/api/v1/freigabe?token={make_token(ticket.id, 'approve')}"
+        reject_url  = f"{base}/api/v1/freigabe?token={make_token(ticket.id, 'reject')}"
+        recipients = [m.strip() for m in get_distributions_from_group(resp.get("id")) if m]
+        send_freigabe_mail(ticket, approve_url, reject_url, recipients)
+        return
+
+    if kind == "group":
+        for mail in get_distributions_from_group(resp.get("id")):
+            if mail:
+                send_newrequest_mail(mail.strip(), ticket.priority, ticket.title, ticket.ticket_type, ticket.id)
+    elif kind == "user":
+        mail_to = get_cached_user_mail(request.app, resp.get("id"))
+        if mail_to:
+            send_newrequest_mail(mail_to, ticket.priority, ticket.title, ticket.ticket_type, ticket.id)
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
@@ -136,21 +172,29 @@ def _get_ticket_or_404(ticket_id: int):
 
 
 def _assert_ticket_access(ticket, user: dict):
-    """Owner, Assignee, Accountable, Gruppen-Mitglied, Manager/Admin dürfen zugreifen."""
+    """Ersteller, in der aktuellen Phase Zuständige (Person/Gruppe/Reviewing-
+    Fachabteilungen), Beobachter oder Manager/Admin dürfen zugreifen.
+    Die alten assignee/accountable-Spalten werden NICHT mehr ausgewertet –
+    Zuständigkeit kommt aus dem workflow_state."""
     user_id = user["id"]
 
     if ticket.owner_id == user_id:
         return
-    if ticket.assignee_id == user_id:
-        return
-    if ticket.accountable_id == user_id:
-        return
     if PERM_MANAGE in user.get("permissions", []):
         return
-    if ticket.assignee_group_id:
-        from backend.database.groups import get_group_ids_for_user
-        if ticket.assignee_group_id in get_group_ids_for_user(user_id):
-            return
+
+    from backend.database.groups import get_group_ids_for_user
+    user_group_ids = get_group_ids_for_user(user_id)
+
+    # In der aktuellen Phase zuständig (Person, Gruppe oder Reviewing-Fachabteilung)?
+    from backend.services.workflow_state import user_is_responsible
+    if user_is_responsible(ticket, user_id, user_group_ids):
+        return
+
+    # Beobachter dürfen das Ticket sehen
+    from backend.database.ticket_watchers import is_watcher
+    if is_watcher(ticket.id, user_id):
+        return
 
     raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff auf dieses Ticket")
 
@@ -186,7 +230,42 @@ def list_my_tickets(user: dict = Depends(get_current_user)):
 def get_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
-    return DataResponse(data=TicketOut.from_ticket(ticket))
+    from backend.database.ticket_watchers import list_watchers
+    return DataResponse(data=TicketOut.from_ticket(ticket, watchers=list_watchers(ticket_id)))
+
+
+# ── Beobachter (Watcher) ──────────────────────────────────────────────────────
+# Jeder mit Ticket-Zugriff darf die Beobachterliste lesen und ändern.
+
+@router.get("/tickets/{ticket_id}/watchers")
+def get_ticket_watchers(ticket_id: int, user: dict = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    from backend.database.ticket_watchers import list_watchers
+    return DataResponse(data={"watchers": list_watchers(ticket_id)})
+
+
+@router.post("/tickets/{ticket_id}/watchers", status_code=201)
+async def add_ticket_watcher(ticket_id: int, request: Request, user: dict = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    body = await request.json()
+    watcher_id = (body.get("user_id") or "").strip()
+    watcher_name = (body.get("user_name") or "").strip()
+    if not watcher_id:
+        raise api_error(400, ErrorCode.INVALID_WATCHER, "user_id ist erforderlich")
+    from backend.database.ticket_watchers import add_watcher, list_watchers
+    add_watcher(ticket_id, watcher_id, watcher_name or None)
+    return DataResponse(data={"watchers": list_watchers(ticket_id)})
+
+
+@router.delete("/tickets/{ticket_id}/watchers/{watcher_id}")
+def remove_ticket_watcher(ticket_id: int, watcher_id: str, user: dict = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    from backend.database.ticket_watchers import remove_watcher, list_watchers
+    remove_watcher(ticket_id, watcher_id)
+    return DataResponse(data={"watchers": list_watchers(ticket_id)})
 
 
 @router.post("/tickets", response_model=DataResponse[TicketOut], status_code=201)
@@ -195,31 +274,53 @@ async def create_ticket(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
+    # Basis-Tickets haben einen eigenen Endpoint
+    if data.ticket_type == TicketType.basis_ticket:
+        raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
+                        "Basis-Tickets bitte über POST /tickets/basis erstellen")
+
     if not can_user_create_ticket(data.ticket_type.value, user["id"], user.get("groups")):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                         f"Kein Recht zum Erstellen von '{data.ticket_type.value}'-Tickets")
-    if not validate_assignee(request.app.state.user_cache, data.assignee_id):
-        raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
-                        f"Unbekannter Assignee '{data.assignee_id}'")
+    # Assignee wird erst geprüft, wenn die erste Phase nach der Erstellung wirklich
+    # einen frei wählbaren Bearbeiter braucht (siehe unten). Tickettypen mit fester
+    # Zuständigkeit der ersten Phase (assign_group/Freigabe/Fachabteilungen) kommen
+    # ohne Assignee aus.
     try:
-        json.loads(data.description)
+        desc_obj = json.loads(data.description)
     except Exception:
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
                         "description muss gültiges JSON sein")
 
-    title = generate_title(data.ticket_type, user, data.description)
+    description = data.description
+    # Onboarding: Personalnummer wird automatisch bei der Auftragserstellung
+    # vergeben (kein manueller Button mehr im Formular). Erst hier verbrauchen,
+    # damit abgebrochene Formulare keine Nummern „verbrennen". Nur wenn noch
+    # keine gesetzt ist.
+    if data.ticket_type == TicketType.zugang_beantragen:
+        personal = desc_obj.get("personal") or {}
+        if not str(personal.get("personal_number") or "").strip():
+            from backend.services.personalnummer_generator import next_personalnummer
+            try:
+                personal["personal_number"] = str(next_personalnummer())
+            except RuntimeError as e:
+                raise api_error(409, "PERSONALNUMMER_FAILED", str(e))
+            except Exception:
+                logger.exception("Personalnummer-Vergabe fehlgeschlagen")
+                raise api_error(500, "PERSONALNUMMER_FAILED",
+                                "Personalnummer konnte nicht vergeben werden")
+            desc_obj["personal"] = personal
+            description = json.dumps(desc_obj, ensure_ascii=False)
+
+    title = generate_title(data.ticket_type, user, description)
     ticket_id = request.app.state.manager.create_ticket(
         title=title,
         ticket_type=data.ticket_type,
-        description=data.description,
+        description=description,
         owner_id=user["id"],
         owner_name=user["displayName"],
         owner_info=json.dumps(user, ensure_ascii=False),
         comment=data.comment,
-        assignee_id=data.assignee_id,
-        assignee_name=data.assignee_name,
-        accountable_id=data.accountable_id,
-        accountable_name=data.accountable_name,
         priority=data.priority,
     )
     add_history_event(
@@ -229,11 +330,49 @@ async def create_ticket(
         action="ticket_created",
         details={"priority": data.priority.value, "ticket_type": data.ticket_type.value},
     )
+    tickets_created_total.labels(type=data.ticket_type.value).inc()
 
-    # Skip phase2 for marketing and hotelbuchung → direkt an Fachabteilung
-    if data.ticket_type in (TicketType.marketing_stellenanzeige, TicketType.hotelbuchung):
+    # Beobachter: vom Client übergebene Liste (inkl. Ersteller), sonst nur Ersteller
+    from backend.database.ticket_watchers import add_watcher
+    if data.watchers:
+        for w in data.watchers:
+            add_watcher(ticket_id, w.id, w.name)
+    else:
+        add_watcher(ticket_id, user["id"], user["displayName"])
+
+    ticket = database.get_ticket(ticket_id)
+    updated_workflow = _build_and_init_workflow(ticket)
+    ticket = database.get_ticket(ticket_id)
+
+    # Phase nach dem Vorbei-Advancen der Erstellung
+    from backend.services.workflow_state import PhaseType as WfPhaseType, set_phase_responsibility
+    phases = updated_workflow.get("phases", [])
+    current_idx = updated_workflow.get("current_phase_index", 0)
+    current_phase = phases[current_idx] if current_idx < len(phases) else None
+
+    # Nur wenn die erste Phase eine assignment-Phase OHNE feste Zuständigkeit ist
+    # (kein assign_group), muss der Client einen Bearbeiter mitliefern.
+    needs_assignee = (
+        current_phase is not None
+        and current_phase.get("type") == WfPhaseType.assignment.value
+        and not (current_phase.get("responsibility") or {}).get("kind")
+    )
+    if needs_assignee:
+        if not validate_assignee(request.app.state.user_cache, data.assignee_id):
+            raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                            f"Unbekannter Assignee '{data.assignee_id}'")
+        from backend.database.groups import get_groups
+        group_map = {g["id"]: g["name"] for g in get_groups()}
+        if data.assignee_id in group_map:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]})
+        else:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "user", "id": data.assignee_id, "name": data.assignee_name})
         ticket = database.get_ticket(ticket_id)
-        complete_ticket_internal(ticket, request, user)
+        current_phase = ticket.workflow_state_parsed.get("phases", [])[current_idx]
+
+    if current_phase and current_phase.get("type") == WfPhaseType.department_review.value:
         add_history_event(
             ticket_id,
             actor_id=user["id"],
@@ -241,32 +380,90 @@ async def create_ticket(
             action="ticket_submitted",
             details={"status_new": RequestStatus.in_request.value},
         )
-        return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
-    # Assignee: Fachabteilung oder User → DB-Update + Mail
-    from backend.database.groups import get_groups
-    group_map = {g["id"]: g["name"] for g in get_groups()}
-    if data.assignee_id in group_map:
-        group_name = group_map[data.assignee_id]
-        database.update_ticket(ticket_id,
-            assignee_id=None, assignee_name=None,
-            assignee_group_id=data.assignee_id, assignee_group_name=group_name)
-
-        all_groups = get_groups()
-        for g in all_groups:
-            if g["id"] == data.assignee_id:
-                for mail in g.get("distributions", []):
-                    if mail:
-                        send_newrequest_mail(mail.strip(), data.priority, title, data.ticket_type, ticket_id)
-                break
-    else:
-        mail_to = get_cached_user_mail(request.app, data.assignee_id)
-        if mail_to:
-            send_newrequest_mail(mail_to, data.priority, title, data.ticket_type, ticket_id)
+    notify_phase_entry(request, ticket, current_phase)
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
+# ── Basis-Ticket (eigener Endpoint, keine Permission-Prüfung) ─────────────────
+
+
+
+
+@router.post("/tickets/basis", response_model=DataResponse[TicketOut], status_code=201)
+async def create_basis_ticket(
+    data: BasisTicketCreateRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    # Keine Permission-Prüfung – jeder eingeloggte User darf Basis-Tickets erstellen
+
+    if not validate_assignee(request.app.state.user_cache, data.assignee_id):
+        raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                        f"Unbekannter Assignee '{data.assignee_id}'")
+    try:
+        json.loads(data.description)
+    except Exception:
+        raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
+                        "description muss gültiges JSON sein")
+
+    # Basis-Tickets sind ausschließlich Fachabteilungen zuweisbar (keine Personen).
+    from backend.database.groups import get_groups
+    group_map = {g["id"]: g["name"] for g in get_groups()}
+    if data.assignee_id not in group_map:
+        raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                        "Basis-Tickets können nur einer Fachabteilung zugewiesen werden")
+
+    now_str = datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M")
+    title = f"{data.title.strip()} – {now_str}" if data.title.strip() else f"Basis-Ticket – {user['displayName']} – {now_str}"
+
+    ticket_id = request.app.state.manager.create_ticket(
+        title=title,
+        ticket_type=TicketType.basis_ticket,
+        description=data.description,
+        owner_id=user["id"],
+        owner_name=user["displayName"],
+        owner_info=json.dumps(user, ensure_ascii=False),
+        comment=data.comment or "",
+        priority=data.priority or "medium",
+    )
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_created",
+        details={"priority": data.priority, "ticket_type": "basis-ticket"},
+    )
+    tickets_created_total.labels(type="basis-ticket").inc()
+
+    # Beobachter: vom Client übergebene Liste (inkl. Ersteller), sonst nur Ersteller
+    from backend.database.ticket_watchers import add_watcher
+    if data.watchers:
+        for w in data.watchers:
+            add_watcher(ticket_id, w.id, w.name)
+    else:
+        add_watcher(ticket_id, user["id"], user["displayName"])
+
+    # Workflow aufbauen und an der Erstellungsphase vorbei in die Bearbeitung schieben.
+    # Basis-Tickets haben Phasen [creation, assignment] – danach immer Assignment-Phase.
+    ticket = database.get_ticket(ticket_id)
+    updated_workflow = _build_and_init_workflow(ticket)
+    current_idx = updated_workflow.get("current_phase_index", 0)
+
+    # Zuständigkeit der Bearbeitungsphase (immer eine Fachabteilung) in den
+    # Workflow schreiben + Verteiler der Gruppe benachrichtigen.
+    from backend.services.workflow_state import set_phase_responsibility
+    set_phase_responsibility(ticket_id, current_idx,
+        {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]})
+    for g in get_groups():
+        if g["id"] == data.assignee_id:
+            for mail in g.get("distributions", []):
+                if mail:
+                    send_newrequest_mail(mail.strip(), data.priority, title, TicketType.basis_ticket, ticket_id)
+            break
+
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
 @router.patch("/tickets/{ticket_id}", response_model=DataResponse[TicketOut])
@@ -311,29 +508,28 @@ async def update_ticket(
     if updates:
         database.update_ticket(ticket_id=ticket_id, **updates)
 
-    # --- Zuweisungen: nur bei in_progress änderbar ---
-    if ticket.status == RequestStatus.in_progress:
-        if data.assignee_id and ticket.assignee_id != data.assignee_id:
-            from backend.database.groups import get_groups
+    # --- Zuweisung der Bearbeitungsphase: nur in der assignment-Phase änderbar ---
+    # Schreibt die responsibility in den Workflow (Person/Gruppe), nicht in die
+    # alten assignee/accountable-Spalten.
+    if data.assignee_id:
+        from backend.database.groups import get_groups
+        from backend.services.workflow_state import (
+            get_workflow_state, current_responsibility, set_phase_responsibility,
+            PhaseType as WfPhaseType,
+        )
+        wf = get_workflow_state(ticket_id)
+        phases = wf.get("phases", [])
+        idx = wf.get("current_phase_index", 0)
+        if 0 <= idx < len(phases) and phases[idx].get("type") == WfPhaseType.assignment.value:
             group_map = {g["id"]: g["name"] for g in get_groups()}
-
             if data.assignee_id in group_map:
-                # Zuweisung an eine Fachabteilung
-                group_name = group_map[data.assignee_id]
-                changes["assignee"] = {"old": ticket.assignee_name, "new": group_name}
-                database.update_ticket(ticket_id,
-                    assignee_id=None, assignee_name=None,
-                    assignee_group_id=data.assignee_id, assignee_group_name=group_name)
+                new_resp = {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]}
             else:
-                # Zuweisung an einen User
-                changes["assignee"] = {"old": ticket.assignee_name, "new": data.assignee_name or data.assignee_id}
-                database.set_assignee(ticket_id, data.assignee_id, data.assignee_name or "")
-                # Gruppen-Zuweisung aufheben
-                database.update_ticket(ticket_id, assignee_group_id=None, assignee_group_name=None)
-
-        if data.accountable_id and ticket.accountable_id != data.accountable_id:
-            changes["accountable"] = {"old": ticket.accountable_name, "new": data.accountable_name or data.accountable_id}
-            database.set_accountable(ticket_id, data.accountable_id, data.accountable_name or "")
+                new_resp = {"kind": "user", "id": data.assignee_id, "name": data.assignee_name or data.assignee_id}
+            old = current_responsibility(ticket)
+            if old.get("id") != new_resp["id"]:
+                changes["assignee"] = {"old": old.get("name"), "new": new_resp["name"]}
+                set_phase_responsibility(ticket_id, idx, new_resp)
 
     # --- Ein gebündeltes History-Event für alle Änderungen ---
     if changes:
@@ -357,14 +553,110 @@ async def submit_ticket(
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
 
-    complete_ticket_internal(ticket, request, user)
+    current_phase = get_current_phase(ticket_id)
+    if not current_phase:
+        raise api_error(400, ErrorCode.INVALID_STATUS, "Ticket hat keine aktive Phase")
+
+    from backend.services.phase_definitions import PhaseType
+    if current_phase["type"] != PhaseType.assignment:
+        raise api_error(400, ErrorCode.INVALID_STATUS, "Aktuelle Phase kann nicht über Submit abgeschlossen werden")
+
+    # Optionaler „nächster Bearbeiter" (z.B. BackOffice wählt Person/Fachabteilung,
+    # Zuständigkeit wird erst beim Abschluss aktiviert).
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    next_assignee_id   = (body or {}).get("assignee_id")
+    next_assignee_name = (body or {}).get("assignee_name")
+
+    completed_key = current_phase["key"]
+    updated_workflow = advance_phase(ticket_id)
+
+    phases = updated_workflow.get("phases", [])
+    current_idx = updated_workflow.get("current_phase_index", 0)
+    next_phase = phases[current_idx] if current_idx < len(phases) else None
+
+    # Nächste assignment-Phase ohne feste Zuständigkeit → gewählten Bearbeiter setzen.
+    from backend.services.workflow_state import set_phase_responsibility
+    if (next_phase is not None
+            and next_phase.get("type") == PhaseType.assignment.value
+            and not (next_phase.get("responsibility") or {}).get("kind")
+            and next_assignee_id):
+        if not validate_assignee(request.app.state.user_cache, next_assignee_id):
+            raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                            f"Unbekannter Assignee '{next_assignee_id}'")
+        from backend.database.groups import get_groups
+        group_map = {g["id"]: g["name"] for g in get_groups()}
+        if next_assignee_id in group_map:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "group", "id": next_assignee_id, "name": group_map[next_assignee_id]})
+        else:
+            set_phase_responsibility(ticket_id, current_idx,
+                {"kind": "user", "id": next_assignee_id, "name": next_assignee_name or next_assignee_id})
+        next_phase = database.get_ticket(ticket_id).workflow_state_parsed["phases"][current_idx]
+
+    ticket = database.get_ticket(ticket_id)
+
+    if next_phase and next_phase["type"] == PhaseType.department_review.value:
+        add_history_event(
+            ticket_id,
+            actor_id=user["id"],
+            actor_name=user["displayName"],
+            action="ticket_submitted",
+            details={"status_new": RequestStatus.in_request.value},
+        )
+    else:
+        action = "ticket_archived" if not next_phase else "phase_advanced"
+        add_history_event(
+            ticket_id,
+            actor_id=user["id"],
+            actor_name=user["displayName"],
+            action=action,
+            details={"phase_completed": completed_key},
+        )
+
+    notify_phase_entry(request, ticket, next_phase)
+
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
+@router.post("/tickets/{ticket_id}/reject", response_model=DataResponse[TicketOut])
+async def reject_ticket(
+    ticket_id: int,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+
+    if ticket.status in (RequestStatus.archived, RequestStatus.rejected):
+        raise api_error(400, ErrorCode.INVALID_STATUS, "Ticket ist bereits abgeschlossen")
+
+    body = await request.json()
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise api_error(400, ErrorCode.INVALID_DESCRIPTION, "Ablehnungsgrund (message) ist erforderlich")
+
+    from zoneinfo import ZoneInfo
+    rejected_at = datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
+    reject_workflow(ticket_id, message=message, rejected_by=user["displayName"], rejected_at=rejected_at)
+
     add_history_event(
         ticket_id,
         actor_id=user["id"],
         actor_name=user["displayName"],
-        action="ticket_submitted",
-        details={"status_new": RequestStatus.in_request.value},
+        action="ticket_rejected",
+        details={"message": message},
     )
+
+    # Ersteller über die Ablehnung informieren (Mailfehler darf den Reject nicht kippen).
+    try:
+        from backend.services.microsoft_mail import send_rejection_mail
+        owner_mail = ticket.owner_info_parsed.get("mail") or get_cached_user_mail(request.app, ticket.owner_id)
+        send_rejection_mail(ticket, message, owner_mail)
+    except Exception:
+        logger.exception("Ablehnungs-Mail an Ersteller fehlgeschlagen (Ticket %s)", ticket_id)
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
@@ -472,19 +764,33 @@ async def set_department_status(
         },
     )
 
-    if can_archive_ticket(ticket_id):
-        database.update_ticket(ticket_id=ticket_id, status=RequestStatus.archived)
-        add_history_event(
-            ticket_id,
-            actor_id=None,
-            actor_name="System",
-            actor_type="system",
-            action="status_changed",
-            details={
-                "field": "status",
-                "old_value": RequestStatus.in_request.value,
-                "new_value": RequestStatus.archived.value,
-            },
-        )
+    if all_required_departments_done(ticket_id):
+        updated_workflow = advance_phase(ticket_id)
+        phases = updated_workflow.get("phases", [])
+        current_idx = updated_workflow.get("current_phase_index", 0)
+        next_phase = phases[current_idx] if current_idx < len(phases) else None
+
+        if next_phase:
+            add_history_event(
+                ticket_id,
+                actor_id=None,
+                actor_name="System",
+                actor_type="system",
+                action="phase_advanced",
+                details={"new_phase": next_phase["key"]},
+            )
+        else:
+            add_history_event(
+                ticket_id,
+                actor_id=None,
+                actor_name="System",
+                actor_type="system",
+                action="status_changed",
+                details={
+                    "field": "status",
+                    "old_value": RequestStatus.in_request.value,
+                    "new_value": RequestStatus.archived.value,
+                },
+            )
 
     return {"ok": True}

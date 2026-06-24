@@ -9,6 +9,7 @@ export type TicketType =
   | 'zugang-sperren'
   | 'marketing-stellenanzeige'
   | 'hotelbuchung'
+  | 'basis-ticket'
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 
@@ -23,6 +24,61 @@ export interface User {
 
 // ── Tickets ───────────────────────────────────────────────────────────────────
 
+// ── Workflow / Phase types ────────────────────────────────────────────────────
+
+export type PhaseType   = 'creation' | 'assignment' | 'department_review'
+export type PhaseStatus = 'pending' | 'in_progress' | 'done'
+// Frontend-Darstellung einer Phase (datengetrieben vom Backend)
+export type PhaseView   = 'form' | 'readonly' | 'export' | 'approval'
+
+export type DeptStatus = 'open' | 'in_progress' | 'done' | 'skipped' | 'rejected'
+
+export interface Department {
+  name:     string
+  required: boolean
+  status:   DeptStatus
+}
+
+export type ResponsibilityKind = 'owner' | 'user' | 'group' | 'departments' | 'none'
+
+export interface PhaseResponsibility {
+  kind: ResponsibilityKind
+  id?:   string | null
+  name?: string | null
+}
+
+export interface WorkflowPhase {
+  key:         string
+  label:       string
+  type:        PhaseType
+  view?:        PhaseView
+  status:      PhaseStatus
+  responsibility?: PhaseResponsibility
+  departments?: Record<string, Department>
+}
+
+export interface WorkflowRejection {
+  phase_key:   string
+  phase_index: number
+  message:     string
+  rejected_by: string
+  rejected_at: string
+}
+
+export interface WorkflowState {
+  current_phase_index: number
+  phases:              WorkflowPhase[]
+  rejected:            WorkflowRejection | null
+}
+
+// ── Tickets ───────────────────────────────────────────────────────────────────
+
+export interface Responsible {
+  kind: 'user' | 'group'
+  id:   string | null
+  name: string | null
+}
+
 export interface Ticket {
   id:                  number
   title:               string
@@ -35,12 +91,15 @@ export interface Ticket {
   priority:            TicketPriority
   created_at:          string
   updated_at:          string | null
-  assignee_id:         string | null
-  assignee_name:       string | null
-  accountable_id:      string | null
-  accountable_name:    string | null
-  assignee_group_id:   string | null
-  assignee_group_name: string | null
+  workflow_state:      WorkflowState | null
+  // Verantwortliche(r) aus dem Workflow (ersetzt assignee/accountable)
+  responsible:         Responsible | null
+  watchers?:           Watcher[]
+}
+
+export interface Watcher {
+  id:   string
+  name: string | null
 }
 
 export interface TicketCreateRequest {

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketHistoryTimeline from '@/views/TicketHistoryTimeline.vue'
+import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
 import ZugangBeantragenContentPanel from '@/components/tickets/ZugangBeantragenContentPanel.vue'
 // Weitere Panels hier importieren sobald sie erstellt wurden:
 import ZugangSperrenContentPanel from '@/components/tickets/ZugangSperrenContentPanel.vue'
@@ -13,6 +14,7 @@ import NiederlassungUmzugContentPanel from '@/components/tickets/NiederlassungUm
 import NiederlassungSchliessenContentPanel from '@/components/tickets/NiederlassungSchliessenContentPanel.vue'
 import MarketingStelleContentPanel from '@/components/tickets/MarketingStelleContentPanel.vue'
 import HotelbuchungContentPanel from '@/components/tickets/HotelbuchungContentPanel.vue'
+import BasisTicketContentPanel from '@/components/tickets/BasisTicketContentPanel.vue'
 
 const route  = useRoute()
 const router = useRouter()
@@ -30,6 +32,7 @@ const PANEL_MAP: Record<string, Component> = {
   'niederlassung-schliessen': NiederlassungSchliessenContentPanel,
   'marketing-stellenanzeige': MarketingStelleContentPanel,
   'hotelbuchung':             HotelbuchungContentPanel,
+  'basis-ticket':             BasisTicketContentPanel,
 }
 
 const contentPanel = computed(() =>
@@ -39,7 +42,7 @@ const contentPanel = computed(() =>
 const STATUS_LABEL: Record<string, string> = {
   in_request:  'Zu bearbeiten',
   in_progress: 'In Bearbeitung',
-  archived:    'Erledigt',
+  archived:    'Archiviert',
   rejected:    'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
@@ -99,7 +102,7 @@ onMounted(async () => {
           <p class="text-sm text-gray-400">Ticket #{{ data.id }}</p>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white mt-0.5">{{ data.title }}</h1>
         </div>
-        <button @click="router.push('/tickets')"
+        <button @click="router.push('/dashboard')"
                 class="px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10
                        text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition">
           ← Zur Übersicht
@@ -111,6 +114,13 @@ onMounted(async () => {
         <!-- ── Sidebar ── -->
         <aside class="space-y-4">
 
+          <!-- Fortschritt -->
+          <div v-if="(data.phases ?? []).length"
+               class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                      rounded-2xl shadow-sm p-5">
+            <PhaseProgress :phases="data.phases" />
+          </div>
+
           <!-- Übersicht -->
           <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                       rounded-2xl shadow-sm p-5 space-y-3 text-sm">
@@ -120,6 +130,12 @@ onMounted(async () => {
               <span class="text-xs font-medium px-2.5 py-1 rounded-full"
                     :class="STATUS_CLASS[data.status] ?? 'bg-gray-100 text-gray-500'">
                 {{ STATUS_LABEL[data.status] ?? data.status }}
+              </span>
+            </div>
+            <div v-if="data.phase && data.phase !== '—'">
+              <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Phase</p>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8]">
+                {{ data.phase }}
               </span>
             </div>
             <div>

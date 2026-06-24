@@ -22,6 +22,8 @@ class Config:
     SCOPE = [s.strip() for s in os.getenv("SCOPE", "User.Read,Mail.Send").split(",") if s.strip()]
     ADMIN_GROUP_ID = os.getenv("ADMIN_GROUP_ID", "")
     TICKET_MAIL = os.getenv("TICKET_MAIL", "")
+    # Empfänger für Fehlerberichte / Feedback aus der UI
+    BUG_REPORT_MAIL = os.getenv("BUG_REPORT_MAIL", "")
 
     SESSION_TIMEOUT = int(os.getenv("SESSION_TIMEOUT", 900))
     NINJA_POLL_INTERVAL = int(os.getenv("NINJA_POLL_INTERVAL", 300))
