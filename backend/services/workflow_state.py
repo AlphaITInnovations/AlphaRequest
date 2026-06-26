@@ -123,7 +123,7 @@ def _build_departments_niederlassung_anmelden(description: dict) -> dict:
         if g:
             departments[g["id"]] = {"name": g["name"], "required": True, "status": DEPARTMENT_STATUS_OPEN}
 
-    add("Miete")
+    add("Verwaltung")   # ersetzt die frühere Fachabteilung "Miete"
     add("IT")
     add("Marketing")
     if description.get("fuhrpark", {}).get("pool_cars") == "Ja":
@@ -160,7 +160,7 @@ DEPARTMENT_BUILDERS = {
 # nicht automatisch auslesbar). assign_group-Phasen werden dagegen automatisch
 # aus TICKET_PHASES ergänzt.
 _DEPARTMENT_GROUP_NAMES = [
-    "IT", "Personalabteilung", "Fuhrpark", "Miete", "Marketing", "Hotelbuchung",
+    "IT", "Personalabteilung", "Fuhrpark", "Verwaltung", "Marketing", "Hotelbuchung",
 ]
 
 
