@@ -168,26 +168,15 @@ onMounted(async () => {
     <div v-else class="space-y-6">
 
       <!-- ── Header ── -->
-      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
-            Willkommen zurück,
-            <span class="text-[#3EAAB8]">{{ auth.user?.displayName }}</span> 👋
-          </h1>
-          <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">
-            <template v-if="totalOpen > 0">Du hast <strong class="text-gray-700 dark:text-gray-200">{{ totalOpen }}</strong> offene Aufgaben.</template>
-            <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
-          </p>
-        </div>
-        <button @click="router.push('/tickets/new')"
-                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
-                       bg-[#3EAAB8] hover:bg-[#2B7D89] text-white text-sm font-semibold
-                       shadow-sm hover:shadow-md transition-all">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-          </svg>
-          Neues Prozess-Ticket
-        </button>
+      <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
+          Willkommen zurück,
+          <span class="text-[#3EAAB8]">{{ auth.user?.displayName }}</span> 👋
+        </h1>
+        <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">
+          <template v-if="totalOpen > 0">Du hast <strong class="text-gray-700 dark:text-gray-200">{{ totalOpen }}</strong> offene Aufgaben.</template>
+          <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
+        </p>
       </div>
 
       <!-- ── Stat Cards ── -->
