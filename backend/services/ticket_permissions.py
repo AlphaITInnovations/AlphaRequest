@@ -72,8 +72,12 @@ def can_user_create_ticket(
     """
     Prüft ob ein User einen bestimmten Tickettyp erstellen darf.
     Erlaubt wenn:
-      1. Der User die extra_permission "create_<type>" hat, ODER
-      2. Der User Mitglied einer AD-Gruppe ist, die für diesen Typ berechtigt ist.
+      0. "Jeder" für diesen Typ gesetzt ist, ODER
+      1. der User die extra_permission "create_<type>" hat, ODER
+      2. der User Mitglied einer berechtigten AD-Gruppe ist, ODER
+      3. der User Mitglied einer berechtigten Fachabteilung (interne Gruppe) ist.
+    allowed_groups enthält gemischt: EVERYONE-Sentinel, AD-Gruppen-IDs und
+    Fachabteilungs-IDs (alle als String).
     """
 
     if not ticket_type or not user_id:
@@ -88,6 +92,13 @@ def can_user_create_ticket(
     if EVERYONE in allowed_groups:
         return True
 
+    # 3. Fachabteilungs-Mitgliedschaft (interne Gruppen) – funktioniert auch
+    #    ohne DB-User-Eintrag.
+    if allowed_groups:
+        from backend.database.groups import get_group_ids_for_user
+        if allowed_groups & set(get_group_ids_for_user(user_id)):
+            return True
+
     user = get_user(user_id)
     if not user:
         return False
@@ -96,7 +107,7 @@ def can_user_create_ticket(
     if _perm(ticket_type) in user.extra_permissions:
         return True
 
-    # 2. Gruppen-Permission
+    # 2. AD-Gruppen-Permission
     if user_group_ids and (allowed_groups & set(user_group_ids)):
         return True
 
@@ -120,6 +131,14 @@ def get_allowed_ticket_types_for_user(
     for ticket_type, group_ids in group_perms.items():
         if ticket_type in valid and EVERYONE in group_ids:
             allowed.add(ticket_type)
+
+    # Fachabteilungs-Mitgliedschaften (interne Gruppen) des Users
+    from backend.database.groups import get_group_ids_for_user
+    fach_ids = set(get_group_ids_for_user(user_id))
+    if fach_ids:
+        for ticket_type, group_ids in group_perms.items():
+            if ticket_type in valid and fach_ids & set(group_ids):
+                allowed.add(ticket_type)
 
     user = get_user(user_id)
     if not user:

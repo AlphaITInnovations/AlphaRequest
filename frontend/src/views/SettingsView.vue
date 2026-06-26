@@ -79,17 +79,23 @@ function filteredAdGroups(key: string): AdGroup[] {
     .filter(g => !q || g.displayName.toLowerCase().includes(q))
 }
 
-function adGroupName(id: string): string {
-  if (id === EVERYONE) return 'Jeder (alle eingeloggten Nutzer)'
-  return adGroups.value.find(g => g.id === id)?.displayName ?? id
+// Einen Eintrag aus allowed_groups auflösen: Jeder / Fachabteilung / AD-Gruppe.
+// (allowed_groups enthält gemischt EVERYONE, Fachabteilungs-IDs und AD-Gruppen-IDs.)
+type GroupKind = 'everyone' | 'fach' | 'ad' | 'unknown'
+function groupKind(id: string): GroupKind {
+  if (id === EVERYONE) return 'everyone'
+  if (groups.value.some(g => g.id === id)) return 'fach'
+  if (adGroups.value.some(g => g.id === id)) return 'ad'
+  return 'unknown'
 }
-
-// "Jeder"-Eintrag im Dropdown anzeigen, solange er noch nicht gesetzt ist und
-// (kein Suchtext oder passend zu „jeder"/„alle").
-function showEveryoneOption(t: PermType): boolean {
-  if (t.allowed_groups.includes(EVERYONE)) return false
-  const q = (adGroupSearch.value[t.key] ?? '').toLowerCase().trim()
-  return q === '' || 'jeder'.includes(q) || 'alle'.includes(q)
+function groupLabel(id: string): string {
+  if (id === EVERYONE) return 'Jeder (alle eingeloggten Nutzer)'
+  return groups.value.find(g => g.id === id)?.name
+      ?? adGroups.value.find(g => g.id === id)?.displayName
+      ?? id
+}
+function groupIcon(id: string): string {
+  return { everyone: '🌐', fach: '🏢', ad: '👥', unknown: '❔' }[groupKind(id)]
 }
 
 async function loadPermissions() {
@@ -101,13 +107,17 @@ async function loadPermissions() {
     adGroupOpen.value[t.key]   = false
   })
 }
-async function addPermUser(key: string) {
-  const u = permSelected.value[key]
-  if (!u) return
+// Auswahl aus dem Picker (Person ODER Fachabteilung) korrekt einsortieren:
+// Fachabteilung -> allowed_groups, Person -> allowed_users.
+async function addPermEntity(key: string) {
+  const sel = permSelected.value[key]
+  if (!sel) return
   const t = permissions.value.find(p => p.key === key)!
-  if (!t.allowed_users.includes(u.id)) {
-    t.allowed_users.push(u.id)
-    await savePermissions()
+  const isFach = groups.value.some(g => g.id === sel.id)
+  if (isFach) {
+    if (!t.allowed_groups.includes(sel.id)) { t.allowed_groups.push(sel.id); await savePermissions() }
+  } else {
+    if (!t.allowed_users.includes(sel.id)) { t.allowed_users.push(sel.id); await savePermissions() }
   }
   permSelected.value[key] = null
 }
@@ -547,107 +557,96 @@ const navGroups = computed(() => {
 
         <!-- Permissions -->
         <section v-if="active === 'permissions'">
-          <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center justify-between mb-1">
             <h2 class="section-title mb-0">Auftragstypen</h2>
             <span class="text-xs text-gray-400">Automatisch gespeichert</span>
           </div>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Lege je Auftragstyp fest, wer ihn erstellen darf – <strong>Jeder</strong>, einzelne
+            <strong>Personen</strong>, <strong>Fachabteilungen</strong> oder <strong>AD-Gruppen</strong>.
+          </p>
+
           <div class="space-y-4">
-            <div v-for="t in permissions" :key="t.key" class="card-section space-y-4">
+            <div v-for="t in permissions" :key="t.key" class="card-section space-y-3">
               <div class="flex items-center justify-between">
                 <h3 class="font-semibold text-gray-900 dark:text-white">{{ t.label }}</h3>
                 <span class="font-mono text-xs text-gray-400">{{ t.key }}</span>
               </div>
 
-              <!-- Warnung wenn niemand berechtigt -->
-              <div v-if="t.allowed_users.length === 0 && t.allowed_groups.length === 0"
-                   class="text-xs rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-900/20
-                          text-amber-700 dark:text-amber-300 px-3 py-2">
-                ⚠ Niemand darf diesen Auftragstyp erstellen
+              <!-- Berechtigte (eine Liste, getypte Chips) -->
+              <div class="flex flex-wrap gap-2 items-center min-h-[44px] rounded-xl
+                          border border-gray-100 dark:border-white/[0.06]
+                          bg-gray-50/60 dark:bg-white/[0.02] p-2.5">
+                <span v-if="t.allowed_groups.length === 0 && t.allowed_users.length === 0"
+                      class="text-xs font-medium text-amber-700 dark:text-amber-300">
+                  ⚠ Niemand darf diesen Auftragstyp erstellen
+                </span>
+
+                <!-- Jeder / Fachabteilung / AD-Gruppe -->
+                <span v-for="gid in t.allowed_groups" :key="'g-' + gid"
+                      class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium"
+                      :class="{
+                        'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300': groupKind(gid) === 'everyone',
+                        'bg-[#3EAAB8]/10 text-[#3EAAB8]':                                                  groupKind(gid) === 'fach',
+                        'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300':        groupKind(gid) === 'ad',
+                        'bg-gray-100 dark:bg-white/10 text-gray-500':                                      groupKind(gid) === 'unknown',
+                      }">
+                  <span>{{ groupIcon(gid) }}</span>{{ groupLabel(gid) }}
+                  <button @click="removePermGroup(t.key, gid)" class="hover:text-red-500 transition">✕</button>
+                </span>
+
+                <!-- Personen -->
+                <span v-for="id in t.allowed_users" :key="'u-' + id"
+                      class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium
+                             bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+                  👤 {{ userName(id) }}
+                  <button @click="removePermUser(t.key, id)" class="hover:text-red-500 transition">✕</button>
+                </span>
               </div>
 
-              <!-- Hinweis wenn "Jeder" aktiv ist -->
-              <div v-if="t.allowed_groups.includes(EVERYONE)"
-                   class="text-xs rounded-lg border border-emerald-300/60 bg-emerald-50 dark:bg-emerald-900/20
-                          text-emerald-700 dark:text-emerald-300 px-3 py-2">
-                🌐 Jeder eingeloggte Nutzer darf diesen Auftragstyp erstellen – zusätzliche Benutzer/Gruppen sind dafür nicht nötig.
-              </div>
+              <!-- "Jeder" aktiv → keine weiteren Adder nötig -->
+              <p v-if="t.allowed_groups.includes(EVERYONE)"
+                 class="text-xs text-emerald-700 dark:text-emerald-300">
+                🌐 Jeder eingeloggte Nutzer darf erstellen – weitere Einträge sind nicht nötig.
+              </p>
 
-              <div class="grid md:grid-cols-2 gap-6">
+              <!-- Hinzufügen -->
+              <div v-else class="flex flex-col lg:flex-row gap-2 lg:items-start">
+                <!-- Person oder Fachabteilung -->
+                <div class="flex gap-2 flex-1 min-w-0">
+                  <UserSelect label="" placeholder="Person oder Fachabteilung…"
+                              :show-groups="true"
+                              :model-value="permSelected[t.key]"
+                              @update:model-value="permSelected[t.key] = $event"
+                              class="flex-1 min-w-0" />
+                  <button @click="addPermEntity(t.key)" class="btn-primary self-end whitespace-nowrap">+ Hinzufügen</button>
+                </div>
 
-                <!-- Benutzer -->
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">Benutzer</p>
-                    <span class="text-xs text-gray-400">{{ t.allowed_users.length }}</span>
-                  </div>
-                  <div class="flex flex-wrap gap-2 min-h-[36px]">
-                    <span v-for="id in t.allowed_users" :key="id"
-                          class="inline-flex items-center gap-1.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] px-3 py-1 text-sm">
-                      {{ userName(id) }}
-                      <button @click="removePermUser(t.key, id)" class="hover:text-red-500 transition">✕</button>
-                    </span>
-                    <span v-if="t.allowed_users.length === 0"
-                          class="text-xs text-gray-400 italic self-center">Keine Benutzer</span>
-                  </div>
-                  <div class="flex gap-2">
-                    <UserSelect label="" placeholder="Benutzer hinzufügen…"
-                                :model-value="permSelected[t.key]"
-                                @update:model-value="permSelected[t.key] = $event"
-                                class="flex-1" />
-                    <button @click="addPermUser(t.key)" class="btn-primary self-end">+</button>
+                <!-- AD-Gruppe -->
+                <div class="relative lg:w-60">
+                  <input v-model="adGroupSearch[t.key]" placeholder="AD-Gruppe…" class="input w-full"
+                         @focus="adGroupOpen[t.key] = true"
+                         @blur="adGroupOpen[t.key] = false; adGroupSearch[t.key] = ''" />
+                  <div v-if="adGroupOpen[t.key] && adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0"
+                       class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
+                              dark:border-white/10 bg-white dark:bg-[#263040] shadow-lg">
+                    <button v-for="g in filteredAdGroups(t.key).slice(0, 15)" :key="g.id"
+                            @mousedown.prevent="addPermGroup(t.key, g.id)"
+                            class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-purple-500/10 transition
+                                   text-gray-900 dark:text-gray-100 flex items-center justify-between">
+                      <span>{{ g.displayName }}</span>
+                      <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[160px]">{{ g.description }}</span>
+                    </button>
                   </div>
                 </div>
 
-                <!-- AD-Gruppen -->
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">AD-Gruppen</p>
-                    <span class="text-xs text-gray-400">{{ t.allowed_groups.length }}</span>
-                  </div>
-                  <div class="flex flex-wrap gap-2 min-h-[36px]">
-                    <span v-for="gid in t.allowed_groups" :key="gid"
-                          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm"
-                          :class="gid === EVERYONE
-                            ? 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 font-medium'
-                            : 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300'">
-                      <span v-if="gid === EVERYONE">🌐</span>{{ adGroupName(gid) }}
-                      <button @click="removePermGroup(t.key, gid)" class="hover:text-red-500 transition">✕</button>
-                    </span>
-                    <span v-if="t.allowed_groups.length === 0"
-                          class="text-xs text-gray-400 italic self-center">Keine Gruppen</span>
-                  </div>
-                  <div class="relative">
-                    <input v-model="adGroupSearch[t.key]"
-       placeholder="AD-Gruppe oder „Jeder“ hinzufügen…"
-       class="input w-full"
-       @focus="adGroupOpen[t.key] = true"
-       @blur="adGroupOpen[t.key] = false; adGroupSearch[t.key] = ''" />
-                    <!-- Dropdown -->
-                    <div v-if="adGroupOpen[t.key] && (showEveryoneOption(t) || (adGroupSearch[t.key]?.length > 0 && filteredAdGroups(t.key).length > 0))"
-                         class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
-                                dark:border-white/10 bg-white dark:bg-[#263040] shadow-lg">
-                      <!-- „Jeder“ – alle eingeloggten Nutzer -->
-                      <button v-if="showEveryoneOption(t)"
-                              @mousedown.prevent="addPermGroup(t.key, EVERYONE)"
-                              class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-emerald-500/10 transition
-                                     text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-2
-                                     border-b border-gray-100 dark:border-white/5">
-                        🌐 Jeder (alle eingeloggten Nutzer)
-                      </button>
-                      <!-- AD-Gruppen (nur bei Suchtext) -->
-                      <template v-if="adGroupSearch[t.key]?.length > 0">
-                        <button v-for="g in filteredAdGroups(t.key).slice(0, 15)" :key="g.id"
-                                @mousedown.prevent="addPermGroup(t.key, g.id)"
-                                class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-[#3EAAB8]/10 transition
-                                       text-gray-900 dark:text-gray-100 flex items-center justify-between">
-                          <span>{{ g.displayName }}</span>
-                          <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[200px]">{{ g.description }}</span>
-                        </button>
-                      </template>
-                    </div>
-                  </div>
-                </div>
-
+                <!-- Jeder -->
+                <button @click="addPermGroup(t.key, EVERYONE)"
+                        class="px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap self-end
+                               border border-emerald-300/60 text-emerald-700 dark:text-emerald-300
+                               bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition">
+                  🌐 Jeder
+                </button>
               </div>
             </div>
           </div>
