@@ -161,6 +161,7 @@ DEPARTMENT_BUILDERS = {
 # aus TICKET_PHASES ergänzt.
 _DEPARTMENT_GROUP_NAMES = [
     "IT", "Personalabteilung", "Fuhrpark", "Verwaltung", "Marketing", "Hotelbuchung",
+    "QM",   # Pflichtgruppe; noch in keinem Workflow-Builder verwendet
 ]
 
 
