@@ -451,7 +451,7 @@ def add_member(
             if payload.user_id not in g["members"]:
                 g["members"].append(payload.user_id)
             save_groups(groups)
-            return DataResponse(data=GroupOut(**g))
+            return DataResponse(data=_group_out(g))
     raise HTTPException(404, "Gruppe nicht gefunden")
 
 
@@ -469,7 +469,7 @@ def remove_member(
                 raise HTTPException(400, "User nicht in Gruppe")
             g["members"] = [m for m in g["members"] if m != user_id]
             save_groups(groups)
-            return DataResponse(data=GroupOut(**g))
+            return DataResponse(data=_group_out(g))
     raise HTTPException(404, "Gruppe nicht gefunden")
 
 
