@@ -220,34 +220,7 @@ async function submitNachtrag() {
 
           <!-- Auftragsinhalt -->
           <div class="space-y-5">
-            <!-- Dediziertes Panel vorhanden → rendern -->
-            <component
-              v-if="contentPanel"
-              :is="contentPanel"
-              :description="data.description"
-            />
-
-            <!-- Fallback: generischer JSON-Renderer -->
-            <div v-else
-                 class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                        rounded-2xl shadow-sm p-6 space-y-3">
-              <h2 class="text-base font-semibold text-gray-900 dark:text-white">Auftragsinhalt</h2>
-              <template v-if="data.description && Object.keys(data.description).length > 0">
-                <details v-for="(section, key) in data.description" :key="key"
-                         class="border border-gray-200 dark:border-white/[0.06] rounded-xl overflow-hidden">
-                  <summary class="cursor-pointer px-4 py-3 font-medium text-sm
-                                  text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5">
-                    {{ String(key).replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }}
-                  </summary>
-                  <div class="p-4 border-t border-gray-100 dark:border-white/[0.04]">
-                    <DescriptionRenderer :value="section" />
-                  </div>
-                </details>
-              </template>
-              <p v-else class="text-sm text-gray-400 italic">Keine Auftragsdaten vorhanden.</p>
-            </div>
-
-            <!-- Nachträge (nur bei archivierten Aufträgen) -->
+            <!-- Nachträge (nur bei archivierten Aufträgen) – ganz oben, direkt sichtbar -->
             <div v-if="data.status === 'archived'"
                  class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                         rounded-2xl shadow-sm p-6 space-y-4">
@@ -307,6 +280,34 @@ async function submitNachtrag() {
                 </div>
               </div>
               <p v-else-if="!showNachtrag" class="text-sm text-gray-400 italic">Noch keine Nachträge.</p>
+            </div>
+
+            <!-- Auftragsinhalt -->
+            <!-- Dediziertes Panel vorhanden → rendern -->
+            <component
+              v-if="contentPanel"
+              :is="contentPanel"
+              :description="data.description"
+            />
+
+            <!-- Fallback: generischer JSON-Renderer -->
+            <div v-else
+                 class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                        rounded-2xl shadow-sm p-6 space-y-3">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">Auftragsinhalt</h2>
+              <template v-if="data.description && Object.keys(data.description).length > 0">
+                <details v-for="(section, key) in data.description" :key="key"
+                         class="border border-gray-200 dark:border-white/[0.06] rounded-xl overflow-hidden">
+                  <summary class="cursor-pointer px-4 py-3 font-medium text-sm
+                                  text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5">
+                    {{ String(key).replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }}
+                  </summary>
+                  <div class="p-4 border-t border-gray-100 dark:border-white/[0.04]">
+                    <DescriptionRenderer :value="section" />
+                  </div>
+                </details>
+              </template>
+              <p v-else class="text-sm text-gray-400 italic">Keine Auftragsdaten vorhanden.</p>
             </div>
           </div>
 
