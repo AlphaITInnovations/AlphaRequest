@@ -301,6 +301,18 @@ def advance_phase(ticket_id: int) -> dict:
 
     new_type = phases[next_idx]["type"]
     if new_type == PhaseType.department_review:
+        # Fachabteilungen erst beim EINTRITT in die Durchführung anhand der
+        # AKTUELLEN description bauen (z.B. Fuhrpark nur wenn Dienstwagen = Ja).
+        # Beim Onboarding stehen die relevanten Felder zur Erstellungszeit noch
+        # nicht fest – sie werden erst in BackOffice/Bearbeitung gefüllt.
+        ticket = get_ticket(ticket_id)
+        builder = DEPARTMENT_BUILDERS.get(ticket.ticket_type) if ticket else None
+        if builder:
+            try:
+                desc = json.loads(ticket.description)
+            except Exception:
+                desc = {}
+            phases[next_idx]["departments"] = builder(desc)
         update_ticket(ticket_id, status=RequestStatus.in_request.value)
     else:
         update_ticket(ticket_id, status=RequestStatus.in_progress.value)
