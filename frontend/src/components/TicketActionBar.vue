@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, inject, type Ref } from 'vue'
+
+// Im Notfall-Bearbeitungsmodus (gesetzt von der Detailansicht) wird nur „Speichern"
+// gezeigt – „Abschließen" würde die Phase weiterschalten, was hier nicht gewollt ist.
+const emergencyEdit = inject<Ref<boolean>>('emergencyEdit', ref(false))
 
 withDefaults(defineProps<{
   phase: 'create' | 'edit' | 'view'
@@ -109,6 +113,7 @@ const DEPT_STATUS_CLASS: Record<string, string> = {
                 Speichern
               </button>
               <button
+                v-if="!emergencyEdit"
                 @click="emit('complete')"
                 :disabled="loading"
                 class="px-6 py-2 rounded-xl text-sm font-medium

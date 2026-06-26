@@ -37,6 +37,11 @@ async function onRemoveWatcher(id: string) {
   try { await removeWatcher(id) } finally { watcherBusy.value = false }
 }
 
+// Notfall-Bearbeitung: macht die Felder in der aktuellen Ansicht editierbar,
+// OHNE die Phase zu ändern. Speichern = PATCH, danach zurück zum Dashboard.
+const emergencyEdit = ref(false)
+provide('emergencyEdit', emergencyEdit)
+
 // Phasen an die geteilte TicketDetails-Sidebar (im Formular) durchreichen
 provide('workflowPhases', phases)
 // Beobachter (Liste + Aktionen) an die geteilte TicketDetails-Sidebar durchreichen
@@ -137,17 +142,14 @@ async function handleReject() {
 async function goToEdit() {
   const ok = confirm(
     '⚠️ Notfall-Bearbeitung\n\n' +
-    'Der Auftrag wird aus der Durchführung zurück in die Bearbeitung geholt. ' +
-    'Die zuständige Person muss ihn danach erneut zur Durchführung freigeben.\n\n' +
+    'Die Felder des Auftrags werden editierbar. Mit „Speichern" werden die ' +
+    'Änderungen übernommen – die Phase bleibt unverändert.\n\n' +
     'Wirklich fortfahren?'
   )
   if (!ok) return
-  try {
-    await ticketsApi.reopen(ticketId)
-    router.push('/dashboard')
-  } catch {
-    alert('Zurückholen in die Bearbeitung fehlgeschlagen.')
-  }
+  if (formCtx) await formCtx.init()
+  emergencyEdit.value = true
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 </script>
 
@@ -167,11 +169,23 @@ async function goToEdit() {
            Wir reichen nur die Phasen via provide() in dessen Sidebar durch.
            Datengetrieben über phase.view, nicht mehr über den Phasen-Typ.
       ════════════════════════════════════════════════════════════════════ -->
-      <div v-if="currentView === 'form'" class="space-y-6 pb-24">
+      <div v-if="currentView === 'form' || emergencyEdit" class="space-y-6 pb-24">
 
         <div class="max-w-7xl mx-auto">
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ ticket.title }}</h1>
           <p class="text-sm text-gray-400 mt-1">Erstellt am {{ ticket.created_at }}</p>
+        </div>
+
+        <!-- Notfall-Bearbeitung: Hinweis, dass die Phase unverändert bleibt -->
+        <div v-if="emergencyEdit"
+             class="max-w-7xl mx-auto rounded-2xl border border-yellow-300 dark:border-yellow-700/60
+                    bg-yellow-50 dark:bg-yellow-900/20 px-4 py-3 flex items-start gap-3">
+          <span class="text-lg leading-none">⚠️</span>
+          <p class="text-sm text-yellow-800 dark:text-yellow-300">
+            <span class="font-semibold">Notfall-Bearbeitung aktiv.</span>
+            Die Felder sind editierbar. Mit „Speichern" werden die Änderungen übernommen –
+            die Phase des Auftrags bleibt unverändert.
+          </p>
         </div>
 
         <div v-if="isRejected && ticket.workflow_state?.rejected"
