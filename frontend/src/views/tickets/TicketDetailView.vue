@@ -134,9 +134,20 @@ async function handleReject() {
   }
 }
 
-function goToEdit() {
-  const ok = confirm('⚠️ In dieser Phase soll das Ticket nur im Notfall bearbeitet werden.\n\nMöchten Sie wirklich fortfahren?')
-  if (ok) router.push(`/tickets/view/${ticketType}/${ticketId}`)
+async function goToEdit() {
+  const ok = confirm(
+    '⚠️ Notfall-Bearbeitung\n\n' +
+    'Der Auftrag wird aus der Durchführung zurück in die Bearbeitung geholt. ' +
+    'Die zuständige Person muss ihn danach erneut zur Durchführung freigeben.\n\n' +
+    'Wirklich fortfahren?'
+  )
+  if (!ok) return
+  try {
+    await ticketsApi.reopen(ticketId)
+    router.push('/dashboard')
+  } catch {
+    alert('Zurückholen in die Bearbeitung fehlgeschlagen.')
+  }
 }
 </script>
 

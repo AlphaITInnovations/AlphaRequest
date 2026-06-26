@@ -720,6 +720,43 @@ async def add_nachtrag(
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
+@router.post("/tickets/{ticket_id}/reopen", response_model=DataResponse[TicketOut])
+async def reopen_ticket(
+    ticket_id: int,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Notfall-Bearbeitung: holt das Ticket aus der Durchführung zurück in die
+    vorherige Bearbeitungsphase und benachrichtigt die/den dort Zuständige(n).
+    """
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+
+    from backend.services.workflow_state import reopen_to_previous_assignment
+    try:
+        reopen_to_previous_assignment(ticket_id)
+    except ValueError as e:
+        raise api_error(400, ErrorCode.INVALID_STATUS, str(e))
+
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_reopened",
+        details={},
+    )
+
+    # Jetzt wieder aktive Bearbeitungsphase benachrichtigen
+    ticket = database.get_ticket(ticket_id)
+    try:
+        notify_phase_entry(request, ticket, get_current_phase(ticket_id))
+    except Exception:
+        logger.exception("Benachrichtigung nach Rückholen fehlgeschlagen (Ticket %s)", ticket_id)
+
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
 @router.delete("/tickets/{ticket_id}", status_code=204)
 def delete_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     ticket = _get_ticket_or_404(ticket_id)

@@ -321,6 +321,36 @@ def advance_phase(ticket_id: int) -> dict:
     return workflow
 
 
+def reopen_to_previous_assignment(ticket_id: int) -> dict:
+    """
+    Holt ein Ticket aus der aktiven Durchführungs-(department_review)-Phase zurück
+    in die vorherige Bearbeitungs-(assignment)-Phase (Notfall-Bearbeitung). Die
+    Zuständigkeit der Bearbeitungsphase bleibt erhalten; alle Phasen ab dort
+    (inkl. Durchführung) werden wieder auf 'pending' gesetzt.
+    """
+    workflow = _require_workflow(ticket_id)
+    phases = workflow["phases"]
+    idx = workflow["current_phase_index"]
+    if idx >= len(phases) or phases[idx].get("type") != PhaseType.department_review.value:
+        raise ValueError("Zurückholen ist nur aus der Durchführung möglich")
+
+    target = None
+    for i in range(idx - 1, -1, -1):
+        if phases[i].get("type") == PhaseType.assignment.value:
+            target = i
+            break
+    if target is None:
+        raise ValueError("Keine Bearbeitungsphase zum Zurückholen gefunden")
+
+    for i in range(target, len(phases)):
+        phases[i]["status"] = PHASE_STATUS_IN_PROGRESS if i == target else PHASE_STATUS_PENDING
+    workflow["current_phase_index"] = target
+
+    set_workflow_state(ticket_id, workflow)
+    update_ticket(ticket_id, status=RequestStatus.in_progress.value)
+    return workflow
+
+
 def reject_workflow(ticket_id: int, message: str, rejected_by: str, rejected_at: str) -> None:
     """Marks the ticket as rejected with a message. Can be called from any active phase."""
     workflow = _require_workflow(ticket_id)
