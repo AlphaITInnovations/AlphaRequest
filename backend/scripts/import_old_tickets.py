@@ -92,17 +92,20 @@ def _position(workflow, idx):
     workflow["current_phase_index"] = idx
 
 
-def build_migrated_workflow(t, name_to_gid):
+def build_migrated_workflow(t, name_to_gid, force_status=None):
     ttype = TicketType(t["ticket_type"])
     desc = as_str(t.get("description")) or "{}"
     wf = build_workflow(_T(ttype, desc, t.get("owner_id"), t.get("owner_name")))
     phases = wf["phases"]
-    status = t.get("status")
+    status = force_status or t.get("status")
 
-    # archiviert -> alles erledigt
+    # archiviert -> alle Phasen UND alle Fachabteilungen erledigt
     if status == "archived":
         for p in phases:
             p["status"] = "done"
+            if p.get("type") == PhaseType.department_review.value:
+                for d in p.get("departments", {}).values():
+                    d["status"] = "done"
         wf["current_phase_index"] = len(phases)
         return wf, "archived"
 
@@ -158,6 +161,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("json_path")
     ap.add_argument("--commit", action="store_true", help="tatsächlich schreiben (sonst Dry-Run)")
+    ap.add_argument("--all-archived", action="store_true",
+                    help="alle Tickets als 'archived' importieren (Phasen komplett erledigt)")
     args = ap.parse_args()
 
     tickets = load_any(args.json_path)
@@ -179,10 +184,12 @@ def main():
                 skipped += 1
                 continue
 
-            wf, mode = build_migrated_workflow(t, name_to_gid)
+            eff_status = "archived" if args.all_archived else t.get("status")
+            wf, mode = build_migrated_workflow(t, name_to_gid, force_status=eff_status)
 
             row = dict(t)
             row.pop("id", None)
+            row["status"] = eff_status
             row["workflow_state"] = json.dumps(wf, ensure_ascii=False)
             for k in ("description", "history", "assignment_history", "ninja_metadata", "owner_info"):
                 if k in row:
