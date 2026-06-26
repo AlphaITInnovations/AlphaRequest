@@ -17,6 +17,7 @@ export const ticketsApi = {
   submit:  (id: number, body?: { assignee_id?: string; assignee_name?: string }) =>
     client.post<DataResponse<Ticket>>(`/tickets/${id}/submit`, body ?? {}),
   reject:  (id: number, message: string)    => client.post<DataResponse<Ticket>>(`/tickets/${id}/reject`, { message }),
+  nachtrag:(id: number, text: string)        => client.post<DataResponse<Ticket>>(`/tickets/${id}/nachtrag`, { text }),
   archive: (id: number)                     => client.post<DataResponse<Ticket>>(`/admin/tickets/${id}/archive`),
   remove:  (id: number)                     => client.delete(`/tickets/${id}`),
 

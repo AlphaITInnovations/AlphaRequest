@@ -674,6 +674,52 @@ async def reject_ticket(
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
+@router.post("/tickets/{ticket_id}/nachtrag", response_model=DataResponse[TicketOut])
+async def add_nachtrag(
+    ticket_id: int,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Nachtrag zu einem (i.d.R. archivierten) Ticket: Freitext, wird im Verlauf
+    festgehalten und an die Verteiler der beteiligten Fachabteilungen gemailt.
+    """
+    ticket = _get_ticket_or_404(ticket_id)
+    # view/manage/admin dürfen überall; sonst nur Beteiligte (Owner/Beobachter/Zuständige)
+    if "view" not in user.get("permissions", []):
+        _assert_ticket_access(ticket, user)
+
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise api_error(400, ErrorCode.INVALID_DESCRIPTION, "Nachtrag-Text ist erforderlich")
+
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="nachtrag_added",
+        details={"text": text},
+    )
+
+    # Beteiligte Fachabteilungen benachrichtigen (Mailfehler darf den Nachtrag nicht kippen).
+    try:
+        from backend.services.workflow_state import involved_group_ids
+        from backend.database.groups import get_distributions_from_group
+        from backend.services.microsoft_mail import send_nachtrag_mail
+        recipients: set[str] = set()
+        for gid in involved_group_ids(ticket):
+            for mail in get_distributions_from_group(gid):
+                if mail:
+                    recipients.add(mail.strip())
+        if recipients:
+            send_nachtrag_mail(ticket, text, sorted(recipients))
+    except Exception:
+        logger.exception("Nachtrag-Mail fehlgeschlagen (Ticket %s)", ticket_id)
+
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
 @router.delete("/tickets/{ticket_id}", status_code=204)
 def delete_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     ticket = _get_ticket_or_404(ticket_id)

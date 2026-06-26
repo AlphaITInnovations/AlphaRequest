@@ -210,6 +210,26 @@ def assign_group_names() -> list[str]:
     return out
 
 
+def involved_group_ids(ticket) -> set:
+    """
+    Alle Gruppen-IDs, die in den Workflow eines Tickets involviert waren/sind:
+    die Fachabteilungen der department_review-Phase plus alle assignment-Phasen
+    mit Gruppen-Zuständigkeit. Für Benachrichtigungen (z.B. Nachträge).
+    """
+    wf = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
+    ids: set = set()
+    for phase in wf.get("phases", []):
+        if phase.get("type") == PhaseType.department_review.value:
+            ids.update(phase.get("departments", {}).keys())
+        resp = phase.get("responsibility")
+        if isinstance(resp, dict) and resp.get("kind") == "group" and resp.get("id"):
+            ids.add(resp["id"])
+    # Altformat-Fallback (kein phases-Schlüssel)
+    if not wf.get("phases") and isinstance(wf.get("departments"), dict):
+        ids.update(wf["departments"].keys())
+    return ids
+
+
 # ============================================================
 # Workflow builder
 # ============================================================

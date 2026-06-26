@@ -76,7 +76,7 @@ function formatDate(ts: string) {
   })
 }
 
-onMounted(async () => {
+async function load() {
   try {
     const { data: res } = await client.get(`/overview/tickets/${id}`)
     data.value = res.data
@@ -85,7 +85,35 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+onMounted(load)
+
+// ── Nachträge ──────────────────────────────────────────────────────────────
+// Aus dem Verlauf extrahiert (action 'nachtrag_added'), neueste zuerst.
+const nachtraege = computed<{ name: string; timestamp: string; text: string }[]>(() =>
+  ((data.value?.history ?? []) as any[])
+    .filter(e => e.action === 'nachtrag_added')
+    .map(e => ({ name: e.actor?.name ?? 'System', timestamp: e.timestamp, text: e.details?.text ?? '' }))
+    .reverse()
+)
+const showNachtrag    = ref(false)
+const nachtragText    = ref('')
+const nachtragSending = ref(false)
+async function submitNachtrag() {
+  const text = nachtragText.value.trim()
+  if (!text) return
+  nachtragSending.value = true
+  try {
+    await client.post(`/tickets/${id}/nachtrag`, { text })
+    nachtragText.value = ''
+    showNachtrag.value = false
+    await load()
+  } catch {
+    alert('Nachtrag konnte nicht gespeichert werden.')
+  } finally {
+    nachtragSending.value = false
+  }
+}
 </script>
 
 <template>
@@ -217,6 +245,68 @@ onMounted(async () => {
                 </details>
               </template>
               <p v-else class="text-sm text-gray-400 italic">Keine Auftragsdaten vorhanden.</p>
+            </div>
+
+            <!-- Nachträge (nur bei archivierten Aufträgen) -->
+            <div v-if="data.status === 'archived'"
+                 class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                        rounded-2xl shadow-sm p-6 space-y-4">
+              <div class="flex items-center justify-between">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+                  Nachträge
+                  <span v-if="nachtraege.length" class="text-gray-400 font-normal">· {{ nachtraege.length }}</span>
+                </h2>
+                <button v-if="!showNachtrag" @click="showNachtrag = true"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-sm font-medium
+                               bg-[#3EAAB8]/10 text-[#3EAAB8] hover:bg-[#3EAAB8]/20 transition">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" d="M12 5v14m7-7H5"/>
+                  </svg>
+                  Nachtrag
+                </button>
+              </div>
+
+              <!-- Eingabe -->
+              <div v-if="showNachtrag"
+                   class="space-y-2 rounded-xl border border-[#3EAAB8]/30 bg-[#3EAAB8]/5 p-3">
+                <textarea v-model="nachtragText" rows="4" autofocus
+                          placeholder="Nachtrag verfassen…"
+                          class="w-full rounded-lg border border-gray-200 dark:border-white/10
+                                 bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+                                 placeholder-gray-400 px-3.5 py-2.5 text-sm resize-none
+                                 focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-xs text-gray-400">
+                    Beim Speichern werden die beteiligten Fachabteilungen per Mail informiert.
+                  </p>
+                  <div class="flex gap-2 flex-shrink-0">
+                    <button @click="showNachtrag = false; nachtragText = ''"
+                            class="px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10
+                                   text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                      Abbrechen
+                    </button>
+                    <button @click="submitNachtrag" :disabled="!nachtragText.trim() || nachtragSending"
+                            class="px-4 py-2 text-sm rounded-xl bg-[#3EAAB8] hover:bg-[#2B7D89] text-white font-medium
+                                   disabled:opacity-50 disabled:cursor-not-allowed transition">
+                      {{ nachtragSending ? 'Wird gesendet…' : 'Speichern' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Liste -->
+              <div v-if="nachtraege.length" class="space-y-3">
+                <div v-for="(n, i) in nachtraege" :key="i"
+                     class="rounded-xl border border-gray-100 dark:border-white/[0.06]
+                            bg-gray-50 dark:bg-[#1A2130] p-3.5">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ n.name }}</span>
+                    <span class="text-xs text-gray-400">{{ formatDate(n.timestamp) }}</span>
+                  </div>
+                  <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ n.text }}</p>
+                </div>
+              </div>
+              <p v-else-if="!showNachtrag" class="text-sm text-gray-400 italic">Noch keine Nachträge.</p>
             </div>
           </div>
 

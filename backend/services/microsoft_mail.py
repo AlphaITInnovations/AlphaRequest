@@ -483,6 +483,38 @@ def send_freigabe_mail(ticket, approve_url: str, reject_url: str, to_recipients:
     )
 
 
+def send_nachtrag_mail(ticket, text: str, to_recipients: List[str]):
+    """
+    Benachrichtigt die beteiligten Fachabteilungen, dass zu einem (i.d.R.
+    archivierten) Auftrag ein Nachtrag verfasst wurde.
+    """
+    if not to_recipients:
+        logger.info("Nachtrag-Mail: keine Empfänger für Ticket %s", ticket.id)
+        return
+
+    intro = (
+        f"Hallo,\n\n"
+        f"zu folgendem Auftrag wurde ein Nachtrag verfasst:\n\n"
+        f"Auftrag: {ticket.title} (#{ticket.id})\n\n"
+        f"Nachtrag:\n{text}"
+    )
+
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
+        subject=f"Nachtrag zu Auftrag #{ticket.id}: {ticket.title}",
+        body=render_corporate_email(
+            subject=ticket.title,
+            headline="Nachtrag zu einem Auftrag",
+            intro=intro,
+            content="",
+            info_box_url=config.FRONTEND_URL + "/dashboard",
+        ),
+        to_recipients=to_recipients,
+        body_type="HTML",
+        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
+    )
+
+
 def send_rejection_mail(ticket, reason: str, to: str):
     """Benachrichtigt den Ersteller, dass sein Auftrag abgelehnt wurde."""
     if not to:
