@@ -72,7 +72,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
           <div>
             <h2 class="text-lg font-semibold text-[#3EAAB8]">Basisdaten</h2>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Es werden zunächst nur die Basisangaben erfasst. Nach der Freigabe ergänzt das BackOffice die übrigen Daten.
+              Es werden zunächst nur die Basisangaben erfasst. Nach der Freigabe ergänzt das Sekretariat GL die übrigen Daten.
             </p>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

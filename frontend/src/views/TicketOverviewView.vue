@@ -26,7 +26,7 @@ const responsibleFilter = ref('all')
 
 // ── Sortierung ────────────────────────────────────────────────────────────────
 type SortKey = 'id' | 'title' | 'creator' | 'responsible' | 'status' | 'priority' | 'created_at'
-const sortKey = ref<SortKey>('created_at')
+const sortKey = ref<SortKey>('id')
 const sortDir = ref<'asc' | 'desc'>('desc')
 
 // ── Client-Pagination ──────────────────────────────────────────────────────────
@@ -261,7 +261,7 @@ onMounted(load)
               </td>
               <td class="px-4 py-3.5 font-mono text-xs text-[#3EAAB8]">#{{ t.id }}</td>
               <td class="px-4 py-3.5">
-                <p class="font-medium text-gray-900 dark:text-white truncate max-w-xs">{{ t.title }}</p>
+                <p :title="t.title" class="font-medium text-gray-900 dark:text-white truncate max-w-[26rem]">{{ t.title }}</p>
                 <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[t.type_key] ?? t.type_key }} · {{ formatDate(t.created_at) }}</p>
               </td>
               <td class="px-4 py-3.5 text-gray-600 dark:text-gray-300">{{ t.creator }}</td>

@@ -214,6 +214,26 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     signatureTitleManuallyEdited.value = true
   }
 
+  // ── Bundesland automatisch aus der (privaten) PLZ via OpenPLZ-API ───────────
+  // Sobald eine 5-stellige PLZ vorliegt, das Bundesland nachschlagen und setzen.
+  // Öffentliche API (CORS erlaubt); Fehler werden still ignoriert.
+  watch(() => form.personal.private_zip, async (zip) => {
+    if (!/^[0-9]{5}$/.test(zip || '')) return
+    const lookup = zip
+    try {
+      const res = await fetch(`https://openplzapi.org/de/Localities?postalCode=${lookup}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const bundesland = Array.isArray(data) ? data[0]?.federalState?.name : null
+      // Nur übernehmen, wenn die PLZ noch aktuell ist (kein Race) und ein Treffer kam.
+      if (bundesland && form.personal.private_zip === lookup) {
+        form.personal.federal_state = bundesland
+      }
+    } catch {
+      /* offline / API nicht erreichbar → manuell wählbar */
+    }
+  })
+
   // ── Validation ──────────────────────────────────────────────────────────────
 
   const rules = computed(() => {
