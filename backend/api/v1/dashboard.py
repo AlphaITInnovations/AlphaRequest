@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
 from backend.models.models import TicketType
@@ -88,13 +88,55 @@ def get_dashboard(user: dict = Depends(get_current_user)):
     ))
 
 
+# Lesbare Typ-Bezeichnungen (für die serverseitige Suche, analog Frontend).
+_TYPE_LABELS = {
+    "hardware": "Hardwarebestellung",
+    "zugang-beantragen": "Onboarding Mitarbeiter:innen",
+    "zugang-sperren": "Offboarding Mitarbeiter:innen",
+    "niederlassung-anmelden": "Niederlassung anmelden",
+    "niederlassung-umzug": "Niederlassung umziehen",
+    "niederlassung-schliessen": "Niederlassung schließen",
+    "marketing-stellenanzeige": "Marketing - Stellenanzeige",
+    "hotelbuchung": "Hotelbuchung",
+    "basis-ticket": "Ticket",
+}
+
+
 @router.get("/dashboard/involved", response_model=DataResponse[InvolvedResponse])
-def get_involved(user: dict = Depends(get_current_user)):
+def get_involved(
+    user: dict = Depends(get_current_user),
+    limit: int = Query(15, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    search: str | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+):
     """
     Alle Tickets (inkl. archiviert), bei denen der Nutzer jemals beteiligt war –
-    Archiv zum Zurückverfolgen. Separat geladen (kann groß werden, enthält Archiv).
+    Archiv zum Zurückverfolgen. Serverseitig gefiltert (Suche/Status/Priorität)
+    und paginiert (limit/offset); liefert die Gesamtzahl der Treffer mit.
     """
     items = get_involved_tickets(user["id"])
+
+    q = (search or "").strip().lower()
+    if q:
+        def matches(it: dict) -> bool:
+            label = _TYPE_LABELS.get(it["type_key"], it["type_key"])
+            return (
+                q in (it["title"] or "").lower()
+                or q in label.lower()
+                or q in (it["type_key"] or "").lower()
+            )
+        items = [it for it in items if matches(it)]
+
+    if status and status != "all":
+        items = [it for it in items if it["status"] == status]
+    if priority and priority != "all":
+        items = [it for it in items if it["priority"] == priority]
+
+    total = len(items)
+    page = items[offset:offset + limit]
+
     involved = [
         InvolvedTicket(
             id=it["id"],
@@ -105,6 +147,6 @@ def get_involved(user: dict = Depends(get_current_user)):
             created_at=(it["created_at"] or "")[:10],
             roles=it["roles"],
         )
-        for it in items
+        for it in page
     ]
-    return DataResponse(data=InvolvedResponse(involved=involved))
+    return DataResponse(data=InvolvedResponse(involved=involved, total=total))

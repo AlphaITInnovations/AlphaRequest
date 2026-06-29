@@ -35,10 +35,12 @@ interface DashboardData {
 const loading   = ref(true)
 const data      = ref<DashboardData>({ orders: [], watched_orders: [], department_board: [], allowed_ticket_types: [] })
 
-// Involvierte Tickets (Archiv) – separat & lazy geladen
-const involved        = ref<InvolvedTicket[]>([])
-const involvedLoading = ref(false)
-const involvedLoaded  = ref(false)
+// Involvierte Tickets (Archiv) – serverseitig gefiltert & paginiert
+const involved         = ref<InvolvedTicket[]>([])   // aktuelle Seite
+const involvedLoading  = ref(false)
+const involvedLoaded   = ref(false)
+const involvedTotal    = ref(0)   // Treffer nach aktuellem Filter (fürs Paging)
+const involvedTotalAll = ref(0)   // Gesamtzahl ungefiltert (für die Stat-Card)
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type Tab = 'mine' | 'group' | 'watched' | 'involved'
@@ -103,22 +105,69 @@ function sortedRoles(roles: string[]): string[] {
   return [...roles].sort((a, b) => ROLE_ORDER.indexOf(a) - ROLE_ORDER.indexOf(b))
 }
 
+const INVOLVED_PAGE_SIZE = 15
+const involvedPage = ref(1)
+const involvedTotalPages = computed(() => Math.max(1, Math.ceil(involvedTotal.value / INVOLVED_PAGE_SIZE)))
+
+let involvedReq = 0
 async function loadInvolved() {
-  if (involvedLoaded.value || involvedLoading.value) return
+  const reqId = ++involvedReq
   involvedLoading.value = true
   try {
-    const res = await client.get<{ data: { involved: InvolvedTicket[] } }>('/dashboard/involved')
+    const params: Record<string, any> = {
+      limit: INVOLVED_PAGE_SIZE,
+      offset: (involvedPage.value - 1) * INVOLVED_PAGE_SIZE,
+    }
+    if (filter.value.search)            params.search   = filter.value.search
+    if (filter.value.status !== 'all')  params.status   = filter.value.status
+    if (filter.value.priority !== 'all') params.priority = filter.value.priority
+
+    const res = await client.get<{ data: { involved: InvolvedTicket[]; total: number } }>(
+      '/dashboard/involved', { params },
+    )
+    if (reqId !== involvedReq) return   // veraltete Antwort verwerfen
     involved.value = res.data.data.involved ?? []
+    involvedTotal.value = res.data.data.total ?? 0
+    // Ungefilterte Gesamtzahl für die Stat-Card merken
+    if (!params.search && !params.status && !params.priority) {
+      involvedTotalAll.value = involvedTotal.value
+    }
     involvedLoaded.value = true
   } finally {
-    involvedLoading.value = false
+    if (reqId === involvedReq) involvedLoading.value = false
   }
+}
+
+let involvedDebounce: ReturnType<typeof setTimeout> | undefined
+function debouncedLoadInvolved() {
+  clearTimeout(involvedDebounce)
+  involvedDebounce = setTimeout(loadInvolved, 250)
+}
+
+function goToInvolvedPage(p: number) {
+  if (p < 1 || p > involvedTotalPages.value) return
+  involvedPage.value = p
+  loadInvolved()
 }
 
 function selectInvolvedTab() {
   activeTab.value = 'involved'
-  loadInvolved()
 }
+
+// Filter-Schlüssel als stabiler String → feuert nur bei echter Wertänderung
+const involvedFilterKey = computed(() =>
+  `${filter.value.search}|${filter.value.status}|${filter.value.priority}`)
+
+watch(activeTab, (tab) => {
+  // Daten sind durch den Prefetch meist schon da; Debounce dedupliziert mit dem
+  // Filter-Reset (watch(activeTab) weiter oben) zu genau einem Request.
+  if (tab === 'involved') { involvedPage.value = 1; debouncedLoadInvolved() }
+})
+watch(involvedFilterKey, () => {
+  if (activeTab.value !== 'involved') return
+  involvedPage.value = 1
+  debouncedLoadInvolved()
+})
 
 // ── Counts ────────────────────────────────────────────────────────────────────
 const mineCount    = computed(() => (data.value.orders ?? []).filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
@@ -144,21 +193,6 @@ const filteredWatched = computed(() => applyFilter(data.value.watched_orders))
 // Beobachter-Tab zeigt nur aktive Tickets – archivierte stehen jetzt unter „Involviert".
 const filteredWatchedActive   = computed(() => filteredWatched.value.filter(o => o.status !== 'archived'))
 
-// Involviert-Tab (Archiv) – durchsuchbar/filterbar wie die anderen
-const filteredInvolved = computed(() => applyFilter(involved.value))
-const involvedCount    = computed(() => involved.value.length)
-
-// Paging – die Involviert-Liste (inkl. Archiv) kann sehr lang werden
-const INVOLVED_PAGE_SIZE = 15
-const involvedPage = ref(1)
-const involvedTotalPages = computed(() => Math.max(1, Math.ceil(filteredInvolved.value.length / INVOLVED_PAGE_SIZE)))
-const pagedInvolved = computed(() => {
-  const start = (involvedPage.value - 1) * INVOLVED_PAGE_SIZE
-  return filteredInvolved.value.slice(start, start + INVOLVED_PAGE_SIZE)
-})
-// Bei Filter-/Tab-Wechsel zurück auf Seite 1
-watch([filter, activeTab], () => { involvedPage.value = 1 }, { deep: true })
-
 // ── „Meine Abteilung" ──────────────────────────────────────────────────────────
 // Vollständig vom Backend gruppiert: jede Abteilung genau einmal, jedes Ticket
 // genau einmal in seiner aktuellen Phase. Frontend filtert nur noch.
@@ -171,7 +205,7 @@ const myDepartmentGroups = computed<DeptBoardGroup[]>(() =>
 const currentCount = computed(() => {
   if (activeTab.value === 'mine') return filteredMine.value.length
   if (activeTab.value === 'group') return myDepartmentGroups.value.reduce((s, g) => s + g.tickets.length, 0)
-  if (activeTab.value === 'involved') return filteredInvolved.value.length
+  if (activeTab.value === 'involved') return involvedTotal.value
   return filteredWatchedActive.value.length
 })
 
@@ -272,7 +306,7 @@ onMounted(async () => {
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </span>
             <span class="text-2xl font-bold text-gray-900 dark:text-white">
-              <span v-if="involvedLoaded">{{ involvedCount }}</span>
+              <span v-if="involvedLoaded">{{ involvedTotalAll }}</span>
               <span v-else class="inline-block w-4 h-4 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin align-middle" />
             </span>
           </div>
@@ -418,13 +452,14 @@ onMounted(async () => {
           <div v-if="activeTab === 'involved'">
 
             <div class="max-h-[560px] overflow-auto">
-              <!-- Ladezustand -->
+              <!-- Ladezustand (Erstaufruf) -->
               <div v-if="involvedLoading && !involvedLoaded" class="flex items-center justify-center py-14">
                 <div class="w-6 h-6 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
               </div>
 
-              <ul v-else class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-                <li v-for="o in pagedInvolved" :key="o.id" @click="openWatchedTicket(o)" class="row group">
+              <ul v-else class="divide-y divide-gray-100 dark:divide-white/[0.06] transition-opacity"
+                  :class="involvedLoading ? 'opacity-50' : ''">
+                <li v-for="o in involved" :key="o.id" @click="openWatchedTicket(o)" class="row group">
                   <div class="flex items-center gap-3.5 min-w-0">
                     <div class="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 self-start" :class="dotClass(o.status)" />
                     <div class="min-w-0">
@@ -446,8 +481,8 @@ onMounted(async () => {
                     <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                   </div>
                 </li>
-                <li v-if="filteredInvolved.length === 0" class="empty">
-                  {{ involvedLoaded ? 'Keine Tickets gefunden, an denen du beteiligt warst.' : 'Wird geladen…' }}
+                <li v-if="involved.length === 0 && !involvedLoading" class="empty">
+                  Keine Tickets gefunden, an denen du beteiligt warst.
                 </li>
               </ul>
             </div>
@@ -455,13 +490,13 @@ onMounted(async () => {
             <!-- Pagination -->
             <div v-if="involvedLoaded && involvedTotalPages > 1"
                  class="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-200/80 dark:border-white/[0.09]">
-              <button @click="involvedPage--" :disabled="involvedPage <= 1" class="page-btn">‹ Zurück</button>
+              <button @click="goToInvolvedPage(involvedPage - 1)" :disabled="involvedPage <= 1 || involvedLoading" class="page-btn">‹ Zurück</button>
               <span class="text-xs text-gray-500 dark:text-gray-400">
                 Seite {{ involvedPage }} / {{ involvedTotalPages }}
                 <span class="text-gray-300 dark:text-gray-600">·</span>
-                {{ filteredInvolved.length }} gesamt
+                {{ involvedTotal }} gesamt
               </span>
-              <button @click="involvedPage++" :disabled="involvedPage >= involvedTotalPages" class="page-btn">Weiter ›</button>
+              <button @click="goToInvolvedPage(involvedPage + 1)" :disabled="involvedPage >= involvedTotalPages || involvedLoading" class="page-btn">Weiter ›</button>
             </div>
           </div>
 

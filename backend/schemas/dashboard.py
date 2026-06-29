@@ -45,5 +45,7 @@ class InvolvedTicket(DashboardTicket):
 
 
 class InvolvedResponse(BaseModel):
-    # Alle Tickets (inkl. archiviert), bei denen der Nutzer jemals beteiligt war.
+    # Eine Seite der Tickets, bei denen der Nutzer jemals beteiligt war.
     involved: list[InvolvedTicket]
+    # Gesamtzahl der Treffer (nach Filter) – für das Paging im Frontend.
+    total: int = 0
