@@ -110,7 +110,7 @@ const DEPT_STATUS_CLASS: Record<string, string> = {
                        bg-[#3EAAB8] hover:bg-[#2B7D89] text-white
                        disabled:opacity-60 transition"
               >
-                Speichern
+                Speichern &amp; später weiterbearbeiten
               </button>
               <button
                 v-if="!emergencyEdit"

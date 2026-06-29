@@ -53,6 +53,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
             :accountable-locked="stage === 'erstellung'"
             accountable-locked-hint="Wird automatisch Herrn Lutz zur Freigabe vorgelegt."
             :accountable-editable="stage === 'backoffice'"
+            :accountable-editable-hint="stage === 'backoffice' ? 'Weitergabe an z. B. Vorgesetzte für fachliche Rückfragen.' : ''"
             @update:priority="form.priority = $event"
             @update:comment="form.comment = $event"
             @update:accountable="form.accountable = $event"
@@ -133,20 +134,26 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                 <input type="date" v-model="form.personal.start_date" :class="fieldClass('personal.start_date')" />
               </div>
 
-              <!-- Privatadresse: Straße, PLZ, Ort -->
-              <div class="md:col-span-2">
-                <label class="label">Straße (Privatadresse) *</label>
-                <input v-model="form.personal.private_street" :class="fieldClass('personal.private_street')" placeholder="Musterstraße 1" />
-              </div>
-              <div>
-                <label class="label">Postleitzahl *</label>
-                <input v-model="form.personal.private_zip"
-                       @input="form.personal.private_zip = form.personal.private_zip.replace(/\D/g,'').slice(0,5)"
-                       :class="fieldClass('personal.private_zip')" inputmode="numeric" maxlength="5" placeholder="12345" />
-              </div>
-              <div>
-                <label class="label">Ort *</label>
-                <input v-model="form.personal.private_city" :class="fieldClass('personal.private_city')" placeholder="Musterstadt" />
+              <!-- Privatadresse: zusammengefasst & klar umrahmt -->
+              <div class="md:col-span-2 rounded-xl border border-gray-200 dark:border-white/10
+                          bg-gray-50/60 dark:bg-white/[0.02] p-4 space-y-3">
+                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Privatadresse</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div class="md:col-span-2">
+                    <label class="label">Straße &amp; Hausnummer *</label>
+                    <input v-model="form.personal.private_street" :class="fieldClass('personal.private_street')" placeholder="Musterstraße 1" />
+                  </div>
+                  <div>
+                    <label class="label">Postleitzahl *</label>
+                    <input v-model="form.personal.private_zip"
+                           @input="form.personal.private_zip = form.personal.private_zip.replace(/\D/g,'').slice(0,5)"
+                           :class="fieldClass('personal.private_zip')" inputmode="numeric" maxlength="5" placeholder="12345" />
+                  </div>
+                  <div>
+                    <label class="label">Ort *</label>
+                    <input v-model="form.personal.private_city" :class="fieldClass('personal.private_city')" placeholder="Musterstadt" />
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -375,51 +382,65 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               </div>
             </div>
 
-            <!-- Software -->
+            <!-- Software-Zugriffe -->
             <div class="space-y-4">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Software</h3>
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Software-Zugriffe</h3>
+              <p class="text-xs text-gray-400 -mt-2">Bitte je benötigtem System anhaken und konkretisieren.</p>
+
               <div class="space-y-3">
-                <div class="flex flex-wrap gap-x-8 gap-y-3">
-                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                <!-- DATEV -->
+                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
                     <input type="checkbox" v-model="form.it.software.datev" :class="checkboxClass" />
-                    DATEV
+                    DATEV-Zugriff
                   </label>
-                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <div v-if="form.it.software.datev" class="mt-2.5">
+                    <label class="label">Rechte wie Mitarbeiter XY?</label>
+                    <input v-model="form.it.software.datev_rights"
+                           :class="fieldClass('it.software.datev_rights')"
+                           placeholder="z. B. wie Max Mustermann" />
+                  </div>
+                </div>
+
+                <!-- PersoPro -->
+                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
                     <input type="checkbox" v-model="form.it.software.persopro" :class="checkboxClass" />
-                    PersoPro
+                    PersoPro-Zugriff
                   </label>
-                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <div v-if="form.it.software.persopro" class="mt-2.5">
+                    <label class="label">Welche Zugriffe?</label>
+                    <input v-model="form.it.software.persopro_rights"
+                           :class="fieldClass('it.software.persopro_rights')"
+                           placeholder="Welche Zugriffe werden benötigt?" />
+                  </div>
+                </div>
+
+                <!-- TimeJob -->
+                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
                     <input type="checkbox" v-model="form.it.software.timejob" :class="checkboxClass" />
-                    TimeJob
+                    TimeJob-Zugriff
                   </label>
-                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <div v-if="form.it.software.timejob" class="mt-2.5">
+                    <label class="label">Welche Zugriffe?</label>
+                    <input v-model="form.it.software.timejob_rights"
+                           :class="fieldClass('it.software.timejob_rights')"
+                           placeholder="Welche Zugriffe werden benötigt?" />
+                  </div>
+                </div>
+
+                <!-- Zvoove -->
+                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
                     <input type="checkbox" v-model="form.it.software.zvoove" :class="checkboxClass" />
-                    Zvoove
+                    Zvoove-Zugriff
                   </label>
-                </div>
-
-                <!-- DATEV Rechte (wenn angehakt) -->
-                <div v-if="form.it.software.datev" class="mt-2">
-                  <label class="label">DATEV Rechte</label>
-                  <textarea v-model="form.it.software.datev_rights"
-                            :class="fieldClass('it.software.datev_rights')"
-                            rows="3" class="resize-none"
-                            placeholder="DATEV Rechte wie Max Mustermann" />
-                </div>
-              </div>
-
-              <!-- Festnetz-Telefonnummer beantragen -->
-              <div class="pt-2">
-                <div class="flex items-start gap-4">
-                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer whitespace-nowrap pt-2.5">
-                    <input type="checkbox" v-model="form.it.phone_order.enabled" :class="checkboxClass" />
-                    Festnetz-Telefonnummer beantragen
-                  </label>
-                  <div v-if="form.it.phone_order.enabled" class="flex-1">
-                    <label class="label">Aus welcher Niederlassung?</label>
-                    <input v-model="form.it.phone_order.location"
-                           :class="fieldClass('it.phone_order.location')"
-                           placeholder="Niederlassung für Rufnummer" />
+                  <div v-if="form.it.software.zvoove" class="mt-2.5">
+                    <label class="label">Welche Zugriffe?</label>
+                    <input v-model="form.it.software.zvoove_rights"
+                           :class="fieldClass('it.software.zvoove_rights')"
+                           placeholder="Welche Zugriffe werden benötigt?" />
                   </div>
                 </div>
               </div>

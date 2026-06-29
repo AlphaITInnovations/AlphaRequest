@@ -59,15 +59,14 @@ export interface ZugangForm {
       supervisor_name: string
     }
     software: {
-      datev:        boolean
-      datev_rights: string
-      persopro:     boolean
-      timejob:      boolean
-      zvoove:        boolean
-    }
-    phone_order: {
-      enabled:  boolean
-      location: string
+      datev:           boolean
+      datev_rights:    string
+      persopro:        boolean
+      persopro_rights: string
+      timejob:         boolean
+      timejob_rights:  string
+      zvoove:          boolean
+      zvoove_rights:   string
     }
     other_systems: string
     mailboxes: {
@@ -190,8 +189,12 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       appearance_company: '',
       signature: { title: '', street: '', zip: '', city: '' },
       timebutler: { vacation_year: '', supervisor_id: '', supervisor_name: '' },
-      software: { datev: false, datev_rights: '', persopro: false, timejob: false, zvoove: false },
-      phone_order: { enabled: false, location: '' },
+      software: {
+        datev: false, datev_rights: '',
+        persopro: false, persopro_rights: '',
+        timejob: false, timejob_rights: '',
+        zvoove: false, zvoove_rights: '',
+      },
       other_systems: '',
       mailboxes: { info_mailbox: true, additional: '', notes: '' },
       additional_cost_centers: '',
@@ -331,7 +334,6 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
           }
           if (desc.it.signature)    Object.assign(form.it.signature,    desc.it.signature)
           if (desc.it.software)     Object.assign(form.it.software,     desc.it.software)
-          if (desc.it.phone_order)  Object.assign(form.it.phone_order,  desc.it.phone_order)
           if (desc.it.timebutler)   Object.assign(form.it.timebutler,   desc.it.timebutler)
           if (desc.it.mailboxes)    Object.assign(form.it.mailboxes,    desc.it.mailboxes)
           if (desc.it.other_systems != null)          form.it.other_systems = desc.it.other_systems

@@ -19,6 +19,8 @@ withDefaults(defineProps<{
   // Auswahl auch außerhalb der Erstellungsphase editierbar (z.B. BackOffice wählt
   // den nächsten Bearbeiter).
   accountableEditable?: boolean
+  // Optionaler Hinweis unter dem editierbaren Bearbeiter-Picker (z.B. BackOffice).
+  accountableEditableHint?: string
 }>(), {
   groupsOnly: false,
   accountableLocked: false,
@@ -97,6 +99,9 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
         </div>
         <p v-if="accountableError" class="mt-1 text-xs text-red-500">
           {{ groupsOnly ? 'Pflichtfeld – bitte eine Fachabteilung auswählen.' : 'Pflichtfeld – bitte einen Verantwortlichen auswählen.' }}
+        </p>
+        <p v-if="accountableEditableHint" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+          {{ accountableEditableHint }}
         </p>
       </template>
 
