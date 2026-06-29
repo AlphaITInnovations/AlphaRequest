@@ -13,6 +13,7 @@ from backend.services.microsoft_mail import send_newrequest_mail, send_mail_to_a
 from backend.services.ticket_permissions import can_user_create_ticket
 from backend.schemas.ticket import (
     TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut, BasisTicketCreateRequest,
+    ResponsibilityOverrideRequest,
 )
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
@@ -489,8 +490,8 @@ async def update_ticket(
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
 
-    if data.assignee_id and not validate_assignee(request.app.state.user_cache, data.assignee_id):
-        raise api_error(400, ErrorCode.INVALID_ASSIGNEE, "Unbekannter Assignee")
+    # assignee_id/assignee_name werden beim PATCH ignoriert (siehe unten) – daher
+    # hier auch keine Assignee-Validierung mehr.
 
     # --- Änderungen tracken (old → new) ---
     changes = {}
@@ -521,28 +522,13 @@ async def update_ticket(
     if updates:
         database.update_ticket(ticket_id=ticket_id, **updates)
 
-    # --- Zuweisung der Bearbeitungsphase: nur in der assignment-Phase änderbar ---
-    # Schreibt die responsibility in den Workflow (Person/Gruppe), nicht in die
-    # alten assignee/accountable-Spalten.
-    if data.assignee_id:
-        from backend.database.groups import get_groups
-        from backend.services.workflow_state import (
-            get_workflow_state, current_responsibility, set_phase_responsibility,
-            PhaseType as WfPhaseType,
-        )
-        wf = get_workflow_state(ticket_id)
-        phases = wf.get("phases", [])
-        idx = wf.get("current_phase_index", 0)
-        if 0 <= idx < len(phases) and phases[idx].get("type") == WfPhaseType.assignment.value:
-            group_map = {g["id"]: g["name"] for g in get_groups()}
-            if data.assignee_id in group_map:
-                new_resp = {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]}
-            else:
-                new_resp = {"kind": "user", "id": data.assignee_id, "name": data.assignee_name or data.assignee_id}
-            old = current_responsibility(ticket)
-            if old.get("id") != new_resp["id"]:
-                changes["assignee"] = {"old": old.get("name"), "new": new_resp["name"]}
-                set_phase_responsibility(ticket_id, idx, new_resp)
+    # Hinweis: Ein PATCH (Feld-Speichern) ändert BEWUSST NICHT die Zuständigkeit.
+    # Die Zuständigkeit wird ausschließlich bei der Erstellung (create_ticket) und
+    # beim Weitergeben (submit_ticket, „nächster Bearbeiter") gesetzt. Früher schrieb
+    # jedes PATCH das mitgesendete assignee_id als aktuelle Phasen-Zuständigkeit –
+    # eine veraltete/falsche Vorbefüllung (z.B. Freigabe-Gruppe beim Onboarding)
+    # hat dadurch beim Speichern die echte Zuständigkeit überschrieben. data.assignee_id
+    # wird hier deshalb ignoriert.
 
     # --- Ein gebündeltes History-Event für alle Änderungen ---
     if changes:
@@ -674,6 +660,52 @@ async def reject_ticket(
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
+@router.post("/tickets/{ticket_id}/nachtrag", response_model=DataResponse[TicketOut])
+async def add_nachtrag(
+    ticket_id: int,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Nachtrag zu einem (i.d.R. archivierten) Ticket: Freitext, wird im Verlauf
+    festgehalten und an die Verteiler der beteiligten Fachabteilungen gemailt.
+    """
+    ticket = _get_ticket_or_404(ticket_id)
+    # view/manage/admin dürfen überall; sonst nur Beteiligte (Owner/Beobachter/Zuständige)
+    if "view" not in user.get("permissions", []):
+        _assert_ticket_access(ticket, user)
+
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise api_error(400, ErrorCode.INVALID_DESCRIPTION, "Nachtrag-Text ist erforderlich")
+
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="nachtrag_added",
+        details={"text": text},
+    )
+
+    # Beteiligte Fachabteilungen benachrichtigen (Mailfehler darf den Nachtrag nicht kippen).
+    try:
+        from backend.services.workflow_state import involved_group_ids
+        from backend.database.groups import get_distributions_from_group
+        from backend.services.microsoft_mail import send_nachtrag_mail
+        recipients: set[str] = set()
+        for gid in involved_group_ids(ticket):
+            for mail in get_distributions_from_group(gid):
+                if mail:
+                    recipients.add(mail.strip())
+        if recipients:
+            send_nachtrag_mail(ticket, text, sorted(recipients))
+    except Exception:
+        logger.exception("Nachtrag-Mail fehlgeschlagen (Ticket %s)", ticket_id)
+
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
 @router.delete("/tickets/{ticket_id}", status_code=204)
 def delete_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     ticket = _get_ticket_or_404(ticket_id)
@@ -720,6 +752,74 @@ def archive_ticket(
             "field": "status",
             "old_value": ticket.status.value,
             "new_value": RequestStatus.archived.value,
+        },
+    )
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
+@router.put("/admin/tickets/{ticket_id}/responsibility", response_model=DataResponse[TicketOut])
+def override_responsibility(
+    ticket_id: int,
+    data: ResponsibilityOverrideRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Admin-Notfall: setzt die Zuständigkeit einer Phase (Standard: aktuelle Phase)
+    auf eine Person oder Fachabteilung/Gruppe – unabhängig vom normalen Workflow.
+    Funktioniert in jeder Bearbeitungs-(assignment)-Phase. Für die Durchführung
+    werden die Fachabteilungen separat verwaltet.
+    """
+    _require_admin(user)
+    ticket = _get_ticket_or_404(ticket_id)
+
+    from backend.services.workflow_state import (
+        get_workflow_state, set_phase_responsibility, PhaseType as WfPhaseType,
+    )
+    wf = get_workflow_state(ticket_id)
+    phases = wf.get("phases", [])
+    if not phases:
+        raise api_error(400, ErrorCode.INVALID_STATUS,
+                        "Ticket hat keinen Workflow im neuen Format")
+
+    idx = data.phase_index if data.phase_index is not None else wf.get("current_phase_index", 0)
+    if not (0 <= idx < len(phases)):
+        raise api_error(400, ErrorCode.INVALID_STATUS,
+                        f"Phase-Index {idx} ungültig (erlaubt: 0..{len(phases) - 1})")
+
+    phase = phases[idx]
+    if phase.get("type") != WfPhaseType.assignment.value:
+        raise api_error(400, ErrorCode.INVALID_STATUS,
+                        f"Phase '{phase.get('key')}' ist keine Bearbeitungsphase – "
+                        "Zuständigkeit kann hier nicht gesetzt werden "
+                        "(Durchführung wird über die Fachabteilungen gesteuert).")
+
+    # Person oder Gruppe/Fachabteilung auflösen
+    from backend.database.groups import get_groups
+    group_map = {g["id"]: g["name"] for g in get_groups()}
+    if data.assignee_id in group_map:
+        new_resp = {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]}
+    else:
+        if not validate_assignee(request.app.state.user_cache, data.assignee_id):
+            raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                            f"Unbekannte Person/Gruppe '{data.assignee_id}'")
+        new_resp = {"kind": "user", "id": data.assignee_id,
+                    "name": data.assignee_name or data.assignee_id}
+
+    old_name = (phase.get("responsibility") or {}).get("name")
+    set_phase_responsibility(ticket_id, idx, new_resp)
+
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="responsibility_overridden",
+        details={
+            "phase_key": phase.get("key"),
+            "phase_label": phase.get("label"),
+            "phase_index": idx,
+            "old": old_name,
+            "new": new_resp["name"],
         },
     )
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))

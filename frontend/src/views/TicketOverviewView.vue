@@ -46,7 +46,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
   in_request:  'bg-[#3EAAB8]/15 text-[#3EAAB8]',
-  archived:    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 }
 const PRIORITY_LABEL: Record<string, string> = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch' }

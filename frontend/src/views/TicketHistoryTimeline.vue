@@ -26,6 +26,8 @@ const ACTION_META: Record<string, { label: string; icon: string; color: string }
   phase_advanced:           { label: 'Phase abgeschlossen',          icon: '➡️', color: 'bg-blue-500' },
   freigabe_approved_mail:   { label: 'Freigegeben (per Mail)',       icon: '✅', color: 'bg-green-500' },
   freigabe_rejected_mail:   { label: 'Abgelehnt (per Mail)',         icon: '⛔', color: 'bg-red-500' },
+  nachtrag_added:           { label: 'Nachtrag',                     icon: '📝', color: 'bg-indigo-500' },
+  responsibility_overridden:{ label: 'Zuständigkeit (Admin)',        icon: '🛠️', color: 'bg-orange-500' },
   status_changed:           { label: 'Status geändert',              icon: '🔄', color: 'bg-purple-500' },
   department_status_changed:{ label: 'Fachabteilung',                icon: '🏢', color: 'bg-teal-500' },
   description_changed:      { label: 'Formular bearbeitet',          icon: '📋', color: 'bg-amber-400' },
@@ -123,6 +125,38 @@ function formatVal(v: any): string {
   return String(v)
 }
 
+// ── Kommentare (im Verlauf hervorgehoben) ──────────────────────────────────────
+function isText(v: any): boolean {
+  return v !== null && v !== undefined && String(v).trim() !== ''
+}
+
+// Verb je nach alt/neu: hinzugefügt / geändert / entfernt
+function commentVerb(change: { old?: any; new?: any } | undefined): string {
+  const had = isText(change?.old)
+  const has = isText(change?.new)
+  if (!had && has) return 'Kommentar hinzugefügt'
+  if (had && !has) return 'Kommentar entfernt'
+  return 'Kommentar geändert'
+}
+
+// Enthält ein Verlaufs-Event eine Kommentar-Änderung? (für den Highlight-Rahmen)
+function hasComment(e: HistoryEvent): boolean {
+  if (e.action !== 'ticket_updated') return false
+  const c = e.details?.changes?.comment
+  return !!c && (isText(c.old) || isText(c.new))
+}
+
+// Reine Kommentar-Änderung (keine weiteren Felder) → eigener Header „💬 Kommentar"
+function isCommentOnly(e: HistoryEvent): boolean {
+  if (!hasComment(e)) return false
+  return Object.keys(e.details?.changes ?? {}).length === 1
+}
+
+// Gibt es einfache Feldänderungen außer description/comment? (Diff-Block nur dann zeigen)
+function hasSimpleFields(e: HistoryEvent): boolean {
+  return Object.keys(e.details?.changes ?? {}).some(k => k !== 'description' && k !== 'comment')
+}
+
 // Flacht ein verschachteltes Objekt auf primitive Werte ab.
 // { software: { datev: true, persopro: false } } → { 'software.datev': true, 'software.persopro': false }
 function flatten(obj: Record<string, any>, prefix = ''): Record<string, any> {
@@ -186,12 +220,14 @@ function descriptionDiff(
         <span class="absolute -left-[17px] top-1.5 w-3 h-3 rounded-full ring-2 ring-white dark:ring-[#212B3A]"
               :class="getMeta(e.action).color" />
 
-        <div class="bg-gray-50 dark:bg-[#1A2130] rounded-xl p-3.5 space-y-2">
+        <div class="bg-gray-50 dark:bg-[#1A2130] rounded-xl p-3.5 space-y-2"
+             :class="hasComment(e) ? 'ring-1 ring-amber-300/70 dark:ring-amber-400/25' : ''">
 
           <!-- Header -->
           <div class="flex items-start justify-between gap-3">
             <p class="text-sm font-semibold text-gray-900 dark:text-white">
-              {{ getMeta(e.action).icon }}&nbsp;{{ getMeta(e.action).label }}
+              <template v-if="isCommentOnly(e)">💬&nbsp;Kommentar</template>
+              <template v-else>{{ getMeta(e.action).icon }}&nbsp;{{ getMeta(e.action).label }}</template>
             </p>
             <div class="text-right flex-shrink-0">
               <p class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ e.actor.name }}</p>
@@ -214,6 +250,29 @@ function descriptionDiff(
           <!-- ticket_updated -->
           <template v-if="e.action === 'ticket_updated' && e.details?.changes">
 
+            <!-- Kommentar – hervorgehoben (Highlight) -->
+            <div v-if="e.details.changes.comment"
+                 class="rounded-xl border border-amber-200/80 dark:border-amber-400/20
+                        border-l-4 border-l-amber-400 dark:border-l-amber-400/80
+                        bg-amber-50 dark:bg-amber-400/[0.07] pl-3.5 pr-3 py-2.5">
+              <div class="flex items-center gap-1.5 mb-1">
+                <span class="text-sm leading-none">💬</span>
+                <span class="text-[11px] font-bold uppercase tracking-wider
+                             text-amber-700 dark:text-amber-300">
+                  {{ commentVerb(e.details.changes.comment) }}
+                </span>
+              </div>
+              <p v-if="isText(e.details.changes.comment.new)"
+                 class="text-sm text-gray-800 dark:text-amber-50/90 whitespace-pre-wrap leading-relaxed">
+                {{ e.details.changes.comment.new }}
+              </p>
+              <p v-if="isText(e.details.changes.comment.old)"
+                 class="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+                Vorher:
+                <span class="line-through">{{ e.details.changes.comment.old }}</span>
+              </p>
+            </div>
+
             <!-- description snapshot diff (rekursiv geflattened) -->
             <template v-if="e.details.changes.description">
               <div class="space-y-2">
@@ -235,10 +294,10 @@ function descriptionDiff(
               </div>
             </template>
 
-            <!-- einfache Felder (priority, comment, assignee, accountable) -->
-            <div class="space-y-2 mt-2">
+            <!-- einfache Felder (priority, assignee, accountable) – Kommentar oben separat -->
+            <div v-if="hasSimpleFields(e)" class="space-y-2 mt-2">
               <template v-for="(change, field) in e.details.changes" :key="field">
-                <div v-if="field !== 'description'"
+                <div v-if="field !== 'description' && field !== 'comment'"
                      class="text-xs rounded-lg bg-white dark:bg-white/[0.03]
                             border border-gray-100 dark:border-white/[0.06] px-2.5 py-1.5">
                   <p class="text-gray-500 dark:text-gray-400 font-medium mb-0.5">{{ fieldLabel(String(field)) }}</p>
@@ -268,6 +327,21 @@ function descriptionDiff(
             <p class="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
               Grund: {{ e.details.message }}
             </p>
+          </template>
+
+          <!-- nachtrag_added: Text anzeigen -->
+          <template v-if="e.action === 'nachtrag_added' && e.details?.text">
+            <p class="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{{ e.details.text }}</p>
+          </template>
+
+          <!-- responsibility_overridden: alt → neu (+ Phase) -->
+          <template v-if="e.action === 'responsibility_overridden'">
+            <div class="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs">
+              <span class="text-gray-400 line-through">{{ e.details?.old || '—' }}</span>
+              <span class="text-gray-400">→</span>
+              <span class="font-medium text-gray-800 dark:text-gray-200">{{ e.details?.new }}</span>
+              <span v-if="e.details?.phase_label" class="text-gray-400">· {{ e.details.phase_label }}</span>
+            </div>
           </template>
 
           <!-- status_changed -->

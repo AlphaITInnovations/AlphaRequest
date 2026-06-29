@@ -26,12 +26,10 @@ const isProcessTicketActive = computed(
   () => route.path.startsWith('/tickets/new') && !isBasisTicketActive.value,
 )
 
-// „Alle Aufträge" = die Liste selbst und ihre Detailansicht (/tickets/overview/:id).
-// NICHT die Arbeitsansicht /tickets/view/:type/:id (kommt vom Dashboard) und
-// nicht /tickets/new*.
-const isAuftraegeActive = computed(
-  () => route.path === '/tickets' || route.path.startsWith('/tickets/overview'),
-)
+// „Alle Aufträge" = nur die Liste selbst (/tickets). In der Einzelticket-Ansicht
+// (/tickets/overview/:id) bzw. der Arbeitsansicht (/tickets/view/:type/:id) ist
+// bewusst KEIN Navigationspunkt aktiv.
+const isAuftraegeActive = computed(() => route.path === '/tickets')
 
 function navigate(path: string) {
   router.push(path)

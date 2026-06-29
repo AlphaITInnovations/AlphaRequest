@@ -17,7 +17,11 @@ export const ticketsApi = {
   submit:  (id: number, body?: { assignee_id?: string; assignee_name?: string }) =>
     client.post<DataResponse<Ticket>>(`/tickets/${id}/submit`, body ?? {}),
   reject:  (id: number, message: string)    => client.post<DataResponse<Ticket>>(`/tickets/${id}/reject`, { message }),
+  nachtrag:(id: number, text: string)        => client.post<DataResponse<Ticket>>(`/tickets/${id}/nachtrag`, { text }),
   archive: (id: number)                     => client.post<DataResponse<Ticket>>(`/admin/tickets/${id}/archive`),
+  // Admin-Notfall: Zuständigkeit einer Phase (Standard: aktuelle) setzen.
+  setResponsibility: (id: number, assignee_id: string, assignee_name?: string, phase_index?: number) =>
+    client.put<DataResponse<Ticket>>(`/admin/tickets/${id}/responsibility`, { assignee_id, assignee_name, phase_index }),
   remove:  (id: number)                     => client.delete(`/tickets/${id}`),
 
   getDepartments:    (id: number)                          => client.get(`/tickets/${id}/departments`),

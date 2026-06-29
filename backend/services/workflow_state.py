@@ -210,6 +210,26 @@ def assign_group_names() -> list[str]:
     return out
 
 
+def involved_group_ids(ticket) -> set:
+    """
+    Alle Gruppen-IDs, die in den Workflow eines Tickets involviert waren/sind:
+    die Fachabteilungen der department_review-Phase plus alle assignment-Phasen
+    mit Gruppen-Zuständigkeit. Für Benachrichtigungen (z.B. Nachträge).
+    """
+    wf = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
+    ids: set = set()
+    for phase in wf.get("phases", []):
+        if phase.get("type") == PhaseType.department_review.value:
+            ids.update(phase.get("departments", {}).keys())
+        resp = phase.get("responsibility")
+        if isinstance(resp, dict) and resp.get("kind") == "group" and resp.get("id"):
+            ids.add(resp["id"])
+    # Altformat-Fallback (kein phases-Schlüssel)
+    if not wf.get("phases") and isinstance(wf.get("departments"), dict):
+        ids.update(wf["departments"].keys())
+    return ids
+
+
 # ============================================================
 # Workflow builder
 # ============================================================
@@ -281,6 +301,18 @@ def advance_phase(ticket_id: int) -> dict:
 
     new_type = phases[next_idx]["type"]
     if new_type == PhaseType.department_review:
+        # Fachabteilungen erst beim EINTRITT in die Durchführung anhand der
+        # AKTUELLEN description bauen (z.B. Fuhrpark nur wenn Dienstwagen = Ja).
+        # Beim Onboarding stehen die relevanten Felder zur Erstellungszeit noch
+        # nicht fest – sie werden erst in BackOffice/Bearbeitung gefüllt.
+        ticket = get_ticket(ticket_id)
+        builder = DEPARTMENT_BUILDERS.get(ticket.ticket_type) if ticket else None
+        if builder:
+            try:
+                desc = json.loads(ticket.description)
+            except Exception:
+                desc = {}
+            phases[next_idx]["departments"] = builder(desc)
         update_ticket(ticket_id, status=RequestStatus.in_request.value)
     else:
         update_ticket(ticket_id, status=RequestStatus.in_progress.value)
@@ -374,19 +406,18 @@ def current_responsibility(ticket) -> dict:
 
 def primary_responsibility(ticket) -> Optional[dict]:
     """
-    Die „verantwortliche" Person/Gruppe eines Tickets für die Anzeige
-    („Verantwortlicher") = responsibility der ersten Bearbeitungs-(assignment)-Phase,
-    stabil über alle Phasen. None, wenn der Typ keine Bearbeitungsphase hat.
+    Verantwortliche(r) Person/Gruppe für Anzeige und Formular-Vorbefüllung =
+    die AKTUELL zuständige Person/Gruppe der laufenden Phase. None, wenn aktuell
+    niemand bzw. (in der Durchführung) die Fachabteilungen zuständig sind – für die
+    lesbare Gesamt-Anzeige inkl. Fachabteilungen siehe responsibility_label().
+
+    Früher wurde stattdessen die erste assignment-Phase genommen; das blieb beim
+    Onboarding dauerhaft auf der Freigabe-Phase (FreigabeHerrLutz) hängen und
+    aktualisierte sich nie auf die tatsächlich zuständige Stelle.
     """
-    workflow = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
-    if not _is_new_format(workflow):
-        return None
-    for phase in workflow.get("phases", []):
-        if phase.get("type") == PhaseType.assignment.value:
-            resp = phase.get("responsibility")
-            if isinstance(resp, dict) and resp.get("kind") in ("user", "group"):
-                return resp
-            return None
+    resp = current_responsibility(ticket)
+    if resp.get("kind") in ("user", "group"):
+        return {"kind": resp["kind"], "id": resp.get("id"), "name": resp.get("name")}
     return None
 
 
@@ -682,3 +713,69 @@ def get_dashboard_work(user_id: str) -> dict:
         "assigned": assigned,
         "departments": [b for b in boards.values() if b["tickets"]],
     }
+
+
+def get_involved_tickets(user_id: str) -> list[dict]:
+    """
+    Alle Tickets (inkl. archiviert/abgelehnt), bei denen der User jemals
+    irgendwie beteiligt war – als „Archiv zum Zurückverfolgen".
+
+    Beteiligung (eine genügt):
+      - Ersteller des Tickets
+      - Beobachter
+      - aktuell zuständig (Person / Gruppe / offene Fachabteilung)
+      - frühere persönliche Zuständigkeit in irgendeiner Phase
+      - Akteur im Verlauf (hat etwas getan: bearbeitet, freigegeben, …)
+      - Mitglied einer involvierten Gruppe / Fachabteilung (auch bereits erledigt)
+
+    Liefert je Ticket die zutreffenden Rollen für die Anzeige; neueste zuerst.
+    """
+    from backend.database.ticket_watchers import list_ticket_ids_for_watcher
+    watched_ids = set(list_ticket_ids_for_watcher(user_id))
+    group_ids = set(get_group_ids_for_user(user_id))
+
+    items: list[dict] = []
+    for ticket in list_all_tickets():
+        roles: list[str] = []
+
+        if getattr(ticket, "owner_id", None) == user_id:
+            roles.append("ersteller")
+        if ticket.id in watched_ids:
+            roles.append("beobachter")
+        if user_is_responsible(ticket, user_id, group_ids):
+            roles.append("zustaendig")
+        if group_ids & involved_group_ids(ticket):
+            roles.append("fachabteilung")
+
+        # Bearbeiter: frühere persönliche Zuständigkeit ODER Akteur im Verlauf
+        was_handler = False
+        wf = ticket.workflow_state_parsed if isinstance(ticket.workflow_state_parsed, dict) else {}
+        for phase in wf.get("phases", []):
+            resp = phase.get("responsibility")
+            if isinstance(resp, dict) and resp.get("kind") == "user" and resp.get("id") == user_id:
+                was_handler = True
+                break
+        if not was_handler:
+            for ev in (ticket.history_parsed or []):
+                actor = ev.get("actor") or {}
+                if actor.get("id") == user_id and actor.get("type") != "system":
+                    was_handler = True
+                    break
+        if was_handler:
+            roles.append("bearbeiter")
+
+        if not roles:
+            continue
+
+        items.append({
+            "id": ticket.id,
+            "title": ticket.title,
+            "type_key": ticket.ticket_type.value if hasattr(ticket.ticket_type, "value") else ticket.ticket_type,
+            "status": ticket.status.value if hasattr(ticket.status, "value") else ticket.status,
+            "priority": ticket.priority.value if hasattr(ticket.priority, "value") else ticket.priority,
+            "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+            "roles": roles,
+        })
+
+    items.sort(key=lambda x: x["id"], reverse=True)
+    return items

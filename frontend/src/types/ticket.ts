@@ -94,6 +94,8 @@ export interface Ticket {
   workflow_state:      WorkflowState | null
   // Verantwortliche(r) aus dem Workflow (ersetzt assignee/accountable)
   responsible:         Responsible | null
+  // Lesbare Anzeige der aktuell zuständigen Stelle (inkl. Fachabteilungen)
+  responsible_label?:  string | null
   watchers?:           Watcher[]
 }
 

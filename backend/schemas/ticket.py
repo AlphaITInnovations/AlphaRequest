@@ -33,6 +33,9 @@ class TicketOut(BaseModel):
     workflow_state: Optional[dict] = None
     # Verantwortliche(r) (Person/Gruppe) aus dem Workflow – ersetzt assignee/accountable.
     responsible: Optional[ResponsibleOut] = None
+    # Lesbare Anzeige der AKTUELL zuständigen Stelle (Person/Gruppe/Ersteller oder –
+    # in der Durchführung – die offenen Fachabteilungen). Für „Verantwortlicher".
+    responsible_label: Optional[str] = None
     # Nur im Detail-Endpoint befüllt (Listen vermeiden so N+1-Queries).
     watchers: List[WatcherOut] = []
 
@@ -40,7 +43,7 @@ class TicketOut(BaseModel):
 
     @classmethod
     def from_ticket(cls, t: Ticket, watchers: Optional[list] = None) -> "TicketOut":
-        from backend.services.workflow_state import primary_responsibility
+        from backend.services.workflow_state import primary_responsibility, responsibility_label
         resp = primary_responsibility(t)
         return cls(
             id=t.id,
@@ -56,6 +59,7 @@ class TicketOut(BaseModel):
             updated_at=t.updated_at,
             workflow_state=t.workflow_state_parsed or None,
             responsible=ResponsibleOut(**resp) if resp else None,
+            responsible_label=responsibility_label(t),
             watchers=[WatcherOut(**w) for w in (watchers or [])],
         )
 
@@ -102,6 +106,14 @@ class TicketUpdateRequest(BaseModel):
     accountable_name: Optional[str] = None
     priority: Optional[TicketPriority] = None
     action: str = "save"
+
+
+class ResponsibilityOverrideRequest(BaseModel):
+    """Admin-Notfall-Override der Zuständigkeit einer Phase."""
+    assignee_id: str                       # User-ID oder Gruppen-/Fachabteilungs-ID
+    assignee_name: Optional[str] = None
+    # Phase, deren Zuständigkeit gesetzt wird. None = aktuelle Phase.
+    phase_index: Optional[int] = None
 
 
 class UserOut(BaseModel):
