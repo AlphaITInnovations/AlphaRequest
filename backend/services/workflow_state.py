@@ -713,3 +713,69 @@ def get_dashboard_work(user_id: str) -> dict:
         "assigned": assigned,
         "departments": [b for b in boards.values() if b["tickets"]],
     }
+
+
+def get_involved_tickets(user_id: str) -> list[dict]:
+    """
+    Alle Tickets (inkl. archiviert/abgelehnt), bei denen der User jemals
+    irgendwie beteiligt war – als „Archiv zum Zurückverfolgen".
+
+    Beteiligung (eine genügt):
+      - Ersteller des Tickets
+      - Beobachter
+      - aktuell zuständig (Person / Gruppe / offene Fachabteilung)
+      - frühere persönliche Zuständigkeit in irgendeiner Phase
+      - Akteur im Verlauf (hat etwas getan: bearbeitet, freigegeben, …)
+      - Mitglied einer involvierten Gruppe / Fachabteilung (auch bereits erledigt)
+
+    Liefert je Ticket die zutreffenden Rollen für die Anzeige; neueste zuerst.
+    """
+    from backend.database.ticket_watchers import list_ticket_ids_for_watcher
+    watched_ids = set(list_ticket_ids_for_watcher(user_id))
+    group_ids = set(get_group_ids_for_user(user_id))
+
+    items: list[dict] = []
+    for ticket in list_all_tickets():
+        roles: list[str] = []
+
+        if getattr(ticket, "owner_id", None) == user_id:
+            roles.append("ersteller")
+        if ticket.id in watched_ids:
+            roles.append("beobachter")
+        if user_is_responsible(ticket, user_id, group_ids):
+            roles.append("zustaendig")
+        if group_ids & involved_group_ids(ticket):
+            roles.append("fachabteilung")
+
+        # Bearbeiter: frühere persönliche Zuständigkeit ODER Akteur im Verlauf
+        was_handler = False
+        wf = ticket.workflow_state_parsed if isinstance(ticket.workflow_state_parsed, dict) else {}
+        for phase in wf.get("phases", []):
+            resp = phase.get("responsibility")
+            if isinstance(resp, dict) and resp.get("kind") == "user" and resp.get("id") == user_id:
+                was_handler = True
+                break
+        if not was_handler:
+            for ev in (ticket.history_parsed or []):
+                actor = ev.get("actor") or {}
+                if actor.get("id") == user_id and actor.get("type") != "system":
+                    was_handler = True
+                    break
+        if was_handler:
+            roles.append("bearbeiter")
+
+        if not roles:
+            continue
+
+        items.append({
+            "id": ticket.id,
+            "title": ticket.title,
+            "type_key": ticket.ticket_type.value if hasattr(ticket.ticket_type, "value") else ticket.ticket_type,
+            "status": ticket.status.value if hasattr(ticket.status, "value") else ticket.status,
+            "priority": ticket.priority.value if hasattr(ticket.priority, "value") else ticket.priority,
+            "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+            "roles": roles,
+        })
+
+    items.sort(key=lambda x: x["id"], reverse=True)
+    return items

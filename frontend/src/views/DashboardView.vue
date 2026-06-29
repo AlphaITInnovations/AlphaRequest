@@ -22,6 +22,8 @@ interface DeptBoardTicket {
   department_id: string | null
 }
 interface DeptBoardGroup { group_id: string; group_name: string; tickets: DeptBoardTicket[] }
+// Involviertes Ticket: wie DashboardTicket + Rollen des Nutzers
+interface InvolvedTicket extends DashboardTicket { roles: string[] }
 interface DashboardData {
   orders: DashboardTicket[]
   watched_orders: DashboardTicket[]
@@ -33,8 +35,13 @@ interface DashboardData {
 const loading   = ref(true)
 const data      = ref<DashboardData>({ orders: [], watched_orders: [], department_board: [], allowed_ticket_types: [] })
 
+// Involvierte Tickets (Archiv) – separat & lazy geladen
+const involved        = ref<InvolvedTicket[]>([])
+const involvedLoading = ref(false)
+const involvedLoaded  = ref(false)
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-type Tab = 'mine' | 'group' | 'watched'
+type Tab = 'mine' | 'group' | 'watched' | 'involved'
 const activeTab = ref<Tab>('mine')
 
 // ── Filter ────────────────────────────────────────────────────────────────────
@@ -82,6 +89,37 @@ function dotClass(s: string) {
   return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', archived: 'bg-green-500', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
 }
 
+// ── Rollen (Involviert-Tab) ─────────────────────────────────────────────────────
+const ROLE_META: Record<string, { label: string; class: string }> = {
+  ersteller:     { label: 'Ersteller',     class: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  zustaendig:    { label: 'Zuständig',      class: 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20' },
+  bearbeiter:    { label: 'Bearbeiter',     class: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  fachabteilung: { label: 'Fachabteilung',  class: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+  beobachter:    { label: 'Beobachter',     class: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+}
+// stabile Reihenfolge der Chips
+const ROLE_ORDER = ['zustaendig', 'bearbeiter', 'ersteller', 'fachabteilung', 'beobachter']
+function sortedRoles(roles: string[]): string[] {
+  return [...roles].sort((a, b) => ROLE_ORDER.indexOf(a) - ROLE_ORDER.indexOf(b))
+}
+
+async function loadInvolved() {
+  if (involvedLoaded.value || involvedLoading.value) return
+  involvedLoading.value = true
+  try {
+    const res = await client.get<{ data: { involved: InvolvedTicket[] } }>('/dashboard/involved')
+    involved.value = res.data.data.involved ?? []
+    involvedLoaded.value = true
+  } finally {
+    involvedLoading.value = false
+  }
+}
+
+function selectInvolvedTab() {
+  activeTab.value = 'involved'
+  loadInvolved()
+}
+
 // ── Counts ────────────────────────────────────────────────────────────────────
 const mineCount    = computed(() => (data.value.orders ?? []).filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
 const groupCount   = computed(() => (data.value.department_board ?? []).reduce((s, g) => s + g.tickets.length, 0))
@@ -103,9 +141,12 @@ function applyFilter<T extends { title: string; type_key: string; status: string
 const filteredMine    = computed(() => applyFilter(data.value.orders))
 const openGroupDepts = ref<Record<string, boolean>>({})
 const filteredWatched = computed(() => applyFilter(data.value.watched_orders))
+// Beobachter-Tab zeigt nur aktive Tickets – archivierte stehen jetzt unter „Involviert".
 const filteredWatchedActive   = computed(() => filteredWatched.value.filter(o => o.status !== 'archived'))
-const filteredWatchedArchived = computed(() => filteredWatched.value.filter(o => o.status === 'archived'))
-const showArchived = ref(false)
+
+// Involviert-Tab (Archiv) – durchsuchbar/filterbar wie die anderen
+const filteredInvolved = computed(() => applyFilter(involved.value))
+const involvedCount    = computed(() => involved.value.length)
 
 // ── „Meine Abteilung" ──────────────────────────────────────────────────────────
 // Vollständig vom Backend gruppiert: jede Abteilung genau einmal, jedes Ticket
@@ -119,7 +160,8 @@ const myDepartmentGroups = computed<DeptBoardGroup[]>(() =>
 const currentCount = computed(() => {
   if (activeTab.value === 'mine') return filteredMine.value.length
   if (activeTab.value === 'group') return myDepartmentGroups.value.reduce((s, g) => s + g.tickets.length, 0)
-  return filteredWatched.value.length
+  if (activeTab.value === 'involved') return filteredInvolved.value.length
+  return filteredWatchedActive.value.length
 })
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -155,6 +197,8 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  // Involvierte Tickets im Hintergrund vorladen (für den Zähler), ohne den Render zu blockieren.
+  loadInvolved()
 })
 </script>
 
@@ -180,7 +224,7 @@ onMounted(async () => {
       </div>
 
       <!-- ── Stat Cards ── -->
-      <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <button @click="activeTab = 'mine'" class="stat" :class="activeTab === 'mine' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
@@ -209,6 +253,19 @@ onMounted(async () => {
             <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ watchedCount }}</span>
           </div>
           <p class="stat-label">Beobachter</p>
+        </button>
+
+        <button @click="selectInvolvedTab" class="stat" :class="activeTab === 'involved' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </span>
+            <span class="text-2xl font-bold text-gray-900 dark:text-white">
+              <span v-if="involvedLoaded">{{ involvedCount }}</span>
+              <span v-else class="inline-block w-4 h-4 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin align-middle" />
+            </span>
+          </div>
+          <p class="stat-label">Involviert</p>
         </button>
       </div>
 
@@ -325,7 +382,7 @@ onMounted(async () => {
             <p v-if="myDepartmentGroups.length === 0" class="empty">Keine Aufträge für deine Abteilung.</p>
           </div>
 
-          <!-- ═══ TAB: Beobachter ═══ -->
+          <!-- ═══ TAB: Beobachter (nur aktive – Archiv unter „Involviert") ═══ -->
           <div v-if="activeTab === 'watched'" class="max-h-[560px] overflow-auto">
             <ul class="divide-y divide-gray-100 dark:divide-white/[0.06]">
               <li v-for="o in filteredWatchedActive" :key="o.id" @click="openWatchedTicket(o)" class="row group">
@@ -342,36 +399,45 @@ onMounted(async () => {
                   <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
               </li>
-              <li v-if="filteredWatchedActive.length === 0 && filteredWatchedArchived.length === 0" class="empty">Du beobachtest keine Tickets.</li>
-              <li v-else-if="filteredWatchedActive.length === 0" class="px-5 py-8 text-center text-sm text-gray-400 italic">Keine offenen beobachteten Tickets.</li>
+              <li v-if="filteredWatchedActive.length === 0" class="empty">Du beobachtest keine offenen Tickets.</li>
             </ul>
+          </div>
 
-            <!-- Archiviert -->
-            <div v-if="filteredWatchedArchived.length > 0" class="border-t border-gray-200/80 dark:border-white/[0.09]">
-              <button @click="showArchived = !showArchived"
-                      class="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
-                <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Archiviert</span>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ filteredWatchedArchived.length }}</span>
-                  <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" :class="showArchived ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-              </button>
-              <ul v-show="showArchived" class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-                <li v-for="o in filteredWatchedArchived" :key="o.id" @click="openWatchedTicket(o)" class="row group opacity-60">
-                  <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
-                    <div class="min-w-0">
-                      <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                      <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
+          <!-- ═══ TAB: Involviert (Archiv zum Zurückverfolgen) ═══ -->
+          <div v-if="activeTab === 'involved'" class="max-h-[560px] overflow-auto">
+
+            <!-- Ladezustand -->
+            <div v-if="involvedLoading && !involvedLoaded" class="flex items-center justify-center py-14">
+              <div class="w-6 h-6 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+            </div>
+
+            <ul v-else class="divide-y divide-gray-100 dark:divide-white/[0.06]">
+              <li v-for="o in filteredInvolved" :key="o.id" @click="openWatchedTicket(o)" class="row group">
+                <div class="flex items-center gap-3.5 min-w-0">
+                  <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
+                    <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
+                    <!-- Rollen-Chips: wie war ich beteiligt? -->
+                    <div v-if="o.roles?.length" class="flex flex-wrap gap-1 mt-1.5">
+                      <span v-for="r in sortedRoles(o.roles)" :key="r"
+                            class="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                            :class="ROLE_META[r]?.class ?? 'bg-gray-100 text-gray-500'">
+                        {{ ROLE_META[r]?.label ?? r }}
+                      </span>
                     </div>
                   </div>
-                  <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                    <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Archiviert</span>
-                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                  </div>
-                </li>
-              </ul>
-            </div>
+                </div>
+                <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
+                  <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
+                  <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
+                  <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </li>
+              <li v-if="filteredInvolved.length === 0" class="empty">
+                {{ involvedLoaded ? 'Keine Tickets gefunden, an denen du beteiligt warst.' : 'Wird geladen…' }}
+              </li>
+            </ul>
           </div>
 
         </div>

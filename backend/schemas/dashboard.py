@@ -36,3 +36,14 @@ class DashboardResponse(BaseModel):
     # Einheitliche „Meine Abteilung"-Liste (Assignment + Durchführung, dedupliziert).
     department_board: list[DepartmentGroup]
     allowed_ticket_types: list[str]
+
+
+class InvolvedTicket(DashboardTicket):
+    # Rollen des Nutzers an diesem Ticket:
+    # ersteller | beobachter | zustaendig | bearbeiter | fachabteilung
+    roles: list[str] = []
+
+
+class InvolvedResponse(BaseModel):
+    # Alle Tickets (inkl. archiviert), bei denen der Nutzer jemals beteiligt war.
+    involved: list[InvolvedTicket]
