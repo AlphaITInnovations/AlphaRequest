@@ -294,7 +294,7 @@ onMounted(async () => {
             <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ groupCount }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
-            Meine Abteilung
+            Meine Abteilungen
             <span class="hint" @click.stop>
               <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
               <span class="bubble">Aufträge, die aktuell einer deiner Fachabteilungen vorliegen – zur Bearbeitung oder Durchführung.</span>
@@ -563,7 +563,7 @@ onMounted(async () => {
 
 /* Info-Icon mit Hover-Tooltip auf den Stat-Cards */
 .hint { @apply relative inline-flex items-center cursor-help; }
-.hint-icon { @apply w-3.5 h-3.5 text-gray-300 dark:text-gray-600 transition-colors; }
+.hint-icon { @apply w-[18px] h-[18px] text-gray-300 dark:text-gray-600 transition-colors; }
 .hint:hover .hint-icon { @apply text-gray-500 dark:text-gray-300; }
 .bubble {
   @apply pointer-events-none absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 w-56
