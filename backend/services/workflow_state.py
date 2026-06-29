@@ -406,19 +406,18 @@ def current_responsibility(ticket) -> dict:
 
 def primary_responsibility(ticket) -> Optional[dict]:
     """
-    Die „verantwortliche" Person/Gruppe eines Tickets für die Anzeige
-    („Verantwortlicher") = responsibility der ersten Bearbeitungs-(assignment)-Phase,
-    stabil über alle Phasen. None, wenn der Typ keine Bearbeitungsphase hat.
+    Verantwortliche(r) Person/Gruppe für Anzeige und Formular-Vorbefüllung =
+    die AKTUELL zuständige Person/Gruppe der laufenden Phase. None, wenn aktuell
+    niemand bzw. (in der Durchführung) die Fachabteilungen zuständig sind – für die
+    lesbare Gesamt-Anzeige inkl. Fachabteilungen siehe responsibility_label().
+
+    Früher wurde stattdessen die erste assignment-Phase genommen; das blieb beim
+    Onboarding dauerhaft auf der Freigabe-Phase (FreigabeHerrLutz) hängen und
+    aktualisierte sich nie auf die tatsächlich zuständige Stelle.
     """
-    workflow = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
-    if not _is_new_format(workflow):
-        return None
-    for phase in workflow.get("phases", []):
-        if phase.get("type") == PhaseType.assignment.value:
-            resp = phase.get("responsibility")
-            if isinstance(resp, dict) and resp.get("kind") in ("user", "group"):
-                return resp
-            return None
+    resp = current_responsibility(ticket)
+    if resp.get("kind") in ("user", "group"):
+        return {"kind": resp["kind"], "id": resp.get("id"), "name": resp.get("name")}
     return None
 
 
