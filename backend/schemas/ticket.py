@@ -108,6 +108,14 @@ class TicketUpdateRequest(BaseModel):
     action: str = "save"
 
 
+class ResponsibilityOverrideRequest(BaseModel):
+    """Admin-Notfall-Override der Zuständigkeit einer Phase."""
+    assignee_id: str                       # User-ID oder Gruppen-/Fachabteilungs-ID
+    assignee_name: Optional[str] = None
+    # Phase, deren Zuständigkeit gesetzt wird. None = aktuelle Phase.
+    phase_index: Optional[int] = None
+
+
 class UserOut(BaseModel):
     id: str
     displayName: str

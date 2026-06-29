@@ -2,6 +2,9 @@
 import { ref, onMounted, computed, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { client } from '@/api/client'
+import { ticketsApi } from '@/api/tickets'
+import { useAuthStore } from '@/stores/authStore'
+import UserSelect from '@/components/UserSelect.vue'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketHistoryTimeline from '@/views/TicketHistoryTimeline.vue'
 import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
@@ -18,6 +21,7 @@ import BasisTicketContentPanel from '@/components/tickets/BasisTicketContentPane
 
 const route  = useRoute()
 const router = useRouter()
+const auth   = useAuthStore()
 const id     = Number(route.params.id)
 
 const loading = ref(true)
@@ -114,6 +118,26 @@ async function submitNachtrag() {
     nachtragSending.value = false
   }
 }
+
+// ── Admin: Zuständigkeit (Notfall) überschreiben ─────────────────────────────
+const respSel    = ref<{ id: string; name: string } | null>(null)
+const respSaving = ref(false)
+async function saveResponsibility() {
+  if (!respSel.value) return
+  respSaving.value = true
+  try {
+    await ticketsApi.setResponsibility(id, respSel.value.id, respSel.value.name)
+    respSel.value = null
+    await load()
+  } catch (e: any) {
+    const msg = e?.response?.data?.error?.message
+            ?? e?.response?.data?.detail
+            ?? 'Zuständigkeit konnte nicht gesetzt werden (nur in einer Bearbeitungsphase möglich).'
+    alert(msg)
+  } finally {
+    respSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -195,6 +219,28 @@ async function submitNachtrag() {
               <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Kommentar</p>
               <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ data.comment }}</p>
             </div>
+          </div>
+
+          <!-- Admin: Zuständigkeit (Notfall) überschreiben -->
+          <div v-if="auth.isAdmin && data.status !== 'archived'"
+               class="bg-white dark:bg-[#212B3A] border border-orange-200/70 dark:border-orange-400/20
+                      rounded-2xl shadow-sm p-5 text-sm">
+            <div class="flex items-center gap-1.5 mb-1">
+              <span class="text-base leading-none">🛠️</span>
+              <p class="font-semibold text-gray-900 dark:text-white">Zuständigkeit ändern</p>
+            </div>
+            <p class="text-xs text-gray-400 mb-3">
+              Admin-Notfall: setzt die Zuständigkeit der <strong>aktuellen Phase</strong> auf eine
+              Person oder Fachabteilung. Wird im Verlauf protokolliert.
+            </p>
+            <UserSelect v-model="respSel" :show-groups="true" :show-users="true"
+                        label="" placeholder="Person / Fachabteilung…" />
+            <button @click="saveResponsibility" :disabled="!respSel || respSaving"
+                    class="mt-3 w-full px-4 py-2 rounded-xl text-sm font-medium
+                           bg-[#3EAAB8] hover:bg-[#2B7D89] text-white
+                           disabled:opacity-50 disabled:cursor-not-allowed transition">
+              {{ respSaving ? 'Wird gesetzt…' : 'Zuständigkeit setzen' }}
+            </button>
           </div>
 
           <!-- Fachabteilungen -->

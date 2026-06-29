@@ -27,6 +27,7 @@ const ACTION_META: Record<string, { label: string; icon: string; color: string }
   freigabe_approved_mail:   { label: 'Freigegeben (per Mail)',       icon: '✅', color: 'bg-green-500' },
   freigabe_rejected_mail:   { label: 'Abgelehnt (per Mail)',         icon: '⛔', color: 'bg-red-500' },
   nachtrag_added:           { label: 'Nachtrag',                     icon: '📝', color: 'bg-indigo-500' },
+  responsibility_overridden:{ label: 'Zuständigkeit (Admin)',        icon: '🛠️', color: 'bg-orange-500' },
   status_changed:           { label: 'Status geändert',              icon: '🔄', color: 'bg-purple-500' },
   department_status_changed:{ label: 'Fachabteilung',                icon: '🏢', color: 'bg-teal-500' },
   description_changed:      { label: 'Formular bearbeitet',          icon: '📋', color: 'bg-amber-400' },
@@ -331,6 +332,16 @@ function descriptionDiff(
           <!-- nachtrag_added: Text anzeigen -->
           <template v-if="e.action === 'nachtrag_added' && e.details?.text">
             <p class="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{{ e.details.text }}</p>
+          </template>
+
+          <!-- responsibility_overridden: alt → neu (+ Phase) -->
+          <template v-if="e.action === 'responsibility_overridden'">
+            <div class="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs">
+              <span class="text-gray-400 line-through">{{ e.details?.old || '—' }}</span>
+              <span class="text-gray-400">→</span>
+              <span class="font-medium text-gray-800 dark:text-gray-200">{{ e.details?.new }}</span>
+              <span v-if="e.details?.phase_label" class="text-gray-400">· {{ e.details.phase_label }}</span>
+            </div>
           </template>
 
           <!-- status_changed -->

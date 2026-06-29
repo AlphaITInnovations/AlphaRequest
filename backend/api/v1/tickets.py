@@ -13,6 +13,7 @@ from backend.services.microsoft_mail import send_newrequest_mail, send_mail_to_a
 from backend.services.ticket_permissions import can_user_create_ticket
 from backend.schemas.ticket import (
     TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut, BasisTicketCreateRequest,
+    ResponsibilityOverrideRequest,
 )
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
@@ -751,6 +752,74 @@ def archive_ticket(
             "field": "status",
             "old_value": ticket.status.value,
             "new_value": RequestStatus.archived.value,
+        },
+    )
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
+@router.put("/admin/tickets/{ticket_id}/responsibility", response_model=DataResponse[TicketOut])
+def override_responsibility(
+    ticket_id: int,
+    data: ResponsibilityOverrideRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Admin-Notfall: setzt die Zuständigkeit einer Phase (Standard: aktuelle Phase)
+    auf eine Person oder Fachabteilung/Gruppe – unabhängig vom normalen Workflow.
+    Funktioniert in jeder Bearbeitungs-(assignment)-Phase. Für die Durchführung
+    werden die Fachabteilungen separat verwaltet.
+    """
+    _require_admin(user)
+    ticket = _get_ticket_or_404(ticket_id)
+
+    from backend.services.workflow_state import (
+        get_workflow_state, set_phase_responsibility, PhaseType as WfPhaseType,
+    )
+    wf = get_workflow_state(ticket_id)
+    phases = wf.get("phases", [])
+    if not phases:
+        raise api_error(400, ErrorCode.INVALID_STATUS,
+                        "Ticket hat keinen Workflow im neuen Format")
+
+    idx = data.phase_index if data.phase_index is not None else wf.get("current_phase_index", 0)
+    if not (0 <= idx < len(phases)):
+        raise api_error(400, ErrorCode.INVALID_STATUS,
+                        f"Phase-Index {idx} ungültig (erlaubt: 0..{len(phases) - 1})")
+
+    phase = phases[idx]
+    if phase.get("type") != WfPhaseType.assignment.value:
+        raise api_error(400, ErrorCode.INVALID_STATUS,
+                        f"Phase '{phase.get('key')}' ist keine Bearbeitungsphase – "
+                        "Zuständigkeit kann hier nicht gesetzt werden "
+                        "(Durchführung wird über die Fachabteilungen gesteuert).")
+
+    # Person oder Gruppe/Fachabteilung auflösen
+    from backend.database.groups import get_groups
+    group_map = {g["id"]: g["name"] for g in get_groups()}
+    if data.assignee_id in group_map:
+        new_resp = {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]}
+    else:
+        if not validate_assignee(request.app.state.user_cache, data.assignee_id):
+            raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                            f"Unbekannte Person/Gruppe '{data.assignee_id}'")
+        new_resp = {"kind": "user", "id": data.assignee_id,
+                    "name": data.assignee_name or data.assignee_id}
+
+    old_name = (phase.get("responsibility") or {}).get("name")
+    set_phase_responsibility(ticket_id, idx, new_resp)
+
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="responsibility_overridden",
+        details={
+            "phase_key": phase.get("key"),
+            "phase_label": phase.get("label"),
+            "phase_index": idx,
+            "old": old_name,
+            "new": new_resp["name"],
         },
     )
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
