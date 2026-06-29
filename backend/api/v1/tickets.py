@@ -489,8 +489,8 @@ async def update_ticket(
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
 
-    if data.assignee_id and not validate_assignee(request.app.state.user_cache, data.assignee_id):
-        raise api_error(400, ErrorCode.INVALID_ASSIGNEE, "Unbekannter Assignee")
+    # assignee_id/assignee_name werden beim PATCH ignoriert (siehe unten) – daher
+    # hier auch keine Assignee-Validierung mehr.
 
     # --- Änderungen tracken (old → new) ---
     changes = {}
@@ -521,28 +521,13 @@ async def update_ticket(
     if updates:
         database.update_ticket(ticket_id=ticket_id, **updates)
 
-    # --- Zuweisung der Bearbeitungsphase: nur in der assignment-Phase änderbar ---
-    # Schreibt die responsibility in den Workflow (Person/Gruppe), nicht in die
-    # alten assignee/accountable-Spalten.
-    if data.assignee_id:
-        from backend.database.groups import get_groups
-        from backend.services.workflow_state import (
-            get_workflow_state, current_responsibility, set_phase_responsibility,
-            PhaseType as WfPhaseType,
-        )
-        wf = get_workflow_state(ticket_id)
-        phases = wf.get("phases", [])
-        idx = wf.get("current_phase_index", 0)
-        if 0 <= idx < len(phases) and phases[idx].get("type") == WfPhaseType.assignment.value:
-            group_map = {g["id"]: g["name"] for g in get_groups()}
-            if data.assignee_id in group_map:
-                new_resp = {"kind": "group", "id": data.assignee_id, "name": group_map[data.assignee_id]}
-            else:
-                new_resp = {"kind": "user", "id": data.assignee_id, "name": data.assignee_name or data.assignee_id}
-            old = current_responsibility(ticket)
-            if old.get("id") != new_resp["id"]:
-                changes["assignee"] = {"old": old.get("name"), "new": new_resp["name"]}
-                set_phase_responsibility(ticket_id, idx, new_resp)
+    # Hinweis: Ein PATCH (Feld-Speichern) ändert BEWUSST NICHT die Zuständigkeit.
+    # Die Zuständigkeit wird ausschließlich bei der Erstellung (create_ticket) und
+    # beim Weitergeben (submit_ticket, „nächster Bearbeiter") gesetzt. Früher schrieb
+    # jedes PATCH das mitgesendete assignee_id als aktuelle Phasen-Zuständigkeit –
+    # eine veraltete/falsche Vorbefüllung (z.B. Freigabe-Gruppe beim Onboarding)
+    # hat dadurch beim Speichern die echte Zuständigkeit überschrieben. data.assignee_id
+    # wird hier deshalb ignoriert.
 
     # --- Ein gebündeltes History-Event für alle Änderungen ---
     if changes:
