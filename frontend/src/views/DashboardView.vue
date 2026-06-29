@@ -75,7 +75,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   in_request:  'bg-[#3EAAB8]/10 text-[#3EAAB8] dark:bg-[#3EAAB8]/20',
-  archived:    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 }
 const PRIORITY_LABEL: Record<string, string> = {
@@ -86,7 +86,7 @@ const PRIORITY_CLASS: Record<string, string> = {
 }
 
 function dotClass(s: string) {
-  return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', archived: 'bg-green-500', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
+  return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', archived: 'bg-gray-400', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
 }
 
 // ── Rollen (Involviert-Tab) ─────────────────────────────────────────────────────
@@ -147,6 +147,17 @@ const filteredWatchedActive   = computed(() => filteredWatched.value.filter(o =>
 // Involviert-Tab (Archiv) – durchsuchbar/filterbar wie die anderen
 const filteredInvolved = computed(() => applyFilter(involved.value))
 const involvedCount    = computed(() => involved.value.length)
+
+// Paging – die Involviert-Liste (inkl. Archiv) kann sehr lang werden
+const INVOLVED_PAGE_SIZE = 15
+const involvedPage = ref(1)
+const involvedTotalPages = computed(() => Math.max(1, Math.ceil(filteredInvolved.value.length / INVOLVED_PAGE_SIZE)))
+const pagedInvolved = computed(() => {
+  const start = (involvedPage.value - 1) * INVOLVED_PAGE_SIZE
+  return filteredInvolved.value.slice(start, start + INVOLVED_PAGE_SIZE)
+})
+// Bei Filter-/Tab-Wechsel zurück auf Seite 1
+watch([filter, activeTab], () => { involvedPage.value = 1 }, { deep: true })
 
 // ── „Meine Abteilung" ──────────────────────────────────────────────────────────
 // Vollständig vom Backend gruppiert: jede Abteilung genau einmal, jedes Ticket
@@ -404,40 +415,54 @@ onMounted(async () => {
           </div>
 
           <!-- ═══ TAB: Involviert (Archiv zum Zurückverfolgen) ═══ -->
-          <div v-if="activeTab === 'involved'" class="max-h-[560px] overflow-auto">
+          <div v-if="activeTab === 'involved'">
 
-            <!-- Ladezustand -->
-            <div v-if="involvedLoading && !involvedLoaded" class="flex items-center justify-center py-14">
-              <div class="w-6 h-6 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
-            </div>
+            <div class="max-h-[560px] overflow-auto">
+              <!-- Ladezustand -->
+              <div v-if="involvedLoading && !involvedLoaded" class="flex items-center justify-center py-14">
+                <div class="w-6 h-6 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+              </div>
 
-            <ul v-else class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-              <li v-for="o in filteredInvolved" :key="o.id" @click="openWatchedTicket(o)" class="row group">
-                <div class="flex items-center gap-3.5 min-w-0">
-                  <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                    <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
-                    <!-- Rollen-Chips: wie war ich beteiligt? -->
-                    <div v-if="o.roles?.length" class="flex flex-wrap gap-1 mt-1.5">
-                      <span v-for="r in sortedRoles(o.roles)" :key="r"
-                            class="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                            :class="ROLE_META[r]?.class ?? 'bg-gray-100 text-gray-500'">
-                        {{ ROLE_META[r]?.label ?? r }}
-                      </span>
+              <ul v-else class="divide-y divide-gray-100 dark:divide-white/[0.06]">
+                <li v-for="o in pagedInvolved" :key="o.id" @click="openWatchedTicket(o)" class="row group">
+                  <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 self-start" :class="dotClass(o.status)" />
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
+                      <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
+                      <!-- Rollen-Chips: wie war ich beteiligt? -->
+                      <div v-if="o.roles?.length" class="flex flex-wrap gap-1 mt-1.5">
+                        <span v-for="r in sortedRoles(o.roles)" :key="r"
+                              class="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                              :class="ROLE_META[r]?.class ?? 'bg-gray-100 text-gray-500'">
+                          {{ ROLE_META[r]?.label ?? r }}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                  <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
-                  <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
-                  <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                </div>
-              </li>
-              <li v-if="filteredInvolved.length === 0" class="empty">
-                {{ involvedLoaded ? 'Keine Tickets gefunden, an denen du beteiligt warst.' : 'Wird geladen…' }}
-              </li>
-            </ul>
+                  <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
+                    <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
+                    <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
+                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </div>
+                </li>
+                <li v-if="filteredInvolved.length === 0" class="empty">
+                  {{ involvedLoaded ? 'Keine Tickets gefunden, an denen du beteiligt warst.' : 'Wird geladen…' }}
+                </li>
+              </ul>
+            </div>
+
+            <!-- Pagination -->
+            <div v-if="involvedLoaded && involvedTotalPages > 1"
+                 class="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-200/80 dark:border-white/[0.09]">
+              <button @click="involvedPage--" :disabled="involvedPage <= 1" class="page-btn">‹ Zurück</button>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                Seite {{ involvedPage }} / {{ involvedTotalPages }}
+                <span class="text-gray-300 dark:text-gray-600">·</span>
+                {{ filteredInvolved.length }} gesamt
+              </span>
+              <button @click="involvedPage++" :disabled="involvedPage >= involvedTotalPages" class="page-btn">Weiter ›</button>
+            </div>
           </div>
 
         </div>
@@ -470,4 +495,10 @@ onMounted(async () => {
 }
 
 .empty { @apply px-5 py-14 text-center text-sm text-gray-400 italic; }
+
+.page-btn {
+  @apply px-3.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-white/10
+         text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#263040]
+         disabled:opacity-40 disabled:cursor-not-allowed transition;
+}
 </style>
