@@ -31,9 +31,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Kein requiresPermission: 'view' – auch involvierte Nutzer ohne globale
+      // view-Rolle dürfen IHRE Tickets öffnen. Der Backend-Endpoint prüft den
+      // Zugriff pro Ticket (view/manage/admin oder beteiligt).
       path: '/tickets/overview/:id',
       component: () => import('@/views/TicketOverviewDetailView.vue'),
-      meta: { requiresAuth: true, requiresPermission: 'view' },
+      meta: { requiresAuth: true },
     },
 
     // ── Generic ticket routes (new) ────────────────────────────────────────────
