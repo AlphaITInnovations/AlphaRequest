@@ -85,7 +85,9 @@ async function load() {
     const { data: res } = await client.get(`/overview/tickets/${id}`)
     data.value = res.data
   } catch {
-    router.push('/tickets')
+    // Kein Zugriff / nicht gefunden → zurück zum Dashboard (funktioniert auch
+    // ohne globale view-Rolle; /tickets wäre für Nicht-Viewer gesperrt).
+    router.push('/dashboard')
   } finally {
     loading.value = false
   }

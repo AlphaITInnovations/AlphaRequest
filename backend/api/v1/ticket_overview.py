@@ -73,6 +73,22 @@ def _require_view(user: dict) -> None:
         raise HTTPException(403, "Kein Zugriff auf die Ticketübersicht")
 
 
+def _assert_overview_detail_access(user: dict, ticket) -> None:
+    """
+    Einzelnes Ticket darf öffnen, wer es überhaupt lesen darf (view/manage/admin)
+    ODER an diesem Ticket beteiligt ist/war (Ersteller, Beobachter, Zuständig,
+    Bearbeiter, Mitglied einer involvierten Fachabteilung) – passend zum
+    „Involviert"-Tab, der auch ohne globale view-Rolle funktionieren muss.
+    """
+    perms = user.get("permissions", [])
+    if any(p in perms for p in ("view", "manage", "admin")):
+        return
+    from backend.services.workflow_state import user_involved_in_ticket
+    if user_involved_in_ticket(ticket, user["id"]):
+        return
+    raise HTTPException(403, "Kein Zugriff auf dieses Ticket")
+
+
 def _require_manage(user: dict) -> None:
     """Nur manage (und admin, da admin ⊇ manage) darf schreiben."""
     if "manage" not in user.get("permissions", []):
@@ -188,11 +204,11 @@ def get_overview_ticket(
     ticket_id: int,
     user: dict = Depends(get_current_user),
 ):
-    _require_view(user)
-
     ticket = database.get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(404, "Ticket nicht gefunden")
+
+    _assert_overview_detail_access(user, ticket)
 
     try:
         description = json.loads(ticket.description or "{}")

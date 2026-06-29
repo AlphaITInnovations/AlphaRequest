@@ -230,6 +230,29 @@ def involved_group_ids(ticket) -> set:
     return ids
 
 
+def reached_involved_group_ids(ticket) -> set:
+    """
+    Wie involved_group_ids(), aber NUR für bereits erreichte Phasen
+    (Status ≠ 'pending'). Künftige, noch nicht erreichte Phasen zählen NICHT –
+    z.B. die Durchführungs-Fachabteilungen eines Onboarding-Tickets, solange es
+    noch in Freigabe/BackOffice/Bearbeitung steckt. Für die „beteiligt"-Anzeige.
+    """
+    wf = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
+    ids: set = set()
+    for phase in wf.get("phases", []):
+        if phase.get("status") == PHASE_STATUS_PENDING:
+            continue
+        if phase.get("type") == PhaseType.department_review.value:
+            ids.update(phase.get("departments", {}).keys())
+        resp = phase.get("responsibility")
+        if isinstance(resp, dict) and resp.get("kind") == "group" and resp.get("id"):
+            ids.add(resp["id"])
+    # Altformat-Fallback (kein phases-Schlüssel): wie bisher alle Abteilungen
+    if not wf.get("phases") and isinstance(wf.get("departments"), dict):
+        ids.update(wf["departments"].keys())
+    return ids
+
+
 # ============================================================
 # Workflow builder
 # ============================================================
@@ -715,19 +738,59 @@ def get_dashboard_work(user_id: str) -> dict:
     }
 
 
+def involvement_roles(ticket, user_id: str, group_ids: set, watched_ids: set) -> list[str]:
+    """
+    Rollen, mit denen ein User an einem Ticket beteiligt ist (leer = gar nicht):
+      - ersteller     : Ersteller des Tickets
+      - beobachter    : steht in der Beobachter-Liste
+      - zustaendig    : aktuell zuständig (Person / Gruppe / offene Fachabteilung)
+      - fachabteilung : aktuell Mitglied einer Gruppe, die im Workflow je vorkam
+      - bearbeiter    : frühere persönliche Zuständigkeit ODER Akteur im Verlauf
+    """
+    roles: list[str] = []
+
+    if getattr(ticket, "owner_id", None) == user_id:
+        roles.append("ersteller")
+    if ticket.id in watched_ids:
+        roles.append("beobachter")
+    if user_is_responsible(ticket, user_id, group_ids):
+        roles.append("zustaendig")
+    # „fachabteilung" nur für bereits ERREICHTE Phasen – sonst sehen z.B. IT-Mitglieder
+    # ein Onboarding-Ticket schon, während es noch in der Freigabe (Herr Lutz) steckt.
+    if group_ids & reached_involved_group_ids(ticket):
+        roles.append("fachabteilung")
+
+    was_handler = False
+    wf = ticket.workflow_state_parsed if isinstance(ticket.workflow_state_parsed, dict) else {}
+    for phase in wf.get("phases", []):
+        resp = phase.get("responsibility")
+        if isinstance(resp, dict) and resp.get("kind") == "user" and resp.get("id") == user_id:
+            was_handler = True
+            break
+    if not was_handler:
+        for ev in (ticket.history_parsed or []):
+            actor = ev.get("actor") or {}
+            if actor.get("id") == user_id and actor.get("type") != "system":
+                was_handler = True
+                break
+    if was_handler:
+        roles.append("bearbeiter")
+
+    return roles
+
+
+def user_involved_in_ticket(ticket, user_id: str) -> bool:
+    """True, wenn der User an genau diesem Ticket beteiligt ist (für Zugriffsprüfung)."""
+    from backend.database.ticket_watchers import is_watcher
+    group_ids = set(get_group_ids_for_user(user_id))
+    watched_ids = {ticket.id} if is_watcher(ticket.id, user_id) else set()
+    return bool(involvement_roles(ticket, user_id, group_ids, watched_ids))
+
+
 def get_involved_tickets(user_id: str) -> list[dict]:
     """
     Alle Tickets (inkl. archiviert/abgelehnt), bei denen der User jemals
     irgendwie beteiligt war – als „Archiv zum Zurückverfolgen".
-
-    Beteiligung (eine genügt):
-      - Ersteller des Tickets
-      - Beobachter
-      - aktuell zuständig (Person / Gruppe / offene Fachabteilung)
-      - frühere persönliche Zuständigkeit in irgendeiner Phase
-      - Akteur im Verlauf (hat etwas getan: bearbeitet, freigegeben, …)
-      - Mitglied einer involvierten Gruppe / Fachabteilung (auch bereits erledigt)
-
     Liefert je Ticket die zutreffenden Rollen für die Anzeige; neueste zuerst.
     """
     from backend.database.ticket_watchers import list_ticket_ids_for_watcher
@@ -736,37 +799,9 @@ def get_involved_tickets(user_id: str) -> list[dict]:
 
     items: list[dict] = []
     for ticket in list_all_tickets():
-        roles: list[str] = []
-
-        if getattr(ticket, "owner_id", None) == user_id:
-            roles.append("ersteller")
-        if ticket.id in watched_ids:
-            roles.append("beobachter")
-        if user_is_responsible(ticket, user_id, group_ids):
-            roles.append("zustaendig")
-        if group_ids & involved_group_ids(ticket):
-            roles.append("fachabteilung")
-
-        # Bearbeiter: frühere persönliche Zuständigkeit ODER Akteur im Verlauf
-        was_handler = False
-        wf = ticket.workflow_state_parsed if isinstance(ticket.workflow_state_parsed, dict) else {}
-        for phase in wf.get("phases", []):
-            resp = phase.get("responsibility")
-            if isinstance(resp, dict) and resp.get("kind") == "user" and resp.get("id") == user_id:
-                was_handler = True
-                break
-        if not was_handler:
-            for ev in (ticket.history_parsed or []):
-                actor = ev.get("actor") or {}
-                if actor.get("id") == user_id and actor.get("type") != "system":
-                    was_handler = True
-                    break
-        if was_handler:
-            roles.append("bearbeiter")
-
+        roles = involvement_roles(ticket, user_id, group_ids, watched_ids)
         if not roles:
             continue
-
         items.append({
             "id": ticket.id,
             "title": ticket.title,
