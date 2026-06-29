@@ -277,7 +277,13 @@ onMounted(async () => {
             </span>
             <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ mineCount }}</span>
           </div>
-          <p class="stat-label">Mir zugewiesen</p>
+          <p class="stat-label inline-flex items-center gap-1">
+            Meine Tickets
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Aufträge, die aktuell dir persönlich zur Bearbeitung zugewiesen sind.</span>
+            </span>
+          </p>
         </button>
 
         <button @click="activeTab = 'group'" class="stat" :class="activeTab === 'group' ? 'stat-on' : ''">
@@ -287,7 +293,13 @@ onMounted(async () => {
             </span>
             <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ groupCount }}</span>
           </div>
-          <p class="stat-label">Meiner Abteilung</p>
+          <p class="stat-label inline-flex items-center gap-1">
+            Meine Abteilung
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Aufträge, die aktuell einer deiner Fachabteilungen vorliegen – zur Bearbeitung oder Durchführung.</span>
+            </span>
+          </p>
         </button>
 
         <button @click="activeTab = 'watched'" class="stat" :class="activeTab === 'watched' ? 'stat-on' : ''">
@@ -297,7 +309,13 @@ onMounted(async () => {
             </span>
             <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ watchedCount }}</span>
           </div>
-          <p class="stat-label">Beobachter</p>
+          <p class="stat-label inline-flex items-center gap-1">
+            Beobachtet
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Aktive Aufträge, die du beobachtest. Als Ersteller bist du automatisch Beobachter.</span>
+            </span>
+          </p>
         </button>
 
         <button @click="selectInvolvedTab" class="stat" :class="activeTab === 'involved' ? 'stat-on' : ''">
@@ -310,7 +328,13 @@ onMounted(async () => {
               <span v-else class="inline-block w-4 h-4 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin align-middle" />
             </span>
           </div>
-          <p class="stat-label">Involviert</p>
+          <p class="stat-label inline-flex items-center gap-1">
+            Involviert
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Alle Aufträge – auch archivierte – an denen du je beteiligt warst (Ersteller, Zuständig, Bearbeiter, Fachabteilung, Beobachter). Zum Zurückverfolgen.</span>
+            </span>
+          </p>
         </button>
       </div>
 
@@ -536,4 +560,15 @@ onMounted(async () => {
          text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#263040]
          disabled:opacity-40 disabled:cursor-not-allowed transition;
 }
+
+/* Info-Icon mit Hover-Tooltip auf den Stat-Cards */
+.hint { @apply relative inline-flex items-center cursor-help; }
+.hint-icon { @apply w-3.5 h-3.5 text-gray-300 dark:text-gray-600 transition-colors; }
+.hint:hover .hint-icon { @apply text-gray-500 dark:text-gray-300; }
+.bubble {
+  @apply pointer-events-none absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 w-56
+         rounded-lg bg-gray-900 text-gray-100 text-[11px] leading-snug px-3 py-2
+         opacity-0 transition-opacity duration-150 normal-case font-normal text-left shadow-lg;
+}
+.hint:hover .bubble { @apply opacity-100; }
 </style>
