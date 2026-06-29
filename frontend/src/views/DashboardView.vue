@@ -275,7 +275,7 @@ onMounted(async () => {
             <span class="stat-icon bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
             </span>
-            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ mineCount }}</span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ mineCount }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
             Meine Tickets
@@ -291,7 +291,7 @@ onMounted(async () => {
             <span class="stat-icon bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </span>
-            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ groupCount }}</span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ groupCount }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
             Meine Abteilungen
@@ -307,7 +307,7 @@ onMounted(async () => {
             <span class="stat-icon bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             </span>
-            <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ watchedCount }}</span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ watchedCount }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
             Beobachtet
@@ -323,7 +323,7 @@ onMounted(async () => {
             <span class="stat-icon bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </span>
-            <span class="text-2xl font-bold text-gray-900 dark:text-white">
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">
               <span v-if="involvedLoaded">{{ involvedTotalAll }}</span>
               <span v-else class="inline-block w-4 h-4 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin align-middle" />
             </span>
@@ -535,11 +535,17 @@ onMounted(async () => {
 
 .stat {
   @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-         rounded-2xl p-4 text-left transition-all duration-150 hover:shadow-md hover:border-gray-300 dark:hover:border-white/20;
+         rounded-2xl p-4 text-left transition-all duration-200
+         hover:shadow-md hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-white/20;
 }
-.stat-on { @apply ring-2 ring-[#3EAAB8]/40 border-[#3EAAB8]/30; }
-.stat-icon { @apply w-8 h-8 rounded-lg flex items-center justify-center; }
-.stat-label { @apply text-xs font-medium text-gray-500 dark:text-gray-400 mt-2; }
+.stat-on {
+  @apply ring-2 ring-[#3EAAB8]/50 border-[#3EAAB8]/40 shadow-sm
+         bg-[#3EAAB8]/[0.05] dark:bg-[#3EAAB8]/[0.08];
+}
+.stat-icon { @apply w-8 h-8 rounded-xl flex items-center justify-center; }
+/* kräftigere Icon-Striche */
+.stat-icon svg { stroke-width: 2.3px; }
+.stat-label { @apply text-[13px] font-semibold text-gray-700 dark:text-gray-200 mt-2.5; }
 
 .fi {
   @apply w-full rounded-xl border border-gray-200 dark:border-white/10
