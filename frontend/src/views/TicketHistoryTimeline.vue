@@ -65,9 +65,12 @@ const DE_FIELD_LABELS: Record<string, string> = {
   appearance_company: 'Firma (Signatur)', street: 'Straße', zip: 'PLZ', city: 'Ort',
   // Timebutler
   vacation_year: 'Urlaubsanspruch', supervisor_id: 'Urlaubsfreigabe', supervisor_name: 'Urlaubsfreigabe',
-  // Software
-  datev: 'DATEV', datev_rights: 'DATEV-Rechte', persopro: 'PersoPro', timejob: 'TimeJob', zvoove: 'Zvoove',
-  enabled: 'Festnetz beantragen', other_systems: 'Weitere Software',
+  // Software-Zugriffe
+  datev: 'DATEV-Zugriff', datev_rights: 'DATEV: Rechte wie',
+  persopro: 'PersoPro-Zugriff', persopro_rights: 'PersoPro: Zugriffe',
+  timejob: 'TimeJob-Zugriff', timejob_rights: 'TimeJob: Zugriffe',
+  zvoove: 'Zvoove-Zugriff', zvoove_rights: 'Zvoove: Zugriffe',
+  other_systems: 'Weitere Software',
   // Postfächer
   info_mailbox: 'Infopostfach', additional: 'Zusätzliche Postfächer', notes: 'Postfächer (Notiz)',
   additional_cost_centers: 'Zusätzliche Kostenstellen',

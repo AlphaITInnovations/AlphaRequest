@@ -536,7 +536,7 @@ onMounted(async () => {
 .stat {
   @apply relative bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
          rounded-2xl p-4 text-left transition-all duration-200
-         hover:shadow-md hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-white/20;
+         hover:z-30 hover:shadow-md hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-white/20;
 }
 .stat-on {
   @apply ring-2 ring-[#3EAAB8]/50 border-[#3EAAB8]/40 shadow-sm

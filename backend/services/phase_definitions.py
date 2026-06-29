@@ -52,13 +52,14 @@ TICKET_PHASES: dict[TicketType, List[PhaseDefinition]] = {
     #   Erstellung (Basisfelder) → Freigabe Herr Lutz (Mail JA/NEIN + In-App)
     #   → BackOffice (Felder + nächsten Bearbeiter wählen) → Bearbeitung → Durchführung
     TicketType.zugang_beantragen: _flow(
-        _ERSTELLUNG(),
-        PhaseDefinition("freigabe", "Freigabe Herr Lutz", PhaseType.assignment,
+        # Onboarding-spezifische, sprechende Phasen-Labels (Keys/Typen unverändert).
+        PhaseDefinition("erstellung", "Prozesserstellung", PhaseType.creation),
+        PhaseDefinition("freigabe", "Freigabe durch Udo Lutz", PhaseType.assignment,
                         view=PhaseView.approval, assign_group="FreigabeHerrLutz"),
-        PhaseDefinition("backoffice", "Sekretariat GL", PhaseType.assignment,
+        PhaseDefinition("backoffice", "Bearbeitung durch Sekretariat GL", PhaseType.assignment,
                         assign_group="Sekretariat GL"),
-        _BEARBEITUNG(),
-        _DURCHFUEHRUNG(),
+        PhaseDefinition("bearbeitung", "Bearbeitung durch Vorgesetzten", PhaseType.assignment),
+        PhaseDefinition("durchfuehrung", "Durchführung durch Fachabteilungen", PhaseType.department_review),
     ),
     TicketType.zugang_sperren:         _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),
     TicketType.hardware:               _flow(_ERSTELLUNG(), _BEARBEITUNG(), _DURCHFUEHRUNG()),

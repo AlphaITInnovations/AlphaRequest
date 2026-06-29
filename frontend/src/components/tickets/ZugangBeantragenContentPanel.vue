@@ -9,14 +9,8 @@ const sw  = (k: string) => props.description?.it?.software?.[k]      ?? false
 const mb  = (k: string) => props.description?.it?.mailboxes?.[k]     ?? '—'
 const f   = (k: string) => props.description?.fuhrpark?.[k]          ?? '—'
 
-const softwareList = () => {
-  const items: string[] = []
-  if (sw('datev'))    items.push('DATEV')
-  if (sw('persopro')) items.push('PersoPro')
-  if (sw('timejob'))  items.push('TimeJob')
-  if (sw('zvoove'))   items.push('Zvoove')
-  return items.length > 0 ? items.join(', ') : '—'
-}
+// Freitext zu einem Software-Zugriff (z.B. datev_rights)
+const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
 </script>
 
 <template>
@@ -32,12 +26,18 @@ const softwareList = () => {
         <div><p class="ro-label">Nachname</p><p class="ro-value">{{ p('last_name') }}</p></div>
         <div><p class="ro-label">Titel</p><p class="ro-value">{{ p('title') }}</p></div>
         <div><p class="ro-label">Eintrittsdatum (laut Vertrag)</p><p class="ro-value">{{ p('start_date') }}</p></div>
-        <div>
-          <p class="ro-label">Straße (Privatadresse)</p>
-          <p class="ro-value">{{ p('private_street') || p('private_address') }}</p>
+
+        <!-- Privatadresse zusammengefasst -->
+        <div class="md:col-span-2 rounded-xl border border-gray-200 dark:border-white/10
+                    bg-gray-50/60 dark:bg-white/[0.02] p-4">
+          <p class="ro-label mb-2">Privatadresse</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2"><p class="ro-label">Straße &amp; Hausnummer</p><p class="ro-value">{{ p('private_street') || p('private_address') }}</p></div>
+            <div><p class="ro-label">PLZ</p><p class="ro-value">{{ p('private_zip') }}</p></div>
+            <div><p class="ro-label">Ort</p><p class="ro-value">{{ p('private_city') }}</p></div>
+          </div>
         </div>
-        <div><p class="ro-label">PLZ</p><p class="ro-value">{{ p('private_zip') }}</p></div>
-        <div><p class="ro-label">Ort</p><p class="ro-value">{{ p('private_city') }}</p></div>
+
         <div><p class="ro-label">Homeoffice</p><p class="ro-value">{{ p('homeoffice') }}</p></div>
         <div><p class="ro-label">Arbeitszeit (Std./Woche)</p><p class="ro-value">{{ p('weekly_hours') }}</p></div>
         <div><p class="ro-label">Personalnummer</p><p class="ro-value font-mono">{{ p('personal_number') }}</p></div>
@@ -111,17 +111,20 @@ const softwareList = () => {
     </div>
 
     <div>
-      <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Software</h3>
+      <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Software-Zugriffe</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p class="ro-label">Ausgewählte Software</p><p class="ro-value">{{ softwareList() }}</p></div>
-        <div v-if="sw('datev') && description?.it?.software?.datev_rights" class="md:col-span-2">
-          <p class="ro-label">DATEV Rechte</p>
-          <p class="ro-value whitespace-pre-wrap">{{ description.it.software.datev_rights }}</p>
-        </div>
-        <div v-if="description?.it?.phone_order?.enabled">
-          <p class="ro-label">Festnetz-Telefonnummer beantragen</p>
-          <p class="ro-value">Ja — {{ description?.it?.phone_order?.location || '—' }}</p>
-        </div>
+        <div><p class="ro-label">DATEV-Zugriff</p><p class="ro-value">{{ sw('datev') ? 'Ja' : 'Nein' }}</p></div>
+        <div v-if="sw('datev') && swText('datev_rights')"><p class="ro-label">Rechte wie Mitarbeiter XY?</p><p class="ro-value whitespace-pre-wrap">{{ swText('datev_rights') }}</p></div>
+
+        <div><p class="ro-label">PersoPro-Zugriff</p><p class="ro-value">{{ sw('persopro') ? 'Ja' : 'Nein' }}</p></div>
+        <div v-if="sw('persopro') && swText('persopro_rights')"><p class="ro-label">Welche Zugriffe?</p><p class="ro-value whitespace-pre-wrap">{{ swText('persopro_rights') }}</p></div>
+
+        <div><p class="ro-label">TimeJob-Zugriff</p><p class="ro-value">{{ sw('timejob') ? 'Ja' : 'Nein' }}</p></div>
+        <div v-if="sw('timejob') && swText('timejob_rights')"><p class="ro-label">Welche Zugriffe?</p><p class="ro-value whitespace-pre-wrap">{{ swText('timejob_rights') }}</p></div>
+
+        <div><p class="ro-label">Zvoove-Zugriff</p><p class="ro-value">{{ sw('zvoove') ? 'Ja' : 'Nein' }}</p></div>
+        <div v-if="sw('zvoove') && swText('zvoove_rights')"><p class="ro-label">Welche Zugriffe?</p><p class="ro-value whitespace-pre-wrap">{{ swText('zvoove_rights') }}</p></div>
+
         <div class="md:col-span-2" v-if="it('other_systems')">
           <p class="ro-label">Weitere Software</p>
           <p class="ro-value whitespace-pre-wrap">{{ it('other_systems') }}</p>
