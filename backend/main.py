@@ -15,13 +15,11 @@ from backend.core.session import setup_session
 from backend.database import init_db
 from backend.models.models import TicketType
 from backend.metrics.metrics import init_metrics
-from backend.services.personalnummer_generator import init_personalnummer
 from backend.services.ticket_service import TicketService
 from backend.utils.config import config
 from backend.api.v1 import dashboard as dashboard_v1
 from backend.api.v1 import users as users_v1
 from backend.api.v1 import companies as companies_v1
-from backend.api.v1 import personalnummer as personalnummer_v1
 from backend.api.v1 import ticket_view as ticket_view_v1
 from backend.api.v1 import settings as settings_v1
 from backend.api.v1 import ticket_overview as ticket_overview_v1
@@ -55,7 +53,6 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_v1.router, prefix="/api/v1")
     app.include_router(users_v1.router, prefix="/api/v1")
     app.include_router(companies_v1.router, prefix="/api/v1")
-    app.include_router(personalnummer_v1.router, prefix="/api/v1")
     app.include_router(ticket_view_v1.router, prefix="/api/v1")
     app.include_router(settings_v1.router, prefix="/api/v1")
     app.include_router(ticket_overview_v1.router, prefix="/api/v1")
@@ -91,7 +88,6 @@ def run_server(https: bool = False):
 def main():
     init_db()
     configure_event_loop()
-    init_personalnummer()
     run_server(https=config.HTTPS)
 
 

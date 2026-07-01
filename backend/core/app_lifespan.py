@@ -8,6 +8,7 @@ from backend.services.microsoft_auth import acquire_app_token
 from backend.utils.logger import logger
 from backend.services import ninja_sync
 from backend.database.ticket_group_permissions import ensure_table as ensure_group_perms_table
+from backend.database.ticket_locks import ensure_table as ensure_ticket_locks_table
 
 
 EXCLUDED_USERS = {"Administrator AlphaConsult", "CodeTwo Admin"}
@@ -53,8 +54,9 @@ async def lifespan(app):
     app.state.group_cache = []
     app.state.group_cache_timestamp = 0
 
-    # DB-Tabelle für Gruppen-Permissions anlegen
+    # DB-Tabellen anlegen
     ensure_group_perms_table()
+    ensure_ticket_locks_table()
 
     await sync_users_into_cache(app)
     await sync_groups_into_cache(app)

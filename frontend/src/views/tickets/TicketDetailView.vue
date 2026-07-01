@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, provide, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, provide, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
@@ -104,6 +104,67 @@ const DEPT_STATUS_CLASS: Record<string, string> = {
 // Object.keys im Template verfügbar machen
 const objectKeys = (o: Record<string, unknown>) => Object.keys(o ?? {})
 
+// ── Edit-Lock ────────────────────────────────────────────────────────────────
+// Nur die Bearbeitungs-Formularansicht (assignment-Phasen) wird gesperrt. Die
+// Durchführung bleibt frei, weil dort mehrere Fachabteilungen parallel arbeiten.
+const lockBlocked    = ref(false)
+const lockHolderName = ref('')
+let   lockHeld       = false
+let   lockHeartbeat: ReturnType<typeof setInterval> | undefined
+
+function stopHeartbeat() {
+  if (lockHeartbeat) { clearInterval(lockHeartbeat); lockHeartbeat = undefined }
+}
+
+async function sendHeartbeat() {
+  try {
+    const { data } = await ticketsApi.lockHeartbeat(ticketId)
+    if (!data.data.is_me) {
+      lockHeld = false
+      lockBlocked.value = true
+      lockHolderName.value = data.data.holder_name || 'einer anderen Person'
+      stopHeartbeat()
+    }
+  } catch { /* transient – TTL fängt es ab */ }
+}
+
+async function acquireLock(): Promise<boolean> {
+  try {
+    const { data } = await ticketsApi.lock(ticketId)
+    const st = data.data
+    if (st.is_me) {
+      lockHeld = true
+      lockHeartbeat = setInterval(sendHeartbeat, 60_000)
+      return true
+    }
+    lockBlocked.value = true
+    lockHolderName.value = st.holder_name || 'einer anderen Person'
+    return false
+  } catch {
+    // Lock-Service nicht erreichbar → Bearbeitung nicht blockieren (fail-open)
+    lockHeld = true
+    return true
+  }
+}
+
+function releaseLock() {
+  stopHeartbeat()
+  if (!lockHeld) return
+  lockHeld = false
+  ticketsApi.unlock(ticketId).catch(() => {})
+}
+
+// Beim harten Schließen/Neuladen des Tabs den Lock best-effort freigeben
+// (keepalive-DELETE, Cookie-Auth same-origin). Sonst greift die Server-TTL.
+function onPageHide() {
+  if (!lockHeld) return
+  try {
+    fetch(`/api/v1/tickets/${ticketId}/lock`, {
+      method: 'DELETE', keepalive: true, credentials: 'include',
+    }).catch(() => {})
+  } catch { /* ignore */ }
+}
+
 onMounted(async () => {
   if (!entry) { router.replace('/dashboard'); return }
 
@@ -111,10 +172,24 @@ onMounted(async () => {
 
   if (!ticket.value) { router.replace('/dashboard'); return }
 
-  // Formular-Composable nur initialisieren, wenn die aktuelle Phase ein Formular zeigt
-  if (currentView.value === 'form' && formCtx) {
-    await formCtx.init()
+  // Nur die Formularansicht sperren; erst Lock holen, dann Formular initialisieren.
+  if (currentView.value === 'form') {
+    window.addEventListener('pagehide', onPageHide)
+    const ok = await acquireLock()
+    if (ok && formCtx) {
+      await formCtx.init()
+    }
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', onPageHide)
+  releaseLock()
+})
+
+// Bei SPA-Navigation (Speichern → Dashboard, anderer Link etc.) Lock freigeben.
+onBeforeRouteLeave(() => {
+  releaseLock()
 })
 
 // My dept info (for dept-review mode)
@@ -164,12 +239,45 @@ async function goToEdit() {
     <template v-else-if="ticket">
 
       <!-- ═══════════════════════════════════════════════════════════════════
+           GESPERRT — jemand anderes bearbeitet dieses Ticket gerade.
+      ════════════════════════════════════════════════════════════════════ -->
+      <div v-if="lockBlocked" class="max-w-lg mx-auto mt-10">
+        <div class="bg-white dark:bg-[#212B3A] border border-amber-300/70 dark:border-amber-400/25
+                    rounded-2xl shadow-sm p-8 text-center space-y-4">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-400/15
+                      flex items-center justify-center text-2xl">🔒</div>
+          <div>
+            <h1 class="text-lg font-semibold text-gray-900 dark:text-white">Ticket wird gerade bearbeitet</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1.5">
+              <span class="font-medium text-gray-700 dark:text-gray-200">{{ lockHolderName }}</span>
+              bearbeitet dieses Ticket aktuell. Um Konflikte zu vermeiden, kann es nur von einer
+              Person gleichzeitig bearbeitet werden.
+            </p>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2.5 justify-center pt-1">
+            <button @click="router.push(`/tickets/overview/${ticketId}`)"
+                    class="px-5 py-2.5 rounded-xl text-sm font-medium bg-[#3EAAB8] hover:bg-[#2B7D89] text-white transition">
+              Nur ansehen (read-only)
+            </button>
+            <button @click="router.push('/dashboard')"
+                    class="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 dark:border-white/10
+                           text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+              Zum Dashboard
+            </button>
+          </div>
+          <p class="text-xs text-gray-400 pt-1">
+            Die Sperre wird automatisch aufgehoben, sobald die Bearbeitung beendet ist.
+          </p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
            VIEW = FORM — das Formular ist selbst-layoutend
            (Sidebar mit Fortschritt + Details links, Eingabefelder rechts).
            Wir reichen nur die Phasen via provide() in dessen Sidebar durch.
            Datengetrieben über phase.view, nicht mehr über den Phasen-Typ.
       ════════════════════════════════════════════════════════════════════ -->
-      <div v-if="currentView === 'form' || emergencyEdit" class="space-y-6 pb-24">
+      <div v-else-if="currentView === 'form' || emergencyEdit" class="space-y-6 pb-24">
 
         <div class="max-w-7xl mx-auto">
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ ticket.title }}</h1>

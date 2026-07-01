@@ -6,7 +6,9 @@ from typing import Optional
 
 from backend.core.dependencies import get_current_user
 from backend.database.groups import get_groups, save_groups
-from backend.database.settings import get_companies, set_companies
+from backend.database.settings import (
+    get_companies, set_companies, get_companies_full, set_companies_full,
+)
 from backend.database.users import (
     list_users, set_user_role, get_user,
     add_extra_permission, remove_extra_permission, set_extra_permissions,
@@ -183,41 +185,67 @@ def get_env(user: dict = Depends(get_current_user)):
 
 # ── Companies ─────────────────────────────────────────────────────────────────
 
+class CompanyItem(BaseModel):
+    name: str
+    # Ziffern-Strings, damit führende Nullen erhalten bleiben (z.B. "00896").
+    pnr_from: Optional[str] = None
+    pnr_to: Optional[str] = None
+    mandant: Optional[str] = None
+    # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
+    pnr_current: Optional[int] = None
+    pnr_warned: bool = False
+
+
 class CompaniesOut(BaseModel):
-    companies: list[str]
+    companies: list[CompanyItem]
+
 
 class CompaniesIn(BaseModel):
-    companies: list[str]
-
-
-def _normalize_companies(items: list[str]) -> list[str]:
-    seen, out = set(), []
-    for raw in items:
-        v = str(raw).strip()
-        if v and v.casefold() not in seen:
-            seen.add(v.casefold())
-            out.append(v)
-    return out
+    companies: list[CompanyItem]
 
 
 @router.get("/settings/companies", response_model=DataResponse[CompaniesOut])
 def get_companies_endpoint(user: dict = Depends(get_current_user)):
     require_admin(user)
-    return DataResponse(data=CompaniesOut(companies=get_companies()))
+    return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
 
 
 @router.put("/settings/companies", response_model=DataResponse[CompaniesOut])
 def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_current_user)):
     require_admin(user)
-    normalized = _normalize_companies(payload.companies)
-    if not normalized:
+
+    cleaned: list[dict] = []
+    seen = set()
+    for c in payload.companies:
+        name = (c.name or "").strip()
+        if not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        # Grenzen als Ziffern-Strings (führende Nullen erlaubt, z.B. "00896").
+        pf = str(c.pnr_from).strip() if c.pnr_from not in (None, "") else None
+        pt = str(c.pnr_to).strip() if c.pnr_to not in (None, "") else None
+        if (pf is None) != (pt is None):
+            raise HTTPException(422, f"„{name}“: Bitte Von und Bis der Personalnummern beide angeben (oder beide leer lassen).")
+        if pf is not None:
+            if not pf.isdigit() or not pt.isdigit():
+                raise HTTPException(422, f"„{name}“: Personalnummern dürfen nur aus Ziffern bestehen.")
+            if int(pf) > int(pt):
+                raise HTTPException(422, f"„{name}“: „Von“ darf nicht größer als „Bis“ sein.")
+        cleaned.append({
+            "name": name,
+            "pnr_from": pf,
+            "pnr_to": pt,
+            "mandant": (c.mandant or "").strip() or None,
+        })
+
+    if not cleaned:
         raise HTTPException(422, "Mindestens eine Firma erforderlich")
     try:
-        set_companies(normalized)
+        set_companies_full(cleaned)
     except Exception as e:
         logger.exception("Failed to update companies: %s", e)
         raise HTTPException(500, "Fehler beim Speichern")
-    return DataResponse(data=CompaniesOut(companies=get_companies()))
+    return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
 
 
 # ── Ticket Permissions ────────────────────────────────────────────────────────
@@ -516,20 +544,3 @@ def send_testmail(payload: TestMailIn, user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.exception("Test mail failed: %s", e)
         raise HTTPException(500, f"Fehler beim Senden: {e}")
-
-
-# ── Personalnummer Reset ──────────────────────────────────────────────────────
-
-class ResetOut(BaseModel):
-    message: str
-
-
-@router.post("/settings/personalnummer/reset", response_model=DataResponse[ResetOut])
-def reset_personalnummer(user: dict = Depends(get_current_user)):
-    require_admin(user)
-    try:
-        from backend.services.personalnummer_generator import reset_personalnummer as _reset
-        _reset()
-        return DataResponse(data=ResetOut(message="Personalnummer wurde zurückgesetzt"))
-    except Exception as e:
-        raise HTTPException(500, f"Fehler beim Zurücksetzen: {e}")

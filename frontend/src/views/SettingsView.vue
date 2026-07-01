@@ -5,7 +5,7 @@ import { usersApi, type UserEntry } from '@/api/users'
 import AppLayout from '@/components/AppLayout.vue'
 import UserSelect from '@/components/UserSelect.vue'
 
-type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'permissions' | 'app-users' | 'testmail' | 'personalnummer'
+type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'permissions' | 'app-users' | 'testmail'
 const active = ref<Section>('general')
 const toast  = ref<{ msg: string; ok: boolean } | null>(null)
 const users  = ref<UserEntry[]>([])
@@ -22,30 +22,93 @@ async function loadEnv() {
   env.value = data.data
 }
 
-// ── Companies ──────────────────────────────────────────────────────────────────
-const companies  = ref<string[]>([])
-const newCompany = ref('')
+// ── Companies (mit Personalnummern-Bereich pro Firma) ───────────────────────────
+interface CompanyItem {
+  name: string
+  pnr_from: string | null   // Ziffern-String, führende Nullen bleiben (z.B. "00896")
+  pnr_to: string | null
+  mandant: string | null
+  pnr_current: number | null
+  pnr_warned: boolean
+}
+const companies       = ref<CompanyItem[]>([])
+const companiesSaving = ref(false)
+
+function mapCompany(c: any): CompanyItem {
+  return {
+    name: c?.name ?? '',
+    pnr_from: c?.pnr_from ?? null,
+    pnr_to: c?.pnr_to ?? null,
+    mandant: c?.mandant ?? null,
+    pnr_current: c?.pnr_current ?? null,
+    pnr_warned: !!c?.pnr_warned,
+  }
+}
+
 async function loadCompanies() {
   const { data } = await client.get('/settings/companies')
-  companies.value = data.data.companies
+  companies.value = (data.data.companies ?? []).map(mapCompany)
 }
-async function addCompany() {
-  const v = newCompany.value.trim()
-  if (!v) return
-  if (companies.value.includes(v)) { showToast('Firma existiert bereits', false); return }
-  await saveCompanies([...companies.value, v])
-  newCompany.value = ''
+
+function addCompanyRow() {
+  companies.value.push({ name: '', pnr_from: null, pnr_to: null, mandant: null, pnr_current: null, pnr_warned: false })
 }
-async function removeCompany(idx: number) {
-  if (!confirm(`"${companies.value[idx]}" wirklich löschen?`)) return
-  await saveCompanies(companies.value.filter((_, i) => i !== idx))
+
+function removeCompanyRow(idx: number) {
+  const c = companies.value[idx]
+  if (c.name && !confirm(`„${c.name}“ wirklich entfernen?`)) return
+  companies.value.splice(idx, 1)
 }
-async function saveCompanies(list: string[]) {
+
+// Stellenanzahl fürs Padding (breitere Grenze), z.B. "00896"/"15999" → 5
+function pnrWidth(c: CompanyItem): number {
+  return Math.max((c.pnr_from ?? '').length, (c.pnr_to ?? '').length, 1)
+}
+// Zuletzt vergebene Nummer mit führenden Nullen (Anzeige)
+function currentDisplay(c: CompanyItem): string {
+  if (c.pnr_current == null) return '—'
+  return String(c.pnr_current).padStart(pnrWidth(c), '0')
+}
+// Wie viele Nummern sind für die Firma noch vergebbar? (null = kein Bereich hinterlegt)
+function freeCount(c: CompanyItem): number | null {
+  const pf = (c.pnr_from ?? '').trim()
+  const pt = (c.pnr_to ?? '').trim()
+  if (!pf || !pt) return null
+  const from = parseInt(pf, 10), to = parseInt(pt, 10)
+  if (isNaN(from) || isNaN(to)) return null
+  const base = c.pnr_current ?? (from - 1)
+  return Math.max(0, to - base)
+}
+
+async function saveCompanies() {
+  for (const c of companies.value) {
+    if (!c.name.trim()) { showToast('Jede Firma braucht einen Namen', false); return }
+    const pf = (c.pnr_from ?? '').trim()
+    const pt = (c.pnr_to ?? '').trim()
+    if (!!pf !== !!pt) { showToast(`„${c.name}“: Von und Bis bitte beide angeben`, false); return }
+    if (pf && (!/^\d+$/.test(pf) || !/^\d+$/.test(pt))) {
+      showToast(`„${c.name}“: Personalnummern dürfen nur Ziffern enthalten`, false); return
+    }
+    if (pf && parseInt(pf, 10) > parseInt(pt, 10)) {
+      showToast(`„${c.name}“: „Von“ darf nicht größer als „Bis“ sein`, false); return
+    }
+  }
+  companiesSaving.value = true
   try {
-    const { data } = await client.put('/settings/companies', { companies: list })
-    companies.value = data.data.companies
+    const payload = companies.value.map(c => ({
+      name: c.name.trim(),
+      pnr_from: (c.pnr_from ?? '').trim() || null,
+      pnr_to:   (c.pnr_to   ?? '').trim() || null,
+      mandant:  (c.mandant ?? '').trim() || null,
+    }))
+    const { data } = await client.put('/settings/companies', { companies: payload })
+    companies.value = (data.data.companies ?? []).map(mapCompany)
     showToast('Gespeichert', true)
-  } catch { showToast('Fehler beim Speichern', false) }
+  } catch (e: any) {
+    showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
+  } finally {
+    companiesSaving.value = false
+  }
 }
 
 // ── Ticket Permissions ─────────────────────────────────────────────────────────
@@ -375,22 +438,6 @@ async function sendTestMail() {
   } finally { mailLoading.value = false }
 }
 
-// ── Personalnummer ─────────────────────────────────────────────────────────────
-const pnConfirm = ref('')
-const pnLoading = ref(false)
-const pnResult  = ref<{ ok: boolean; msg: string } | null>(null)
-async function resetPersonalnummer() {
-  if (pnConfirm.value !== 'RESET') return
-  pnLoading.value = true; pnResult.value = null
-  try {
-    const { data } = await client.post('/settings/personalnummer/reset')
-    pnResult.value = { ok: true, msg: data.data.message }
-    pnConfirm.value = ''
-  } catch (e: any) {
-    pnResult.value = { ok: false, msg: e.response?.data?.detail ?? 'Fehler' }
-  } finally { pnLoading.value = false }
-}
-
 // ── Init ───────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   const { data } = await usersApi.list()
@@ -408,7 +455,6 @@ const nav = [
   { key: 'permissions',    label: 'Auftragstypen',       group: 'Berechtigungen' },
   { key: 'app-users',      label: 'Benutzer & Rollen',   group: 'Berechtigungen' },
   { key: 'testmail',       label: 'Testmail',            group: 'Kommunikation' },
-  { key: 'personalnummer', label: 'Personalnummer Reset',group: 'Tools' },
 ] as const
 
 const navGroups = computed(() => {
@@ -537,21 +583,65 @@ const navGroups = computed(() => {
           <h2 class="section-title">Firmen</h2>
           <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20
                       px-4 py-3 text-sm text-amber-800 dark:text-amber-200 mb-4">
-            Firmen müssen exakt so wie im Drop-Down in NinjaOne heißen.
+            Firmen müssen exakt so wie im Drop-Down in NinjaOne heißen. Der Personalnummern-Bereich
+            (Von/Bis) wird pro Firma vergeben; beim Onboarding entscheidet die „Firma lt.&nbsp;Arbeitsvertrag“,
+            welche Nummer vergeben wird. „Aktuell“ ist die zuletzt vergebene Nummer.
           </div>
-          <div class="card-section space-y-4">
-            <div class="flex gap-3">
-              <input v-model="newCompany" @keydown.enter.prevent="addCompany" placeholder="Neue Firma…" class="input flex-1" />
-              <button @click="addCompany" class="btn-primary">Hinzufügen</button>
-            </div>
+          <div class="card-section space-y-3">
             <p v-if="companies.length === 0" class="text-sm text-gray-400 italic">Noch keine Firmen vorhanden.</p>
-            <ul class="flex flex-wrap gap-2">
-              <li v-for="(c, i) in companies" :key="c"
-                  class="inline-flex items-center gap-2 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] px-3 py-1 text-sm">
-                {{ c }}
-                <button @click="removeCompany(i)" class="hover:text-red-500 transition">✕</button>
-              </li>
-            </ul>
+
+            <div v-for="(c, i) in companies" :key="i"
+                 class="rounded-xl border border-gray-200 dark:border-white/10 p-4 space-y-3">
+              <div class="flex items-start gap-3">
+                <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div class="md:col-span-2">
+                    <label class="lbl">Firmenname</label>
+                    <input v-model="c.name" class="input w-full" placeholder="z. B. AlphaConsult" />
+                  </div>
+                  <div>
+                    <label class="lbl">Personalnummer von</label>
+                    <input v-model="c.pnr_from" @input="c.pnr_from = (c.pnr_from || '').replace(/\D/g, '')"
+                           type="text" inputmode="numeric" class="input w-full" placeholder="00896" />
+                  </div>
+                  <div>
+                    <label class="lbl">Personalnummer bis</label>
+                    <input v-model="c.pnr_to" @input="c.pnr_to = (c.pnr_to || '').replace(/\D/g, '')"
+                           type="text" inputmode="numeric" class="input w-full" placeholder="15999" />
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="lbl">Mandantennr. <span class="text-gray-400 font-normal">(optional)</span></label>
+                    <input v-model="c.mandant" class="input w-full" placeholder="z. B. 100" />
+                  </div>
+                </div>
+                <button @click="removeCompanyRow(i)" title="Entfernen"
+                        class="mt-7 text-gray-400 hover:text-red-500 transition flex-shrink-0">✕</button>
+              </div>
+
+              <!-- Status des Nummernbereichs -->
+              <div v-if="freeCount(c) !== null" class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">
+                  Aktuell: {{ currentDisplay(c) }}
+                </span>
+                <span class="px-2 py-0.5 rounded-full font-medium"
+                      :class="(freeCount(c) ?? 0) === 0
+                                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                : (freeCount(c) ?? 0) <= 10
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                  : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'">
+                  Frei: {{ freeCount(c) }}
+                </span>
+                <span v-if="(freeCount(c) ?? 0) === 0" class="text-red-600 dark:text-red-400">
+                  Bereich erschöpft – für diese Firma sind keine neuen Aufträge möglich.
+                </span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1">
+              <button @click="addCompanyRow" class="btn-secondary">+ Firma hinzufügen</button>
+              <button @click="saveCompanies" :disabled="companiesSaving" class="btn-primary">
+                {{ companiesSaving ? 'Speichert…' : 'Speichern' }}
+              </button>
+            </div>
           </div>
         </section>
 
@@ -879,35 +969,6 @@ const navGroups = computed(() => {
           </div>
         </section>
 
-        <!-- Personalnummer -->
-        <section v-if="active === 'personalnummer'">
-          <h2 class="section-title">Personalnummer zurücksetzen</h2>
-          <div class="rounded-xl border border-red-300/60 bg-red-50 dark:bg-red-900/20
-                      px-4 py-3 text-sm text-red-800 dark:text-red-200 mb-4">
-            ⚠️ <strong>ACHTUNG:</strong> Diese Aktion setzt den globalen Personalnummerzähler zurück und kann nicht rückgängig gemacht werden.
-          </div>
-          <div class="card-section space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Zur Bestätigung <span class="font-mono font-bold">RESET</span> eingeben:
-              </label>
-              <input v-model="pnConfirm" placeholder="RESET" class="input w-64" />
-            </div>
-            <button @click="resetPersonalnummer"
-                    :disabled="pnLoading || pnConfirm !== 'RESET'"
-                    class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium
-                           transition disabled:opacity-50 disabled:cursor-not-allowed">
-              {{ pnLoading ? 'Wird zurückgesetzt…' : 'Personalnummer zurücksetzen' }}
-            </button>
-            <div v-if="pnResult" class="rounded-xl border px-4 py-3 text-sm"
-                 :class="pnResult.ok
-                   ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300/60 text-emerald-800 dark:text-emerald-200'
-                   : 'bg-red-50 dark:bg-red-900/20 border-red-300/60 text-red-800 dark:text-red-200'">
-              {{ pnResult.msg }}
-            </div>
-          </div>
-        </section>
-
       </div>
     </div>
   </AppLayout>
@@ -937,5 +998,7 @@ function envDesc(key: string) { return ENV_DESCS[key] ?? key }
 .section-title { @apply text-lg font-semibold text-gray-900 dark:text-white mb-4; }
 .card-section  { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-5; }
 .input         { @apply rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition; }
-.btn-primary   { @apply px-4 py-2 rounded-xl bg-[#3EAAB8] hover:bg-[#2B7D89] text-white text-sm font-medium transition; }
+.btn-primary   { @apply px-4 py-2 rounded-xl bg-[#3EAAB8] hover:bg-[#2B7D89] text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed; }
+.btn-secondary { @apply px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 text-sm font-medium transition; }
+.lbl           { @apply block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1; }
 </style>
