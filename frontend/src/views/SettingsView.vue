@@ -28,6 +28,7 @@ interface CompanyItem {
   pnr_from: string | null   // Ziffern-String, führende Nullen bleiben (z.B. "00896")
   pnr_to: string | null
   mandant: string | null
+  pnr_shared_with: string | null   // teilt Zähler mit dieser Firma (dann kein eigener Bereich)
   pnr_current: number | null
   pnr_warned: boolean
 }
@@ -40,6 +41,7 @@ function mapCompany(c: any): CompanyItem {
     pnr_from: c?.pnr_from ?? null,
     pnr_to: c?.pnr_to ?? null,
     mandant: c?.mandant ?? null,
+    pnr_shared_with: c?.pnr_shared_with ?? null,
     pnr_current: c?.pnr_current ?? null,
     pnr_warned: !!c?.pnr_warned,
   }
@@ -51,7 +53,19 @@ async function loadCompanies() {
 }
 
 function addCompanyRow() {
-  companies.value.push({ name: '', pnr_from: null, pnr_to: null, mandant: null, pnr_current: null, pnr_warned: false })
+  companies.value.push({ name: '', pnr_from: null, pnr_to: null, mandant: null,
+                         pnr_shared_with: null, pnr_current: null, pnr_warned: false })
+}
+
+// Firmen mit EIGENEM Bereich (mögliche Quellen zum Teilen; ohne die Firma selbst)
+function shareTargets(c: CompanyItem): CompanyItem[] {
+  return companies.value.filter(o =>
+    o !== c && o.name.trim() && !o.pnr_shared_with && (o.pnr_from ?? '').trim() && (o.pnr_to ?? '').trim())
+}
+// Quell-Firma eines Sharers (für die Status-Anzeige)
+function sourceOf(c: CompanyItem): CompanyItem | null {
+  if (!c.pnr_shared_with) return null
+  return companies.value.find(o => o.name === c.pnr_shared_with) ?? null
 }
 
 function removeCompanyRow(idx: number) {
@@ -79,10 +93,17 @@ function freeCount(c: CompanyItem): number | null {
   const base = c.pnr_current ?? (from - 1)
   return Math.max(0, to - base)
 }
+function freeBadgeClass(n: number | null): string {
+  const v = n ?? 0
+  return v === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+       : v <= 10 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                 : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+}
 
 async function saveCompanies() {
   for (const c of companies.value) {
     if (!c.name.trim()) { showToast('Jede Firma braucht einen Namen', false); return }
+    if (c.pnr_shared_with) continue   // Sharer: kein eigener Bereich zu prüfen
     const pf = (c.pnr_from ?? '').trim()
     const pt = (c.pnr_to ?? '').trim()
     if (!!pf !== !!pt) { showToast(`„${c.name}“: Von und Bis bitte beide angeben`, false); return }
@@ -97,9 +118,10 @@ async function saveCompanies() {
   try {
     const payload = companies.value.map(c => ({
       name: c.name.trim(),
-      pnr_from: (c.pnr_from ?? '').trim() || null,
-      pnr_to:   (c.pnr_to   ?? '').trim() || null,
+      pnr_from: c.pnr_shared_with ? null : ((c.pnr_from ?? '').trim() || null),
+      pnr_to:   c.pnr_shared_with ? null : ((c.pnr_to   ?? '').trim() || null),
       mandant:  (c.mandant ?? '').trim() || null,
+      pnr_shared_with: c.pnr_shared_with || null,
     }))
     const { data } = await client.put('/settings/companies', { companies: payload })
     companies.value = (data.data.companies ?? []).map(mapCompany)
@@ -586,6 +608,8 @@ const navGroups = computed(() => {
             Firmen müssen exakt so wie im Drop-Down in NinjaOne heißen. Der Personalnummern-Bereich
             (Von/Bis) wird pro Firma vergeben; beim Onboarding entscheidet die „Firma lt.&nbsp;Arbeitsvertrag“,
             welche Nummer vergeben wird. „Aktuell“ ist die zuletzt vergebene Nummer.
+            Mehrere Firmen können sich einen gemeinsamen Zähler teilen – dazu bei einer Firma
+            „Teilt Zähler mit …“ auswählen (statt eigenem Bereich).
           </div>
           <div class="card-section space-y-3">
             <p v-if="companies.length === 0" class="text-sm text-gray-400 italic">Noch keine Firmen vorhanden.</p>
@@ -598,16 +622,30 @@ const navGroups = computed(() => {
                     <label class="lbl">Firmenname</label>
                     <input v-model="c.name" class="input w-full" placeholder="z. B. AlphaConsult" />
                   </div>
-                  <div>
-                    <label class="lbl">Personalnummer von</label>
-                    <input v-model="c.pnr_from" @input="c.pnr_from = (c.pnr_from || '').replace(/\D/g, '')"
-                           type="text" inputmode="numeric" class="input w-full" placeholder="00896" />
+
+                  <div class="md:col-span-2">
+                    <label class="lbl">Personalnummern</label>
+                    <select v-model="c.pnr_shared_with" class="input w-full">
+                      <option :value="null">Eigener Nummernbereich</option>
+                      <option v-for="o in shareTargets(c)" :key="o.name" :value="o.name">
+                        Teilt Zähler mit „{{ o.name }}“
+                      </option>
+                    </select>
                   </div>
-                  <div>
-                    <label class="lbl">Personalnummer bis</label>
-                    <input v-model="c.pnr_to" @input="c.pnr_to = (c.pnr_to || '').replace(/\D/g, '')"
-                           type="text" inputmode="numeric" class="input w-full" placeholder="15999" />
-                  </div>
+
+                  <template v-if="!c.pnr_shared_with">
+                    <div>
+                      <label class="lbl">Personalnummer von</label>
+                      <input v-model="c.pnr_from" @input="c.pnr_from = (c.pnr_from || '').replace(/\D/g, '')"
+                             type="text" inputmode="numeric" class="input w-full" placeholder="00896" />
+                    </div>
+                    <div>
+                      <label class="lbl">Personalnummer bis</label>
+                      <input v-model="c.pnr_to" @input="c.pnr_to = (c.pnr_to || '').replace(/\D/g, '')"
+                             type="text" inputmode="numeric" class="input w-full" placeholder="15999" />
+                    </div>
+                  </template>
+
                   <div class="md:col-span-2">
                     <label class="lbl">Mandantennr. <span class="text-gray-400 font-normal">(optional)</span></label>
                     <input v-model="c.mandant" class="input w-full" placeholder="z. B. 100" />
@@ -617,17 +655,27 @@ const navGroups = computed(() => {
                         class="mt-7 text-gray-400 hover:text-red-500 transition flex-shrink-0">✕</button>
               </div>
 
-              <!-- Status des Nummernbereichs -->
-              <div v-if="freeCount(c) !== null" class="flex flex-wrap items-center gap-2 text-xs">
+              <!-- Status: geteilter Zähler -->
+              <div v-if="c.pnr_shared_with" class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="px-2 py-0.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] font-medium">
+                  🔗 Teilt Zähler mit „{{ c.pnr_shared_with }}“
+                </span>
+                <template v-if="sourceOf(c)">
+                  <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">
+                    Aktuell: {{ currentDisplay(sourceOf(c)!) }}
+                  </span>
+                  <span class="px-2 py-0.5 rounded-full font-medium" :class="freeBadgeClass(freeCount(sourceOf(c)!))">
+                    Frei: {{ freeCount(sourceOf(c)!) }}
+                  </span>
+                </template>
+              </div>
+
+              <!-- Status: eigener Nummernbereich -->
+              <div v-else-if="freeCount(c) !== null" class="flex flex-wrap items-center gap-2 text-xs">
                 <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">
                   Aktuell: {{ currentDisplay(c) }}
                 </span>
-                <span class="px-2 py-0.5 rounded-full font-medium"
-                      :class="(freeCount(c) ?? 0) === 0
-                                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                                : (freeCount(c) ?? 0) <= 10
-                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                                  : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'">
+                <span class="px-2 py-0.5 rounded-full font-medium" :class="freeBadgeClass(freeCount(c))">
                   Frei: {{ freeCount(c) }}
                 </span>
                 <span v-if="(freeCount(c) ?? 0) === 0" class="text-red-600 dark:text-red-400">

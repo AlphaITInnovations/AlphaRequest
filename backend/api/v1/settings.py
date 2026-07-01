@@ -191,6 +191,8 @@ class CompanyItem(BaseModel):
     pnr_from: Optional[str] = None
     pnr_to: Optional[str] = None
     mandant: Optional[str] = None
+    # Teilt sich den Zähler mit dieser Firma (dann kein eigener Bereich).
+    pnr_shared_with: Optional[str] = None
     # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
     pnr_current: Optional[int] = None
     pnr_warned: bool = False
@@ -221,7 +223,20 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         if not name or name.casefold() in seen:
             continue
         seen.add(name.casefold())
-        # Grenzen als Ziffern-Strings (führende Nullen erlaubt, z.B. "00896").
+        mandant = (c.mandant or "").strip() or None
+        shared = (c.pnr_shared_with or "").strip() or None
+
+        if shared:
+            # Teilt den Zähler → kein eigener Bereich.
+            if shared.casefold() == name.casefold():
+                raise HTTPException(422, f"„{name}“: kann den Zähler nicht mit sich selbst teilen.")
+            cleaned.append({
+                "name": name, "pnr_from": None, "pnr_to": None,
+                "mandant": mandant, "pnr_shared_with": shared,
+            })
+            continue
+
+        # Eigener Bereich – Ziffern-Strings (führende Nullen erlaubt, z.B. "00896").
         pf = str(c.pnr_from).strip() if c.pnr_from not in (None, "") else None
         pt = str(c.pnr_to).strip() if c.pnr_to not in (None, "") else None
         if (pf is None) != (pt is None):
@@ -232,14 +247,23 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
             if int(pf) > int(pt):
                 raise HTTPException(422, f"„{name}“: „Von“ darf nicht größer als „Bis“ sein.")
         cleaned.append({
-            "name": name,
-            "pnr_from": pf,
-            "pnr_to": pt,
-            "mandant": (c.mandant or "").strip() or None,
+            "name": name, "pnr_from": pf, "pnr_to": pt,
+            "mandant": mandant, "pnr_shared_with": None,
         })
 
     if not cleaned:
         raise HTTPException(422, "Mindestens eine Firma erforderlich")
+
+    # Geteilte Zähler: das Ziel muss eine Firma mit EIGENEM Nummernbereich sein.
+    owners = {c["name"] for c in cleaned if not c["pnr_shared_with"] and c["pnr_from"] is not None}
+    for c in cleaned:
+        if c["pnr_shared_with"] and c["pnr_shared_with"] not in owners:
+            raise HTTPException(
+                422,
+                f"„{c['name']}“: teilt den Zähler mit „{c['pnr_shared_with']}“, aber diese Firma "
+                "hat keinen eigenen Personalnummern-Bereich.",
+            )
+
     try:
         set_companies_full(cleaned)
     except Exception as e:
