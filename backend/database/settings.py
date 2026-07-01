@@ -98,26 +98,35 @@ def pnr_format(company: dict, n: int) -> str:
     return str(n).zfill(pnr_width(company))
 
 
+def _str_or_none(v) -> Optional[str]:
+    if v in (None, ""):
+        return None
+    s = str(v).strip()
+    return s or None
+
+
 def normalize_company(item) -> dict:
     """Ein Firmen-Eintrag (String oder Objekt) → kanonisches Objekt.
     pnr_from/pnr_to werden als Ziffern-STRINGS gehalten (führende Nullen bleiben),
-    pnr_current als Zahl (laufender Zähler)."""
+    pnr_current als Zahl (laufender Zähler). pnr_shared_with = Name der Firma, deren
+    Zähler geteilt wird (dann kein eigener Bereich)."""
     if isinstance(item, str):
         return {"name": item.strip(), "pnr_from": None, "pnr_to": None,
-                "pnr_current": None, "pnr_warned": False, "mandant": None}
+                "pnr_current": None, "pnr_warned": False, "mandant": None,
+                "pnr_shared_with": None}
     if isinstance(item, dict):
-        mandant = item.get("mandant")
-        mandant = str(mandant).strip() if mandant not in (None, "") else None
         return {
             "name": str(item.get("name", "")).strip(),
             "pnr_from": _digits_or_none(item.get("pnr_from")),
             "pnr_to": _digits_or_none(item.get("pnr_to")),
             "pnr_current": _int_or_none(item.get("pnr_current")),
             "pnr_warned": bool(item.get("pnr_warned", False)),
-            "mandant": mandant,
+            "mandant": _str_or_none(item.get("mandant")),
+            "pnr_shared_with": _str_or_none(item.get("pnr_shared_with")),
         }
     return {"name": "", "pnr_from": None, "pnr_to": None,
-            "pnr_current": None, "pnr_warned": False, "mandant": None}
+            "pnr_current": None, "pnr_warned": False, "mandant": None,
+            "pnr_shared_with": None}
 
 
 def get_companies_full() -> List[dict]:
@@ -159,16 +168,23 @@ def set_companies_full(companies: List[dict]) -> None:
         if not c["name"] or c["name"] in seen:
             continue
         seen.add(c["name"])
-        prev = existing.get(c["name"])
-        if prev:
-            c["pnr_current"] = prev["pnr_current"]
-            extended = c["pnr_to"] is not None and (
-                prev["pnr_to"] is None or int(c["pnr_to"]) > int(prev["pnr_to"])
-            )
-            c["pnr_warned"] = False if extended else prev["pnr_warned"]
-        else:
+        if c["pnr_shared_with"]:
+            # Teilt den Zähler einer anderen Firma → kein eigener Bereich/Zähler.
+            c["pnr_from"] = None
+            c["pnr_to"] = None
             c["pnr_current"] = None
             c["pnr_warned"] = False
+        else:
+            prev = existing.get(c["name"])
+            if prev:
+                c["pnr_current"] = prev["pnr_current"]
+                extended = c["pnr_to"] is not None and (
+                    prev["pnr_to"] is None or int(c["pnr_to"]) > int(prev["pnr_to"])
+                )
+                c["pnr_warned"] = False if extended else prev["pnr_warned"]
+            else:
+                c["pnr_current"] = None
+                c["pnr_warned"] = False
         out.append(c)
     settings_set("COMPANIES", out)
 
