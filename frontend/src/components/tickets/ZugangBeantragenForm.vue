@@ -174,17 +174,30 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
 
               <!-- Personalnummer -->
               <div class="md:col-span-2">
-                <label class="label">Personalnummer</label>
+                <label class="label flex items-center gap-2">
+                  Personalnummer
+                  <span v-if="!form.personal.personal_number"
+                        class="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded
+                               bg-[#3EAAB8]/15 text-[#3EAAB8]">automatisch</span>
+                </label>
                 <div v-if="phase === 'create' || !form.personal.personal_number"
-                     class="flex items-center gap-2 px-4 py-2.5 rounded-xl
-                            bg-[#3EAAB8]/5 border border-dashed border-[#3EAAB8]/40
-                            text-sm text-gray-600 dark:text-gray-300">
-                  <svg class="w-4 h-4 flex-shrink-0 text-[#3EAAB8]" viewBox="0 0 24 24" fill="none"
-                       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-                  </svg>
-                  Wird beim Abschluss des Sekretariat&nbsp;GL („Weitergeben“) automatisch aus dem
-                  Nummernbereich der „Firma lt. Arbeitsvertrag“ vergeben.
+                     class="rounded-xl bg-[#3EAAB8]/5 border border-dashed border-[#3EAAB8]/40 px-4 py-3 space-y-1.5">
+                  <div class="flex items-center gap-2 text-sm font-medium text-[#3EAAB8]">
+                    <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    Wird beim „Weitergeben“ automatisch vergeben
+                  </div>
+                  <p class="text-sm text-gray-600 dark:text-gray-300">
+                    Beim Abschluss durch das Sekretariat&nbsp;GL wird die nächste freie Nummer aus dem
+                    Bereich
+                    <template v-if="form.personal.contract_company">
+                      der Firma „<strong>{{ form.personal.contract_company }}</strong>“
+                    </template>
+                    <template v-else>der gewählten „Firma lt. Arbeitsvertrag“</template>
+                    vergeben.
+                  </p>
                 </div>
                 <input v-else v-model="form.personal.personal_number"
                        :class="fieldClass('personal.personal_number')"
