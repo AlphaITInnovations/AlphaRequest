@@ -187,8 +187,9 @@ def get_env(user: dict = Depends(get_current_user)):
 
 class CompanyItem(BaseModel):
     name: str
-    pnr_from: Optional[int] = None
-    pnr_to: Optional[int] = None
+    # Ziffern-Strings, damit führende Nullen erhalten bleiben (z.B. "00896").
+    pnr_from: Optional[str] = None
+    pnr_to: Optional[str] = None
     mandant: Optional[str] = None
     # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
     pnr_current: Optional[int] = None
@@ -220,18 +221,20 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         if not name or name.casefold() in seen:
             continue
         seen.add(name.casefold())
-        # Bereich: entweder beide leer oder beide gesetzt + plausibel.
-        if (c.pnr_from is None) != (c.pnr_to is None):
+        # Grenzen als Ziffern-Strings (führende Nullen erlaubt, z.B. "00896").
+        pf = str(c.pnr_from).strip() if c.pnr_from not in (None, "") else None
+        pt = str(c.pnr_to).strip() if c.pnr_to not in (None, "") else None
+        if (pf is None) != (pt is None):
             raise HTTPException(422, f"„{name}“: Bitte Von und Bis der Personalnummern beide angeben (oder beide leer lassen).")
-        if c.pnr_from is not None and c.pnr_to is not None:
-            if c.pnr_from < 0 or c.pnr_to < 0:
-                raise HTTPException(422, f"„{name}“: Personalnummern müssen positiv sein.")
-            if c.pnr_from > c.pnr_to:
+        if pf is not None:
+            if not pf.isdigit() or not pt.isdigit():
+                raise HTTPException(422, f"„{name}“: Personalnummern dürfen nur aus Ziffern bestehen.")
+            if int(pf) > int(pt):
                 raise HTTPException(422, f"„{name}“: „Von“ darf nicht größer als „Bis“ sein.")
         cleaned.append({
             "name": name,
-            "pnr_from": c.pnr_from,
-            "pnr_to": c.pnr_to,
+            "pnr_from": pf,
+            "pnr_to": pt,
             "mandant": (c.mandant or "").strip() or None,
         })
 

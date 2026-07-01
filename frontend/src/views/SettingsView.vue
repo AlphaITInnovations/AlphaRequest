@@ -25,8 +25,8 @@ async function loadEnv() {
 // ── Companies (mit Personalnummern-Bereich pro Firma) ───────────────────────────
 interface CompanyItem {
   name: string
-  pnr_from: number | null
-  pnr_to: number | null
+  pnr_from: string | null   // Ziffern-String, führende Nullen bleiben (z.B. "00896")
+  pnr_to: string | null
   mandant: string | null
   pnr_current: number | null
   pnr_warned: boolean
@@ -60,20 +60,36 @@ function removeCompanyRow(idx: number) {
   companies.value.splice(idx, 1)
 }
 
+// Stellenanzahl fürs Padding (breitere Grenze), z.B. "00896"/"15999" → 5
+function pnrWidth(c: CompanyItem): number {
+  return Math.max((c.pnr_from ?? '').length, (c.pnr_to ?? '').length, 1)
+}
+// Zuletzt vergebene Nummer mit führenden Nullen (Anzeige)
+function currentDisplay(c: CompanyItem): string {
+  if (c.pnr_current == null) return '—'
+  return String(c.pnr_current).padStart(pnrWidth(c), '0')
+}
 // Wie viele Nummern sind für die Firma noch vergebbar? (null = kein Bereich hinterlegt)
 function freeCount(c: CompanyItem): number | null {
-  if (c.pnr_from == null || c.pnr_to == null) return null
-  const base = c.pnr_current ?? (c.pnr_from - 1)
-  return Math.max(0, c.pnr_to - base)
+  const pf = (c.pnr_from ?? '').trim()
+  const pt = (c.pnr_to ?? '').trim()
+  if (!pf || !pt) return null
+  const from = parseInt(pf, 10), to = parseInt(pt, 10)
+  if (isNaN(from) || isNaN(to)) return null
+  const base = c.pnr_current ?? (from - 1)
+  return Math.max(0, to - base)
 }
 
 async function saveCompanies() {
   for (const c of companies.value) {
     if (!c.name.trim()) { showToast('Jede Firma braucht einen Namen', false); return }
-    const hasFrom = c.pnr_from !== null && (c.pnr_from as any) !== ''
-    const hasTo   = c.pnr_to   !== null && (c.pnr_to as any) !== ''
-    if (hasFrom !== hasTo) { showToast(`„${c.name}“: Von und Bis bitte beide angeben`, false); return }
-    if (hasFrom && hasTo && Number(c.pnr_from) > Number(c.pnr_to)) {
+    const pf = (c.pnr_from ?? '').trim()
+    const pt = (c.pnr_to ?? '').trim()
+    if (!!pf !== !!pt) { showToast(`„${c.name}“: Von und Bis bitte beide angeben`, false); return }
+    if (pf && (!/^\d+$/.test(pf) || !/^\d+$/.test(pt))) {
+      showToast(`„${c.name}“: Personalnummern dürfen nur Ziffern enthalten`, false); return
+    }
+    if (pf && parseInt(pf, 10) > parseInt(pt, 10)) {
       showToast(`„${c.name}“: „Von“ darf nicht größer als „Bis“ sein`, false); return
     }
   }
@@ -81,8 +97,8 @@ async function saveCompanies() {
   try {
     const payload = companies.value.map(c => ({
       name: c.name.trim(),
-      pnr_from: c.pnr_from === null || (c.pnr_from as any) === '' ? null : Number(c.pnr_from),
-      pnr_to:   c.pnr_to   === null || (c.pnr_to   as any) === '' ? null : Number(c.pnr_to),
+      pnr_from: (c.pnr_from ?? '').trim() || null,
+      pnr_to:   (c.pnr_to   ?? '').trim() || null,
       mandant:  (c.mandant ?? '').trim() || null,
     }))
     const { data } = await client.put('/settings/companies', { companies: payload })
@@ -584,11 +600,13 @@ const navGroups = computed(() => {
                   </div>
                   <div>
                     <label class="lbl">Personalnummer von</label>
-                    <input v-model.number="c.pnr_from" type="number" min="0" class="input w-full" placeholder="10000" />
+                    <input v-model="c.pnr_from" @input="c.pnr_from = (c.pnr_from || '').replace(/\D/g, '')"
+                           type="text" inputmode="numeric" class="input w-full" placeholder="00896" />
                   </div>
                   <div>
                     <label class="lbl">Personalnummer bis</label>
-                    <input v-model.number="c.pnr_to" type="number" min="0" class="input w-full" placeholder="19999" />
+                    <input v-model="c.pnr_to" @input="c.pnr_to = (c.pnr_to || '').replace(/\D/g, '')"
+                           type="text" inputmode="numeric" class="input w-full" placeholder="15999" />
                   </div>
                   <div class="md:col-span-2">
                     <label class="lbl">Mandantennr. <span class="text-gray-400 font-normal">(optional)</span></label>
@@ -600,9 +618,9 @@ const navGroups = computed(() => {
               </div>
 
               <!-- Status des Nummernbereichs -->
-              <div v-if="c.pnr_from != null && c.pnr_to != null" class="flex flex-wrap items-center gap-2 text-xs">
+              <div v-if="freeCount(c) !== null" class="flex flex-wrap items-center gap-2 text-xs">
                 <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">
-                  Aktuell: {{ c.pnr_current ?? '—' }}
+                  Aktuell: {{ currentDisplay(c) }}
                 </span>
                 <span class="px-2 py-0.5 rounded-full font-medium"
                       :class="(freeCount(c) ?? 0) === 0

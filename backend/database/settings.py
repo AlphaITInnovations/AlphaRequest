@@ -78,8 +78,30 @@ def _int_or_none(v) -> Optional[int]:
         return None
 
 
+def _digits_or_none(v) -> Optional[str]:
+    """Grenze als Ziffern-String (bewahrt führende Nullen, z.B. '00896'). None, wenn leer/ungültig."""
+    if v in (None, ""):
+        return None
+    s = str(v).strip()
+    return s if s.isdigit() else None
+
+
+def pnr_width(company: dict) -> int:
+    """Stellenanzahl fürs Zero-Padding (aus der breiteren Bereichsgrenze)."""
+    f = company.get("pnr_from") or ""
+    t = company.get("pnr_to") or ""
+    return max(len(str(f)), len(str(t)), 1)
+
+
+def pnr_format(company: dict, n: int) -> str:
+    """Eine numerische Personalnummer als Ziffern-String mit führenden Nullen."""
+    return str(n).zfill(pnr_width(company))
+
+
 def normalize_company(item) -> dict:
-    """Ein Firmen-Eintrag (String oder Objekt) → kanonisches Objekt."""
+    """Ein Firmen-Eintrag (String oder Objekt) → kanonisches Objekt.
+    pnr_from/pnr_to werden als Ziffern-STRINGS gehalten (führende Nullen bleiben),
+    pnr_current als Zahl (laufender Zähler)."""
     if isinstance(item, str):
         return {"name": item.strip(), "pnr_from": None, "pnr_to": None,
                 "pnr_current": None, "pnr_warned": False, "mandant": None}
@@ -88,8 +110,8 @@ def normalize_company(item) -> dict:
         mandant = str(mandant).strip() if mandant not in (None, "") else None
         return {
             "name": str(item.get("name", "")).strip(),
-            "pnr_from": _int_or_none(item.get("pnr_from")),
-            "pnr_to": _int_or_none(item.get("pnr_to")),
+            "pnr_from": _digits_or_none(item.get("pnr_from")),
+            "pnr_to": _digits_or_none(item.get("pnr_to")),
             "pnr_current": _int_or_none(item.get("pnr_current")),
             "pnr_warned": bool(item.get("pnr_warned", False)),
             "mandant": mandant,
@@ -140,10 +162,10 @@ def set_companies_full(companies: List[dict]) -> None:
         prev = existing.get(c["name"])
         if prev:
             c["pnr_current"] = prev["pnr_current"]
-            if c["pnr_to"] is not None and (prev["pnr_to"] is None or c["pnr_to"] > prev["pnr_to"]):
-                c["pnr_warned"] = False
-            else:
-                c["pnr_warned"] = prev["pnr_warned"]
+            extended = c["pnr_to"] is not None and (
+                prev["pnr_to"] is None or int(c["pnr_to"]) > int(prev["pnr_to"])
+            )
+            c["pnr_warned"] = False if extended else prev["pnr_warned"]
         else:
             c["pnr_current"] = None
             c["pnr_warned"] = False

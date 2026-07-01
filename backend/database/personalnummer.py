@@ -1,7 +1,7 @@
 import json
 
 from backend.database.connection import get_connection, _fetchone, _exec
-from backend.database.settings import normalize_company
+from backend.database.settings import normalize_company, pnr_format
 
 COMPANIES_KEY = "COMPANIES"
 
@@ -49,14 +49,19 @@ def db_assign_personalnummer_for_company(company_name: str, warn_remaining: int)
                 f"Für die Firma „{company_name}“ ist kein Personalnummern-Bereich hinterlegt."
             )
 
-        nxt = (c["pnr_current"] + 1) if c["pnr_current"] is not None else c["pnr_from"]
-        if nxt > c["pnr_to"]:
+        # Grenzen sind Ziffern-Strings (führende Nullen); numerisch rechnen, mit
+        # führenden Nullen ausgeben (Breite = längste Grenze, via pnr_format).
+        from_i = int(c["pnr_from"])
+        to_i = int(c["pnr_to"])
+
+        nxt = (c["pnr_current"] + 1) if c["pnr_current"] is not None else from_i
+        if nxt > to_i:
             raise PersonalnummerExhausted(
                 f"Der Personalnummern-Bereich der Firma „{company_name}“ ist erschöpft."
             )
 
         c["pnr_current"] = nxt
-        remaining = c["pnr_to"] - nxt
+        remaining = to_i - nxt
         should_warn = remaining <= warn_remaining and not c["pnr_warned"]
         if should_warn:
             c["pnr_warned"] = True
@@ -70,7 +75,7 @@ def db_assign_personalnummer_for_company(company_name: str, warn_remaining: int)
         )
         conn.commit()
         return {
-            "number": nxt,
+            "number": pnr_format(c, nxt),   # z.B. "00896"
             "remaining": remaining,
             "should_warn": should_warn,
             "company_name": company_name,
