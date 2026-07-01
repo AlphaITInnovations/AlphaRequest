@@ -611,76 +611,87 @@ const navGroups = computed(() => {
             Mehrere Firmen können sich einen gemeinsamen Zähler teilen – dazu bei einer Firma
             „Teilt Zähler mit …“ auswählen (statt eigenem Bereich).
           </div>
-          <div class="card-section space-y-3">
-            <p v-if="companies.length === 0" class="text-sm text-gray-400 italic">Noch keine Firmen vorhanden.</p>
+          <div class="space-y-4">
+            <p v-if="companies.length === 0" class="text-sm text-gray-400 italic px-1">Noch keine Firmen vorhanden.</p>
 
+            <!-- Eine Karte pro Firma – klar abgegrenzt -->
             <div v-for="(c, i) in companies" :key="i"
-                 class="rounded-xl border border-gray-200 dark:border-white/10 p-4 space-y-3">
-              <div class="flex items-start gap-3">
-                <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div class="md:col-span-2">
-                    <label class="lbl">Firmenname</label>
-                    <input v-model="c.name" class="input w-full" placeholder="z. B. AlphaConsult" />
+                 class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#1A2130]
+                        shadow-sm overflow-hidden">
+
+              <!-- Kopfzeile: Nummer + Firmenname (Titel) + Löschen -->
+              <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200/80 dark:border-white/[0.08]
+                          bg-white/70 dark:bg-white/[0.02]">
+                <span class="flex-shrink-0 w-7 h-7 rounded-lg bg-[#3EAAB8]/15 text-[#3EAAB8] text-sm font-bold
+                             flex items-center justify-center">{{ i + 1 }}</span>
+                <input v-model="c.name" placeholder="Firmenname (z. B. AlphaConsult)"
+                       class="flex-1 min-w-0 rounded-lg border border-transparent bg-transparent px-2 py-1
+                              text-base font-semibold text-gray-900 dark:text-white placeholder-gray-400
+                              hover:border-gray-200 dark:hover:border-white/10
+                              focus:bg-white dark:focus:bg-[#263040] focus:border-[#3EAAB8]/50
+                              focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/20 transition" />
+                <button @click="removeCompanyRow(i)" title="Firma entfernen"
+                        class="flex-shrink-0 w-8 h-8 rounded-lg text-gray-400 hover:text-red-500
+                               hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition">✕</button>
+              </div>
+
+              <!-- Body -->
+              <div class="p-4 space-y-3">
+                <div>
+                  <label class="lbl">Personalnummern</label>
+                  <select v-model="c.pnr_shared_with" class="input w-full">
+                    <option :value="null">Eigener Nummernbereich</option>
+                    <option v-for="o in shareTargets(c)" :key="o.name" :value="o.name">
+                      Teilt Zähler mit „{{ o.name }}“
+                    </option>
+                  </select>
+                </div>
+
+                <div v-if="!c.pnr_shared_with" class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="lbl">Personalnummer von</label>
+                    <input v-model="c.pnr_from" @input="c.pnr_from = (c.pnr_from || '').replace(/\D/g, '')"
+                           type="text" inputmode="numeric" class="input w-full" placeholder="00896" />
                   </div>
-
-                  <div class="md:col-span-2">
-                    <label class="lbl">Personalnummern</label>
-                    <select v-model="c.pnr_shared_with" class="input w-full">
-                      <option :value="null">Eigener Nummernbereich</option>
-                      <option v-for="o in shareTargets(c)" :key="o.name" :value="o.name">
-                        Teilt Zähler mit „{{ o.name }}“
-                      </option>
-                    </select>
-                  </div>
-
-                  <template v-if="!c.pnr_shared_with">
-                    <div>
-                      <label class="lbl">Personalnummer von</label>
-                      <input v-model="c.pnr_from" @input="c.pnr_from = (c.pnr_from || '').replace(/\D/g, '')"
-                             type="text" inputmode="numeric" class="input w-full" placeholder="00896" />
-                    </div>
-                    <div>
-                      <label class="lbl">Personalnummer bis</label>
-                      <input v-model="c.pnr_to" @input="c.pnr_to = (c.pnr_to || '').replace(/\D/g, '')"
-                             type="text" inputmode="numeric" class="input w-full" placeholder="15999" />
-                    </div>
-                  </template>
-
-                  <div class="md:col-span-2">
-                    <label class="lbl">Mandantennr. <span class="text-gray-400 font-normal">(optional)</span></label>
-                    <input v-model="c.mandant" class="input w-full" placeholder="z. B. 100" />
+                  <div>
+                    <label class="lbl">Personalnummer bis</label>
+                    <input v-model="c.pnr_to" @input="c.pnr_to = (c.pnr_to || '').replace(/\D/g, '')"
+                           type="text" inputmode="numeric" class="input w-full" placeholder="15999" />
                   </div>
                 </div>
-                <button @click="removeCompanyRow(i)" title="Entfernen"
-                        class="mt-7 text-gray-400 hover:text-red-500 transition flex-shrink-0">✕</button>
-              </div>
 
-              <!-- Status: geteilter Zähler -->
-              <div v-if="c.pnr_shared_with" class="flex flex-wrap items-center gap-2 text-xs">
-                <span class="px-2 py-0.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] font-medium">
-                  🔗 Teilt Zähler mit „{{ c.pnr_shared_with }}“
-                </span>
-                <template v-if="sourceOf(c)">
+                <div>
+                  <label class="lbl">Mandantennr. <span class="text-gray-400 font-normal">(optional)</span></label>
+                  <input v-model="c.mandant" class="input w-full" placeholder="z. B. 100" />
+                </div>
+
+                <!-- Status: geteilter Zähler -->
+                <div v-if="c.pnr_shared_with" class="flex flex-wrap items-center gap-2 text-xs pt-1">
+                  <span class="px-2 py-0.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] font-medium">
+                    🔗 Teilt Zähler mit „{{ c.pnr_shared_with }}“
+                  </span>
+                  <template v-if="sourceOf(c)">
+                    <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">
+                      Aktuell: {{ currentDisplay(sourceOf(c)!) }}
+                    </span>
+                    <span class="px-2 py-0.5 rounded-full font-medium" :class="freeBadgeClass(freeCount(sourceOf(c)!))">
+                      Frei: {{ freeCount(sourceOf(c)!) }}
+                    </span>
+                  </template>
+                </div>
+
+                <!-- Status: eigener Nummernbereich -->
+                <div v-else-if="freeCount(c) !== null" class="flex flex-wrap items-center gap-2 text-xs pt-1">
                   <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">
-                    Aktuell: {{ currentDisplay(sourceOf(c)!) }}
+                    Aktuell: {{ currentDisplay(c) }}
                   </span>
-                  <span class="px-2 py-0.5 rounded-full font-medium" :class="freeBadgeClass(freeCount(sourceOf(c)!))">
-                    Frei: {{ freeCount(sourceOf(c)!) }}
+                  <span class="px-2 py-0.5 rounded-full font-medium" :class="freeBadgeClass(freeCount(c))">
+                    Frei: {{ freeCount(c) }}
                   </span>
-                </template>
-              </div>
-
-              <!-- Status: eigener Nummernbereich -->
-              <div v-else-if="freeCount(c) !== null" class="flex flex-wrap items-center gap-2 text-xs">
-                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">
-                  Aktuell: {{ currentDisplay(c) }}
-                </span>
-                <span class="px-2 py-0.5 rounded-full font-medium" :class="freeBadgeClass(freeCount(c))">
-                  Frei: {{ freeCount(c) }}
-                </span>
-                <span v-if="(freeCount(c) ?? 0) === 0" class="text-red-600 dark:text-red-400">
-                  Bereich erschöpft – für diese Firma sind keine neuen Aufträge möglich.
-                </span>
+                  <span v-if="(freeCount(c) ?? 0) === 0" class="text-red-600 dark:text-red-400">
+                    Bereich erschöpft – für diese Firma sind keine neuen Aufträge möglich.
+                  </span>
+                </div>
               </div>
             </div>
 
