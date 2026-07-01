@@ -541,20 +541,3 @@ def send_testmail(payload: TestMailIn, user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.exception("Test mail failed: %s", e)
         raise HTTPException(500, f"Fehler beim Senden: {e}")
-
-
-# ── Personalnummer Reset ──────────────────────────────────────────────────────
-
-class ResetOut(BaseModel):
-    message: str
-
-
-@router.post("/settings/personalnummer/reset", response_model=DataResponse[ResetOut])
-def reset_personalnummer(user: dict = Depends(get_current_user)):
-    require_admin(user)
-    try:
-        from backend.services.personalnummer_generator import reset_personalnummer as _reset
-        _reset()
-        return DataResponse(data=ResetOut(message="Personalnummer wurde zurückgesetzt"))
-    except Exception as e:
-        raise HTTPException(500, f"Fehler beim Zurücksetzen: {e}")

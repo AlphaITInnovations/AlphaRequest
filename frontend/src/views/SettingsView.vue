@@ -5,7 +5,7 @@ import { usersApi, type UserEntry } from '@/api/users'
 import AppLayout from '@/components/AppLayout.vue'
 import UserSelect from '@/components/UserSelect.vue'
 
-type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'permissions' | 'app-users' | 'testmail' | 'personalnummer'
+type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'permissions' | 'app-users' | 'testmail'
 const active = ref<Section>('general')
 const toast  = ref<{ msg: string; ok: boolean } | null>(null)
 const users  = ref<UserEntry[]>([])
@@ -422,22 +422,6 @@ async function sendTestMail() {
   } finally { mailLoading.value = false }
 }
 
-// ── Personalnummer ─────────────────────────────────────────────────────────────
-const pnConfirm = ref('')
-const pnLoading = ref(false)
-const pnResult  = ref<{ ok: boolean; msg: string } | null>(null)
-async function resetPersonalnummer() {
-  if (pnConfirm.value !== 'RESET') return
-  pnLoading.value = true; pnResult.value = null
-  try {
-    const { data } = await client.post('/settings/personalnummer/reset')
-    pnResult.value = { ok: true, msg: data.data.message }
-    pnConfirm.value = ''
-  } catch (e: any) {
-    pnResult.value = { ok: false, msg: e.response?.data?.detail ?? 'Fehler' }
-  } finally { pnLoading.value = false }
-}
-
 // ── Init ───────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   const { data } = await usersApi.list()
@@ -455,7 +439,6 @@ const nav = [
   { key: 'permissions',    label: 'Auftragstypen',       group: 'Berechtigungen' },
   { key: 'app-users',      label: 'Benutzer & Rollen',   group: 'Berechtigungen' },
   { key: 'testmail',       label: 'Testmail',            group: 'Kommunikation' },
-  { key: 'personalnummer', label: 'Personalnummer Reset',group: 'Tools' },
 ] as const
 
 const navGroups = computed(() => {
@@ -964,35 +947,6 @@ const navGroups = computed(() => {
                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300/60 text-emerald-800 dark:text-emerald-200'
                    : 'bg-red-50 dark:bg-red-900/20 border-red-300/60 text-red-800 dark:text-red-200'">
               {{ mailResult.msg }}
-            </div>
-          </div>
-        </section>
-
-        <!-- Personalnummer -->
-        <section v-if="active === 'personalnummer'">
-          <h2 class="section-title">Personalnummer zurücksetzen</h2>
-          <div class="rounded-xl border border-red-300/60 bg-red-50 dark:bg-red-900/20
-                      px-4 py-3 text-sm text-red-800 dark:text-red-200 mb-4">
-            ⚠️ <strong>ACHTUNG:</strong> Diese Aktion setzt den globalen Personalnummerzähler zurück und kann nicht rückgängig gemacht werden.
-          </div>
-          <div class="card-section space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Zur Bestätigung <span class="font-mono font-bold">RESET</span> eingeben:
-              </label>
-              <input v-model="pnConfirm" placeholder="RESET" class="input w-64" />
-            </div>
-            <button @click="resetPersonalnummer"
-                    :disabled="pnLoading || pnConfirm !== 'RESET'"
-                    class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium
-                           transition disabled:opacity-50 disabled:cursor-not-allowed">
-              {{ pnLoading ? 'Wird zurückgesetzt…' : 'Personalnummer zurücksetzen' }}
-            </button>
-            <div v-if="pnResult" class="rounded-xl border px-4 py-3 text-sm"
-                 :class="pnResult.ok
-                   ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300/60 text-emerald-800 dark:text-emerald-200'
-                   : 'bg-red-50 dark:bg-red-900/20 border-red-300/60 text-red-800 dark:text-red-200'">
-              {{ pnResult.msg }}
             </div>
           </div>
         </section>

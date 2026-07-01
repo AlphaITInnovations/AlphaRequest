@@ -37,10 +37,8 @@ class Config:
     DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", "false"))
     USER_SYNC_INTERVAL = int(os.getenv("USER_SYNC_INTERVAL", "30"))
 
-    PERSONALNUMMER_START = int(os.getenv("PERSONALNUMMER_START", 10000))
-    PERSONALNUMMER_END = int(os.getenv("PERSONALNUMMER_END", 100000))
-    # Personalnummern werden pro Firma vergeben. Sind für eine Firma nur noch
-    # <= diese viele Nummern frei, geht eine Warn-Mail an TICKET_MAIL.
+    # Personalnummern werden pro Firma vergeben (Bereich in den Settings/Firmen).
+    # Sind für eine Firma nur noch <= so viele Nummern frei, geht eine Warn-Mail an TICKET_MAIL.
     PERSONALNUMMER_WARN_REMAINING = int(os.getenv("PERSONALNUMMER_WARN_REMAINING", 10))
 
     # URLs – in .env setzen, Defaults für Dev
