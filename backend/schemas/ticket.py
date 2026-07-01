@@ -116,6 +116,15 @@ class ResponsibilityOverrideRequest(BaseModel):
     phase_index: Optional[int] = None
 
 
+class LockState(BaseModel):
+    """Zustand des Edit-Locks eines Tickets."""
+    locked: bool = False               # aktiver Lock vorhanden?
+    is_me: bool = False                # gehört er dem anfragenden Nutzer?
+    holder_id: Optional[str] = None
+    holder_name: Optional[str] = None
+    age_seconds: Optional[int] = None  # Sekunden seit letztem Heartbeat
+
+
 class UserOut(BaseModel):
     id: str
     displayName: str

@@ -13,7 +13,7 @@ from backend.services.microsoft_mail import send_newrequest_mail, send_mail_to_a
 from backend.services.ticket_permissions import can_user_create_ticket
 from backend.schemas.ticket import (
     TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut, BasisTicketCreateRequest,
-    ResponsibilityOverrideRequest,
+    ResponsibilityOverrideRequest, LockState,
 )
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
@@ -198,6 +198,20 @@ def _assert_ticket_access(ticket, user: dict):
         return
 
     raise api_error(403, ErrorCode.TICKET_FORBIDDEN, "Kein Zugriff auf dieses Ticket")
+
+
+def _assert_not_locked_by_other(ticket_id: int, user: dict) -> None:
+    """Schreibzugriff verweigern, wenn ein ANDERER Nutzer den Edit-Lock hält.
+    Admins umgehen den Lock (können ihn per Force-Unlock ohnehin aufheben)."""
+    if PERM_ADMIN in user.get("permissions", []):
+        return
+    from backend.database.ticket_locks import get_active_lock
+    lock = get_active_lock(ticket_id)
+    if lock and lock["holder_id"] != user["id"]:
+        raise api_error(
+            423, ErrorCode.TICKET_LOCKED,
+            f"Ticket wird gerade von {lock['holder_name'] or 'einer anderen Person'} bearbeitet.",
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -489,6 +503,7 @@ async def update_ticket(
 ):
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
+    _assert_not_locked_by_other(ticket_id, user)
 
     # assignee_id/assignee_name werden beim PATCH ignoriert (siehe unten) – daher
     # hier auch keine Assignee-Validierung mehr.
@@ -543,6 +558,65 @@ async def update_ticket(
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# EDIT-LOCKS – pessimistisches Sperren der Bearbeitungsansicht
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/tickets/{ticket_id}/lock", response_model=DataResponse[LockState])
+def acquire_ticket_lock(ticket_id: int, user: dict = Depends(get_current_user)):
+    """
+    Sperrt das Ticket für den aufrufenden Nutzer (beim Öffnen der Bearbeitung).
+    Erfolgt still, wenn frei/eigener/abgelaufener Lock. Hält jemand anderes einen
+    aktiven Lock, kommt is_me=False + holder_* zurück (Frontend zeigt Popup).
+    """
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    from backend.database.ticket_locks import acquire_lock
+    state = acquire_lock(ticket_id, user["id"], user["displayName"])
+    return DataResponse(data=LockState(**state))
+
+
+@router.post("/tickets/{ticket_id}/lock/heartbeat", response_model=DataResponse[LockState])
+def heartbeat_ticket_lock(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Lebenszeichen des Editors – hält den Lock aktiv. is_me=False → Lock verloren."""
+    from backend.database.ticket_locks import refresh_lock, get_active_lock
+    still_mine = refresh_lock(ticket_id, user["id"])
+    if still_mine:
+        return DataResponse(data=LockState(locked=True, is_me=True,
+                                           holder_id=user["id"], holder_name=user["displayName"]))
+    lock = get_active_lock(ticket_id)
+    if lock:
+        return DataResponse(data=LockState(locked=True, is_me=False,
+                                           holder_id=lock["holder_id"], holder_name=lock["holder_name"],
+                                           age_seconds=lock["age_seconds"]))
+    return DataResponse(data=LockState(locked=False, is_me=False))
+
+
+@router.delete("/tickets/{ticket_id}/lock", status_code=204)
+def release_ticket_lock(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Gibt den eigenen Lock frei (beim Verlassen der Bearbeitung)."""
+    from backend.database.ticket_locks import release_lock
+    release_lock(ticket_id, user["id"])
+
+
+@router.get("/tickets/{ticket_id}/lock", response_model=DataResponse[LockState])
+def get_ticket_lock(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Aktuellen Sperr-Status abfragen (z.B. für die read-only Übersicht)."""
+    ticket = _get_ticket_or_404(ticket_id)
+    _assert_ticket_access(ticket, user)
+    from backend.database.ticket_locks import get_active_lock
+    lock = get_active_lock(ticket_id)
+    if not lock:
+        return DataResponse(data=LockState(locked=False, is_me=False))
+    return DataResponse(data=LockState(
+        locked=True,
+        is_me=lock["holder_id"] == user["id"],
+        holder_id=lock["holder_id"],
+        holder_name=lock["holder_name"],
+        age_seconds=lock["age_seconds"],
+    ))
+
+
 @router.post("/tickets/{ticket_id}/submit", response_model=DataResponse[TicketOut])
 async def submit_ticket(
     ticket_id: int,
@@ -551,6 +625,7 @@ async def submit_ticket(
 ):
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
+    _assert_not_locked_by_other(ticket_id, user)
 
     current_phase = get_current_phase(ticket_id)
     if not current_phase:
@@ -823,6 +898,23 @@ def override_responsibility(
         },
     )
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
+@router.delete("/admin/tickets/{ticket_id}/lock", status_code=204)
+def admin_force_unlock(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Admin-Notfall: hebt die Bearbeitungs-Sperre eines Tickets auf (verhindert
+    dauerhaften Lockout, falls ein Editor den Tab nicht sauber geschlossen hat)."""
+    _require_admin(user)
+    _get_ticket_or_404(ticket_id)
+    from backend.database.ticket_locks import force_release_lock
+    force_release_lock(ticket_id)
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="lock_released",
+        details={},
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

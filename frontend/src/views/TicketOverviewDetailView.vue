@@ -140,6 +140,21 @@ async function saveResponsibility() {
     respSaving.value = false
   }
 }
+
+// Admin-Notfall: Bearbeitungs-Sperre aufheben (verhindert Lockout).
+const unlocking = ref(false)
+async function forceUnlock() {
+  if (!confirm('Bearbeitungs-Sperre dieses Tickets aufheben?\n\nDie aktuell bearbeitende Person verliert dadurch ihre Sperre.')) return
+  unlocking.value = true
+  try {
+    await ticketsApi.adminUnlock(id)
+    await load()
+  } catch {
+    alert('Sperre konnte nicht aufgehoben werden.')
+  } finally {
+    unlocking.value = false
+  }
+}
 </script>
 
 <template>
@@ -167,6 +182,27 @@ async function saveResponsibility() {
 
         <!-- ── Sidebar ── -->
         <aside class="space-y-4">
+
+          <!-- Edit-Lock: wer bearbeitet gerade? (+ Admin-Notfall-Freigabe) -->
+          <div v-if="data.lock?.locked"
+               class="bg-amber-50 dark:bg-amber-400/10 border border-amber-300/70 dark:border-amber-400/25
+                      rounded-2xl shadow-sm p-4 space-y-3">
+            <div class="flex items-start gap-2.5">
+              <span class="text-lg leading-none">🔒</span>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-amber-800 dark:text-amber-300">Wird gerade bearbeitet</p>
+                <p class="text-xs text-amber-700 dark:text-amber-400/90 mt-0.5">
+                  {{ data.lock.holder_name || 'Eine Person' }} bearbeitet dieses Ticket aktuell.
+                </p>
+              </div>
+            </div>
+            <button v-if="auth.isAdmin" @click="forceUnlock" :disabled="unlocking"
+                    class="w-full px-4 py-2 rounded-xl text-sm font-medium
+                           bg-amber-600 hover:bg-amber-700 text-white
+                           disabled:opacity-50 disabled:cursor-not-allowed transition">
+              {{ unlocking ? 'Wird aufgehoben…' : '🛠️ Sperre aufheben (Admin)' }}
+            </button>
+          </div>
 
           <!-- Fortschritt -->
           <div v-if="(data.phases ?? []).length"

@@ -79,6 +79,15 @@ export interface Responsible {
   name: string | null
 }
 
+// Edit-Lock-Status eines Tickets
+export interface LockState {
+  locked:      boolean
+  is_me:       boolean
+  holder_id:   string | null
+  holder_name: string | null
+  age_seconds: number | null
+}
+
 export interface Ticket {
   id:                  number
   title:               string

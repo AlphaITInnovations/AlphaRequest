@@ -47,6 +47,13 @@ class HistoryEvent(BaseModel):
     details: dict = {}
 
 
+class LockInfo(BaseModel):
+    locked: bool = False
+    holder_id: Optional[str] = None
+    holder_name: Optional[str] = None
+    age_seconds: Optional[int] = None
+
+
 class TicketOverviewDetail(BaseModel):
     id: int
     title: str
@@ -63,6 +70,7 @@ class TicketOverviewDetail(BaseModel):
     history: list[HistoryEvent]
     phase: str = "—"   # Label der aktuellen Workflow-Phase
     phases: list[dict] = []   # Workflow-Phasen (für die Fortschritts-Anzeige)
+    lock: LockInfo = LockInfo()   # aktueller Edit-Lock (wer bearbeitet gerade)
 
 
 # ── Permission helpers ─────────────────────────────────────────────────────────
@@ -257,6 +265,15 @@ def get_overview_ticket(
             details=e.get("details") or {},
         ))
 
+    from backend.database.ticket_locks import get_active_lock
+    active_lock = get_active_lock(ticket_id)
+    lock = LockInfo(
+        locked=True,
+        holder_id=active_lock["holder_id"],
+        holder_name=active_lock["holder_name"],
+        age_seconds=active_lock["age_seconds"],
+    ) if active_lock else LockInfo()
+
     return DataResponse(data=TicketOverviewDetail(
         id=ticket.id,
         title=ticket.title,
@@ -273,4 +290,5 @@ def get_overview_ticket(
         history=history,
         phase=_current_phase_label(workflow),
         phases=workflow.get("phases", []),
+        lock=lock,
     ))

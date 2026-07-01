@@ -3,7 +3,7 @@
 // ── api/tickets.ts ─────────────────────────────────────────────────────────────
 import type {
   Ticket, TicketCreateRequest, TicketUpdateRequest, Watcher,
-  DataResponse, ListResponse,
+  DataResponse, ListResponse, LockState,
 } from '@/types/ticket'
 import {client} from "@/api/client.ts";
 
@@ -22,6 +22,13 @@ export const ticketsApi = {
   // Admin-Notfall: Zuständigkeit einer Phase (Standard: aktuelle) setzen.
   setResponsibility: (id: number, assignee_id: string, assignee_name?: string, phase_index?: number) =>
     client.put<DataResponse<Ticket>>(`/admin/tickets/${id}/responsibility`, { assignee_id, assignee_name, phase_index }),
+
+  // ── Edit-Locks ──
+  lock:          (id: number) => client.post<DataResponse<LockState>>(`/tickets/${id}/lock`),
+  lockHeartbeat: (id: number) => client.post<DataResponse<LockState>>(`/tickets/${id}/lock/heartbeat`),
+  unlock:        (id: number) => client.delete(`/tickets/${id}/lock`),
+  adminUnlock:   (id: number) => client.delete(`/admin/tickets/${id}/lock`),
+
   remove:  (id: number)                     => client.delete(`/tickets/${id}`),
 
   getDepartments:    (id: number)                          => client.get(`/tickets/${id}/departments`),
