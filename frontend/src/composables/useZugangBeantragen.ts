@@ -402,8 +402,12 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         comment:          form.comment,
       })
       router.push('/dashboard')
-    } catch {
-      alert('Fehler beim Erstellen des Tickets')
+    } catch (e: any) {
+      // Spezifische Backend-Meldung zeigen (z.B. Personalnummern-Bereich erschöpft).
+      const msg = e?.response?.data?.detail?.message
+              ?? e?.response?.data?.error?.message
+              ?? 'Fehler beim Erstellen des Tickets'
+      alert(msg)
     } finally {
       submitting.value = false
     }

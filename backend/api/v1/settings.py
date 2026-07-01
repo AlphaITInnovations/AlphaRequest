@@ -6,7 +6,9 @@ from typing import Optional
 
 from backend.core.dependencies import get_current_user
 from backend.database.groups import get_groups, save_groups
-from backend.database.settings import get_companies, set_companies
+from backend.database.settings import (
+    get_companies, set_companies, get_companies_full, set_companies_full,
+)
 from backend.database.users import (
     list_users, set_user_role, get_user,
     add_extra_permission, remove_extra_permission, set_extra_permissions,
@@ -183,41 +185,64 @@ def get_env(user: dict = Depends(get_current_user)):
 
 # ── Companies ─────────────────────────────────────────────────────────────────
 
+class CompanyItem(BaseModel):
+    name: str
+    pnr_from: Optional[int] = None
+    pnr_to: Optional[int] = None
+    mandant: Optional[str] = None
+    # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
+    pnr_current: Optional[int] = None
+    pnr_warned: bool = False
+
+
 class CompaniesOut(BaseModel):
-    companies: list[str]
+    companies: list[CompanyItem]
+
 
 class CompaniesIn(BaseModel):
-    companies: list[str]
-
-
-def _normalize_companies(items: list[str]) -> list[str]:
-    seen, out = set(), []
-    for raw in items:
-        v = str(raw).strip()
-        if v and v.casefold() not in seen:
-            seen.add(v.casefold())
-            out.append(v)
-    return out
+    companies: list[CompanyItem]
 
 
 @router.get("/settings/companies", response_model=DataResponse[CompaniesOut])
 def get_companies_endpoint(user: dict = Depends(get_current_user)):
     require_admin(user)
-    return DataResponse(data=CompaniesOut(companies=get_companies()))
+    return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
 
 
 @router.put("/settings/companies", response_model=DataResponse[CompaniesOut])
 def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_current_user)):
     require_admin(user)
-    normalized = _normalize_companies(payload.companies)
-    if not normalized:
+
+    cleaned: list[dict] = []
+    seen = set()
+    for c in payload.companies:
+        name = (c.name or "").strip()
+        if not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        # Bereich: entweder beide leer oder beide gesetzt + plausibel.
+        if (c.pnr_from is None) != (c.pnr_to is None):
+            raise HTTPException(422, f"„{name}“: Bitte Von und Bis der Personalnummern beide angeben (oder beide leer lassen).")
+        if c.pnr_from is not None and c.pnr_to is not None:
+            if c.pnr_from < 0 or c.pnr_to < 0:
+                raise HTTPException(422, f"„{name}“: Personalnummern müssen positiv sein.")
+            if c.pnr_from > c.pnr_to:
+                raise HTTPException(422, f"„{name}“: „Von“ darf nicht größer als „Bis“ sein.")
+        cleaned.append({
+            "name": name,
+            "pnr_from": c.pnr_from,
+            "pnr_to": c.pnr_to,
+            "mandant": (c.mandant or "").strip() or None,
+        })
+
+    if not cleaned:
         raise HTTPException(422, "Mindestens eine Firma erforderlich")
     try:
-        set_companies(normalized)
+        set_companies_full(cleaned)
     except Exception as e:
         logger.exception("Failed to update companies: %s", e)
         raise HTTPException(500, "Fehler beim Speichern")
-    return DataResponse(data=CompaniesOut(companies=get_companies()))
+    return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
 
 
 # ── Ticket Permissions ────────────────────────────────────────────────────────

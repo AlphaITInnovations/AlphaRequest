@@ -39,6 +39,9 @@ class Config:
 
     PERSONALNUMMER_START = int(os.getenv("PERSONALNUMMER_START", 10000))
     PERSONALNUMMER_END = int(os.getenv("PERSONALNUMMER_END", 100000))
+    # Personalnummern werden pro Firma vergeben. Sind für eine Firma nur noch
+    # <= diese viele Nummern frei, geht eine Warn-Mail an TICKET_MAIL.
+    PERSONALNUMMER_WARN_REMAINING = int(os.getenv("PERSONALNUMMER_WARN_REMAINING", 10))
 
     # URLs – in .env setzen, Defaults für Dev
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://ai-ms-01.dom.local:5173")

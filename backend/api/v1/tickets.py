@@ -328,17 +328,42 @@ async def create_ticket(
     if data.ticket_type == TicketType.zugang_beantragen:
         personal = desc_obj.get("personal") or {}
         if not str(personal.get("personal_number") or "").strip():
-            from backend.services.personalnummer_generator import next_personalnummer
+            # Personalnummer wird pro Firma („Firma lt. Arbeitsvertrag") vergeben.
+            company = str(personal.get("contract_company") or "").strip()
+            if not company:
+                raise api_error(400, "PERSONALNUMMER_FAILED",
+                                "Bitte zuerst die „Firma lt. Arbeitsvertrag“ auswählen.")
+            from backend.database.personalnummer import (
+                db_assign_personalnummer_for_company,
+                PersonalnummerNotConfigured, PersonalnummerExhausted,
+            )
+            from backend.utils.config import config
             try:
-                personal["personal_number"] = str(next_personalnummer())
-            except RuntimeError as e:
+                result = db_assign_personalnummer_for_company(
+                    company, warn_remaining=config.PERSONALNUMMER_WARN_REMAINING,
+                )
+            except PersonalnummerExhausted as e:
                 raise api_error(409, "PERSONALNUMMER_FAILED", str(e))
+            except PersonalnummerNotConfigured as e:
+                raise api_error(400, "PERSONALNUMMER_FAILED", str(e))
             except Exception:
                 logger.exception("Personalnummer-Vergabe fehlgeschlagen")
                 raise api_error(500, "PERSONALNUMMER_FAILED",
                                 "Personalnummer konnte nicht vergeben werden")
+
+            personal["personal_number"] = str(result["number"])
             desc_obj["personal"] = personal
             description = json.dumps(desc_obj, ensure_ascii=False)
+
+            # Warn-Mail, wenn der Bereich der Firma zur Neige geht.
+            if result.get("should_warn"):
+                try:
+                    from backend.services.microsoft_mail import send_personalnummer_warning_mail
+                    send_personalnummer_warning_mail(
+                        company, result["remaining"], result["pnr_to"],
+                    )
+                except Exception:
+                    logger.exception("Personalnummern-Warn-Mail fehlgeschlagen (Firma %s)", company)
 
     title = generate_title(data.ticket_type, user, description)
     ticket_id = request.app.state.manager.create_ticket(

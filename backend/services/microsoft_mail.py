@@ -288,6 +288,33 @@ def send_test_mail(to: str):
         attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
     )
 
+
+def send_personalnummer_warning_mail(company_name: str, remaining: int, pnr_to: int) -> None:
+    """Warnt TICKET_MAIL, wenn der Personalnummern-Bereich einer Firma zur Neige geht."""
+    to = getattr(config, "TICKET_MAIL", "") or ""
+    if not to:
+        logger.warning("Keine TICKET_MAIL konfiguriert – Personalnummern-Warnung nicht versendet")
+        return
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
+        subject=f"⚠️ Personalnummern für {company_name} gehen zur Neige",
+        body=render_corporate_email(
+            subject=f"Personalnummern-Bereich {company_name} fast erschöpft",
+            headline="AlphaRequest – Einstellungen öffnen",
+            intro=(
+                f"Achtung: Für die Firma „{company_name}“ sind nur noch {remaining} "
+                f"Personalnummer(n) frei (der Bereich endet bei {pnr_to}).\n\n"
+                "Bitte den Bereich rechtzeitig unter Einstellungen → Firmen erweitern – "
+                "sonst können bald keine Onboarding-Aufträge mehr für diese Firma erstellt werden."
+            ),
+            info_box_url=config.FRONTEND_URL + "/settings",
+            content="",
+        ),
+        to_recipients=[to],
+        body_type="HTML",
+    )
+
+
 def send_newrequest_mail(to: str, prio: TicketPriority, titel: str, ttype: TicketType, ticketid):
 
     ticket_type_labels = {
