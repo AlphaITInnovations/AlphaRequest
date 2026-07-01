@@ -449,8 +449,13 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         await ticketsApi.submit(ticketId, body)
       }
       router.push('/dashboard')
-    } catch {
-      alert('Fehler beim Speichern')
+    } catch (e: any) {
+      // Spezifische Backend-Meldung zeigen (z.B. Personalnummern-Bereich erschöpft
+      // beim „Weitergeben" des BackOffice).
+      const msg = e?.response?.data?.detail?.message
+              ?? e?.response?.data?.error?.message
+              ?? 'Fehler beim Speichern'
+      alert(msg)
     } finally {
       submitting.value = false
     }

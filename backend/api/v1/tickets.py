@@ -321,49 +321,9 @@ async def create_ticket(
                         "description muss gültiges JSON sein")
 
     description = data.description
-    # Onboarding: Personalnummer wird automatisch bei der Auftragserstellung
-    # vergeben (kein manueller Button mehr im Formular). Erst hier verbrauchen,
-    # damit abgebrochene Formulare keine Nummern „verbrennen". Nur wenn noch
-    # keine gesetzt ist.
-    if data.ticket_type == TicketType.zugang_beantragen:
-        personal = desc_obj.get("personal") or {}
-        if not str(personal.get("personal_number") or "").strip():
-            # Personalnummer wird pro Firma („Firma lt. Arbeitsvertrag") vergeben.
-            company = str(personal.get("contract_company") or "").strip()
-            if not company:
-                raise api_error(400, "PERSONALNUMMER_FAILED",
-                                "Bitte zuerst die „Firma lt. Arbeitsvertrag“ auswählen.")
-            from backend.database.personalnummer import (
-                db_assign_personalnummer_for_company,
-                PersonalnummerNotConfigured, PersonalnummerExhausted,
-            )
-            from backend.utils.config import config
-            try:
-                result = db_assign_personalnummer_for_company(
-                    company, warn_remaining=config.PERSONALNUMMER_WARN_REMAINING,
-                )
-            except PersonalnummerExhausted as e:
-                raise api_error(409, "PERSONALNUMMER_FAILED", str(e))
-            except PersonalnummerNotConfigured as e:
-                raise api_error(400, "PERSONALNUMMER_FAILED", str(e))
-            except Exception:
-                logger.exception("Personalnummer-Vergabe fehlgeschlagen")
-                raise api_error(500, "PERSONALNUMMER_FAILED",
-                                "Personalnummer konnte nicht vergeben werden")
-
-            personal["personal_number"] = str(result["number"])
-            desc_obj["personal"] = personal
-            description = json.dumps(desc_obj, ensure_ascii=False)
-
-            # Warn-Mail, wenn der Bereich der Firma zur Neige geht.
-            if result.get("should_warn"):
-                try:
-                    from backend.services.microsoft_mail import send_personalnummer_warning_mail
-                    send_personalnummer_warning_mail(
-                        company, result["remaining"], result["pnr_to"],
-                    )
-                except Exception:
-                    logger.exception("Personalnummern-Warn-Mail fehlgeschlagen (Firma %s)", company)
+    # Hinweis: Die Personalnummer wird NICHT bei der Erstellung vergeben, sondern
+    # erst beim Abschluss der BackOffice-Phase (endgültige „Firma lt. Arbeitsvertrag“)
+    # – siehe _assign_onboarding_personalnummer() in submit_ticket.
 
     title = generate_title(data.ticket_type, user, description)
     ticket_id = request.app.state.manager.create_ticket(
@@ -642,6 +602,56 @@ def get_ticket_lock(ticket_id: int, user: dict = Depends(get_current_user)):
     ))
 
 
+def _assign_onboarding_personalnummer(ticket_id: int) -> None:
+    """
+    Vergibt die Personalnummer anhand der aktuellen „Firma lt. Arbeitsvertrag"
+    (contract_company), sofern noch keine gesetzt ist. Wird beim Abschluss der
+    BackOffice-Phase aufgerufen. Wirft api_error, wenn kein Bereich hinterlegt
+    oder erschöpft ist (dann wird die Phase nicht weitergeschaltet).
+    """
+    ticket = database.get_ticket(ticket_id)
+    try:
+        desc_obj = json.loads(ticket.description or "{}")
+    except Exception:
+        desc_obj = {}
+    personal = desc_obj.get("personal") or {}
+    if str(personal.get("personal_number") or "").strip():
+        return  # bereits vergeben – nicht erneut
+
+    company = str(personal.get("contract_company") or "").strip()
+    if not company:
+        raise api_error(400, "PERSONALNUMMER_FAILED",
+                        "Bitte zuerst die „Firma lt. Arbeitsvertrag“ auswählen.")
+
+    from backend.database.personalnummer import (
+        db_assign_personalnummer_for_company,
+        PersonalnummerNotConfigured, PersonalnummerExhausted,
+    )
+    from backend.utils.config import config
+    try:
+        result = db_assign_personalnummer_for_company(
+            company, warn_remaining=config.PERSONALNUMMER_WARN_REMAINING,
+        )
+    except PersonalnummerExhausted as e:
+        raise api_error(409, "PERSONALNUMMER_FAILED", str(e))
+    except PersonalnummerNotConfigured as e:
+        raise api_error(400, "PERSONALNUMMER_FAILED", str(e))
+    except Exception:
+        logger.exception("Personalnummer-Vergabe fehlgeschlagen")
+        raise api_error(500, "PERSONALNUMMER_FAILED", "Personalnummer konnte nicht vergeben werden")
+
+    personal["personal_number"] = str(result["number"])
+    desc_obj["personal"] = personal
+    database.update_ticket(ticket_id=ticket_id, description=json.dumps(desc_obj, ensure_ascii=False))
+
+    if result.get("should_warn"):
+        try:
+            from backend.services.microsoft_mail import send_personalnummer_warning_mail
+            send_personalnummer_warning_mail(company, result["remaining"], result["pnr_to"])
+        except Exception:
+            logger.exception("Personalnummern-Warn-Mail fehlgeschlagen (Firma %s)", company)
+
+
 @router.post("/tickets/{ticket_id}/submit", response_model=DataResponse[TicketOut])
 async def submit_ticket(
     ticket_id: int,
@@ -670,6 +680,14 @@ async def submit_ticket(
     next_assignee_name = (body or {}).get("assignee_name")
 
     completed_key = current_phase["key"]
+
+    # Personalnummer erst beim Abschluss des BackOffice vergeben (endgültige
+    # „Firma lt. Arbeitsvertrag"). Schlägt es fehl (kein Bereich / erschöpft),
+    # wird NICHT weitergegeben (advance_phase folgt erst danach).
+    tt = ticket.ticket_type.value if hasattr(ticket.ticket_type, "value") else ticket.ticket_type
+    if tt == TicketType.zugang_beantragen.value and completed_key == "backoffice":
+        _assign_onboarding_personalnummer(ticket_id)
+
     updated_workflow = advance_phase(ticket_id)
 
     phases = updated_workflow.get("phases", [])
