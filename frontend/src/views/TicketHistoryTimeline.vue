@@ -189,6 +189,8 @@ function descriptionDiff(
   const result: { key: string; label: string; oldVal: any; newVal: any }[] = []
 
   for (const key of allKeys) {
+    // Interne Meta-Felder (mit '_' beginnend, z.B. _next_assignee) nicht anzeigen.
+    if (key.startsWith('_')) continue
     // ID-Felder (z.B. supervisor_hr_id) nicht anzeigen – die rohen GUIDs sind
     // nichtssagend; die lesbare Änderung steht im jeweiligen *_name-Feld.
     const seg = key.split('.').pop() ?? key

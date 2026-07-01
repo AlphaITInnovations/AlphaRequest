@@ -344,10 +344,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         form.priority    = t.priority as TicketPriority
         form.comment     = t.comment ?? ''
         form.assignee    = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
-        // BackOffice wählt den nächsten Bearbeiter frisch → Feld leer lassen.
+        // BackOffice: gewählten nächsten Bearbeiter aus dem Entwurf (_next_assignee)
+        // wiederherstellen – so bleibt er auch nach „Speichern und später weiter" erhalten.
         // Sonst (Bearbeitung) den bereits Zuständigen anzeigen.
         form.accountable = stage.value === 'backoffice'
-          ? null
+          ? (desc._next_assignee ? { id: desc._next_assignee.id, name: desc._next_assignee.name } : null)
           : (t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null)
 
         // Mark signature title as manually edited if it differs from personal title
@@ -374,11 +375,18 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       personal.department_other = ''
     }
 
-    return JSON.stringify({
+    const desc: Record<string, any> = {
       personal,
       it: form.it,
       fuhrpark: form.fuhrpark,
-    })
+    }
+    // BackOffice: gewählten nächsten Bearbeiter als Entwurf sichern (mit '_' als
+    // interne Meta-Angabe gekennzeichnet → wird im Verlauf/Panel ausgeblendet),
+    // damit er beim „Speichern und später weiterbearbeiten" nicht verloren geht.
+    if (stage.value === 'backoffice' && form.accountable) {
+      desc._next_assignee = { id: form.accountable.id, name: form.accountable.name }
+    }
+    return JSON.stringify(desc)
   }
 
   const pendingConfirm  = ref(false)
