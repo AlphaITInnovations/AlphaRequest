@@ -7,7 +7,10 @@ from starlette.status import HTTP_302_FOUND
 from backend.core.dependencies import get_current_user, check_session_only
 from backend.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS
 from backend.database.users import (
-    upsert_user, get_user_permissions, get_user, set_user_role, ROLE_ADMIN, ROLE_NONE,
+    upsert_user, get_user_permissions, get_user, set_group_admin, revoke_group_admin,
+)
+from backend.services.admin_sync import (
+    decide_group_admin_action, ACTION_PROMOTE, ACTION_REVOKE,
 )
 from backend.metrics.auth_metrics import (
     record_login_attempt, record_login_success, record_logout,
@@ -146,8 +149,6 @@ async def auth_callback(request: Request):
 
         admin_group_configured = bool(config.ADMIN_GROUP_ID)
         is_in_admin_group = admin_group_configured and config.ADMIN_GROUP_ID in user_groups
-        # Beim Login nur befördern; das Degradieren passiert unten gezielt.
-        initial_role = ROLE_ADMIN if is_in_admin_group else None
 
         logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
@@ -165,23 +166,33 @@ async def auth_callback(request: Request):
             "groups":      id_claims.get("groups", []) or [],
         }
 
-        # User anlegen / last_login aktualisieren; Admin-Rolle ggf. befördern
+        # User anlegen / last_login aktualisieren (Rolle wird separat synchronisiert)
         db_user = upsert_user(
             microsoft_id=user_payload["id"],
             display_name=user_payload["displayName"] or "",
             email=user_payload["email"] or "",
-            role=initial_role,
         )
 
-        # Admin-Demotion: Wer die Admin-Rolle hat, aber (laut maßgeblichem
-        # groups-Claim) NICHT mehr in der Admin-Gruppe ist, verliert Admin.
-        # Nur die Admin-Rolle wird angefasst – manuell vergebene viewer/manager
-        # bleiben unberührt. Voraussetzung: ADMIN_GROUP_ID gesetzt und Claim da.
-        if (admin_group_configured and groups_authoritative
-                and not is_in_admin_group and db_user.role == ROLE_ADMIN):
-            logger.info("Admin-Rolle entzogen (nicht mehr in AAD-Admin-Gruppe): %s",
-                        user_payload["id"])
-            db_user = set_user_role(user_payload["id"], ROLE_NONE)
+        # Admin-Rolle mit der AD-Gruppe abgleichen: gruppen-basierte Admins werden
+        # bei Austritt entzogen; manuell vergebene Rollen bleiben unberührt
+        # (siehe services.admin_sync). Defensiv – ein Fehler darf den Login nicht
+        # blockieren.
+        action = decide_group_admin_action(
+            admin_group_configured=admin_group_configured,
+            groups_authoritative=groups_authoritative,
+            is_in_admin_group=is_in_admin_group,
+            current_role=db_user.role,
+            admin_via_group=db_user.admin_via_group,
+        )
+        try:
+            if action == ACTION_PROMOTE:
+                db_user = set_group_admin(user_payload["id"]) or db_user
+            elif action == ACTION_REVOKE:
+                logger.info("Admin-Rolle entzogen (nicht mehr in AAD-Admin-Gruppe): %s",
+                            user_payload["id"])
+                db_user = revoke_group_admin(user_payload["id"]) or db_user
+        except Exception:
+            logger.exception("Admin-Gruppen-Sync fehlgeschlagen für %s", user_payload["id"])
 
         # Permissions in die Session schreiben
         user_payload["permissions"] = db_user.permissions
