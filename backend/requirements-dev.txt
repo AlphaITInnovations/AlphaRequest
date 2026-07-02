@@ -1,0 +1,3 @@
+# Test-/Entwicklungsabhängigkeiten (nicht im Prod-Image nötig)
+-r requirements.txt
+pytest>=8.0
