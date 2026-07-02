@@ -6,7 +6,9 @@ from starlette.status import HTTP_302_FOUND
 
 from backend.core.dependencies import get_current_user, check_session_only
 from backend.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS
-from backend.database.users import upsert_user, get_user_permissions, get_user, ROLE_ADMIN
+from backend.database.users import (
+    upsert_user, get_user_permissions, get_user, set_user_role, ROLE_ADMIN, ROLE_NONE,
+)
 from backend.metrics.auth_metrics import (
     record_login_attempt, record_login_success, record_logout,
 )
@@ -133,11 +135,20 @@ async def auth_callback(request: Request):
             logger.exception("Graph-Call fehlgeschlagen")
             infos = {}
 
-        # Admin-Rolle automatisch setzen wenn User in der konfigurierten AAD-Gruppe ist
-        is_in_admin_group = config.ADMIN_GROUP_ID in (id_claims.get("groups", []) or [])
+        # Die AAD-Admin-Gruppe ist maßgeblich für die Admin-Rolle.
+        # Wichtig: nur auswerten, wenn ADMIN_GROUP_ID konfiguriert ist und der
+        # groups-Claim tatsächlich geliefert wurde. Bei "groups overage" (User in
+        # sehr vielen Gruppen) fehlt der Claim – dann NICHT anfassen (fail-safe),
+        # sonst würde man Admins fälschlich degradieren.
+        raw_groups = id_claims.get("groups")
+        groups_authoritative = isinstance(raw_groups, list)  # kein Overage
+        user_groups = raw_groups if groups_authoritative else []
+
+        admin_group_configured = bool(config.ADMIN_GROUP_ID)
+        is_in_admin_group = admin_group_configured and config.ADMIN_GROUP_ID in user_groups
+        # Beim Login nur befördern; das Degradieren passiert unten gezielt.
         initial_role = ROLE_ADMIN if is_in_admin_group else None
 
-        user_groups = id_claims.get("groups", []) or []
         logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
         user_payload = {
@@ -154,13 +165,23 @@ async def auth_callback(request: Request):
             "groups":      id_claims.get("groups", []) or [],
         }
 
-        # User anlegen / last_login aktualisieren; Admin-Rolle ggf. erzwingen
+        # User anlegen / last_login aktualisieren; Admin-Rolle ggf. befördern
         db_user = upsert_user(
             microsoft_id=user_payload["id"],
             display_name=user_payload["displayName"] or "",
             email=user_payload["email"] or "",
             role=initial_role,
         )
+
+        # Admin-Demotion: Wer die Admin-Rolle hat, aber (laut maßgeblichem
+        # groups-Claim) NICHT mehr in der Admin-Gruppe ist, verliert Admin.
+        # Nur die Admin-Rolle wird angefasst – manuell vergebene viewer/manager
+        # bleiben unberührt. Voraussetzung: ADMIN_GROUP_ID gesetzt und Claim da.
+        if (admin_group_configured and groups_authoritative
+                and not is_in_admin_group and db_user.role == ROLE_ADMIN):
+            logger.info("Admin-Rolle entzogen (nicht mehr in AAD-Admin-Gruppe): %s",
+                        user_payload["id"])
+            db_user = set_user_role(user_payload["id"], ROLE_NONE)
 
         # Permissions in die Session schreiben
         user_payload["permissions"] = db_user.permissions

@@ -60,6 +60,21 @@ def create_app() -> FastAPI:
     setup_session(app)
     init_metrics(app, config.SESSION_TIMEOUT, app.state.manager)
 
+    @app.middleware("http")
+    async def _security_headers(request, call_next):
+        """Defensive Response-Header (Clickjacking/MIME-Sniffing/Referer-Leak).
+        Keine CSP – die müsste erst gegen die SPA getestet werden."""
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        # Verhindert, dass die (token-tragende) Freigabe-URL per Referer abfließt.
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if config.APP_ENV != "development":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains",
+            )
+        return response
+
     app.include_router(auth_v1.router)
     app.include_router(auth_v1.router, prefix="/api/v1")
     app.include_router(tickets_v1.router, prefix="/api/v1")
