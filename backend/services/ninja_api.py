@@ -280,7 +280,6 @@ def create_ticket(
         "subject": subject,
         "status": status,
     }
-    print(description)
     rendered, overflow_html = render_ticket_description(form_id, description)
     ticket["description"] = rendered
 

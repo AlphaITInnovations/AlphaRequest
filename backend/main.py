@@ -30,7 +30,21 @@ def get_ticket_type_dict():
     return {t.name: t.value for t in TicketType}
 
 
+def _assert_secure_config() -> None:
+    """In Produktion niemals mit dem Default-/zu kurzen SECRET_KEY starten.
+    Die Session ist ein signiertes Cookie, das die User-Identität trägt – ein
+    bekannter/kurzer Schlüssel erlaubt das Fälschen beliebiger Sessions."""
+    if config.APP_ENV == "development":
+        return
+    if config.SECRET_KEY in ("", "change-me-min-16-chars") or len(config.SECRET_KEY) < 16:
+        raise RuntimeError(
+            "Unsicherer SECRET_KEY: In Produktion muss SECRET_KEY gesetzt und "
+            ">= 16 Zeichen lang sein (nicht der Default)."
+        )
+
+
 def create_app() -> FastAPI:
+    _assert_secure_config()
     app = FastAPI(lifespan=lifespan)
     app.state = cast(State, app.state)
     app.state.manager = TicketService()
