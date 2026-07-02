@@ -153,29 +153,29 @@ def get_companies() -> List[str]:
     return [c["name"] for c in get_companies_full()]
 
 
-def set_companies_full(companies: List[dict]) -> None:
+def merge_companies(incoming: List[dict], existing: List[dict]) -> List[dict]:
     """
-    Firmen speichern. Der Laufzeit-Zähler (pnr_current) wird NIE aus dem Client
-    übernommen, sondern aus dem Bestand bewahrt (verhindert versehentliches
-    Zurücksetzen und damit doppelte Nummern). Wird der Bereich erweitert
-    (pnr_to erhöht), wird das Warn-Flag zurückgesetzt.
+    REINE Merge-Logik (kein DB-Zugriff → unit-testbar). Normalisiert `incoming`,
+    dedupliziert nach Name und bewahrt den Laufzeit-Zähler (pnr_current) aus
+    `existing` – der wird NIE aus dem Client übernommen (verhindert Zurücksetzen /
+    Doppelvergabe). Wird der Bereich erweitert (pnr_to erhöht), fällt das Warn-Flag
+    zurück. Firmen mit geteiltem Zähler verlieren eigenen Bereich/Zähler.
     """
-    existing = {c["name"]: c for c in get_companies_full()}
+    existing_by_name = {c["name"]: c for c in existing}
     out: List[dict] = []
     seen = set()
-    for item in companies:
+    for item in incoming:
         c = normalize_company(item)
         if not c["name"] or c["name"] in seen:
             continue
         seen.add(c["name"])
         if c["pnr_shared_with"]:
-            # Teilt den Zähler einer anderen Firma → kein eigener Bereich/Zähler.
             c["pnr_from"] = None
             c["pnr_to"] = None
             c["pnr_current"] = None
             c["pnr_warned"] = False
         else:
-            prev = existing.get(c["name"])
+            prev = existing_by_name.get(c["name"])
             if prev:
                 c["pnr_current"] = prev["pnr_current"]
                 extended = c["pnr_to"] is not None and (
@@ -186,7 +186,12 @@ def set_companies_full(companies: List[dict]) -> None:
                 c["pnr_current"] = None
                 c["pnr_warned"] = False
         out.append(c)
-    settings_set("COMPANIES", out)
+    return out
+
+
+def set_companies_full(companies: List[dict]) -> None:
+    """Firmen speichern (dünne DB-Hülle um merge_companies)."""
+    settings_set("COMPANIES", merge_companies(companies, get_companies_full()))
 
 
 def set_companies(companies: List[str]) -> None:
