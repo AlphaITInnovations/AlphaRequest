@@ -37,7 +37,7 @@ sys.path.insert(0, os.getcwd())
 
 from backend.database.connection import get_connection
 from backend.database.groups import get_groups
-from backend.services.phase_definitions import TICKET_PHASES, PhaseType
+from backend.services.phase_definitions import PhaseType
 from backend.services.workflow_state import build_workflow
 from backend.models.models import TicketType
 

@@ -10,12 +10,11 @@ import mimetypes
 import os
 
 import requests
-from fastapi import Request, Path
+from fastapi import Request
 
 from backend.database.groups import get_groups
 from backend.models.models import TicketPriority, TicketType, Ticket
 from backend.services.microsoft_auth import acquire_app_token
-from backend.utils.config import Config
 from backend.utils.logger import logger
 from backend.utils.mail_templates import render_corporate_email
 from backend.utils.config import config

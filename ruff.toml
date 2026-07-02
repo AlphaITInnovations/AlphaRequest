@@ -1,0 +1,8 @@
+# Ruff-Konfiguration – bewusst high-signal & low-noise.
+# Fokus: echte Fehlerklassen (Syntax, ungenutzte/undefinierte Namen, Redefinitionen)
+# statt Stil-Meckerei. Kann später um z.B. "B" (bugbear) oder "I" (imports) erweitert werden.
+line-length = 120
+extend-exclude = [".venv", "**/_archive/**", "**/_old_backup/**"]
+
+[lint]
+select = ["E9", "F"]

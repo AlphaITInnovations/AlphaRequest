@@ -183,7 +183,7 @@ async def auth_callback(request: Request):
 
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
 
-    except Exception as e:
+    except Exception:
         logger.exception("Login fehlgeschlagen")
         return RedirectResponse(
             f"{config.FRONTEND_URL}/login?error=login_failed",
@@ -195,7 +195,6 @@ async def auth_callback(request: Request):
 
 @router.get("/logout", include_in_schema=False)
 async def logout(request: Request):
-    user_email = request.session.get("user", {}).get("email")
     sid = request.session.get("sid")
     if sid:
         TOKENS.delete(sid)

@@ -1,10 +1,8 @@
 from __future__ import annotations
-import json
 from typing import List, Optional, Dict, Any
 
 from backend.utils.logger import logger
 from backend.models.models import Ticket, RequestStatus, TicketPriority, TicketType
-from backend.models import models
 from backend.database import tickets as db
 
 class TicketService:

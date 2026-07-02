@@ -7,13 +7,11 @@ Wenn ein User Mitglied einer berechtigten AD-Gruppe ist, darf er den
 Tickettyp ebenfalls erstellen.
 """
 
-import json
 from backend.database.users import (
     list_users,
     add_extra_permission,
     remove_extra_permission,
     get_user,
-    set_extra_permissions,
     upsert_user,
 )
 from backend.database.ticket_group_permissions import (

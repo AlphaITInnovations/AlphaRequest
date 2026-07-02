@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from backend.core.dependencies import get_current_user
 from backend.database.settings import get_companies, set_companies

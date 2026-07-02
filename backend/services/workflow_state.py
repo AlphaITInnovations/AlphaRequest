@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from typing import Optional
 
 from backend.models.models import TicketType, RequestStatus, Ticket

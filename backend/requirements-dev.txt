@@ -1,3 +1,4 @@
 # Test-/Entwicklungsabhängigkeiten (nicht im Prod-Image nötig)
 -r requirements.txt
 pytest>=8.0
+ruff>=0.6

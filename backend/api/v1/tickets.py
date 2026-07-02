@@ -1,13 +1,12 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Request, Depends, Query, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Request, Depends, Query
 from typing import Optional
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
 from backend.models.models import RequestStatus, TicketType
-from backend.services.ticket_history import add_history_event, add_field_change_events
+from backend.services.ticket_history import add_history_event
 from backend.services.microsoft_graph import get_cached_user_mail
 from backend.services.microsoft_mail import send_newrequest_mail, send_mail_to_all_fachabteilung
 from backend.services.ticket_permissions import can_user_create_ticket
@@ -26,7 +25,6 @@ from backend.services.workflow_state import (
 from backend.utils.ticket_labels import TICKET_LABELS
 from backend.utils.logger import logger
 from backend.metrics.ticket_metrics import tickets_created_total
-from datetime import datetime
 from zoneinfo import ZoneInfo
 router = APIRouter()
 
@@ -315,7 +313,7 @@ async def create_ticket(
     # Zuständigkeit der ersten Phase (assign_group/Freigabe/Fachabteilungen) kommen
     # ohne Assignee aus.
     try:
-        desc_obj = json.loads(data.description)
+        json.loads(data.description)   # nur Validierung: muss gültiges JSON sein
     except Exception:
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
                         "description muss gültiges JSON sein")
@@ -889,7 +887,7 @@ def override_responsibility(
     werden die Fachabteilungen separat verwaltet.
     """
     _require_admin(user)
-    ticket = _get_ticket_or_404(ticket_id)
+    _get_ticket_or_404(ticket_id)   # 404, falls es das Ticket nicht gibt
 
     from backend.services.workflow_state import (
         get_workflow_state, set_phase_responsibility, PhaseType as WfPhaseType,
@@ -985,7 +983,7 @@ async def set_department_status(
     user: dict = Depends(get_current_user),
 ):
     from backend.services.workflow_state import (
-        user_can_complete_department, set_department_status, can_archive_ticket,
+        user_can_complete_department, set_department_status,
     )
     from backend.database.groups import get_group_name_from_id
 

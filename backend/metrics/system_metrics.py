@@ -1,5 +1,4 @@
 import threading
-import os
 import time
 
 from prometheus_client import Gauge

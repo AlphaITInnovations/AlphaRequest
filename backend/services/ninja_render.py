@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import html
-import json
 import re
 from datetime import datetime
-from typing import Optional, Tuple, Dict, Any, Iterable
+from typing import Optional, Dict, Any, Iterable
 
 # =========================================
 # Öffentliche API dieser Datei
