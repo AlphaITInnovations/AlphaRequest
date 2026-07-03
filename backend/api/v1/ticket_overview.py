@@ -6,9 +6,8 @@ from pydantic import BaseModel
 
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
-from backend.models.models import RequestStatus
 from backend.schemas.responses import DataResponse, ListResponse, Meta
-from backend.services.ticket_history import get_ticket_history, add_history_event
+from backend.services.ticket_history import get_ticket_history
 from backend.services.workflow_state import responsibility_label
 
 router = APIRouter()
@@ -97,18 +96,6 @@ def _assert_overview_detail_access(user: dict, ticket) -> None:
     raise HTTPException(403, "Kein Zugriff auf dieses Ticket")
 
 
-def _require_manage(user: dict) -> None:
-    """Nur manage (und admin, da admin ⊇ manage) darf schreiben."""
-    if "manage" not in user.get("permissions", []):
-        raise HTTPException(403, "Keine Berechtigung zum Bearbeiten")
-
-
-def _require_admin(user: dict) -> None:
-    """Nur Admins dürfen archivieren."""
-    if "admin" not in user.get("permissions", []):
-        raise HTTPException(403, "Nur Admins dürfen Tickets archivieren")
-
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _fmt_dt(val) -> str:
@@ -168,42 +155,6 @@ def list_overview_tickets(
     return ListResponse(
         data=items,
         meta=Meta(total=total, limit=page_size, offset=offset),
-    )
-
-
-@router.delete("/overview/tickets/{ticket_id}", status_code=204)
-def delete_overview_ticket(
-    ticket_id: int,
-    user: dict = Depends(get_current_user),
-):
-    _require_view(user)
-    _require_manage(user)
-    if not database.delete_ticket(ticket_id):
-        raise HTTPException(404, "Ticket nicht gefunden")
-
-
-@router.post("/overview/tickets/{ticket_id}/archive", status_code=204)
-def archive_overview_ticket(
-    ticket_id: int,
-    user: dict = Depends(get_current_user),
-):
-    """Hart-Archivieren aus der Übersicht – nur für Admins."""
-    _require_view(user)
-    _require_admin(user)
-    ticket = database.get_ticket(ticket_id)
-    if not ticket:
-        raise HTTPException(404, "Ticket nicht gefunden")
-    if ticket.status == RequestStatus.archived:
-        raise HTTPException(400, "Ticket ist bereits archiviert")
-
-    old_status = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
-    database.update_ticket(ticket_id, status=RequestStatus.archived.value)
-    add_history_event(
-        ticket_id,
-        actor_id=user["id"],
-        actor_name=user["displayName"],
-        action="ticket_archived_manual",
-        details={"field": "status", "old_value": old_status, "new_value": RequestStatus.archived.value},
     )
 
 
