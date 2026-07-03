@@ -54,6 +54,17 @@ onMounted(async () => {
         <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">Wähle den passenden Auftragstyp aus.</p>
       </div>
 
+      <!-- Info: Was ist ein Prozess-Ticket? -->
+      <div class="flex items-start gap-3 rounded-2xl border border-[#3EAAB8]/25 bg-[#3EAAB8]/[0.06] p-4">
+        <span class="text-lg leading-none mt-0.5">ℹ️</span>
+        <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+          <span class="font-semibold text-gray-900 dark:text-white">Was ist ein Prozess-Ticket?</span>
+          Ein Ticket mit einem standardisierten Ablauf für wiederkehrende Aufgaben – die
+          nötigen Schritte (Antrag, Freigaben, Durchführung durch die zuständigen Fachabteilungen)
+          sind fest vorgegeben, sodass nichts vergessen wird.
+        </p>
+      </div>
+
       <!-- Suche -->
       <div class="relative">
         <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
