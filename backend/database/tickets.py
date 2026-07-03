@@ -256,8 +256,13 @@ def update_ticket_metadata(
 
 
 def delete_ticket(ticket_id: int) -> bool:
+    """Hard-Delete inkl. Cleanup abhängiger Zeilen (Beobachter + Edit-Locks),
+    damit keine Waisen zurückbleiben. Alles in einer Transaktion.
+    (Die Historie liegt in der tickets-Zeile und wird mitgelöscht.)"""
     conn = get_connection()
     try:
+        _exec(conn, "DELETE FROM ticket_watchers WHERE ticket_id=%s", (ticket_id,))
+        _exec(conn, "DELETE FROM ticket_locks WHERE ticket_id=%s", (ticket_id,))
         cur = _exec(conn, f"DELETE FROM {TICKET_TABLE} WHERE id=%s", (ticket_id,))
         affected = cur.rowcount
         conn.commit()

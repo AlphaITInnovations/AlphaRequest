@@ -207,17 +207,9 @@ def archive_overview_ticket(
     )
 
 
-@router.get("/overview/tickets/{ticket_id}", response_model=DataResponse[TicketOverviewDetail])
-def get_overview_ticket(
-    ticket_id: int,
-    user: dict = Depends(get_current_user),
-):
-    ticket = database.get_ticket(ticket_id)
-    if not ticket:
-        raise HTTPException(404, "Ticket nicht gefunden")
-
-    _assert_overview_detail_access(user, ticket)
-
+def build_overview_detail(ticket) -> TicketOverviewDetail:
+    """Baut das (read-only) Detail-Objekt eines Tickets. Wird sowohl vom normalen
+    Overview-Endpunkt als auch vom Admin-Detail (tickets.py) genutzt."""
     try:
         description = json.loads(ticket.description or "{}")
     except Exception:
@@ -246,7 +238,7 @@ def get_overview_ticket(
     from backend.services.workflow_state import primary_responsibility
     resp = primary_responsibility(ticket)
 
-    raw_history = get_ticket_history(ticket_id)
+    raw_history = get_ticket_history(ticket.id)
     history = []
     for e in raw_history:
         actor_raw = e.get("actor", {})
@@ -266,7 +258,7 @@ def get_overview_ticket(
         ))
 
     from backend.database.ticket_locks import get_active_lock
-    active_lock = get_active_lock(ticket_id)
+    active_lock = get_active_lock(ticket.id)
     lock = LockInfo(
         locked=True,
         holder_id=active_lock["holder_id"],
@@ -274,7 +266,7 @@ def get_overview_ticket(
         age_seconds=active_lock["age_seconds"],
     ) if active_lock else LockInfo()
 
-    return DataResponse(data=TicketOverviewDetail(
+    return TicketOverviewDetail(
         id=ticket.id,
         title=ticket.title,
         type_key=ticket.ticket_type if isinstance(ticket.ticket_type, str) else ticket.ticket_type.value,
@@ -291,4 +283,17 @@ def get_overview_ticket(
         phase=_current_phase_label(workflow),
         phases=workflow.get("phases", []),
         lock=lock,
-    ))
+    )
+
+
+@router.get("/overview/tickets/{ticket_id}", response_model=DataResponse[TicketOverviewDetail])
+def get_overview_ticket(
+    ticket_id: int,
+    user: dict = Depends(get_current_user),
+):
+    ticket = database.get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(404, "Ticket nicht gefunden")
+
+    _assert_overview_detail_access(user, ticket)
+    return DataResponse(data=build_overview_detail(ticket))
