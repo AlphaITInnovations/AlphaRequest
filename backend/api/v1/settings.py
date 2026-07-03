@@ -7,7 +7,7 @@ from typing import Optional
 from backend.core.dependencies import get_current_user
 from backend.database.groups import get_groups, save_groups
 from backend.database.settings import (
-    get_companies, set_companies, get_companies_full, set_companies_full,
+    get_companies_full, set_companies_full,
 )
 from backend.database.users import (
     list_users, set_user_role, get_user,

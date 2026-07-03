@@ -1,12 +1,10 @@
 import asyncio
-import threading
 import time
 from contextlib import asynccontextmanager
 from backend.utils.config import config
-from backend.services.microsoft_graph import list_all_users_appcontext, list_all_users_with_e3_license, list_all_groups
+from backend.services.microsoft_graph import list_all_users_with_e3_license, list_all_groups
 from backend.services.microsoft_auth import acquire_app_token
 from backend.utils.logger import logger
-from backend.services import ninja_sync
 from backend.database.ticket_group_permissions import ensure_table as ensure_group_perms_table
 from backend.database.ticket_locks import ensure_table as ensure_ticket_locks_table
 
@@ -45,9 +43,6 @@ async def sync_groups_into_cache(app):
 
 @asynccontextmanager
 async def lifespan(app):
-
-    #thread = threading.Thread(target=ninja_sync.start_polling, daemon=True)
-    #thread.start()
 
     app.state.user_cache = []
     app.state.user_cache_timestamp = 0

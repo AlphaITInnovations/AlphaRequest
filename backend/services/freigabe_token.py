@@ -14,8 +14,9 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from backend.utils.config import config
 
 _SALT = "freigabe-v1"
-# Gültigkeit des Links (Sekunden) – großzügig, da die Freigabe Tage dauern kann.
-MAX_AGE_SECONDS = 30 * 24 * 60 * 60  # 30 Tage
+# Gültigkeit des Links (Sekunden) – 1 Woche. Begrenzt das Zeitfenster, in dem ein
+# abgefangener/weitergeleiteter Link missbraucht werden könnte.
+MAX_AGE_SECONDS = 7 * 24 * 60 * 60  # 7 Tage
 
 VALID_ACTIONS = ("approve", "reject")
 

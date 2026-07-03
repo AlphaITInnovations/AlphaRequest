@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Iterable, List
 
 from backend.database.settings import settings_get, settings_set
 

@@ -71,7 +71,9 @@ def setup_session(app):
         secret_key=config.SECRET_KEY,
         session_cookie="app_session",
         same_site="lax",
-        https_only=config.HTTPS,
+        # Secure-Flag außerhalb der lokalen Entwicklung immer setzen (auch hinter
+        # TLS-terminierendem Proxy, wo HTTPS evtl. nicht als Env gesetzt ist).
+        https_only=config.HTTPS or config.APP_ENV != "development",
         max_age=config.SESSION_TIMEOUT,
         path="/",
     )

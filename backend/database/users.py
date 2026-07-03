@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from backend.database.connection import (
@@ -37,10 +37,16 @@ CREATE TABLE IF NOT EXISTS app_users (
     email              VARCHAR(255) NOT NULL,
     role               VARCHAR(32)  NOT NULL DEFAULT 'none',
     extra_permissions  LONGTEXT     NOT NULL DEFAULT '[]',
+    admin_via_group    TINYINT(1)   NOT NULL DEFAULT 0,
     created_at         VARCHAR(64)  NOT NULL,
     last_login         VARCHAR(64)  NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
+
+# Idempotente Nachrüstung der Spalte für bestehende DBs (in init_db aufgerufen).
+USERS_MIGRATIONS = [
+    "ALTER TABLE app_users ADD COLUMN IF NOT EXISTS admin_via_group TINYINT(1) NOT NULL DEFAULT 0",
+]
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +59,7 @@ class AppUser:
     extra_permissions: List[str]
     created_at:        str
     last_login:        str
+    admin_via_group:   bool = False
 
     @classmethod
     def from_row(cls, row: dict) -> "AppUser":
@@ -69,6 +76,7 @@ class AppUser:
             extra_permissions=parsed_extra if isinstance(parsed_extra, list) else [],
             created_at=row["created_at"],
             last_login=row["last_login"],
+            admin_via_group=bool(row.get("admin_via_group", 0)),
         )
 
     @property
@@ -87,7 +95,7 @@ class AppUser:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _now() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -145,9 +153,38 @@ def set_user_role(microsoft_id: str, role: str) -> AppUser:
         raise ValueError(f"Ungültige Rolle: {role!r}. Erlaubt: {VALID_ROLES}")
     conn = get_connection()
     try:
+        # Manuelle Rollenvergabe → als NICHT gruppen-basiert markieren, damit ein
+        # so gesetzter Admin beim Login nicht automatisch entzogen wird.
         _exec(conn,
-            "UPDATE app_users SET role = %s WHERE microsoft_id = %s",
+            "UPDATE app_users SET role = %s, admin_via_group = 0 WHERE microsoft_id = %s",
             (role, microsoft_id))
+        conn.commit()
+    finally:
+        conn.close()
+    return get_user(microsoft_id)
+
+
+def set_group_admin(microsoft_id: str) -> Optional[AppUser]:
+    """Setzt/bestätigt die Admin-Rolle als gruppen-basiert (AD-Admin-Gruppe)."""
+    conn = get_connection()
+    try:
+        _exec(conn,
+            "UPDATE app_users SET role = %s, admin_via_group = 1 WHERE microsoft_id = %s",
+            (ROLE_ADMIN, microsoft_id))
+        conn.commit()
+    finally:
+        conn.close()
+    return get_user(microsoft_id)
+
+
+def revoke_group_admin(microsoft_id: str) -> Optional[AppUser]:
+    """Entzieht die Admin-Rolle NUR, wenn sie gruppen-basiert war."""
+    conn = get_connection()
+    try:
+        _exec(conn,
+            "UPDATE app_users SET role = %s, admin_via_group = 0 "
+            "WHERE microsoft_id = %s AND role = %s AND admin_via_group = 1",
+            (ROLE_NONE, microsoft_id, ROLE_ADMIN))
         conn.commit()
     finally:
         conn.close()

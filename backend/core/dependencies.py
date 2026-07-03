@@ -26,7 +26,9 @@ def get_current_user(request: Request) -> Dict:
     except Exception:
         cookie_len = -1
 
-    logger.info(
+    # DEBUG statt INFO: sid ist der Schlüssel zum serverseitigen Token-Store und
+    # soll nicht bei jedem Request in die regulären Logs geschrieben werden.
+    logger.debug(
         "session_keys=%s sid=%s last=%s now=%s cookie_len=%s",
         list(session.keys()), session.get("sid"), last_activity_raw, now, cookie_len,
     )

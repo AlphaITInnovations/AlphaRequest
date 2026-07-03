@@ -6,7 +6,12 @@ from starlette.status import HTTP_302_FOUND
 
 from backend.core.dependencies import get_current_user, check_session_only
 from backend.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS
-from backend.database.users import upsert_user, get_user_permissions, get_user, ROLE_ADMIN
+from backend.database.users import (
+    upsert_user, get_user_permissions, get_user, set_group_admin, revoke_group_admin,
+)
+from backend.services.admin_sync import (
+    decide_group_admin_action, ACTION_PROMOTE, ACTION_REVOKE,
+)
 from backend.metrics.auth_metrics import (
     record_login_attempt, record_login_success, record_logout,
 )
@@ -133,11 +138,18 @@ async def auth_callback(request: Request):
             logger.exception("Graph-Call fehlgeschlagen")
             infos = {}
 
-        # Admin-Rolle automatisch setzen wenn User in der konfigurierten AAD-Gruppe ist
-        is_in_admin_group = config.ADMIN_GROUP_ID in (id_claims.get("groups", []) or [])
-        initial_role = ROLE_ADMIN if is_in_admin_group else None
+        # Die AAD-Admin-Gruppe ist maßgeblich für die Admin-Rolle.
+        # Wichtig: nur auswerten, wenn ADMIN_GROUP_ID konfiguriert ist und der
+        # groups-Claim tatsächlich geliefert wurde. Bei "groups overage" (User in
+        # sehr vielen Gruppen) fehlt der Claim – dann NICHT anfassen (fail-safe),
+        # sonst würde man Admins fälschlich degradieren.
+        raw_groups = id_claims.get("groups")
+        groups_authoritative = isinstance(raw_groups, list)  # kein Overage
+        user_groups = raw_groups if groups_authoritative else []
 
-        user_groups = id_claims.get("groups", []) or []
+        admin_group_configured = bool(config.ADMIN_GROUP_ID)
+        is_in_admin_group = admin_group_configured and config.ADMIN_GROUP_ID in user_groups
+
         logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
         user_payload = {
@@ -154,13 +166,33 @@ async def auth_callback(request: Request):
             "groups":      id_claims.get("groups", []) or [],
         }
 
-        # User anlegen / last_login aktualisieren; Admin-Rolle ggf. erzwingen
+        # User anlegen / last_login aktualisieren (Rolle wird separat synchronisiert)
         db_user = upsert_user(
             microsoft_id=user_payload["id"],
             display_name=user_payload["displayName"] or "",
             email=user_payload["email"] or "",
-            role=initial_role,
         )
+
+        # Admin-Rolle mit der AD-Gruppe abgleichen: gruppen-basierte Admins werden
+        # bei Austritt entzogen; manuell vergebene Rollen bleiben unberührt
+        # (siehe services.admin_sync). Defensiv – ein Fehler darf den Login nicht
+        # blockieren.
+        action = decide_group_admin_action(
+            admin_group_configured=admin_group_configured,
+            groups_authoritative=groups_authoritative,
+            is_in_admin_group=is_in_admin_group,
+            current_role=db_user.role,
+            admin_via_group=db_user.admin_via_group,
+        )
+        try:
+            if action == ACTION_PROMOTE:
+                db_user = set_group_admin(user_payload["id"]) or db_user
+            elif action == ACTION_REVOKE:
+                logger.info("Admin-Rolle entzogen (nicht mehr in AAD-Admin-Gruppe): %s",
+                            user_payload["id"])
+                db_user = revoke_group_admin(user_payload["id"]) or db_user
+        except Exception:
+            logger.exception("Admin-Gruppen-Sync fehlgeschlagen für %s", user_payload["id"])
 
         # Permissions in die Session schreiben
         user_payload["permissions"] = db_user.permissions
@@ -183,7 +215,7 @@ async def auth_callback(request: Request):
 
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
 
-    except Exception as e:
+    except Exception:
         logger.exception("Login fehlgeschlagen")
         return RedirectResponse(
             f"{config.FRONTEND_URL}/login?error=login_failed",
@@ -195,7 +227,6 @@ async def auth_callback(request: Request):
 
 @router.get("/logout", include_in_schema=False)
 async def logout(request: Request):
-    user_email = request.session.get("user", {}).get("email")
     sid = request.session.get("sid")
     if sid:
         TOKENS.delete(sid)

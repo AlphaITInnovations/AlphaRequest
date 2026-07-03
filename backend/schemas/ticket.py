@@ -116,6 +116,28 @@ class ResponsibilityOverrideRequest(BaseModel):
     phase_index: Optional[int] = None
 
 
+class RawTicketUpdateRequest(BaseModel):
+    """Admin-Notfall: rohe Bearbeitung einzelner Ticket-Felder. Alle Felder
+    optional – nur gesetzte werden geändert. `description` ist ein roher
+    JSON-String und wird serverseitig auf Gültigkeit geprüft."""
+    description: Optional[str] = None
+    title: Optional[str] = None
+    comment: Optional[str] = None
+    priority: Optional[TicketPriority] = None
+    status: Optional[RequestStatus] = None
+
+
+class BulkTicketActionRequest(BaseModel):
+    """Sammelaktion auf mehrere Tickets."""
+    ids: List[int]
+    action: str                            # "archive" | "delete"
+
+
+class BulkActionResult(BaseModel):
+    ok: List[int] = []
+    failed: List[dict] = []                # [{id, error}]
+
+
 class LockState(BaseModel):
     """Zustand des Edit-Locks eines Tickets."""
     locked: bool = False               # aktiver Lock vorhanden?

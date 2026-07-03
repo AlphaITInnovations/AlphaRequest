@@ -100,7 +100,6 @@ async def list_all_users_appcontext(access_token: str) -> list[dict]:
             data = resp.json()
 
             for u in data.get("value", []):
-                print(u)
                 users.append({
                     "id": u.get("id"),
                     "displayName": u.get("displayName") or "",

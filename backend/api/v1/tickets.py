@@ -1,23 +1,25 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Request, Depends, Query, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Request, Depends, Query
 from typing import Optional
 from backend.core.dependencies import get_current_user
 from backend.database import tickets as database
 from backend.models.models import RequestStatus, TicketType
-from backend.services.ticket_history import add_history_event, add_field_change_events
+from backend.services.ticket_history import add_history_event
 from backend.services.microsoft_graph import get_cached_user_mail
 from backend.services.microsoft_mail import send_newrequest_mail, send_mail_to_all_fachabteilung
 from backend.services.ticket_permissions import can_user_create_ticket
 from backend.schemas.ticket import (
     TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut, BasisTicketCreateRequest,
     ResponsibilityOverrideRequest, LockState,
+    RawTicketUpdateRequest, BulkTicketActionRequest, BulkActionResult,
 )
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
 )
+from backend.api.v1.ticket_overview import build_overview_detail, TicketOverviewDetail
+from backend.services.bulk_actions import normalize_bulk_action, required_permission_for_bulk
 from backend.database.users import PERM_MANAGE, PERM_ADMIN
 from backend.services.workflow_state import (
     build_workflow, set_workflow_state, advance_phase,
@@ -26,7 +28,6 @@ from backend.services.workflow_state import (
 from backend.utils.ticket_labels import TICKET_LABELS
 from backend.utils.logger import logger
 from backend.metrics.ticket_metrics import tickets_created_total
-from datetime import datetime
 from zoneinfo import ZoneInfo
 router = APIRouter()
 
@@ -315,7 +316,7 @@ async def create_ticket(
     # Zuständigkeit der ersten Phase (assign_group/Freigabe/Fachabteilungen) kommen
     # ohne Assignee aus.
     try:
-        desc_obj = json.loads(data.description)
+        json.loads(data.description)   # nur Validierung: muss gültiges JSON sein
     except Exception:
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION,
                         "description muss gültiges JSON sein")
@@ -889,7 +890,7 @@ def override_responsibility(
     werden die Fachabteilungen separat verwaltet.
     """
     _require_admin(user)
-    ticket = _get_ticket_or_404(ticket_id)
+    _get_ticket_or_404(ticket_id)   # 404, falls es das Ticket nicht gibt
 
     from backend.services.workflow_state import (
         get_workflow_state, set_phase_responsibility, PhaseType as WfPhaseType,
@@ -960,6 +961,141 @@ def admin_force_unlock(ticket_id: int, user: dict = Depends(get_current_user)):
     )
 
 
+# ── Admin-Detail (inkl. rohem description-JSON) ────────────────────────────────
+
+class AdminTicketDetail(TicketOverviewDetail):
+    """Read-only-Detail wie im Overview + roher description-JSON-String für den
+    Raw-Editor."""
+    description_raw: str = ""
+
+
+@router.get("/admin/tickets/{ticket_id}/detail", response_model=DataResponse[AdminTicketDetail])
+def admin_ticket_detail(ticket_id: int, user: dict = Depends(get_current_user)):
+    _require_admin(user)
+    ticket = _get_ticket_or_404(ticket_id)
+    detail = build_overview_detail(ticket)
+    return DataResponse(data=AdminTicketDetail(
+        **detail.model_dump(),
+        description_raw=ticket.description or "",
+    ))
+
+
+@router.put("/admin/tickets/{ticket_id}/raw", response_model=DataResponse[TicketOut])
+def admin_raw_update(
+    ticket_id: int,
+    data: RawTicketUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Admin-Notfall: rohe Bearbeitung einzelner Ticket-Felder (Lock wird als
+    Admin umgangen). `description` muss gültiges JSON sein."""
+    _require_admin(user)
+    ticket = _get_ticket_or_404(ticket_id)
+
+    updates: dict = {}
+    changes: dict = {}
+
+    if data.description is not None:
+        try:
+            parsed_new = json.loads(data.description)
+        except Exception:
+            raise api_error(400, ErrorCode.INVALID_DESCRIPTION, "description ist kein gültiges JSON")
+        try:
+            parsed_old = json.loads(ticket.description or "{}")
+        except Exception:
+            parsed_old = {}
+        if parsed_new != parsed_old:
+            updates["description"] = json.dumps(parsed_new, ensure_ascii=False)
+            changes["description"] = {"old": parsed_old, "new": parsed_new}
+
+    if data.title is not None and data.title != ticket.title:
+        updates["title"] = data.title
+        changes["title"] = {"old": ticket.title, "new": data.title}
+
+    if data.comment is not None and data.comment != (ticket.comment or ""):
+        updates["comment"] = data.comment
+        changes["comment"] = {"old": ticket.comment or "", "new": data.comment}
+
+    if data.priority is not None:
+        old_p = ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority)
+        if data.priority.value != old_p:
+            updates["priority"] = data.priority.value
+            changes["priority"] = {"old": old_p, "new": data.priority.value}
+
+    if data.status is not None:
+        old_s = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
+        if data.status.value != old_s:
+            updates["status"] = data.status.value
+            changes["status"] = {"old": old_s, "new": data.status.value}
+
+    if not updates:
+        raise api_error(400, ErrorCode.INVALID_STATUS, "Keine Änderungen übermittelt")
+
+    database.update_ticket(ticket_id, **updates)
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="admin_raw_edited",
+        details={"changes": changes},
+    )
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+
+
+@router.delete("/admin/tickets/{ticket_id}", status_code=204)
+def admin_delete_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Admin-Notfall: Ticket endgültig löschen (inkl. Cleanup von Beobachtern/Locks)."""
+    _require_admin(user)
+    if not database.delete_ticket(ticket_id):
+        raise api_error(404, ErrorCode.TICKET_NOT_FOUND, "Ticket nicht gefunden")
+
+
+@router.post("/admin/tickets/bulk", response_model=DataResponse[BulkActionResult])
+def admin_bulk_action(
+    data: BulkTicketActionRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Sammelaktion auf mehrere Tickets: 'archive' (ab Manager) oder 'delete' (nur
+    Admin). Verarbeitet pro Ticket; Ergebnis mit ok/failed-Listen."""
+    action = normalize_bulk_action(data.action)
+    if action is None:
+        raise api_error(400, ErrorCode.INVALID_STATUS, f"Unbekannte Aktion: {data.action!r}")
+
+    # Rechte je Aktion durchsetzen.
+    if required_permission_for_bulk(action) == PERM_ADMIN:
+        _require_admin(user)
+    else:
+        _require_manage(user)
+
+    ok: list[int] = []
+    failed: list[dict] = []
+    for tid in data.ids:
+        try:
+            ticket = database.get_ticket(tid)
+            if not ticket:
+                failed.append({"id": tid, "error": "nicht gefunden"})
+                continue
+            if action == "archive":
+                if ticket.status == RequestStatus.archived:
+                    failed.append({"id": tid, "error": "bereits archiviert"})
+                    continue
+                old_status = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
+                database.update_ticket(tid, status=RequestStatus.archived.value)
+                add_history_event(
+                    tid, actor_id=user["id"], actor_name=user["displayName"],
+                    action="ticket_archived_manual",
+                    details={"field": "status", "old_value": old_status,
+                             "new_value": RequestStatus.archived.value, "bulk": True},
+                )
+            else:  # delete
+                database.delete_ticket(tid)
+            ok.append(tid)
+        except Exception:
+            logger.exception("Bulk-Aktion %s fehlgeschlagen für Ticket %s", action, tid)
+            failed.append({"id": tid, "error": "Fehler bei der Verarbeitung"})
+
+    return DataResponse(data=BulkActionResult(ok=ok, failed=failed))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DEPARTMENTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -985,7 +1121,7 @@ async def set_department_status(
     user: dict = Depends(get_current_user),
 ):
     from backend.services.workflow_state import (
-        user_can_complete_department, set_department_status, can_archive_ticket,
+        user_can_complete_department, set_department_status,
     )
     from backend.database.groups import get_group_name_from_id
 

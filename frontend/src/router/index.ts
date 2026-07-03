@@ -38,6 +38,13 @@ const router = createRouter({
       component: () => import('@/views/TicketOverviewDetailView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      // Admin-Detail mit Notfall-Aktionen (Zuständigkeit, Sperre, Archiv, Löschen,
+      // Raw-JSON). Nur für Admins; der Backend-Endpoint prüft ebenfalls.
+      path: '/admin/tickets/:id',
+      component: () => import('@/views/AdminTicketDetailView.vue'),
+      meta: { requiresAuth: true, requiresPermission: 'admin' },
+    },
 
     // ── Generic ticket routes (new) ────────────────────────────────────────────
     // /tickets/new/:type     → create a ticket of a given type
