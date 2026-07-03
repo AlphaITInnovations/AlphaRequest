@@ -100,8 +100,11 @@ def list_audit(
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
     q: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
 ) -> tuple[list[dict], int]:
-    """Gefilterte, paginierte Audit-Einträge (neueste zuerst) + Gesamtzahl."""
+    """Gefilterte, paginierte Audit-Einträge (neueste zuerst) + Gesamtzahl.
+    `since`/`until` akzeptieren 'YYYY-MM-DD' (Tag inklusive) oder volle Zeitstempel."""
     where: list[str] = []
     params: list = []
     if action:
@@ -115,6 +118,12 @@ def list_audit(
     if q:
         where.append("(summary LIKE %s OR details LIKE %s OR action LIKE %s)")
         params += [f"%{q}%", f"%{q}%", f"%{q}%"]
+    if since:
+        where.append("created_at >= %s"); params.append(since)
+    if until:
+        # Reines Datum → bis Tagesende inklusiv.
+        u = until + " 23:59:59" if len(until) == 10 else until
+        where.append("created_at <= %s"); params.append(u)
     clause = ("WHERE " + " AND ".join(where)) if where else ""
 
     conn = get_connection()

@@ -27,6 +27,8 @@ const fAction     = ref('')
 const fEntityType = ref('')
 const fActor      = ref('')
 const fSearch     = ref('')
+const fFrom       = ref('')   // Datum von (YYYY-MM-DD)
+const fTo         = ref('')   // Datum bis (inkl. ganzem Tag)
 const pageSize    = 25
 const offset      = ref(0)
 
@@ -77,6 +79,8 @@ async function load() {
         entity_type: fEntityType.value || undefined,
         actor: fActor.value || undefined,
         q: fSearch.value || undefined,
+        since: fFrom.value || undefined,
+        until: fTo.value || undefined,
       },
     })
     entries.value = data.data.entries
@@ -89,7 +93,7 @@ async function load() {
 
 // Filterwechsel → zurück auf Seite 1 (debounced für Textfelder).
 let t: ReturnType<typeof setTimeout> | null = null
-watch([fAction, fEntityType, fActor, fSearch], () => {
+watch([fAction, fEntityType, fActor, fSearch, fFrom, fTo], () => {
   if (t) clearTimeout(t)
   t = setTimeout(() => { offset.value = 0; load() }, 250)
 })
@@ -98,7 +102,10 @@ watch(offset, load)
 function prev() { if (offset.value > 0) offset.value -= pageSize }
 function next() { if (page.value < totalPages.value) offset.value += pageSize }
 function toggle(id: number) { expanded.value = expanded.value === id ? null : id }
-function resetFilters() { fAction.value = ''; fEntityType.value = ''; fActor.value = ''; fSearch.value = '' }
+function resetFilters() {
+  fAction.value = ''; fEntityType.value = ''; fActor.value = ''; fSearch.value = ''
+  fFrom.value = ''; fTo.value = ''
+}
 
 onMounted(load)
 </script>
@@ -114,8 +121,8 @@ onMounted(load)
     </div>
 
     <!-- Filter -->
-    <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto] gap-2 mb-4">
-      <input v-model="fSearch" placeholder="Suche (Zusammenfassung, Details…)" class="afi" />
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <input v-model="fSearch" placeholder="Suche (Zusammenfassung, Details…)" class="afi flex-1 min-w-[12rem]" />
       <select v-model="fAction" class="afi">
         <option value="">Alle Aktionen</option>
         <option v-for="a in actions" :key="a" :value="a">{{ actionLabel(a) }}</option>
@@ -129,6 +136,12 @@ onMounted(load)
         <option value="group">Gruppen</option>
       </select>
       <input v-model="fActor" placeholder="Person…" class="afi" />
+      <div class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+        <span>Von</span>
+        <input v-model="fFrom" type="date" class="afi" />
+        <span>bis</span>
+        <input v-model="fTo" type="date" class="afi" />
+      </div>
       <button @click="resetFilters"
               class="px-3 py-2 rounded-xl text-sm text-gray-500 dark:text-gray-400
                      border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition">

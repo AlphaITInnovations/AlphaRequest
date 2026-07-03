@@ -610,11 +610,13 @@ def get_audit_log(
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
     q: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
 ):
     require_admin(user)
     entries, total = list_audit(
         limit=limit, offset=offset, action=action, actor=actor,
-        entity_type=entity_type, entity_id=entity_id, q=q,
+        entity_type=entity_type, entity_id=entity_id, q=q, since=since, until=until,
     )
     return DataResponse(data=AuditListOut(
         entries=[AuditEntryOut(**e) for e in entries],
