@@ -150,7 +150,8 @@ async def auth_callback(request: Request):
         admin_group_configured = bool(config.ADMIN_GROUP_ID)
         is_in_admin_group = admin_group_configured and config.ADMIN_GROUP_ID in user_groups
 
-        logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
+        # Gruppen-GUIDs nur im DEBUG-Log (verraten Org-Struktur, nicht ins INFO-Log).
+        logger.debug("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
         user_payload = {
             "id":          id_claims.get("oid") or id_claims.get("sub"),
