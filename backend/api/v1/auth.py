@@ -133,6 +133,9 @@ async def auth_callback(request: Request):
 
 
         if not result or "access_token" not in result:
+            record_audit(action="login_failed", actor_type="system", actor_name="?",
+                         entity_type="auth", summary="Token konnte nicht bezogen werden",
+                         details={"reason": "token_error"}, ip=_client_ip(request))
             return RedirectResponse(
                 f"{config.FRONTEND_URL}/login?error=token_error",
                 status_code=HTTP_302_FOUND,
@@ -237,6 +240,9 @@ async def auth_callback(request: Request):
 
     except Exception:
         logger.exception("Login fehlgeschlagen")
+        record_audit(action="login_failed", actor_type="system", actor_name="?",
+                     entity_type="auth", summary="Login fehlgeschlagen",
+                     details={"reason": "exception"}, ip=_client_ip(request))
         return RedirectResponse(
             f"{config.FRONTEND_URL}/login?error=login_failed",
             status_code=HTTP_302_FOUND,

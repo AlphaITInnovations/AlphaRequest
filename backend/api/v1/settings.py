@@ -491,6 +491,7 @@ def update_group(
             g["distributions"] = _validate_emails(payload.distributions)
             g["hidden"]        = bool(payload.hidden)
             save_groups(groups)
+            _audit(user, "group_updated", entity_type="group", entity_id=group_id, summary=new_name)
             return DataResponse(data=_group_out(g))
     raise HTTPException(404, "Gruppe nicht gefunden")
 
@@ -530,6 +531,8 @@ def add_member(
             if payload.user_id not in g["members"]:
                 g["members"].append(payload.user_id)
             save_groups(groups)
+            _audit(user, "group_member_added", entity_type="group", entity_id=group_id,
+                   summary=g["name"], details={"user_id": payload.user_id})
             return DataResponse(data=_group_out(g))
     raise HTTPException(404, "Gruppe nicht gefunden")
 
@@ -548,6 +551,8 @@ def remove_member(
                 raise HTTPException(400, "User nicht in Gruppe")
             g["members"] = [m for m in g["members"] if m != user_id]
             save_groups(groups)
+            _audit(user, "group_member_removed", entity_type="group", entity_id=group_id,
+                   summary=g["name"], details={"user_id": user_id})
             return DataResponse(data=_group_out(g))
     raise HTTPException(404, "Gruppe nicht gefunden")
 

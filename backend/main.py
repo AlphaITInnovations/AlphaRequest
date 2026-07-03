@@ -73,6 +73,26 @@ def create_app() -> FastAPI:
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains",
             )
+
+        # Abgelehnte Admin-/Settings-Zugriffe (403) auditieren (Missbrauchsversuche).
+        if response.status_code == 403:
+            path = request.url.path
+            if "/admin/" in path or "/settings/" in path:
+                try:
+                    from backend.database.audit_log import record_audit
+                    u = (request.scope.get("session") or {}).get("user") or {}
+                    record_audit(
+                        action="access_denied",
+                        actor_id=u.get("id"),
+                        actor_name=u.get("displayName") or u.get("email") or "?",
+                        entity_type="auth",
+                        summary=f"{request.method} {path}",
+                        details={"method": request.method, "path": path},
+                        ip=request.client.host if request.client else None,
+                    )
+                except Exception:
+                    pass
+
         return response
 
     app.include_router(auth_v1.router)
