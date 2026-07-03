@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 from backend.database.connection import get_connection, _exec, _fetchall, _fetchone
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS {TICKET_TABLE} (
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def _select_tickets(

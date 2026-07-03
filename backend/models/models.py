@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 
@@ -135,7 +135,7 @@ class Ticket:
 
             #tags=parse_json(row.get("tags"), []),
 
-            created_at=parse_dt(row.get("created_at")) or datetime.utcnow(),
+            created_at=parse_dt(row.get("created_at")) or datetime.now(timezone.utc).replace(tzinfo=None),
             updated_at=parse_dt(row.get("updated_at")),
         )
 
