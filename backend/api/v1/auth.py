@@ -21,8 +21,16 @@ from backend.services.microsoft_auth import (
     initiate_auth_flow, acquire_token_by_auth_code,
 )
 from backend.services.microsoft_graph import get_user_profile
+from backend.database.audit_log import record_audit
 from backend.utils.config import config
 from backend.utils.logger import logger
+
+
+def _client_ip(request: Request) -> str | None:
+    try:
+        return request.client.host if request.client else None
+    except Exception:
+        return None
 
 router = APIRouter()
 
@@ -188,10 +196,18 @@ async def auth_callback(request: Request):
         try:
             if action == ACTION_PROMOTE:
                 db_user = set_group_admin(user_payload["id"]) or db_user
+                record_audit(action="admin_granted", actor_id=user_payload["id"],
+                             actor_name=user_payload["displayName"] or "", entity_type="user",
+                             entity_id=user_payload["id"], summary="Admin via AD-Gruppe",
+                             ip=_client_ip(request))
             elif action == ACTION_REVOKE:
                 logger.info("Admin-Rolle entzogen (nicht mehr in AAD-Admin-Gruppe): %s",
                             user_payload["id"])
                 db_user = revoke_group_admin(user_payload["id"]) or db_user
+                record_audit(action="admin_revoked", actor_id=user_payload["id"],
+                             actor_name=user_payload["displayName"] or "", entity_type="user",
+                             entity_id=user_payload["id"], summary="Nicht mehr in AD-Admin-Gruppe",
+                             ip=_client_ip(request))
         except Exception:
             logger.exception("Admin-Gruppen-Sync fehlgeschlagen für %s", user_payload["id"])
 
@@ -213,6 +229,9 @@ async def auth_callback(request: Request):
             })
 
         record_login_success(request)
+        record_audit(action="login", actor_id=user_payload["id"],
+                     actor_name=user_payload["displayName"] or "", entity_type="auth",
+                     entity_id=user_payload["id"], ip=_client_ip(request))
 
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
 
@@ -232,5 +251,8 @@ async def logout(request: Request):
     if sid:
         TOKENS.delete(sid)
     record_logout(request)
+    u = request.session.get("user") or {}
+    record_audit(action="logout", actor_id=u.get("id"), actor_name=u.get("displayName") or "",
+                 entity_type="auth", entity_id=u.get("id"), ip=_client_ip(request))
     request.session.clear()
     return RedirectResponse(f"{config.FRONTEND_URL}/login", status_code=HTTP_302_FOUND)

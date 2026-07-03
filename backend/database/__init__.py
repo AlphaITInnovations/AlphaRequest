@@ -3,6 +3,7 @@ from backend.database.tickets import DDL_TICKETS
 from backend.database.settings import DDL_SETTINGS
 from backend.database.users import USERS_DDL, USERS_MIGRATIONS
 from backend.database.ticket_watchers import TICKET_WATCHERS_DDL, backfill_owner_watchers
+from backend.database.audit_log import AUDIT_LOG_DDL
 from backend.utils.logger import logger
 
 
@@ -16,6 +17,7 @@ def init_db():
         for migration in USERS_MIGRATIONS:
             _exec(conn, migration)
         _exec(conn, TICKET_WATCHERS_DDL)
+        _exec(conn, AUDIT_LOG_DDL)
         conn.commit()
         logger.info("All tables ready")
     finally:

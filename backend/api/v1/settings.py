@@ -1,6 +1,6 @@
 import re
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel
 from typing import Optional
 
@@ -15,6 +15,7 @@ from backend.database.users import (
     VALID_ROLES, PERM_ADMIN,
 )
 from backend.models.models import TicketType
+from backend.database.audit_log import record_audit, list_audit, distinct_actions
 from backend.schemas.responses import DataResponse
 from backend.services.microsoft_mail import send_test_mail
 from backend.services.ticket_permissions import (
@@ -36,6 +37,16 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 def require_admin(user: dict) -> None:
     if PERM_ADMIN not in user.get("permissions", []):
         raise HTTPException(403, "Admin-Rechte erforderlich")
+
+
+def _audit(user: dict, action: str, **kw) -> None:
+    """Kurzform für record_audit mit ausgefülltem Actor (aktueller Admin)."""
+    record_audit(
+        action=action,
+        actor_id=user.get("id"),
+        actor_name=user.get("displayName") or user.get("email") or "",
+        **kw,
+    )
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -98,7 +109,10 @@ def update_user_role(
     require_admin(user)
     if payload.role not in VALID_ROLES:
         raise HTTPException(400, f"Ungültige Rolle. Erlaubt: {', '.join(VALID_ROLES)}")
-    return DataResponse(data=_user_out(set_user_role(microsoft_id, payload.role)))
+    result = _user_out(set_user_role(microsoft_id, payload.role))
+    _audit(user, "user_role_changed", entity_type="user", entity_id=microsoft_id,
+           summary=f"{result.display_name}: Rolle → {payload.role}", details={"role": payload.role})
+    return DataResponse(data=result)
 
 
 # ── User Permissions ──────────────────────────────────────────────────────────
@@ -125,6 +139,8 @@ def set_user_permissions(
     role_perms = set(u.permissions) - set(u.extra_permissions)
     new_extras = [p for p in payload.permissions if p not in role_perms]
     set_extra_permissions(microsoft_id, new_extras)
+    _audit(user, "user_permissions_set", entity_type="user", entity_id=microsoft_id,
+           summary=f"{u.display_name}: Rechte gesetzt", details={"permissions": new_extras})
     return DataResponse(data=_user_out(_get_user_or_404(microsoft_id)))
 
 
@@ -136,6 +152,8 @@ def add_user_permission(
 ):
     require_admin(user)
     _get_user_or_404(microsoft_id)
+    _audit(user, "user_permission_added", entity_type="user", entity_id=microsoft_id,
+           details={"permission": payload.permission})
     return DataResponse(data=_user_out(add_extra_permission(microsoft_id, payload.permission)))
 
 
@@ -147,6 +165,8 @@ def remove_user_permission(
 ):
     require_admin(user)
     _get_user_or_404(microsoft_id)
+    _audit(user, "user_permission_removed", entity_type="user", entity_id=microsoft_id,
+           details={"permission": payload.permission})
     return DataResponse(data=_user_out(remove_extra_permission(microsoft_id, payload.permission)))
 
 
@@ -269,6 +289,9 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
     except Exception as e:
         logger.exception("Failed to update companies: %s", e)
         raise HTTPException(500, "Fehler beim Speichern")
+    _audit(user, "companies_changed", entity_type="settings", entity_id="companies",
+           summary=f"{len(cleaned)} Firmen gespeichert",
+           details={"companies": [c["name"] for c in cleaned]})
     return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
 
 
@@ -332,6 +355,8 @@ def set_permissions(
         set_group_ticket_permissions(
             {k.value: v for k, v in payload.group_permissions.items()}
         )
+    _audit(user, "ticket_permissions_changed", entity_type="settings", entity_id="ticket_permissions",
+           summary="Ticket-Erstellrechte geändert")
     return get_permissions(user)
 
 
@@ -433,6 +458,7 @@ def create_group(payload: GroupCreate, user: dict = Depends(get_current_user)):
     }
     groups.append(new)
     save_groups(groups)
+    _audit(user, "group_created", entity_type="group", entity_id=new["id"], summary=name)
     return DataResponse(data=_group_out(new))
 
 
@@ -484,6 +510,7 @@ def delete_group(group_id: str, user: dict = Depends(get_current_user)):
             f"und kann nicht gelöscht werden.",
         )
     save_groups([g for g in groups if g["id"] != group_id])
+    _audit(user, "group_deleted", entity_type="group", entity_id=group_id, summary=target["name"])
 
 
 @router.post("/settings/groups/{group_id}/members", response_model=DataResponse[GroupOut])
@@ -544,6 +571,51 @@ def list_groups_public(user: dict = Depends(get_current_user)):
         for g in groups
         if not g.get("hidden", False)
     ])
+
+
+# ── Audit-Log ─────────────────────────────────────────────────────────────────
+
+class AuditEntryOut(BaseModel):
+    id: int
+    created_at: str
+    actor_id: Optional[str] = None
+    actor_name: Optional[str] = None
+    actor_type: str = "user"
+    action: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    summary: Optional[str] = None
+    details: dict = {}
+    ip: Optional[str] = None
+
+
+class AuditListOut(BaseModel):
+    entries: list[AuditEntryOut]
+    total: int
+    actions: list[str]   # vorkommende Aktionen (für den Filter)
+
+
+@router.get("/settings/audit-log", response_model=DataResponse[AuditListOut])
+def get_audit_log(
+    user: dict = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    action: Optional[str] = None,
+    actor: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    q: Optional[str] = None,
+):
+    require_admin(user)
+    entries, total = list_audit(
+        limit=limit, offset=offset, action=action, actor=actor,
+        entity_type=entity_type, entity_id=entity_id, q=q,
+    )
+    return DataResponse(data=AuditListOut(
+        entries=[AuditEntryOut(**e) for e in entries],
+        total=total,
+        actions=distinct_actions(),
+    ))
 
 
 # ── Test Mail ─────────────────────────────────────────────────────────────────
