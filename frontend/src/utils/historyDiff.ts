@@ -6,6 +6,8 @@ export const FIELD_LABEL: Record<string, string> = {
   description: 'Formular',
   assignee:    'Zuständig',
   accountable: 'Verantwortlich',
+  title:       'Titel',
+  status:      'Status',
 }
 
 // Deutsche Beschriftungen der Formularfelder (für die Verlaufs-Diffs).

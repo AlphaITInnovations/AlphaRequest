@@ -1003,8 +1003,9 @@ def admin_raw_update(
             parsed_old = json.loads(ticket.description or "{}")
         except Exception:
             parsed_old = {}
-        updates["description"] = json.dumps(parsed_new, ensure_ascii=False)
-        changes["description"] = {"old": parsed_old, "new": parsed_new}
+        if parsed_new != parsed_old:
+            updates["description"] = json.dumps(parsed_new, ensure_ascii=False)
+            changes["description"] = {"old": parsed_old, "new": parsed_new}
 
     if data.title is not None and data.title != ticket.title:
         updates["title"] = data.title

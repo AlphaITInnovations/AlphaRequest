@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { client } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
+import { ticketsApi } from '@/api/tickets'
 import AppLayout from '@/components/AppLayout.vue'
 
 const router = useRouter()
@@ -133,10 +134,24 @@ async function load() {
   }
 }
 
+// Öffnet das Ticket – Admins in die Admin-Detailansicht (mit Notfall-Aktionen),
+// alle anderen in die read-only Übersicht.
+function openTicket(id: number) {
+  router.push(auth.isAdmin ? `/admin/tickets/${id}` : `/tickets/overview/${id}`)
+}
+
+function reportBulk(res: { ok: number[]; failed: { id: number; error: string }[] }) {
+  if (res?.failed?.length) {
+    alert(`${res.ok.length} verarbeitet, ${res.failed.length} übersprungen:\n`
+      + res.failed.map(f => `#${f.id}: ${f.error}`).join('\n'))
+  }
+}
+
 async function deleteSelected() {
   if (!selected.value.length) return
-  if (!confirm(`${selected.value.length} Ticket(s) endgültig löschen?`)) return
-  await Promise.all(selected.value.map(id => client.delete(`/overview/tickets/${id}`)))
+  if (!confirm(`${selected.value.length} Ticket(s) endgültig löschen?\n\nDas kann NICHT rückgängig gemacht werden.`)) return
+  const { data } = await ticketsApi.bulk(selected.value, 'delete')
+  reportBulk(data.data)
   await load()
 }
 
@@ -144,7 +159,8 @@ async function archiveSelected() {
   const ids = selectedArchivable.value
   if (!ids.length) return
   if (!confirm(`${ids.length} Ticket(s) archivieren?`)) return
-  await Promise.all(ids.map(id => client.post(`/overview/tickets/${id}/archive`)))
+  const { data } = await ticketsApi.bulk(ids, 'archive')
+  reportBulk(data.data)
   await load()
 }
 
@@ -176,18 +192,23 @@ onMounted(load)
             {{ sorted.length }} von {{ tickets.length }} Tickets<span v-if="selected.length"> · {{ selected.length }} ausgewählt</span>
           </p>
         </div>
-        <!-- Aktionen: immer sichtbar, nur bei Auswahl aktiv -->
-        <div class="flex items-center gap-2">
-          <button v-if="auth.isAdmin" @click="archiveSelected" :disabled="selectedArchivable.length === 0"
+        <!-- Auswahl-Aktionen: erscheinen nur bei Auswahl (hält den Header aufgeräumt) -->
+        <div v-if="selected.length" class="flex items-center gap-2">
+          <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">{{ selected.length }} ausgewählt</span>
+          <button v-if="auth.canManage" @click="archiveSelected" :disabled="selectedArchivable.length === 0"
                   class="px-4 py-2 rounded-xl bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium
                          transition disabled:opacity-40 disabled:cursor-not-allowed"
                   title="Bereits archivierte Tickets werden übersprungen">
             Archivieren<span v-if="selectedArchivable.length"> ({{ selectedArchivable.length }})</span>
           </button>
-          <button v-if="auth.canManage" @click="deleteSelected" :disabled="selected.length === 0"
-                  class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium
-                         transition disabled:opacity-40 disabled:cursor-not-allowed">
-            Löschen<span v-if="selected.length"> ({{ selected.length }})</span>
+          <button v-if="auth.isAdmin" @click="deleteSelected"
+                  class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition">
+            Löschen ({{ selected.length }})
+          </button>
+          <button @click="selected = []"
+                  class="px-3 py-2 rounded-xl text-sm text-gray-500 dark:text-gray-400
+                         border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+            Auswahl aufheben
           </button>
         </div>
       </div>
@@ -254,7 +275,7 @@ onMounted(load)
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-white/[0.04]">
             <tr v-for="t in paged" :key="t.id"
-                @click="router.push(`/tickets/overview/${t.id}`)"
+                @click="openTicket(t.id)"
                 class="hover:bg-gray-50 dark:hover:bg-[#263040] transition cursor-pointer">
               <td v-if="auth.canManage" class="px-4 py-3.5 text-center" @click.stop>
                 <input type="checkbox" :checked="selected.includes(t.id)" @change="toggle(t.id)" class="rounded" />
@@ -286,7 +307,7 @@ onMounted(load)
                 </span>
               </td>
               <td class="px-4 py-3.5 text-right" @click.stop>
-                <button @click="router.push(`/tickets/overview/${t.id}`)"
+                <button @click="openTicket(t.id)"
                         class="px-3 py-1.5 rounded-xl bg-[#3EAAB8]/10 text-[#3EAAB8]
                                hover:bg-[#3EAAB8]/20 text-xs font-medium transition">
                   Details →

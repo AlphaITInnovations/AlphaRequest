@@ -23,6 +23,14 @@ export const ticketsApi = {
   setResponsibility: (id: number, assignee_id: string, assignee_name?: string, phase_index?: number) =>
     client.put<DataResponse<Ticket>>(`/admin/tickets/${id}/responsibility`, { assignee_id, assignee_name, phase_index }),
 
+  // ── Admin-Detail / Notfall-Werkzeuge ──
+  adminDetail: (id: number) => client.get<DataResponse<any>>(`/admin/tickets/${id}/detail`),
+  rawUpdate:   (id: number, payload: { description?: string; title?: string; comment?: string; priority?: string; status?: string }) =>
+    client.put<DataResponse<Ticket>>(`/admin/tickets/${id}/raw`, payload),
+  adminDelete: (id: number) => client.delete(`/admin/tickets/${id}`),
+  bulk:        (ids: number[], action: 'archive' | 'delete') =>
+    client.post<DataResponse<{ ok: number[]; failed: { id: number; error: string }[] }>>('/admin/tickets/bulk', { ids, action }),
+
   // ── Edit-Locks ──
   lock:          (id: number) => client.post<DataResponse<LockState>>(`/tickets/${id}/lock`),
   lockHeartbeat: (id: number) => client.post<DataResponse<LockState>>(`/tickets/${id}/lock/heartbeat`),

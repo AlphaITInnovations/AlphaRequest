@@ -36,6 +36,7 @@ const ACTION_META: Record<string, { label: string; icon: string; color: string }
   status_changed:           { label: 'Status geändert',              icon: '🔄', color: 'bg-purple-500' },
   department_status_changed:{ label: 'Fachabteilung',                icon: '🏢', color: 'bg-teal-500' },
   description_changed:      { label: 'Formular bearbeitet',          icon: '📋', color: 'bg-amber-400' },
+  admin_raw_edited:         { label: 'Notfall-Bearbeitung (Admin)',  icon: '🧬', color: 'bg-orange-500' },
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -72,9 +73,14 @@ function getMeta(action: string) {
   return ACTION_META[action] ?? { label: action, icon: '🔹', color: 'bg-gray-400' }
 }
 
+// Verlaufs-Events mit gebündelten Feld-Änderungen (gleiche Diff-Darstellung).
+function isFieldEdit(action: string): boolean {
+  return action === 'ticket_updated' || action === 'admin_raw_edited'
+}
+
 // Enthält ein Verlaufs-Event eine Kommentar-Änderung? (für den Highlight-Rahmen)
 function hasComment(e: HistoryEvent): boolean {
-  if (e.action !== 'ticket_updated') return false
+  if (!isFieldEdit(e.action)) return false
   const c = e.details?.changes?.comment
   return !!c && (isText(c.old) || isText(c.new))
 }
@@ -134,8 +140,8 @@ function hasSimpleFields(e: HistoryEvent): boolean {
             </div>
           </template>
 
-          <!-- ticket_updated -->
-          <template v-if="e.action === 'ticket_updated' && e.details?.changes">
+          <!-- ticket_updated / admin_raw_edited: gebündelte Feld-Änderungen -->
+          <template v-if="isFieldEdit(e.action) && e.details?.changes">
 
             <!-- Kommentar – hervorgehoben (Highlight) -->
             <div v-if="e.details.changes.comment"
