@@ -26,11 +26,6 @@ class Config:
     BUG_REPORT_MAIL = os.getenv("BUG_REPORT_MAIL", "")
 
     SESSION_TIMEOUT = int(os.getenv("SESSION_TIMEOUT", 900))
-    NINJA_POLL_INTERVAL = int(os.getenv("NINJA_POLL_INTERVAL", 300))
-
-    NINJA_CLIENT_ID = os.getenv("NINJA_CLIENT_ID", "")
-    NINJA_CLIENT_SECRET = os.getenv("NINJA_CLIENT_SECRET", "")
-    NINJA_REDIRECT_URI = os.getenv("NINJA_REDIRECT_URI", "")
 
     PORT = int(os.getenv("PORT", 5000))
     HTTPS = str_to_bool(os.getenv("HTTPS", "false"))
@@ -48,10 +43,6 @@ class Config:
     @property
     def COMPANIES(self):
         return db.get_companies()
-
-    @property
-    def NINJA_TOKEN(self):
-        return db.get_ninja_token()
 
     @classmethod
     def as_dict(cls):

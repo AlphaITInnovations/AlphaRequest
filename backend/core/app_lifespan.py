@@ -44,9 +44,6 @@ async def sync_groups_into_cache(app):
 @asynccontextmanager
 async def lifespan(app):
 
-    #thread = threading.Thread(target=ninja_sync.start_polling, daemon=True)
-    #thread.start()
-
     app.state.user_cache = []
     app.state.user_cache_timestamp = 0
     app.state.group_cache = []

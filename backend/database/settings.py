@@ -197,14 +197,3 @@ def set_companies_full(companies: List[dict]) -> None:
 def set_companies(companies: List[str]) -> None:
     """Nur Namen setzen (Altpfad) – bestehende Bereiche/Zähler bleiben erhalten."""
     set_companies_full([{"name": n} for n in companies])
-
-
-# ── Ninja Token ───────────────────────────────────────────────────────────────
-
-def get_ninja_token() -> Optional[dict]:
-    tok = settings_get("NINJA_TOKEN")
-    return tok if isinstance(tok, dict) else None
-
-
-def set_ninja_token(token: Optional[dict]) -> None:
-    settings_set("NINJA_TOKEN", token)
