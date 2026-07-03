@@ -59,9 +59,7 @@ onMounted(async () => {
         <span class="text-lg leading-none mt-0.5">ℹ️</span>
         <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
           <span class="font-semibold text-gray-900 dark:text-white">Was ist ein Prozess-Ticket?</span>
-          Ein Ticket mit einem standardisierten Ablauf für wiederkehrende Aufgaben – die
-          nötigen Schritte (Antrag, Freigaben, Durchführung durch die zuständigen Fachabteilungen)
-          sind fest vorgegeben, sodass nichts vergessen wird.
+          Ein Ticket mit standardisiertem Ablauf für wiederkehrende Aufgaben.
         </p>
       </div>
 
