@@ -44,6 +44,10 @@ async def sync_groups_into_cache(app):
 @asynccontextmanager
 async def lifespan(app):
 
+    # Secrets (OAuth-Code, Tokens) aus den uvicorn-Access-Logs redigieren.
+    from backend.utils.logger import install_access_log_redaction
+    install_access_log_redaction()
+
     app.state.user_cache = []
     app.state.user_cache_timestamp = 0
     app.state.group_cache = []

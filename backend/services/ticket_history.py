@@ -3,6 +3,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from backend.database.tickets import get_ticket, update_ticket
+from backend.database.audit_log import record_audit
 
 
 def add_history_event(
@@ -33,6 +34,18 @@ def add_history_event(
     update_ticket(
         ticket_id=ticket_id,
         history=json.dumps(history, ensure_ascii=False),
+    )
+
+    # Jedes Ticket-Ereignis zusätzlich persistent auditieren (überlebt Löschung).
+    record_audit(
+        action=action,
+        actor_id=actor_id,
+        actor_name=actor_name,
+        actor_type=actor_type,
+        entity_type="ticket",
+        entity_id=str(ticket_id),
+        summary=ticket.title,
+        details=details or {},
     )
 
 

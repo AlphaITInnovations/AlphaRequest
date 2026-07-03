@@ -21,8 +21,16 @@ from backend.services.microsoft_auth import (
     initiate_auth_flow, acquire_token_by_auth_code,
 )
 from backend.services.microsoft_graph import get_user_profile
+from backend.database.audit_log import record_audit
 from backend.utils.config import config
 from backend.utils.logger import logger
+
+
+def _client_ip(request: Request) -> str | None:
+    try:
+        return request.client.host if request.client else None
+    except Exception:
+        return None
 
 router = APIRouter()
 
@@ -125,6 +133,9 @@ async def auth_callback(request: Request):
 
 
         if not result or "access_token" not in result:
+            record_audit(action="login_failed", actor_type="system", actor_name="?",
+                         entity_type="auth", summary="Token konnte nicht bezogen werden",
+                         details={"reason": "token_error"}, ip=_client_ip(request))
             return RedirectResponse(
                 f"{config.FRONTEND_URL}/login?error=token_error",
                 status_code=HTTP_302_FOUND,
@@ -150,7 +161,8 @@ async def auth_callback(request: Request):
         admin_group_configured = bool(config.ADMIN_GROUP_ID)
         is_in_admin_group = admin_group_configured and config.ADMIN_GROUP_ID in user_groups
 
-        logger.info("Login groups for user %s: %s", id_claims.get("name"), user_groups)
+        # Gruppen-GUIDs nur im DEBUG-Log (verraten Org-Struktur, nicht ins INFO-Log).
+        logger.debug("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
         user_payload = {
             "id":          id_claims.get("oid") or id_claims.get("sub"),
@@ -187,10 +199,18 @@ async def auth_callback(request: Request):
         try:
             if action == ACTION_PROMOTE:
                 db_user = set_group_admin(user_payload["id"]) or db_user
+                record_audit(action="admin_granted", actor_id=user_payload["id"],
+                             actor_name=user_payload["displayName"] or "", entity_type="user",
+                             entity_id=user_payload["id"], summary="Admin via AD-Gruppe",
+                             ip=_client_ip(request))
             elif action == ACTION_REVOKE:
                 logger.info("Admin-Rolle entzogen (nicht mehr in AAD-Admin-Gruppe): %s",
                             user_payload["id"])
                 db_user = revoke_group_admin(user_payload["id"]) or db_user
+                record_audit(action="admin_revoked", actor_id=user_payload["id"],
+                             actor_name=user_payload["displayName"] or "", entity_type="user",
+                             entity_id=user_payload["id"], summary="Nicht mehr in AD-Admin-Gruppe",
+                             ip=_client_ip(request))
         except Exception:
             logger.exception("Admin-Gruppen-Sync fehlgeschlagen für %s", user_payload["id"])
 
@@ -212,11 +232,17 @@ async def auth_callback(request: Request):
             })
 
         record_login_success(request)
+        record_audit(action="login", actor_id=user_payload["id"],
+                     actor_name=user_payload["displayName"] or "", entity_type="auth",
+                     entity_id=user_payload["id"], ip=_client_ip(request))
 
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
 
     except Exception:
         logger.exception("Login fehlgeschlagen")
+        record_audit(action="login_failed", actor_type="system", actor_name="?",
+                     entity_type="auth", summary="Login fehlgeschlagen",
+                     details={"reason": "exception"}, ip=_client_ip(request))
         return RedirectResponse(
             f"{config.FRONTEND_URL}/login?error=login_failed",
             status_code=HTTP_302_FOUND,
@@ -231,5 +257,8 @@ async def logout(request: Request):
     if sid:
         TOKENS.delete(sid)
     record_logout(request)
+    u = request.session.get("user") or {}
+    record_audit(action="logout", actor_id=u.get("id"), actor_name=u.get("displayName") or "",
+                 entity_type="auth", entity_id=u.get("id"), ip=_client_ip(request))
     request.session.clear()
     return RedirectResponse(f"{config.FRONTEND_URL}/login", status_code=HTTP_302_FOUND)

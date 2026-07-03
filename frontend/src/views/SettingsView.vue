@@ -4,8 +4,9 @@ import { client } from '@/api/client'
 import { usersApi, type UserEntry } from '@/api/users'
 import AppLayout from '@/components/AppLayout.vue'
 import UserSelect from '@/components/UserSelect.vue'
+import AuditLogPanel from '@/components/AuditLogPanel.vue'
 
-type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'permissions' | 'app-users' | 'testmail'
+type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'permissions' | 'app-users' | 'testmail' | 'audit'
 const active = ref<Section>('general')
 const toast  = ref<{ msg: string; ok: boolean } | null>(null)
 const users  = ref<UserEntry[]>([])
@@ -476,6 +477,7 @@ const nav = [
   { key: 'groups',         label: 'Fachabteilungen',     group: 'Organisation' },
   { key: 'permissions',    label: 'Auftragstypen',       group: 'Berechtigungen' },
   { key: 'app-users',      label: 'Benutzer & Rollen',   group: 'Berechtigungen' },
+  { key: 'audit',          label: 'Audit-Log',           group: 'System' },
   { key: 'testmail',       label: 'Testmail',            group: 'Kommunikation' },
 ] as const
 
@@ -1008,6 +1010,9 @@ const navGroups = computed(() => {
             </table>
           </div>
         </section>
+
+        <!-- Audit-Log -->
+        <AuditLogPanel v-if="active === 'audit'" />
 
         <!-- Testmail -->
         <section v-if="active === 'testmail'">

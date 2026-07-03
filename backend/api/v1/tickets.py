@@ -21,6 +21,7 @@ from backend.schemas.responses import (
 from backend.api.v1.ticket_overview import build_overview_detail, TicketOverviewDetail
 from backend.services.bulk_actions import normalize_bulk_action, required_permission_for_bulk
 from backend.database.users import PERM_MANAGE, PERM_ADMIN
+from backend.database.audit_log import record_audit
 from backend.services.workflow_state import (
     build_workflow, set_workflow_state, advance_phase,
     reject_workflow, get_current_phase, all_required_departments_done,
@@ -603,7 +604,7 @@ def get_ticket_lock(ticket_id: int, user: dict = Depends(get_current_user)):
     ))
 
 
-def _assign_onboarding_personalnummer(ticket_id: int) -> None:
+def _assign_onboarding_personalnummer(ticket_id: int, user: dict) -> None:
     """
     Vergibt die Personalnummer anhand der aktuellen „Firma lt. Arbeitsvertrag"
     (contract_company), sofern noch keine gesetzt ist. Wird beim Abschluss der
@@ -634,6 +635,12 @@ def _assign_onboarding_personalnummer(ticket_id: int) -> None:
             company, warn_remaining=config.PERSONALNUMMER_WARN_REMAINING,
         )
     except PersonalnummerExhausted as e:
+        record_audit(
+            action="personalnummer_exhausted", actor_id=user.get("id"),
+            actor_name=user.get("displayName") or "", entity_type="settings",
+            entity_id="personalnummer", summary=f"Firma {company}: Nummernbereich erschöpft",
+            details={"company": company},
+        )
         raise api_error(409, "PERSONALNUMMER_FAILED", str(e))
     except PersonalnummerNotConfigured as e:
         raise api_error(400, "PERSONALNUMMER_FAILED", str(e))
@@ -645,7 +652,27 @@ def _assign_onboarding_personalnummer(ticket_id: int) -> None:
     desc_obj["personal"] = personal
     database.update_ticket(ticket_id=ticket_id, description=json.dumps(desc_obj, ensure_ascii=False))
 
+    person_name = f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
+    record_audit(
+        action="personalnummer_assigned", actor_id=user.get("id"),
+        actor_name=user.get("displayName") or "", entity_type="ticket", entity_id=str(ticket_id),
+        summary=f"Personalnummer {result['number']} – {person_name or company}",
+        details={
+            "number": str(result["number"]),
+            "company": result.get("company_name") or company,
+            "mandant": result.get("mandant"),
+            "remaining": result.get("remaining"),
+            "person": person_name,
+        },
+    )
+
     if result.get("should_warn"):
+        record_audit(
+            action="personalnummer_range_low", actor_type="system", actor_name="System",
+            entity_type="settings", entity_id="personalnummer",
+            summary=f"Firma {company}: nur noch {result.get('remaining')} Nummern frei",
+            details={"company": company, "remaining": result.get("remaining"), "pnr_to": result.get("pnr_to")},
+        )
         try:
             from backend.services.microsoft_mail import send_personalnummer_warning_mail
             send_personalnummer_warning_mail(company, result["remaining"], result["pnr_to"])
@@ -687,7 +714,7 @@ async def submit_ticket(
     # wird NICHT weitergegeben (advance_phase folgt erst danach).
     tt = ticket.ticket_type.value if hasattr(ticket.ticket_type, "value") else ticket.ticket_type
     if tt == TicketType.zugang_beantragen.value and completed_key == "backoffice":
-        _assign_onboarding_personalnummer(ticket_id)
+        _assign_onboarding_personalnummer(ticket_id, user)
 
     updated_workflow = advance_phase(ticket_id)
 
@@ -1041,17 +1068,41 @@ def admin_raw_update(
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
 
 
+def _client_ip(request) -> str | None:
+    try:
+        return request.client.host if request and request.client else None
+    except Exception:
+        return None
+
+
+def _audit_ticket_deleted(ticket, user: dict, request) -> None:
+    """Löschung persistent auditieren – VOR dem Löschen aufrufen, da danach die
+    Ticket-Historie weg ist."""
+    tt = ticket.ticket_type.value if hasattr(ticket.ticket_type, "value") else str(ticket.ticket_type)
+    st = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
+    record_audit(
+        action="ticket_deleted",
+        actor_id=user["id"], actor_name=user["displayName"],
+        entity_type="ticket", entity_id=str(ticket.id),
+        summary=ticket.title,
+        details={"ticket_type": tt, "status": st, "owner_name": ticket.owner_name},
+        ip=_client_ip(request),
+    )
+
+
 @router.delete("/admin/tickets/{ticket_id}", status_code=204)
-def admin_delete_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
+def admin_delete_ticket(ticket_id: int, request: Request, user: dict = Depends(get_current_user)):
     """Admin-Notfall: Ticket endgültig löschen (inkl. Cleanup von Beobachtern/Locks)."""
     _require_admin(user)
-    if not database.delete_ticket(ticket_id):
-        raise api_error(404, ErrorCode.TICKET_NOT_FOUND, "Ticket nicht gefunden")
+    ticket = _get_ticket_or_404(ticket_id)
+    _audit_ticket_deleted(ticket, user, request)
+    database.delete_ticket(ticket_id)
 
 
 @router.post("/admin/tickets/bulk", response_model=DataResponse[BulkActionResult])
 def admin_bulk_action(
     data: BulkTicketActionRequest,
+    request: Request,
     user: dict = Depends(get_current_user),
 ):
     """Sammelaktion auf mehrere Tickets: 'archive' (ab Manager) oder 'delete' (nur
@@ -1087,6 +1138,7 @@ def admin_bulk_action(
                              "new_value": RequestStatus.archived.value, "bulk": True},
                 )
             else:  # delete
+                _audit_ticket_deleted(ticket, user, request)
                 database.delete_ticket(tid)
             ok.append(tid)
         except Exception:

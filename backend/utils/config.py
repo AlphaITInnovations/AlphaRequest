@@ -29,6 +29,7 @@ class Config:
 
     PORT = int(os.getenv("PORT", 5000))
     HTTPS = str_to_bool(os.getenv("HTTPS", "false"))
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     DEVPOPUP = str_to_bool(os.getenv("DEVPOPUP", "false"))
     USER_SYNC_INTERVAL = int(os.getenv("USER_SYNC_INTERVAL", "30"))
 
