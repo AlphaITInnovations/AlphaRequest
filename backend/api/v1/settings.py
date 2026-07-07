@@ -422,18 +422,30 @@ def set_permissions(
     if payload.group_permissions:
         set_group_ticket_permissions(new_groups)
 
-    # Nur tatsächlich geänderte Auftragstypen protokollieren.
-    changed: list[str] = []
+    # Nur echte Änderungen protokollieren – mit Person/Gruppe (aufgelöst zu Namen).
+    from backend.database.groups import get_groups as _get_groups
+    names = _names_from(request)
+    gmap = {g["id"]: g["name"] for g in _get_groups()}
+    for g in getattr(request.app.state, "group_cache", []):
+        gmap.setdefault(g["id"], g.get("displayName") or g["id"])
+    def _glabel(gid: str) -> str:
+        return "Jeder" if gid == "__everyone__" else gmap.get(gid, gid)
+
+    parts: list[str] = []
     for t in TicketType:
         tk = t.value
-        u_changed = set(new_users.get(tk, [])) != set(old_users.get(tk, []))
-        g_changed = tk in new_groups and set(new_groups.get(tk, [])) != set(old_groups.get(tk, []))
-        if u_changed or g_changed:
-            changed.append(TICKET_LABELS.get(t, tk))
-    if changed:
+        ou, nu = set(old_users.get(tk, [])), set(new_users.get(tk, []))
+        og, ng = set(old_groups.get(tk, [])), set(new_groups.get(tk, []))
+        ch: list[str] = []
+        if nu - ou: ch.append("Person +: " + ", ".join(sorted(names.get(i, i) for i in nu - ou)))
+        if ou - nu: ch.append("Person −: " + ", ".join(sorted(names.get(i, i) for i in ou - nu)))
+        if ng - og: ch.append("Gruppe +: " + ", ".join(sorted(_glabel(i) for i in ng - og)))
+        if og - ng: ch.append("Gruppe −: " + ", ".join(sorted(_glabel(i) for i in og - ng)))
+        if ch:
+            parts.append(f"„{TICKET_LABELS.get(t, tk)}“: {'; '.join(ch)}")
+    if parts:
         _audit(user, "ticket_permissions_changed", entity_type="settings", entity_id="ticket_permissions",
-               summary=_summary([f"„{c}“ geändert" for c in changed], "Erstellrechten"),
-               details={"changed": changed})
+               summary=_summary(parts, "Erstellrechten"), details={"changes": parts})
 
     return get_permissions(user)
 
