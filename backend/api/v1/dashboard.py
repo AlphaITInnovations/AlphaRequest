@@ -110,13 +110,15 @@ def get_involved(
     search: str | None = None,
     status: str | None = None,
     priority: str | None = None,
+    since_days: int = Query(14, ge=0, le=3650),   # 0 = alle (kein Zeitfenster)
 ):
     """
-    Alle Tickets (inkl. archiviert), bei denen der Nutzer jemals beteiligt war –
-    Archiv zum Zurückverfolgen. Serverseitig gefiltert (Suche/Status/Priorität)
-    und paginiert (limit/offset); liefert die Gesamtzahl der Treffer mit.
+    Tickets (inkl. archiviert), bei denen der Nutzer beteiligt war – Archiv zum
+    Zurückverfolgen. Standardmäßig auf Tickets der letzten `since_days` Tage
+    begrenzt (0 = alle), serverseitig gefiltert (Suche/Status/Priorität) und
+    paginiert (limit/offset); liefert die Gesamtzahl der Treffer mit.
     """
-    items = get_involved_tickets(user["id"])
+    items = get_involved_tickets(user["id"], since_days=since_days or None)
 
     q = (search or "").strip().lower()
     if q:

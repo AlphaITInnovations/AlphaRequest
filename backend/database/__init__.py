@@ -1,5 +1,5 @@
 from backend.database.connection import get_connection, _exec
-from backend.database.tickets import DDL_TICKETS
+from backend.database.tickets import DDL_TICKETS, TICKETS_MIGRATIONS
 from backend.database.settings import DDL_SETTINGS
 from backend.database.users import USERS_DDL, USERS_MIGRATIONS
 from backend.database.ticket_watchers import TICKET_WATCHERS_DDL, backfill_owner_watchers
@@ -22,6 +22,18 @@ def init_db():
         logger.info("All tables ready")
     finally:
         conn.close()
+
+    # Indizes idempotent nachrüsten (in-place, non-fatal – reine Performance).
+    try:
+        conn = get_connection()
+        try:
+            for migration in TICKETS_MIGRATIONS:
+                _exec(conn, migration)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"Ticket-Index-Migrationen übersprungen: {e}")
 
     # Bestehende Tickets: Ersteller als Beobachter nachtragen (idempotent)
     try:

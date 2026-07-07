@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS {TICKET_TABLE} (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+# Idempotente In-Place-Migrationen (kein Datenverlust) – in init_db aufgerufen.
+TICKETS_MIGRATIONS = [
+    # Index auf created_at beschleunigt ORDER BY created_at und die
+    # Zeitfenster-Filter (Involviert-Ansicht, Übersicht) bei vielen Tickets.
+    f"ALTER TABLE {TICKET_TABLE} ADD INDEX IF NOT EXISTS idx_tickets_created_at (created_at)",
+]
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -146,8 +153,16 @@ def list_all_tickets(
     *,
     limit: int | None = None,
     offset: int | None = None,
+    since: str | None = None,
 ) -> List[Ticket]:
-    return _select_tickets(limit=limit, offset=offset)
+    """Tickets (neueste zuerst). `since` = ISO-Zeitstempel; nur Tickets mit
+    created_at >= since (begrenzt den Scan, z.B. für die Involviert-Ansicht)."""
+    where_sql = ""
+    params: Tuple = ()
+    if since:
+        where_sql = "WHERE created_at >= %s"
+        params = (since,)
+    return _select_tickets(where_sql, params, limit=limit, offset=offset)
 
 
 def count_all_tickets() -> int:
