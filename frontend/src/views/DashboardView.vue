@@ -349,12 +349,13 @@ onMounted(async () => {
                     rounded-t-2xl overflow-hidden">
 
           <!-- Filter -->
-          <div class="px-5 py-3.5 flex flex-wrap gap-3 items-center">
-            <div class="relative flex-1 min-w-[14rem]">
+          <div class="px-5 py-3.5 grid grid-cols-1 gap-3 items-center"
+               :class="activeTab === 'involved' ? 'sm:grid-cols-[1fr_auto_auto_auto]' : 'sm:grid-cols-[1fr_auto_auto]'">
+            <div class="relative">
               <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
               </svg>
-              <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10 w-full" />
+              <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10" />
             </div>
             <select v-model="filter.status" class="fi">
               <option value="all">Alle Phasen</option>
