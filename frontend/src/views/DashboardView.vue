@@ -107,6 +107,7 @@ function sortedRoles(roles: string[]): string[] {
 
 const INVOLVED_PAGE_SIZE = 15
 const involvedPage = ref(1)
+const involvedSinceDays = ref(14)   // Zeitfenster (Tage) für „Involviert"; 0 = alle
 const involvedTotalPages = computed(() => Math.max(1, Math.ceil(involvedTotal.value / INVOLVED_PAGE_SIZE)))
 
 let involvedReq = 0
@@ -121,6 +122,8 @@ async function loadInvolved() {
     if (filter.value.search)            params.search   = filter.value.search
     if (filter.value.status !== 'all')  params.status   = filter.value.status
     if (filter.value.priority !== 'all') params.priority = filter.value.priority
+    // Immer mitsenden (0 = alle) – überschreibt den Server-Default von 14 Tagen.
+    params.since_days = involvedSinceDays.value
 
     const res = await client.get<{ data: { involved: InvolvedTicket[]; total: number } }>(
       '/dashboard/involved', { params },
@@ -156,7 +159,7 @@ function selectInvolvedTab() {
 
 // Filter-Schlüssel als stabiler String → feuert nur bei echter Wertänderung
 const involvedFilterKey = computed(() =>
-  `${filter.value.search}|${filter.value.status}|${filter.value.priority}`)
+  `${filter.value.search}|${filter.value.status}|${filter.value.priority}|${involvedSinceDays.value}`)
 
 watch(activeTab, (tab) => {
   // Daten sind durch den Prefetch meist schon da; Debounce dedupliziert mit dem
@@ -346,12 +349,12 @@ onMounted(async () => {
                     rounded-t-2xl overflow-hidden">
 
           <!-- Filter -->
-          <div class="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
-            <div class="relative">
+          <div class="px-5 py-3.5 flex flex-wrap gap-3 items-center">
+            <div class="relative flex-1 min-w-[14rem]">
               <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
               </svg>
-              <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10" />
+              <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10 w-full" />
             </div>
             <select v-model="filter.status" class="fi">
               <option value="all">Alle Phasen</option>
@@ -366,6 +369,15 @@ onMounted(async () => {
               <option value="medium">Mittel</option>
               <option value="high">Hoch</option>
               <option value="critical">Kritisch</option>
+            </select>
+            <!-- Zeitraum: nur im Involviert-Tab (begrenzt den Scan; Default 14 Tage) -->
+            <select v-if="activeTab === 'involved'" v-model.number="involvedSinceDays" class="fi"
+                    title="Zeitraum nach Erstelldatum">
+              <option :value="14">Letzte 14 Tage</option>
+              <option :value="30">Letzte 30 Tage</option>
+              <option :value="90">Letzte 90 Tage</option>
+              <option :value="365">Letztes Jahr</option>
+              <option :value="0">Alle</option>
             </select>
           </div>
         </div>

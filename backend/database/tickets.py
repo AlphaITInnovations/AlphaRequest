@@ -146,8 +146,16 @@ def list_all_tickets(
     *,
     limit: int | None = None,
     offset: int | None = None,
+    since: str | None = None,
 ) -> List[Ticket]:
-    return _select_tickets(limit=limit, offset=offset)
+    """Tickets (neueste zuerst). `since` = ISO-Zeitstempel; nur Tickets mit
+    created_at >= since (begrenzt den Scan, z.B. für die Involviert-Ansicht)."""
+    where_sql = ""
+    params: Tuple = ()
+    if since:
+        where_sql = "WHERE created_at >= %s"
+        params = (since,)
+    return _select_tickets(where_sql, params, limit=limit, offset=offset)
 
 
 def count_all_tickets() -> int:

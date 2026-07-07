@@ -786,18 +786,27 @@ def user_involved_in_ticket(ticket, user_id: str) -> bool:
     return bool(involvement_roles(ticket, user_id, group_ids, watched_ids))
 
 
-def get_involved_tickets(user_id: str) -> list[dict]:
+def get_involved_tickets(user_id: str, since_days: int | None = 14) -> list[dict]:
     """
-    Alle Tickets (inkl. archiviert/abgelehnt), bei denen der User jemals
-    irgendwie beteiligt war – als „Archiv zum Zurückverfolgen".
-    Liefert je Ticket die zutreffenden Rollen für die Anzeige; neueste zuerst.
+    Tickets (inkl. archiviert/abgelehnt), bei denen der User beteiligt war –
+    als „Archiv zum Zurückverfolgen". Liefert je Ticket die zutreffenden Rollen;
+    neueste zuerst.
+
+    `since_days` begrenzt auf Tickets, die in den letzten N Tagen ERSTELLT wurden
+    (Default 14), damit der Scan nicht über die gesamte DB läuft. None/0 = alle.
     """
     from backend.database.ticket_watchers import list_ticket_ids_for_watcher
     watched_ids = set(list_ticket_ids_for_watcher(user_id))
     group_ids = set(get_group_ids_for_user(user_id))
 
+    since = None
+    if since_days and since_days > 0:
+        from datetime import datetime, timezone, timedelta
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=since_days)
+        since = cutoff.isoformat()
+
     items: list[dict] = []
-    for ticket in list_all_tickets():
+    for ticket in list_all_tickets(since=since):
         roles = involvement_roles(ticket, user_id, group_ids, watched_ids)
         if not roles:
             continue
