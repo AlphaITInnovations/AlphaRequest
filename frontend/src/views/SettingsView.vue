@@ -48,9 +48,10 @@ const navGroups = computed(() => {
 })
 
 // Sektionswechsel über die URL (dadurch funktioniert Browser Vor/Zurück).
+// `item` wird bewusst fallen gelassen – die neue Sektion startet in der Liste.
 function switchTo(key: Section) {
   if (key === active.value) return
-  router.push({ query: { ...route.query, section: key } })
+  router.push({ query: { section: key } })
 }
 
 // Unsaved-Guard – greift auch beim Browser-Zurück (Query-Wechsel = Route-Update).

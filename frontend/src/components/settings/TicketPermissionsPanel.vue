@@ -4,6 +4,8 @@ import { client } from '@/api/client'
 import { usersApi, type UserEntry } from '@/api/users'
 import UserSelect from '@/components/UserSelect.vue'
 import { useSaver } from '@/composables/settingsSave'
+import { useDetailNav } from '@/composables/useDetailNav'
+import SettingsList from '@/components/settings/SettingsList.vue'
 
 interface PermType { key: string; label: string; allowed_users: string[]; allowed_groups: string[] }
 interface AdGroup { id: string; displayName: string; description: string }
@@ -14,7 +16,7 @@ const EVERYONE = '__everyone__'
 const permissions  = ref<PermType[]>([])
 const snapshot     = ref('')
 const loading      = ref(true)
-const selected     = ref<number | null>(null)
+const { selected, open, back } = useDetailNav(() => permissions.value.length)
 const permSelected = ref<Record<string, { id: string; name: string } | null>>({})
 const adGroups     = ref<AdGroup[]>([])
 const adGroupSearch = ref<Record<string, string>>({})
@@ -108,7 +110,7 @@ async function savePermissions() {
   try {
     await client.put('/settings/permissions', { permissions: userPayload, group_permissions: groupPayload })
     snapshot.value = serialize(permissions.value)
-    selected.value = null
+    back()
   } finally {
     setSaving(false)
   }
@@ -122,34 +124,25 @@ onMounted(loadAll)
 
 <template>
   <section>
-    <!-- ── Liste ── -->
-    <template v-if="selected === null">
-      <h2 class="section-title">Erstellrechte</h2>
-      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Lege je Auftragstyp fest, wer ihn erstellen darf. Auf einen Typ klicken zum Bearbeiten.
-      </p>
+    <SettingsList v-if="selected === null" title="Erstellrechte" :items="permissions" :loading="loading"
+                  search-placeholder="Auftragstyp suchen…" :filter-text="(t) => t.label"
+                  @select="open">
+      <template #hint>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+          Lege je Auftragstyp fest, wer ihn erstellen darf. Auf einen Typ klicken zum Bearbeiten.
+        </p>
+      </template>
+      <template #row="{ item }">
+        <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ item.label }}</span>
+        <span v-if="isEveryone(item)" class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">🌐 Jeder</span>
+        <span v-else-if="permCount(item) === 0" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 whitespace-nowrap">⚠ niemand</span>
+        <span v-else class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 whitespace-nowrap">{{ permCount(item) }} berechtigt</span>
+      </template>
+    </SettingsList>
 
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
-      </div>
-
-      <div v-else class="space-y-2">
-        <button v-for="(t, i) in permissions" :key="t.key" @click="selected = i"
-                class="w-full flex items-center gap-3 text-left rounded-xl border border-gray-200 dark:border-white/10
-                       bg-white dark:bg-[#212B3A] hover:border-[#3EAAB8]/40 hover:shadow-sm transition px-4 py-3">
-          <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ t.label }}</span>
-          <span v-if="isEveryone(t)" class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">🌐 Jeder</span>
-          <span v-else-if="permCount(t) === 0" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 whitespace-nowrap">⚠ niemand</span>
-          <span v-else class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 whitespace-nowrap">{{ permCount(t) }} berechtigt</span>
-          <span class="text-gray-300 dark:text-gray-600">›</span>
-        </button>
-      </div>
-    </template>
-
-    <!-- ── Detail ── -->
     <template v-else-if="permissions[selected]">
       <div class="flex items-center gap-3 mb-4">
-        <button @click="selected = null" class="btn-secondary">← Zurück</button>
+        <button @click="back()" class="btn-secondary">← Zurück</button>
         <h3 class="font-semibold text-gray-900 dark:text-white">{{ permissions[selected].label }}</h3>
         <span class="font-mono text-xs text-gray-400">{{ permissions[selected].key }}</span>
       </div>

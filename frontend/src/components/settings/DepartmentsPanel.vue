@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { client } from '@/api/client'
 import { usersApi, type UserEntry } from '@/api/users'
 import UserSelect from '@/components/UserSelect.vue'
 import { useToast } from '@/composables/useToast'
 import { useSaver } from '@/composables/settingsSave'
+import { useDetailNav } from '@/composables/useDetailNav'
+import SettingsList from '@/components/settings/SettingsList.vue'
 
 const { showToast } = useToast()
 
@@ -14,14 +16,15 @@ const groups   = ref<Group[]>([])
 const snapshot = ref('')
 const users    = ref<UserEntry[]>([])
 const loading  = ref(true)
-const selected = ref<number | null>(null)
+const { selected, open, back } = useDetailNav(() => groups.value.length)
 const memberSel = ref<{ id: string; name: string } | null>(null)
 const distInput = ref('')
 let tmpSeq = 0
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
-// dirty ohne id (neue Gruppen haben temporäre ids) – erkennt Anlegen/Löschen/Ändern.
+watch(selected, () => { memberSel.value = null; distInput.value = '' })
+
 function serialize(list: Group[]): string {
   return JSON.stringify(list.map(g => ({
     name: g.name, members: [...g.members].sort(), distributions: [...g.distributions].sort(), hidden: !!g.hidden,
@@ -43,17 +46,15 @@ async function loadGroups() {
 
 function addGroup() {
   groups.value.push({ id: `tmp_${++tmpSeq}`, name: '', members: [], distributions: [], required: false, hidden: false })
-  selected.value = groups.value.length - 1
-  memberSel.value = null; distInput.value = ''
+  open(groups.value.length - 1)
 }
 function removeGroup(idx: number) {
   const g = groups.value[idx]
   if (g.required) return
   if (g.name && !confirm(`Fachabteilung „${g.name}“ wirklich löschen? (wird beim Speichern übernommen)`)) return
   groups.value.splice(idx, 1)
-  selected.value = null
+  back()
 }
-function openGroup(i: number) { selected.value = i; memberSel.value = null; distInput.value = '' }
 
 function addMember() {
   const g = selected.value !== null ? groups.value[selected.value] : null
@@ -85,7 +86,7 @@ async function saveGroups() {
     const { data } = await client.put('/settings/groups', { groups: payload })
     groups.value = data.data
     snapshot.value = serialize(groups.value)
-    selected.value = null
+    back()
     showToast('Gespeichert', true)
   } catch (e: any) {
     showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
@@ -102,35 +103,21 @@ onMounted(loadGroups)
 
 <template>
   <section>
-    <!-- ── Liste ── -->
-    <template v-if="selected === null">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="section-title mb-0">Fachabteilungen</h2>
-        <button @click="addGroup" class="btn-primary">+ Fachabteilung hinzufügen</button>
-      </div>
+    <SettingsList v-if="selected === null" title="Fachabteilungen" :items="groups" :loading="loading"
+                  add-label="+ Fachabteilung hinzufügen" search-placeholder="Fachabteilung suchen…"
+                  empty-text="Noch keine Fachabteilungen." :filter-text="(g) => g.name"
+                  @add="addGroup" @select="open">
+      <template #row="{ item }">
+        <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ item.name || 'Unbenannt' }}</span>
+        <span v-if="item.required" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 whitespace-nowrap">🔒 Pflicht</span>
+        <span v-if="item.hidden" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 whitespace-nowrap">versteckt</span>
+        <span class="text-xs text-gray-400 whitespace-nowrap">{{ item.members.length }} 👤</span>
+      </template>
+    </SettingsList>
 
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
-      </div>
-
-      <div v-else class="space-y-2">
-        <p v-if="groups.length === 0" class="text-sm text-gray-400 italic px-1">Noch keine Fachabteilungen.</p>
-        <button v-for="(g, i) in groups" :key="g.id" @click="openGroup(i)"
-                class="w-full flex items-center gap-3 text-left rounded-xl border border-gray-200 dark:border-white/10
-                       bg-white dark:bg-[#212B3A] hover:border-[#3EAAB8]/40 hover:shadow-sm transition px-4 py-3">
-          <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ g.name || 'Unbenannt' }}</span>
-          <span v-if="g.required" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 whitespace-nowrap">🔒 Pflicht</span>
-          <span v-if="g.hidden" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 whitespace-nowrap">versteckt</span>
-          <span class="text-xs text-gray-400 whitespace-nowrap">{{ g.members.length }} 👤</span>
-          <span class="text-gray-300 dark:text-gray-600">›</span>
-        </button>
-      </div>
-    </template>
-
-    <!-- ── Detail ── -->
     <template v-else-if="groups[selected]">
       <div class="flex items-center justify-between mb-4">
-        <button @click="selected = null" class="btn-secondary">← Zurück</button>
+        <button @click="back()" class="btn-secondary">← Zurück</button>
         <button v-if="!groups[selected].required" @click="removeGroup(selected)"
                 class="text-sm text-red-500 hover:text-red-600 hover:underline">Löschen</button>
       </div>

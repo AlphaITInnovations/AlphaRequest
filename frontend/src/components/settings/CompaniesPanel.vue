@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { client } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useSaver } from '@/composables/settingsSave'
+import { useDetailNav } from '@/composables/useDetailNav'
+import SettingsList from '@/components/settings/SettingsList.vue'
 
 const { showToast } = useToast()
 
@@ -18,7 +20,7 @@ interface CompanyItem {
 const companies = ref<CompanyItem[]>([])
 const snapshot  = ref('')
 const loading   = ref(true)
-const selected  = ref<number | null>(null)
+const { selected, open, back } = useDetailNav(() => companies.value.length)
 
 function mapCompany(c: any): CompanyItem {
   return {
@@ -48,13 +50,13 @@ async function loadCompanies() {
 function addCompany() {
   companies.value.push({ name: '', pnr_from: null, pnr_to: null, mandant: null,
                          pnr_shared_with: null, pnr_current: null, pnr_warned: false })
-  selected.value = companies.value.length - 1
+  open(companies.value.length - 1)
 }
 function removeCompany(idx: number) {
   const c = companies.value[idx]
   if (c.name && !confirm(`„${c.name}“ wirklich entfernen?`)) return
   companies.value.splice(idx, 1)
-  selected.value = null
+  back()
 }
 
 function shareTargets(c: CompanyItem): CompanyItem[] {
@@ -112,7 +114,7 @@ async function saveCompanies() {
     const { data } = await client.put('/settings/companies', { companies: payload })
     companies.value = (data.data.companies ?? []).map(mapCompany)
     snapshot.value = serialize(companies.value)
-    selected.value = null
+    back()
     showToast('Gespeichert', true)
   } catch (e: any) {
     showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
@@ -129,48 +131,28 @@ onMounted(loadCompanies)
 
 <template>
   <section>
-    <!-- ── Liste ── -->
-    <template v-if="selected === null">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="section-title mb-0">Firmen</h2>
-        <button @click="addCompany" class="btn-primary">+ Firma hinzufügen</button>
-      </div>
-      <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20
-                  px-4 py-3 text-sm text-amber-800 dark:text-amber-200 mb-4">
-        Der Personalnummern-Bereich (Von/Bis) wird pro Firma vergeben; beim Onboarding entscheidet
-        die „Firma lt.&nbsp;Arbeitsvertrag“, welche Nummer vergeben wird. Firmen können sich einen
-        gemeinsamen Zähler teilen.
-      </div>
+    <SettingsList v-if="selected === null" title="Firmen" :items="companies" :loading="loading"
+                  add-label="+ Firma hinzufügen" search-placeholder="Firma suchen…"
+                  empty-text="Noch keine Firmen vorhanden." :filter-text="(c) => c.name"
+                  @add="addCompany" @select="open">
+      <template #hint>
+        <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20
+                    px-4 py-3 text-sm text-amber-800 dark:text-amber-200 mb-3">
+          Der Personalnummern-Bereich (Von/Bis) wird pro Firma vergeben; beim Onboarding entscheidet
+          die „Firma lt.&nbsp;Arbeitsvertrag“, welche Nummer vergeben wird. Firmen können sich einen
+          gemeinsamen Zähler teilen.
+        </div>
+      </template>
+      <template #row="{ item }">
+        <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ item.name || 'Unbenannt' }}</span>
+        <span v-if="item.pnr_shared_with" class="text-xs px-2 py-0.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] whitespace-nowrap">🔗 geteilt</span>
+        <span v-else-if="freeCount(item) !== null" class="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap" :class="freeBadgeClass(freeCount(item))">Frei: {{ freeCount(item) }}</span>
+      </template>
+    </SettingsList>
 
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
-      </div>
-
-      <div v-else class="space-y-2">
-        <p v-if="companies.length === 0" class="text-sm text-gray-400 italic px-1">Noch keine Firmen vorhanden.</p>
-        <button v-for="(c, i) in companies" :key="i" @click="selected = i"
-                class="w-full flex items-center gap-3 text-left rounded-xl border border-gray-200 dark:border-white/10
-                       bg-white dark:bg-[#212B3A] hover:border-[#3EAAB8]/40 hover:shadow-sm transition px-4 py-3">
-          <span class="flex-shrink-0 w-6 h-6 rounded-md bg-[#3EAAB8]/15 text-[#3EAAB8] text-xs font-bold
-                       flex items-center justify-center">{{ i + 1 }}</span>
-          <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">
-            {{ c.name || 'Unbenannt' }}
-          </span>
-          <span v-if="c.pnr_shared_with"
-                class="text-xs px-2 py-0.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] whitespace-nowrap">🔗 geteilt</span>
-          <span v-else-if="freeCount(c) !== null"
-                class="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap" :class="freeBadgeClass(freeCount(c))">
-            Frei: {{ freeCount(c) }}
-          </span>
-          <span class="text-gray-300 dark:text-gray-600">›</span>
-        </button>
-      </div>
-    </template>
-
-    <!-- ── Detail ── -->
     <template v-else-if="companies[selected]">
       <div class="flex items-center justify-between mb-4">
-        <button @click="selected = null" class="btn-secondary">← Zurück</button>
+        <button @click="back()" class="btn-secondary">← Zurück</button>
         <button @click="removeCompany(selected)"
                 class="text-sm text-red-500 hover:text-red-600 hover:underline">Firma entfernen</button>
       </div>
