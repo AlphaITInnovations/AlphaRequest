@@ -14,6 +14,7 @@ interface Group { id: string; name: string; members: string[]; distributions: st
 const groups      = ref<Group[]>([])
 const snapshot    = ref<Record<string, string>>({})   // id -> serialisierter Feldstand (zuletzt gespeichert)
 const users       = ref<UserEntry[]>([])
+const loading     = ref(true)
 const newGroupName = ref('')
 const distInput    = ref<Record<string, string>>({})
 const groupMember  = ref<Record<string, { id: string; name: string } | null>>({})
@@ -27,16 +28,21 @@ function serialize(g: Group): string {
 function userName(id: string) { return users.value.find(u => u.id === id)?.displayName ?? id }
 
 async function loadGroups() {
-  const [grp, usr] = await Promise.all([client.get('/settings/groups'), usersApi.list()])
-  groups.value = grp.data.data
-  users.value  = usr.data.data.users
-  const snap: Record<string, string> = {}
-  groups.value.forEach(g => {
-    snap[g.id] = serialize(g)
-    distInput.value[g.id]   = ''
-    groupMember.value[g.id] = null
-  })
-  snapshot.value = snap
+  loading.value = true
+  try {
+    const [grp, usr] = await Promise.all([client.get('/settings/groups'), usersApi.list()])
+    groups.value = grp.data.data
+    users.value  = usr.data.data.users
+    const snap: Record<string, string> = {}
+    groups.value.forEach(g => {
+      snap[g.id] = serialize(g)
+      distInput.value[g.id]   = ''
+      groupMember.value[g.id] = null
+    })
+    snapshot.value = snap
+  } finally {
+    loading.value = false
+  }
 }
 
 // ── Sofort-Aktionen (Anlegen / Löschen) ─────────────────────────────────────
@@ -119,7 +125,12 @@ onUnmounted(() => resetSettingsSave(save))
       <input v-model="newGroupName" @keydown.enter.prevent="createGroup" placeholder="Neue Gruppe…" class="set-input flex-1" />
       <button @click="createGroup" class="btn-primary">Erstellen</button>
     </div>
-    <div class="space-y-4">
+
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+    </div>
+
+    <div v-else class="space-y-4">
       <div v-for="g in groups" :key="g.id" class="card-section space-y-5">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2 flex-1 min-w-0">

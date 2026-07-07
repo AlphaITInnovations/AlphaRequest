@@ -35,6 +35,7 @@ function permClass(p: string) {
 
 const appUsers     = ref<AppUser[]>([])
 const snapshot     = ref<Record<string, string>>({})
+const loading      = ref(true)
 const userSearch   = ref('')
 const roleFilter   = ref('all')
 const expandedUser = ref<string | null>(null)
@@ -53,6 +54,14 @@ const filteredAppUsers = computed(() => {
 })
 
 async function loadAppUsers() {
+  loading.value = true
+  try {
+    await _loadAppUsers()
+  } finally {
+    loading.value = false
+  }
+}
+async function _loadAppUsers() {
   const { data } = await client.get('/settings/app-users')
   const snap: Record<string, string> = {}
   appUsers.value = data.data.map((u: any) => {
@@ -149,7 +158,11 @@ onUnmounted(() => resetSettingsSave(save))
         <option value="admin">Admin</option>
       </select>
     </div>
-    <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm overflow-hidden">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+    </div>
+
+    <div v-else class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm overflow-hidden">
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-gray-100 dark:border-white/[0.06] text-xs font-semibold text-gray-400 uppercase tracking-wider">

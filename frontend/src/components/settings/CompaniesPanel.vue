@@ -18,6 +18,7 @@ interface CompanyItem {
 }
 const companies = ref<CompanyItem[]>([])
 const snapshot  = ref('')
+const loading   = ref(true)
 
 function mapCompany(c: any): CompanyItem {
   return {
@@ -35,9 +36,14 @@ function serialize(list: CompanyItem[]): string {
 }
 
 async function loadCompanies() {
-  const { data } = await client.get('/settings/companies')
-  companies.value = (data.data.companies ?? []).map(mapCompany)
-  snapshot.value = serialize(companies.value)
+  loading.value = true
+  try {
+    const { data } = await client.get('/settings/companies')
+    companies.value = (data.data.companies ?? []).map(mapCompany)
+    snapshot.value = serialize(companies.value)
+  } finally {
+    loading.value = false
+  }
 }
 
 function addCompanyRow() {
@@ -133,7 +139,12 @@ onUnmounted(() => resetSettingsSave(save))
       Mehrere Firmen können sich einen gemeinsamen Zähler teilen – dazu bei einer Firma
       „Teilt Zähler mit …“ auswählen (statt eigenem Bereich).
     </div>
-    <div class="space-y-4">
+
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+    </div>
+
+    <div v-else class="space-y-4">
       <p v-if="companies.length === 0" class="text-sm text-gray-400 italic px-1">Noch keine Firmen vorhanden.</p>
 
       <div v-for="(c, i) in companies" :key="i"

@@ -15,6 +15,7 @@ const EVERYONE = '__everyone__'
 
 const permissions  = ref<PermType[]>([])
 const snapshot     = ref('')
+const loading      = ref(true)
 const permSelected = ref<Record<string, { id: string; name: string } | null>>({})
 const adGroups     = ref<AdGroup[]>([])
 const adGroupSearch = ref<Record<string, string>>({})
@@ -27,22 +28,27 @@ function serialize(list: PermType[]): string {
 }
 
 async function loadAll() {
-  const [perms, ad, grp, usr] = await Promise.all([
-    client.get('/settings/permissions'),
-    client.get('/settings/ad-groups').catch(() => ({ data: { data: [] } })),
-    client.get('/settings/groups'),
-    usersApi.list(),
-  ])
-  permissions.value = perms.data.data.types
-  permissions.value.forEach(t => {
-    permSelected.value[t.key] = null
-    adGroupSearch.value[t.key] = ''
-    adGroupOpen.value[t.key]   = false
-  })
-  adGroups.value = ad.data.data
-  groups.value   = grp.data.data
-  users.value    = usr.data.data.users
-  snapshot.value = serialize(permissions.value)
+  loading.value = true
+  try {
+    const [perms, ad, grp, usr] = await Promise.all([
+      client.get('/settings/permissions'),
+      client.get('/settings/ad-groups').catch(() => ({ data: { data: [] } })),
+      client.get('/settings/groups'),
+      usersApi.list(),
+    ])
+    permissions.value = perms.data.data.types
+    permissions.value.forEach(t => {
+      permSelected.value[t.key] = null
+      adGroupSearch.value[t.key] = ''
+      adGroupOpen.value[t.key]   = false
+    })
+    adGroups.value = ad.data.data
+    groups.value   = grp.data.data
+    users.value    = usr.data.data.users
+    snapshot.value = serialize(permissions.value)
+  } finally {
+    loading.value = false
+  }
 }
 
 type GroupKind = 'everyone' | 'fach' | 'ad' | 'unknown'
@@ -123,7 +129,11 @@ onUnmounted(() => resetSettingsSave(save))
       <strong>Personen</strong>, <strong>Fachabteilungen</strong> oder <strong>AD-Gruppen</strong>.
     </p>
 
-    <div class="space-y-4">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+    </div>
+
+    <div v-else class="space-y-4">
       <div v-for="t in permissions" :key="t.key" class="card-section space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="font-semibold text-gray-900 dark:text-white">{{ t.label }}</h3>
