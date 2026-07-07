@@ -127,7 +127,7 @@ onUnmounted(() => resetSettingsSave(save))
     <h2 class="section-title">Firmen</h2>
     <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20
                 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 mb-4">
-      Firmen müssen exakt so wie im Drop-Down in NinjaOne heißen. Der Personalnummern-Bereich
+      Der Personalnummern-Bereich
       (Von/Bis) wird pro Firma vergeben; beim Onboarding entscheidet die „Firma lt.&nbsp;Arbeitsvertrag“,
       welche Nummer vergeben wird. „Aktuell“ ist die zuletzt vergebene Nummer.
       Mehrere Firmen können sich einen gemeinsamen Zähler teilen – dazu bei einer Firma
