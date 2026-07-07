@@ -295,11 +295,12 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       const { data: compData } = await companiesApi.list()
       companies.value = compData.data.companies
 
-      // Load department groups from API (als 'hidden' markierte ausblenden)
+      // Fachabteilungen über den öffentlichen /groups-Endpoint laden (kein Admin
+      // nötig; als 'hidden' markierte werden serverseitig bereits ausgeblendet).
       try {
         const { data: groupsData } =
-          await client.get<{ data: Array<GroupOption & { hidden?: boolean }> }>('/settings/groups')
-        departments.value = groupsData.data.filter(g => !g.hidden)
+          await client.get<{ data: Array<GroupOption> }>('/groups')
+        departments.value = groupsData.data
       } catch {
         departments.value = []
       }

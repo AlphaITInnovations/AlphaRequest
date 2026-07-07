@@ -4,7 +4,7 @@ from fastapi import Request, HTTPException, status
 from backend.utils.config import config
 from backend.utils.logger import logger
 from backend.metrics.auth_metrics import update_last_activity
-from backend.core.session import TOKENS
+from backend.core.session import TOKENS, SERVER_BOOT_ID
 from backend.database.users import get_user_permissions
 
 SAFE_UPDATE_INTERVAL = 60  # seconds
@@ -17,6 +17,11 @@ def get_current_user(request: Request) -> Dict:
     last_activity_raw = session.get("last_activity")
 
     if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    # Nach einem Server-Neustart sind alte Sessions ungültig (boot_id passt nicht mehr).
+    if session.get("boot_id") != SERVER_BOOT_ID:
+        session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     update_last_activity(request)
@@ -73,6 +78,10 @@ def check_session_only(request: Request) -> Dict:
     now = int(time.time())
 
     if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    if session.get("boot_id") != SERVER_BOOT_ID:
+        session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     try:
