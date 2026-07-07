@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
-import { provideSettingsSave } from '@/composables/settingsSave'
+import { useSettingsSaveBar } from '@/composables/settingsSave'
 import EnvInfoPanel from '@/components/settings/EnvInfoPanel.vue'
 import CompaniesPanel from '@/components/settings/CompaniesPanel.vue'
 import DepartmentsPanel from '@/components/settings/DepartmentsPanel.vue'
@@ -15,7 +15,7 @@ type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'p
 const active = ref<Section>('general')
 
 const { toast } = useToast()
-const saveState = provideSettingsSave()
+const { state: saveState, save: doSave, reset: doReset } = useSettingsSaveBar()
 
 // ── Nav ──────────────────────────────────────────────────────────────────────
 const nav = [
@@ -109,8 +109,8 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
               ● Ungespeicherte Änderungen
             </span>
             <div class="flex gap-2">
-              <button @click="saveState.reset()" :disabled="saveState.saving" class="btn-secondary">Verwerfen</button>
-              <button @click="saveState.save()" :disabled="saveState.saving" class="btn-primary">
+              <button @click="doReset()" :disabled="saveState.saving" class="btn-secondary">Verwerfen</button>
+              <button @click="doSave()" :disabled="saveState.saving" class="btn-primary">
                 {{ saveState.saving ? 'Speichert…' : 'Speichern' }}
               </button>
             </div>

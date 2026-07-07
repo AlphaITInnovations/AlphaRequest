@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { client } from '@/api/client'
 import { usersApi, type UserEntry } from '@/api/users'
 import UserSelect from '@/components/UserSelect.vue'
-import { useSettingsSave, resetSettingsSave } from '@/composables/settingsSave'
-
-const save = useSettingsSave()
+import { useSaver } from '@/composables/settingsSave'
 
 interface PermType { key: string; label: string; allowed_users: string[]; allowed_groups: string[] }
 interface AdGroup { id: string; displayName: string; description: string }
@@ -103,22 +101,19 @@ async function savePermissions() {
   const userPayload: Record<string, string[]> = {}
   const groupPayload: Record<string, string[]> = {}
   permissions.value.forEach(t => { userPayload[t.key] = t.allowed_users; groupPayload[t.key] = t.allowed_groups })
-  save.saving = true
+  setSaving(true)
   try {
     await client.put('/settings/permissions', { permissions: userPayload, group_permissions: groupPayload })
     snapshot.value = serialize(permissions.value)
   } finally {
-    save.saving = false
+    setSaving(false)
   }
 }
 
 const dirty = computed(() => serialize(permissions.value) !== snapshot.value)
-watchEffect(() => { save.dirty = dirty.value })
-save.save  = savePermissions
-save.reset = () => { loadAll() }
+const { setSaving } = useSaver({ dirty, save: savePermissions, reset: () => loadAll() })
 
 onMounted(loadAll)
-onUnmounted(() => resetSettingsSave(save))
 </script>
 
 <template>

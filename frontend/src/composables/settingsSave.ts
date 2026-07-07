@@ -1,39 +1,58 @@
-import { reactive, inject, provide, type InjectionKey } from 'vue'
+import { reactive, watch, onUnmounted, type Ref } from 'vue'
 
 /**
- * Geteilter Speicher-Status für die Settings: Die Shell stellt einen reaktiven
- * Zustand bereit, die aktive Panel-Komponente meldet dort ihren „dirty"-Status
- * und ihre save()/reset()-Funktionen an. Die Shell rendert daraus EINE sticky
- * Speicher-Leiste unten. So gibt es genau einen konsistenten Speicherweg.
+ * Geteilter Speicher-Status für die Settings (Modul-Singleton).
+ * - Die Shell rendert daraus EINE sticky Speicher-Leiste (dirty/saving) und ruft
+ *   save()/reset() des aktiven Panels auf.
+ * - Ein Panel registriert sich via useSaver(); ein Owner-Token verhindert, dass
+ *   ein unmountendes Panel den Status des neuen Panels überschreibt.
+ *
+ * Bewusst: save/reset liegen als Modul-Variablen (NICHT in einem reactive-Objekt),
+ * damit es keine subtilen Reaktivitätsprobleme mit Funktions-Properties gibt.
  */
-export interface SettingsSaveState {
-  dirty: boolean
-  saving: boolean
+const state = reactive({ dirty: false, saving: false })
+let doSaveFn: () => void | Promise<void> = () => {}
+let doResetFn: () => void = () => {}
+let owner = 0
+let seq = 0
+
+/** Shell: reaktiver Status + Auslöser für Speichern/Verwerfen. */
+export function useSettingsSaveBar() {
+  return {
+    state,
+    save: () => doSaveFn(),
+    reset: () => doResetFn(),
+  }
+}
+
+export interface SaverOptions {
+  dirty: Ref<boolean>
   save: () => void | Promise<void>
   reset: () => void
 }
 
-const KEY: InjectionKey<SettingsSaveState> = Symbol('settingsSave')
+/** Panel: meldet dirty-Status + save/reset an. Gibt setSaving() zurück und räumt
+ *  beim Unmount selbst auf. */
+export function useSaver(opts: SaverOptions) {
+  const id = ++seq
+  owner = id
+  doSaveFn = opts.save
+  doResetFn = opts.reset
+  state.dirty = false      // vor dem ersten echten Wechsel keine Leiste zeigen
+  state.saving = false
 
-function _defaults(): SettingsSaveState {
-  return { dirty: false, saving: false, save: () => {}, reset: () => {} }
-}
+  const stop = watch(opts.dirty, v => { if (owner === id) state.dirty = v })
 
-/** In der Shell aufrufen. Gibt den reaktiven Zustand für die Speicher-Leiste zurück. */
-export function provideSettingsSave(): SettingsSaveState {
-  const state = reactive<SettingsSaveState>(_defaults())
-  provide(KEY, state)
-  return state
-}
+  onUnmounted(() => {
+    stop()
+    if (owner === id) {
+      owner = 0
+      doSaveFn = () => {}
+      doResetFn = () => {}
+      state.dirty = false
+      state.saving = false
+    }
+  })
 
-/** In einem Panel aufrufen. Meldet sich beim Zustand an und räumt beim Unmount auf. */
-export function useSettingsSave(): SettingsSaveState {
-  const s = inject(KEY)
-  if (!s) throw new Error('provideSettingsSave() fehlt in einem Vorfahren')
-  return s
-}
-
-/** Zustand auf Default zurücksetzen (Panel-Unmount / Sektionswechsel). */
-export function resetSettingsSave(s: SettingsSaveState) {
-  Object.assign(s, _defaults())
+  return { setSaving: (s: boolean) => { if (owner === id) state.saving = s } }
 }

@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { client } from '@/api/client'
 import { usersApi, type UserEntry } from '@/api/users'
 import UserSelect from '@/components/UserSelect.vue'
 import { useToast } from '@/composables/useToast'
-import { useSettingsSave, resetSettingsSave } from '@/composables/settingsSave'
+import { useSaver } from '@/composables/settingsSave'
 
 const { showToast } = useToast()
-const save = useSettingsSave()
 
 interface Group { id: string; name: string; members: string[]; distributions: string[]; required?: boolean; hidden?: boolean }
 
@@ -92,7 +91,7 @@ function removeDistribution(g: Group, mail: string) { g.distributions = g.distri
 async function saveGroups() {
   const changed = groups.value.filter(g => serialize(g) !== snapshot.value[g.id])
   if (changed.length === 0) return
-  save.saving = true
+  setSaving(true)
   try {
     for (const g of changed) {
       const { data } = await client.put(`/settings/groups/${g.id}`, {
@@ -105,17 +104,14 @@ async function saveGroups() {
   } catch (e: any) {
     showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
   } finally {
-    save.saving = false
+    setSaving(false)
   }
 }
 
 const dirty = computed(() => groups.value.some(g => serialize(g) !== snapshot.value[g.id]))
-watchEffect(() => { save.dirty = dirty.value })
-save.save  = saveGroups
-save.reset = () => { loadGroups() }
+const { setSaving } = useSaver({ dirty, save: saveGroups, reset: () => loadGroups() })
 
 onMounted(loadGroups)
-onUnmounted(() => resetSettingsSave(save))
 </script>
 
 <template>

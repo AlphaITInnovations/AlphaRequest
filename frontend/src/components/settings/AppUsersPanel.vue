@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { client } from '@/api/client'
 import { useToast } from '@/composables/useToast'
-import { useSettingsSave, resetSettingsSave } from '@/composables/settingsSave'
+import { useSaver } from '@/composables/settingsSave'
 
 const { showToast } = useToast()
-const save = useSettingsSave()
 
 interface AppUser {
   microsoft_id: string; display_name: string; email: string
@@ -91,7 +90,7 @@ function toggleExpand(id: string) { expandedUser.value = expandedUser.value === 
 async function saveUsers() {
   const changed = appUsers.value.filter(u => serialize(u) !== snapshot.value[u.microsoft_id])
   if (changed.length === 0) return
-  save.saving = true
+  setSaving(true)
   try {
     for (const u of changed) {
       const prev = JSON.parse(snapshot.value[u.microsoft_id] || '{"role":"none","extra":[]}')
@@ -111,22 +110,25 @@ async function saveUsers() {
   } catch {
     showToast('Fehler beim Speichern', false)
   } finally {
-    save.saving = false
+    setSaving(false)
   }
 }
 
 const dirty = computed(() => appUsers.value.some(u => serialize(u) !== snapshot.value[u.microsoft_id]))
-watchEffect(() => { save.dirty = dirty.value })
-save.save  = saveUsers
-save.reset = () => { loadAppUsers() }
+const { setSaving } = useSaver({ dirty, save: saveUsers, reset: () => loadAppUsers() })
 
 onMounted(loadAppUsers)
-onUnmounted(() => resetSettingsSave(save))
 </script>
 
 <template>
   <section>
     <h2 class="section-title">Benutzer & Rollen</h2>
+    <div class="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-900/20
+                px-4 py-3 text-sm text-blue-800 dark:text-blue-200 mb-4">
+      Hier werden nur die Berechtigungen für die Übersicht <strong>„Alle Aufträge"</strong>
+      (Ansehen / Verwalten / Admin) vergeben. Die Rechte zum <strong>Erstellen</strong> von Tickets
+      legst du unter <strong>„Erstellrechte"</strong> fest.
+    </div>
     <div class="card-section mb-4 space-y-2">
       <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">Rollen & Permissions</p>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

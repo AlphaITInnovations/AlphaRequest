@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { client } from '@/api/client'
 import { useToast } from '@/composables/useToast'
-import { useSettingsSave, resetSettingsSave } from '@/composables/settingsSave'
+import { useSaver } from '@/composables/settingsSave'
 
 const { showToast } = useToast()
-const save = useSettingsSave()
 
 interface CompanyItem {
   name: string
@@ -99,7 +98,7 @@ async function saveCompanies() {
       showToast(`„${c.name}“: „Von“ darf nicht größer als „Bis“ sein`, false); return
     }
   }
-  save.saving = true
+  setSaving(true)
   try {
     const payload = companies.value.map(c => ({
       name: c.name.trim(),
@@ -115,17 +114,14 @@ async function saveCompanies() {
   } catch (e: any) {
     showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
   } finally {
-    save.saving = false
+    setSaving(false)
   }
 }
 
 const dirty = computed(() => serialize(companies.value) !== snapshot.value)
-watchEffect(() => { save.dirty = dirty.value })
-save.save  = saveCompanies
-save.reset = () => { loadCompanies() }
+const { setSaving } = useSaver({ dirty, save: saveCompanies, reset: () => loadCompanies() })
 
 onMounted(loadCompanies)
-onUnmounted(() => resetSettingsSave(save))
 </script>
 
 <template>
