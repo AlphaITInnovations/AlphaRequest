@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS {TICKET_TABLE} (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+# Idempotente In-Place-Migrationen (kein Datenverlust) – in init_db aufgerufen.
+TICKETS_MIGRATIONS = [
+    # Index auf created_at beschleunigt ORDER BY created_at und die
+    # Zeitfenster-Filter (Involviert-Ansicht, Übersicht) bei vielen Tickets.
+    f"ALTER TABLE {TICKET_TABLE} ADD INDEX IF NOT EXISTS idx_tickets_created_at (created_at)",
+]
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
