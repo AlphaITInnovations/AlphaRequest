@@ -49,8 +49,12 @@ const navGroups = computed(() => {
 
 // Sektionswechsel über die URL (dadurch funktioniert Browser Vor/Zurück).
 // `item` wird bewusst fallen gelassen – die neue Sektion startet in der Liste.
+// Klick auf den bereits aktiven Reiter im Detail → zurück zur Übersicht.
 function switchTo(key: Section) {
-  if (key === active.value) return
+  if (key === active.value) {
+    if (route.query.item !== undefined) router.push({ query: { section: key } })
+    return
+  }
   router.push({ query: { section: key } })
 }
 
