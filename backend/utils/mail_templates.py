@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Sequence, Tuple
 import html
+
+from backend.utils.config import config
 
 
 @dataclass
@@ -45,6 +47,8 @@ BASE_TEMPLATE = """\
             <td style="height:6px; background:{primary}; line-height:6px; font-size:0;">&nbsp;</td>
           </tr>
 
+          {dev_banner}
+
           <tr>
             <td style="padding:18px 20px 12px 20px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -74,6 +78,8 @@ BASE_TEMPLATE = """\
               <div style="font-family:Arial,Helvetica,sans-serif; color:{text}; font-size:14px; line-height:1.7; padding-top:12px;">
                 {intro_html}
               </div>
+
+              {info_html}
 
               <div style="font-family:Arial,Helvetica,sans-serif; color:{text}; font-size:14px; line-height:1.75; padding-top:14px;">
                 {content_html}
@@ -119,6 +125,7 @@ def render_corporate_email(
     branding: Optional[MailBranding] = None,
     header_subtitle: str = "Automatisierte Benachrichtigung",
     info_box_url: Optional[str] = None,  # HEADLINE link
+    info_rows: Optional[Sequence[Tuple[str, str]]] = None,  # (Label, Wert)-Paare für die Infobox
     footer_text: Optional[str] = None,
     legal_hint: str = "Bitte nicht auf diese E-Mail antworten.",
     action_html: str = "",  # optionaler ROH-HTML-Block (z.B. Aktions-Buttons) – NICHT escaped
@@ -126,9 +133,9 @@ def render_corporate_email(
     """
     Corporate email template.
 
-    Changes (per request):
-    - info_box_* removed entirely
     - headline is clickable and opens info_box_url (required)
+    - info_rows rendern eine saubere Key-Value-Infobox
+    - in Nicht-Produktionsumgebungen wird ein DEV-Banner eingeblendet
     """
     b = branding or MailBranding()
     if not info_box_url:
@@ -137,6 +144,42 @@ def render_corporate_email(
     intro_html = _esc(intro).replace("\n", "<br>")
     content_html = _esc(content).replace("\n", "<br>")
     href = _esc(info_box_url)
+
+    # DEV-Banner (nur außerhalb der Produktion) – macht Test-Mails sofort erkennbar.
+    dev_banner = ""
+    env = (config.APP_ENV or "").strip()
+    if env.lower() != "production":
+        dev_banner = f"""
+          <tr>
+            <td style="background:#B45309; padding:9px 20px;">
+              <div style="font-family:Arial,Helvetica,sans-serif; color:#ffffff; font-size:12px;
+                          font-weight:800; letter-spacing:0.4px; text-align:center;">
+                ⚠ TESTUMGEBUNG ({_esc(env.upper() or "DEV")}) – KEINE ECHTE BENACHRICHTIGUNG
+              </div>
+            </td>
+          </tr>
+        """
+
+    # Optionale Infobox (Label/Wert)
+    info_html = ""
+    if info_rows:
+        rows = "".join(
+            f"""<tr>
+              <td style="font-family:Arial,Helvetica,sans-serif; color:{b.muted_text}; font-size:13px;
+                         padding:5px 14px 5px 0; white-space:nowrap; vertical-align:top;">{_esc(str(label))}</td>
+              <td style="font-family:Arial,Helvetica,sans-serif; color:{b.text_color}; font-size:14px;
+                         font-weight:600; padding:5px 0; vertical-align:top;">{_esc(str(value)).replace(chr(10), '<br>')}</td>
+            </tr>"""
+            for label, value in info_rows
+        )
+        info_html = f"""
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+               style="margin-top:14px; border:1px solid {b.border}; border-radius:12px; background:{b.background};">
+          <tr><td style="padding:8px 14px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%">{rows}</table>
+          </td></tr>
+        </table>
+        """
 
     # Clickable headline (bigger; looks like headline, not blue underlined link)
     headline_html = f"""
@@ -162,6 +205,8 @@ def render_corporate_email(
         header_subtitle=_esc(header_subtitle),
         headline_html=headline_html,
         intro_html=intro_html,
+        info_html=info_html,
+        dev_banner=dev_banner,
         content_html=content_html,
         action_html=action_html or "",
         footer_text=_esc(footer_text or b.footer_text),

@@ -1,0 +1,212 @@
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { client } from '@/api/client'
+import { usersApi, type UserEntry } from '@/api/users'
+import UserSelect from '@/components/UserSelect.vue'
+import { useSaver } from '@/composables/settingsSave'
+import { useDetailNav } from '@/composables/useDetailNav'
+import SettingsList from '@/components/settings/SettingsList.vue'
+
+interface PermType { key: string; label: string; allowed_users: string[]; allowed_groups: string[] }
+interface AdGroup { id: string; displayName: string; description: string }
+interface Group { id: string; name: string }
+
+const EVERYONE = '__everyone__'
+
+const permissions  = ref<PermType[]>([])
+const snapshot     = ref('')
+const loading      = ref(true)
+const { selected, open, back } = useDetailNav(() => permissions.value.length)
+const permSelected = ref<Record<string, { id: string; name: string } | null>>({})
+const adGroups     = ref<AdGroup[]>([])
+const adGroupSearch = ref<Record<string, string>>({})
+const adGroupOpen   = ref<Record<string, boolean>>({})
+const groups = ref<Group[]>([])
+const users  = ref<UserEntry[]>([])
+
+function serialize(list: PermType[]): string {
+  return JSON.stringify(list.map(t => ({ key: t.key, u: [...t.allowed_users].sort(), g: [...t.allowed_groups].sort() })))
+}
+
+async function loadAll() {
+  loading.value = true
+  try {
+    const [perms, ad, grp, usr] = await Promise.all([
+      client.get('/settings/permissions'),
+      client.get('/settings/ad-groups').catch(() => ({ data: { data: [] } })),
+      client.get('/settings/groups'),
+      usersApi.list(),
+    ])
+    permissions.value = perms.data.data.types
+    permissions.value.forEach(t => {
+      permSelected.value[t.key] = null
+      adGroupSearch.value[t.key] = ''
+      adGroupOpen.value[t.key]   = false
+    })
+    adGroups.value = ad.data.data
+    groups.value   = grp.data.data
+    users.value    = usr.data.data.users
+    snapshot.value = serialize(permissions.value)
+  } finally {
+    loading.value = false
+  }
+}
+
+type GroupKind = 'everyone' | 'fach' | 'ad' | 'unknown'
+function groupKind(id: string): GroupKind {
+  if (id === EVERYONE) return 'everyone'
+  if (groups.value.some(g => g.id === id)) return 'fach'
+  if (adGroups.value.some(g => g.id === id)) return 'ad'
+  return 'unknown'
+}
+function groupLabel(id: string): string {
+  if (id === EVERYONE) return 'Jeder (alle eingeloggten Nutzer)'
+  return groups.value.find(g => g.id === id)?.name
+      ?? adGroups.value.find(g => g.id === id)?.displayName ?? id
+}
+function groupIcon(id: string): string {
+  return { everyone: '🌐', fach: '🏢', ad: '👥', unknown: '❔' }[groupKind(id)]
+}
+function userName(id: string) { return users.value.find(u => u.id === id)?.displayName ?? id }
+
+function permCount(t: PermType) { return t.allowed_groups.length + t.allowed_users.length }
+function isEveryone(t: PermType) { return t.allowed_groups.includes(EVERYONE) }
+
+function filteredAdGroups(key: string): AdGroup[] {
+  const t = permissions.value.find(p => p.key === key)
+  const already = new Set(t?.allowed_groups ?? [])
+  const q = (adGroupSearch.value[key] ?? '').toLowerCase().trim()
+  return adGroups.value.filter(g => !already.has(g.id)).filter(g => !q || g.displayName.toLowerCase().includes(q))
+}
+
+function addPermEntity(key: string) {
+  const sel = permSelected.value[key]
+  if (!sel) return
+  const t = permissions.value.find(p => p.key === key)!
+  const isFach = groups.value.some(g => g.id === sel.id)
+  if (isFach) { if (!t.allowed_groups.includes(sel.id)) t.allowed_groups.push(sel.id) }
+  else        { if (!t.allowed_users.includes(sel.id))  t.allowed_users.push(sel.id) }
+  permSelected.value[key] = null
+}
+function removePermUser(key: string, id: string) {
+  const t = permissions.value.find(p => p.key === key)!
+  t.allowed_users = t.allowed_users.filter(x => x !== id)
+}
+function addPermGroup(key: string, groupId: string) {
+  const t = permissions.value.find(p => p.key === key)!
+  if (!t.allowed_groups.includes(groupId)) t.allowed_groups.push(groupId)
+  adGroupSearch.value[key] = ''
+}
+function removePermGroup(key: string, groupId: string) {
+  const t = permissions.value.find(p => p.key === key)!
+  t.allowed_groups = t.allowed_groups.filter(x => x !== groupId)
+}
+
+async function savePermissions() {
+  const userPayload: Record<string, string[]> = {}
+  const groupPayload: Record<string, string[]> = {}
+  permissions.value.forEach(t => { userPayload[t.key] = t.allowed_users; groupPayload[t.key] = t.allowed_groups })
+  setSaving(true)
+  try {
+    await client.put('/settings/permissions', { permissions: userPayload, group_permissions: groupPayload })
+    snapshot.value = serialize(permissions.value)
+    back()
+  } finally {
+    setSaving(false)
+  }
+}
+
+const dirty = computed(() => serialize(permissions.value) !== snapshot.value)
+const { setSaving } = useSaver({ dirty, save: savePermissions, reset: () => loadAll() })
+
+onMounted(loadAll)
+</script>
+
+<template>
+  <section>
+    <SettingsList v-if="selected === null" title="Erstellrechte" :items="permissions" :loading="loading"
+                  search-placeholder="Auftragstyp suchen…" :filter-text="(t) => t.label"
+                  @select="open">
+      <template #hint>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+          Lege je Auftragstyp fest, wer ihn erstellen darf. Auf einen Typ klicken zum Bearbeiten.
+        </p>
+      </template>
+      <template #row="{ item }">
+        <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ item.label }}</span>
+        <span v-if="isEveryone(item)" class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">🌐 Jeder</span>
+        <span v-else-if="permCount(item) === 0" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 whitespace-nowrap">⚠ niemand</span>
+        <span v-else class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 whitespace-nowrap">{{ permCount(item) }} berechtigt</span>
+      </template>
+    </SettingsList>
+
+    <template v-else-if="permissions[selected]">
+      <div class="flex items-center gap-3 mb-4">
+        <button @click="back()" class="btn-secondary">← Zurück</button>
+        <h3 class="font-semibold text-gray-900 dark:text-white">{{ permissions[selected].label }}</h3>
+        <span class="font-mono text-xs text-gray-400">{{ permissions[selected].key }}</span>
+      </div>
+
+      <div class="card-section space-y-3">
+        <div class="flex flex-wrap gap-2 items-center min-h-[44px] rounded-xl
+                    border border-gray-100 dark:border-white/[0.06] bg-gray-50/60 dark:bg-white/[0.02] p-2.5">
+          <span v-if="permCount(permissions[selected]) === 0" class="text-xs font-medium text-amber-700 dark:text-amber-300">
+            ⚠ Niemand darf diesen Auftragstyp erstellen
+          </span>
+          <span v-for="gid in permissions[selected].allowed_groups" :key="'g-' + gid"
+                class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium"
+                :class="{
+                  'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300': groupKind(gid) === 'everyone',
+                  'bg-[#3EAAB8]/10 text-[#3EAAB8]':                                                  groupKind(gid) === 'fach',
+                  'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300':        groupKind(gid) === 'ad',
+                  'bg-gray-100 dark:bg-white/10 text-gray-500':                                      groupKind(gid) === 'unknown',
+                }">
+            <span>{{ groupIcon(gid) }}</span>{{ groupLabel(gid) }}
+            <button @click="removePermGroup(permissions[selected].key, gid)" class="hover:text-red-500 transition">✕</button>
+          </span>
+          <span v-for="id in permissions[selected].allowed_users" :key="'u-' + id"
+                class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium
+                       bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+            👤 {{ userName(id) }}
+            <button @click="removePermUser(permissions[selected].key, id)" class="hover:text-red-500 transition">✕</button>
+          </span>
+        </div>
+
+        <p v-if="isEveryone(permissions[selected])" class="text-xs text-emerald-700 dark:text-emerald-300">
+          🌐 Jeder eingeloggte Nutzer darf erstellen – weitere Einträge sind nicht nötig.
+        </p>
+
+        <div v-else class="flex flex-col lg:flex-row gap-2 lg:items-start">
+          <div class="flex gap-2 flex-1 min-w-0">
+            <UserSelect label="" placeholder="Person oder Fachabteilung…" :show-groups="true"
+                        :model-value="permSelected[permissions[selected].key]"
+                        @update:model-value="permSelected[permissions[selected].key] = $event" class="flex-1 min-w-0" />
+            <button @click="addPermEntity(permissions[selected].key)" class="btn-primary self-end whitespace-nowrap">+ Hinzufügen</button>
+          </div>
+          <div class="relative lg:w-60">
+            <input v-model="adGroupSearch[permissions[selected].key]" placeholder="AD-Gruppe…" class="set-input w-full"
+                   @focus="adGroupOpen[permissions[selected].key] = true"
+                   @blur="adGroupOpen[permissions[selected].key] = false; adGroupSearch[permissions[selected].key] = ''" />
+            <div v-if="adGroupOpen[permissions[selected].key] && adGroupSearch[permissions[selected].key]?.length > 0 && filteredAdGroups(permissions[selected].key).length > 0"
+                 class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200
+                        dark:border-white/10 bg-white dark:bg-[#263040] shadow-lg">
+              <button v-for="g in filteredAdGroups(permissions[selected].key).slice(0, 15)" :key="g.id"
+                      @mousedown.prevent="addPermGroup(permissions[selected].key, g.id)"
+                      class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-purple-500/10 transition
+                             text-gray-900 dark:text-gray-100 flex items-center justify-between">
+                <span>{{ g.displayName }}</span>
+                <span v-if="g.description" class="text-xs text-gray-400 ml-2 truncate max-w-[160px]">{{ g.description }}</span>
+              </button>
+            </div>
+          </div>
+          <button @click="addPermGroup(permissions[selected].key, EVERYONE)"
+                  class="px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap self-end
+                         border border-emerald-300/60 text-emerald-700 dark:text-emerald-300
+                         bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition">
+            🌐 Jeder
+          </button>
+        </div>
+      </div>
+    </template>
+  </section>
+</template>

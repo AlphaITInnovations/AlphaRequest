@@ -21,6 +21,12 @@ from backend.utils.config import config
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 
+def _dev_prefix(subject: str) -> str:
+    """Betreff in Nicht-Produktionsumgebungen mit [DEV] kennzeichnen."""
+    env = (config.APP_ENV or "").strip()
+    return f"[DEV] {subject}" if env.lower() != "production" else subject
+
+
 class GraphMailError(RuntimeError):
     """Raised when Microsoft Graph sendMail fails."""
 
@@ -201,7 +207,7 @@ def send_mail_delegated(
     Endpoint: POST /me/sendMail
     """
     payload = build_message_payload(
-        subject=subject,
+        subject=_dev_prefix(subject),
         body=body,
         to_recipients=to_recipients,
         cc_recipients=cc_recipients,
@@ -257,7 +263,7 @@ def send_mail_app_only(
         raise RuntimeError("App token result has no access_token")
 
     payload = build_message_payload(
-        subject=subject,
+        subject=_dev_prefix(subject),
         body=body,
         to_recipients=to_recipients,
         cc_recipients=cc_recipients,
@@ -307,6 +313,7 @@ def send_personalnummer_warning_mail(company_name: str, remaining: int, pnr_to: 
                 "sonst können bald keine Onboarding-Aufträge mehr für diese Firma erstellt werden."
             ),
             info_box_url=config.FRONTEND_URL + "/settings",
+            info_rows=[("Firma", company_name), ("Noch frei", str(remaining)), ("Bereichsende", str(pnr_to))],
             content="",
         ),
         to_recipients=[to],
@@ -349,7 +356,7 @@ def send_newrequest_mail(to: str, prio: TicketPriority, titel: str, ttype: Ticke
                 f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
             ),
             info_box_url=config.FRONTEND_URL + "/dashboard",
-
+            info_rows=[("Auftrag", f"#{ticketid}"), ("Typ", readable_type), ("Priorität", readable_prio)],
             content="",
         ),
         to_recipients=[to],
@@ -389,6 +396,7 @@ def send_mail_to_fachabteilung(to: str, prio: TicketPriority, titel: str, ttype:
                 f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
             ),
             info_box_url=config.FRONTEND_URL + "/dashboard",
+            info_rows=[("Auftrag", f"#{ticketid}"), ("Typ", readable_type), ("Priorität", readable_prio)],
             content="",
         ),
         to_recipients=[to],
@@ -485,11 +493,9 @@ def send_freigabe_mail(ticket, approve_url: str, reject_url: str, to_recipients:
         return
 
     intro = (
-        f"Hallo,\n\n"
-        f"ein neuer Antrag für neue Mitarbeiter:innen liegt zur Freigabe vor:\n\n"
-        f"Auftrag: {ticket.title}\n"
-        f"Erstellt von: {ticket.owner_name}\n\n"
-        f"Bitte geben Sie den Antrag frei oder lehnen Sie ihn ab:"
+        "Hallo,\n\n"
+        "ein neuer Antrag für neue Mitarbeiter:innen liegt zur Freigabe vor.\n\n"
+        "Bitte geben Sie den Antrag frei oder lehnen Sie ihn ab:"
     )
 
     send_mail_app_only(
@@ -499,6 +505,7 @@ def send_freigabe_mail(ticket, approve_url: str, reject_url: str, to_recipients:
             subject=ticket.title,
             headline="Antrag neue Mitarbeiter:innen – Freigabe",
             intro=intro,
+            info_rows=[("Auftrag", ticket.title), ("Ticket-Nr.", f"#{ticket.id}"), ("Erstellt von", ticket.owner_name)],
             content="",
             action_html=_freigabe_buttons_html(approve_url, reject_url),
             info_box_url=config.FRONTEND_URL + "/dashboard",
@@ -518,12 +525,7 @@ def send_nachtrag_mail(ticket, text: str, to_recipients: List[str]):
         logger.info("Nachtrag-Mail: keine Empfänger für Ticket %s", ticket.id)
         return
 
-    intro = (
-        f"Hallo,\n\n"
-        f"zu folgendem Auftrag wurde ein Nachtrag verfasst:\n\n"
-        f"Auftrag: {ticket.title} (#{ticket.id})\n\n"
-        f"Nachtrag:\n{text}"
-    )
+    intro = "Hallo,\n\nzu folgendem Auftrag wurde ein Nachtrag verfasst:"
 
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
@@ -532,7 +534,8 @@ def send_nachtrag_mail(ticket, text: str, to_recipients: List[str]):
             subject=ticket.title,
             headline="Nachtrag zu einem Auftrag",
             intro=intro,
-            content="",
+            info_rows=[("Auftrag", ticket.title), ("Ticket-Nr.", f"#{ticket.id}")],
+            content=f"Nachtrag:\n{text}",
             info_box_url=config.FRONTEND_URL + "/dashboard",
         ),
         to_recipients=to_recipients,
@@ -547,12 +550,8 @@ def send_rejection_mail(ticket, reason: str, to: str):
         logger.warning("Ablehnungs-Mail: keine Empfängeradresse für Ticket %s", ticket.id)
         return
 
-    reason_txt = f"\n\nGrund:\n{reason.strip()}" if (reason or "").strip() else ""
-    intro = (
-        f"Hallo,\n\n"
-        f"Ihr Auftrag „{ticket.title}“ (#{ticket.id}) wurde abgelehnt."
-        f"{reason_txt}"
-    )
+    reason_txt = reason.strip() if (reason or "").strip() else ""
+    intro = f"Hallo,\n\nIhr Auftrag „{ticket.title}“ (#{ticket.id}) wurde abgelehnt."
 
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
@@ -561,7 +560,8 @@ def send_rejection_mail(ticket, reason: str, to: str):
             subject=ticket.title,
             headline="Auftrag abgelehnt",
             intro=intro,
-            content="",
+            info_rows=[("Auftrag", ticket.title), ("Ticket-Nr.", f"#{ticket.id}")],
+            content=(f"Grund:\n{reason_txt}" if reason_txt else ""),
             info_box_url=config.FRONTEND_URL + "/dashboard",
         ),
         to_recipients=[to],
