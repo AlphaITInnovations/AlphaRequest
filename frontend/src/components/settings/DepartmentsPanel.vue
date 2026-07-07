@@ -10,19 +10,22 @@ const { showToast } = useToast()
 
 interface Group { id: string; name: string; members: string[]; distributions: string[]; required?: boolean; hidden?: boolean }
 
-const groups      = ref<Group[]>([])
-const snapshot    = ref<Record<string, string>>({})   // id -> serialisierter Feldstand (zuletzt gespeichert)
-const users       = ref<UserEntry[]>([])
-const loading     = ref(true)
-const newGroupName = ref('')
-const distInput    = ref<Record<string, string>>({})
-const groupMember  = ref<Record<string, { id: string; name: string } | null>>({})
+const groups   = ref<Group[]>([])
+const snapshot = ref('')
+const users    = ref<UserEntry[]>([])
+const loading  = ref(true)
+const selected = ref<number | null>(null)
+const memberSel = ref<{ id: string; name: string } | null>(null)
+const distInput = ref('')
+let tmpSeq = 0
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
-function serialize(g: Group): string {
-  return JSON.stringify({ name: g.name, members: [...g.members].sort(),
-                          distributions: [...g.distributions].sort(), hidden: !!g.hidden })
+// dirty ohne id (neue Gruppen haben temporäre ids) – erkennt Anlegen/Löschen/Ändern.
+function serialize(list: Group[]): string {
+  return JSON.stringify(list.map(g => ({
+    name: g.name, members: [...g.members].sort(), distributions: [...g.distributions].sort(), hidden: !!g.hidden,
+  })))
 }
 function userName(id: string) { return users.value.find(u => u.id === id)?.displayName ?? id }
 
@@ -32,74 +35,57 @@ async function loadGroups() {
     const [grp, usr] = await Promise.all([client.get('/settings/groups'), usersApi.list()])
     groups.value = grp.data.data
     users.value  = usr.data.data.users
-    const snap: Record<string, string> = {}
-    groups.value.forEach(g => {
-      snap[g.id] = serialize(g)
-      distInput.value[g.id]   = ''
-      groupMember.value[g.id] = null
-    })
-    snapshot.value = snap
+    snapshot.value = serialize(groups.value)
   } finally {
     loading.value = false
   }
 }
 
-// ── Sofort-Aktionen (Anlegen / Löschen) ─────────────────────────────────────
-async function createGroup() {
-  const name = newGroupName.value.trim()
-  if (!name) return
-  try {
-    const { data } = await client.post('/settings/groups', { name, distributions: [] })
-    const g: Group = data.data
-    groups.value.push(g)
-    snapshot.value[g.id] = serialize(g)
-    distInput.value[g.id] = ''
-    groupMember.value[g.id] = null
-    newGroupName.value = ''
-    showToast('Gruppe erstellt', true)
-  } catch { showToast('Fehler beim Erstellen', false) }
+function addGroup() {
+  groups.value.push({ id: `tmp_${++tmpSeq}`, name: '', members: [], distributions: [], required: false, hidden: false })
+  selected.value = groups.value.length - 1
+  memberSel.value = null; distInput.value = ''
 }
-async function deleteGroup(g: Group) {
+function removeGroup(idx: number) {
+  const g = groups.value[idx]
   if (g.required) return
-  if (!confirm(`Fachabteilung "${g.name}" wirklich löschen?`)) return
-  try {
-    await client.delete(`/settings/groups/${g.id}`)
-    groups.value = groups.value.filter(x => x.id !== g.id)
-    delete snapshot.value[g.id]
-    showToast('Gelöscht', true)
-  } catch { showToast('Löschen nicht möglich', false) }
+  if (g.name && !confirm(`Fachabteilung „${g.name}“ wirklich löschen? (wird beim Speichern übernommen)`)) return
+  groups.value.splice(idx, 1)
+  selected.value = null
 }
+function openGroup(i: number) { selected.value = i; memberSel.value = null; distInput.value = '' }
 
-// ── Lokale Feld-Änderungen (Speichern via Sticky-Bar) ────────────────────────
-function addMember(g: Group) {
-  const m = groupMember.value[g.id]
-  if (!m) return
-  if (!g.members.includes(m.id)) g.members.push(m.id)
-  groupMember.value[g.id] = null
+function addMember() {
+  const g = selected.value !== null ? groups.value[selected.value] : null
+  if (!g || !memberSel.value) return
+  if (!g.members.includes(memberSel.value.id)) g.members.push(memberSel.value.id)
+  memberSel.value = null
 }
 function removeMember(g: Group, uid: string) { g.members = g.members.filter(m => m !== uid) }
-function addDistribution(g: Group) {
-  const mail = (distInput.value[g.id] || '').trim().toLowerCase()
+function addDistribution() {
+  const g = selected.value !== null ? groups.value[selected.value] : null
+  if (!g) return
+  const mail = distInput.value.trim().toLowerCase()
   if (!mail) return
   if (!EMAIL_RE.test(mail)) { showToast('Ungültige E-Mail', false); return }
   if (g.distributions.includes(mail)) { showToast('Existiert bereits', false); return }
   g.distributions.push(mail)
-  distInput.value[g.id] = ''
+  distInput.value = ''
 }
 function removeDistribution(g: Group, mail: string) { g.distributions = g.distributions.filter(m => m !== mail) }
 
 async function saveGroups() {
-  const changed = groups.value.filter(g => serialize(g) !== snapshot.value[g.id])
-  if (changed.length === 0) return
+  if (groups.value.some(g => !g.name.trim())) { showToast('Jede Fachabteilung braucht einen Namen', false); return }
   setSaving(true)
   try {
-    for (const g of changed) {
-      const { data } = await client.put(`/settings/groups/${g.id}`, {
-        name: g.name, members: g.members, distributions: g.distributions, hidden: g.hidden ?? false,
-      })
-      Object.assign(g, data.data)
-      snapshot.value[g.id] = serialize(g)
-    }
+    const payload = groups.value.map(g => ({
+      id: (g.id && String(g.id).startsWith('tmp_')) ? null : g.id,
+      name: g.name.trim(), members: g.members, distributions: g.distributions, hidden: !!g.hidden,
+    }))
+    const { data } = await client.put('/settings/groups', { groups: payload })
+    groups.value = data.data
+    snapshot.value = serialize(groups.value)
+    selected.value = null
     showToast('Gespeichert', true)
   } catch (e: any) {
     showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
@@ -108,7 +94,7 @@ async function saveGroups() {
   }
 }
 
-const dirty = computed(() => groups.value.some(g => serialize(g) !== snapshot.value[g.id]))
+const dirty = computed(() => serialize(groups.value) !== snapshot.value)
 const { setSaving } = useSaver({ dirty, save: saveGroups, reset: () => loadGroups() })
 
 onMounted(loadGroups)
@@ -116,82 +102,99 @@ onMounted(loadGroups)
 
 <template>
   <section>
-    <h2 class="section-title">Fachabteilungen</h2>
-    <div class="card-section mb-4 flex gap-3">
-      <input v-model="newGroupName" @keydown.enter.prevent="createGroup" placeholder="Neue Gruppe…" class="set-input flex-1" />
-      <button @click="createGroup" class="btn-primary">Erstellen</button>
-    </div>
+    <!-- ── Liste ── -->
+    <template v-if="selected === null">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="section-title mb-0">Fachabteilungen</h2>
+        <button @click="addGroup" class="btn-primary">+ Fachabteilung hinzufügen</button>
+      </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-16">
-      <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
-    </div>
+      <div v-if="loading" class="flex items-center justify-center py-16">
+        <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+      </div>
 
-    <div v-else class="space-y-4">
-      <div v-for="g in groups" :key="g.id" class="card-section space-y-5">
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2 flex-1 min-w-0">
-            <input v-if="!g.required" v-model="g.name" class="set-input flex-1 min-w-0 font-semibold" />
-            <h3 v-else class="text-lg font-semibold text-gray-900 dark:text-white">{{ g.name }}</h3>
-            <span v-if="g.required"
-                  title="Diese Fachabteilung wird von den Workflows benötigt und kann nicht umbenannt oder gelöscht werden. Mitglieder und Verteiler lassen sich weiterhin bearbeiten."
-                  class="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/20
-                         text-amber-700 dark:text-amber-300 px-2.5 py-1 text-xs font-medium whitespace-nowrap">
-              🔒 Pflichtgruppe
-            </span>
+      <div v-else class="space-y-2">
+        <p v-if="groups.length === 0" class="text-sm text-gray-400 italic px-1">Noch keine Fachabteilungen.</p>
+        <button v-for="(g, i) in groups" :key="g.id" @click="openGroup(i)"
+                class="w-full flex items-center gap-3 text-left rounded-xl border border-gray-200 dark:border-white/10
+                       bg-white dark:bg-[#212B3A] hover:border-[#3EAAB8]/40 hover:shadow-sm transition px-4 py-3">
+          <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ g.name || 'Unbenannt' }}</span>
+          <span v-if="g.required" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 whitespace-nowrap">🔒 Pflicht</span>
+          <span v-if="g.hidden" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 whitespace-nowrap">versteckt</span>
+          <span class="text-xs text-gray-400 whitespace-nowrap">{{ g.members.length }} 👤</span>
+          <span class="text-gray-300 dark:text-gray-600">›</span>
+        </button>
+      </div>
+    </template>
+
+    <!-- ── Detail ── -->
+    <template v-else-if="groups[selected]">
+      <div class="flex items-center justify-between mb-4">
+        <button @click="selected = null" class="btn-secondary">← Zurück</button>
+        <button v-if="!groups[selected].required" @click="removeGroup(selected)"
+                class="text-sm text-red-500 hover:text-red-600 hover:underline">Löschen</button>
+      </div>
+
+      <div class="card-section space-y-5">
+        <div class="flex items-center gap-2">
+          <div class="flex-1">
+            <label class="lbl">Name</label>
+            <input v-if="!groups[selected].required" v-model="groups[selected].name" class="set-input w-full font-semibold" />
+            <p v-else class="text-lg font-semibold text-gray-900 dark:text-white">{{ groups[selected].name }}</p>
           </div>
-          <button v-if="!g.required" @click="deleteGroup(g)"
-                  class="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition flex-shrink-0">🗑</button>
+          <span v-if="groups[selected].required"
+                title="Von den Workflows benötigt – nicht umbenennbar/löschbar. Mitglieder & Verteiler bleiben editierbar."
+                class="mt-5 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/20
+                       text-amber-700 dark:text-amber-300 px-2.5 py-1 text-xs font-medium whitespace-nowrap">🔒 Pflichtgruppe</span>
         </div>
 
         <label class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300 cursor-pointer select-none w-fit">
-          <input type="checkbox" v-model="g.hidden"
+          <input type="checkbox" v-model="groups[selected].hidden"
                  class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8] focus:ring-[#3EAAB8]/30 cursor-pointer" />
           <span>Nicht in Auswahl-Dropdowns anzeigen</span>
-          <span class="text-xs text-gray-400 hidden sm:inline">– für Gruppen, die nur über spezielle Phasen automatisch zugewiesen werden</span>
         </label>
 
         <div class="grid md:grid-cols-2 gap-6">
           <div class="space-y-3">
             <div class="flex items-center justify-between">
               <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">Mitglieder</p>
-              <span class="text-xs text-gray-400">{{ g.members.length }}</span>
+              <span class="text-xs text-gray-400">{{ groups[selected].members.length }}</span>
             </div>
             <div class="flex flex-wrap gap-2 min-h-[36px]">
-              <span v-for="uid in g.members" :key="uid"
+              <span v-for="uid in groups[selected].members" :key="uid"
                     class="inline-flex items-center gap-1.5 rounded-full bg-[#3EAAB8]/10 text-[#3EAAB8] px-3 py-1 text-sm">
                 {{ userName(uid) }}
-                <button @click="removeMember(g, uid)" class="hover:text-red-500 transition">✕</button>
+                <button @click="removeMember(groups[selected], uid)" class="hover:text-red-500 transition">✕</button>
               </span>
             </div>
             <div class="flex gap-2">
               <UserSelect label="" placeholder="Benutzer hinzufügen…"
-                          :model-value="groupMember[g.id]"
-                          @update:model-value="groupMember[g.id] = $event" class="flex-1" />
-              <button @click="addMember(g)" class="btn-primary self-end">+</button>
+                          :model-value="memberSel" @update:model-value="memberSel = $event" class="flex-1" />
+              <button @click="addMember" class="btn-primary self-end">+</button>
             </div>
           </div>
           <div class="space-y-3">
             <div class="flex items-center justify-between">
               <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">Verteiler (E-Mail)</p>
-              <span class="text-xs text-gray-400">{{ g.distributions.length }}</span>
+              <span class="text-xs text-gray-400">{{ groups[selected].distributions.length }}</span>
             </div>
             <div class="flex flex-wrap gap-2 min-h-[36px]">
-              <span v-for="mail in g.distributions" :key="mail"
+              <span v-for="mail in groups[selected].distributions" :key="mail"
                     class="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-900/20
                            text-emerald-700 dark:text-emerald-300 px-3 py-1 text-sm">
                 {{ mail }}
-                <button @click="removeDistribution(g, mail)" class="hover:text-red-500 transition">✕</button>
+                <button @click="removeDistribution(groups[selected], mail)" class="hover:text-red-500 transition">✕</button>
               </span>
             </div>
             <div class="flex gap-2">
-              <input v-model="distInput[g.id]" @keydown.enter.prevent="addDistribution(g)"
+              <input v-model="distInput" @keydown.enter.prevent="addDistribution"
                      type="email" placeholder="Neue Verteiler-Mail…" class="set-input flex-1" />
-              <button @click="addDistribution(g)"
+              <button @click="addDistribution"
                       class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm transition">+</button>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </section>
 </template>
