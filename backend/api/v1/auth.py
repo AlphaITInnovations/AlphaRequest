@@ -5,7 +5,7 @@ from starlette import status
 from starlette.status import HTTP_302_FOUND
 
 from backend.core.dependencies import get_current_user, check_session_only
-from backend.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS
+from backend.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS, SERVER_BOOT_ID
 from backend.database.users import (
     upsert_user, get_user_permissions, get_user, set_group_admin, revoke_group_admin,
 )
@@ -219,7 +219,11 @@ async def auth_callback(request: Request):
 
         sid = rotate_sid(request.session)
         TOKENS.put(sid, result)
-        request.session.update({"user": user_payload, "last_activity": int(time.time())})
+        request.session.update({
+            "user": user_payload,
+            "last_activity": int(time.time()),
+            "boot_id": SERVER_BOOT_ID,
+        })
         request.session.pop("auth_flow", None)
 
         if approx_cookie_size_bytes(request.session) > 3000:
@@ -229,6 +233,7 @@ async def auth_callback(request: Request):
                 "sid": sid,
                 "user": user_payload,
                 "last_activity": int(time.time()),
+                "boot_id": SERVER_BOOT_ID,
             })
 
         record_login_success(request)

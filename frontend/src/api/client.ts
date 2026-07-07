@@ -33,7 +33,10 @@ export function setupInterceptors(router: import('vue-router').Router) {
       // Auth-Endpoints nie abfangen – fetchMe/Router-Guard handeln das
       const isAuthEndpoint = url.includes('/auth/')
 
-      if ((status === 401 || status === 403) && !isAuthEndpoint) {
+      // NUR 401 = Session abgelaufen. 403 ist „keine Berechtigung" (z.B. ein
+      // Nicht-Admin ruft einen Admin-Endpoint) und darf NICHT ausloggen –
+      // das Aufrufende behandelt den Fehler selbst.
+      if (status === 401 && !isAuthEndpoint) {
         if (router.currentRoute.value.path !== '/login') {
           const auth = useAuthStore()
           // Nur Modal zeigen wenn der User GERADE eingeloggt ist

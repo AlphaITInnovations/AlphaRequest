@@ -28,6 +28,11 @@ class TokenStore:
 
 TOKENS = TokenStore()
 
+# Eindeutige Kennung dieses Server-Prozesses. Wird beim Login in die Session
+# geschrieben und bei jedem Request geprüft: Nach einem Neustart ändert sie sich,
+# wodurch ALLE bestehenden Sessions ungültig werden (erzwungenes Re-Login).
+SERVER_BOOT_ID = uuid.uuid4().hex
+
 
 def ensure_sid(session: dict) -> str:
     sid = session.get("sid")
