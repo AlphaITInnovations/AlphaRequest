@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import { useSettingsSaveBar } from '@/composables/settingsSave'
@@ -11,11 +12,21 @@ import AppUsersPanel from '@/components/settings/AppUsersPanel.vue'
 import TestMailPanel from '@/components/settings/TestMailPanel.vue'
 import AuditLogPanel from '@/components/AuditLogPanel.vue'
 
-type Section = 'general' | 'microsoft' | 'session' | 'companies' | 'groups' | 'permissions' | 'app-users' | 'testmail' | 'audit'
-const active = ref<Section>('general')
+const SECTIONS = ['general', 'microsoft', 'session', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit'] as const
+type Section = typeof SECTIONS[number]
 
+const route  = useRoute()
+const router = useRouter()
 const { toast } = useToast()
 const { state: saveState, save: doSave, reset: doReset } = useSettingsSaveBar()
+
+function sectionFromRoute(): Section {
+  const s = route.query.section
+  return (typeof s === 'string' && (SECTIONS as readonly string[]).includes(s)) ? (s as Section) : 'general'
+}
+const active = ref<Section>(sectionFromRoute())
+// URL → aktive Sektion (Deep-Link + Browser Vor/Zurück)
+watch(() => route.query.section, () => { active.value = sectionFromRoute() })
 
 // ── Nav ──────────────────────────────────────────────────────────────────────
 const nav = [
@@ -36,12 +47,19 @@ const navGroups = computed(() => {
   return g
 })
 
-// Sektionswechsel mit Schutz vor Verlust ungespeicherter Änderungen.
+// Sektionswechsel über die URL (dadurch funktioniert Browser Vor/Zurück).
 function switchTo(key: Section) {
   if (key === active.value) return
-  if (saveState.dirty && !confirm('Es gibt ungespeicherte Änderungen. Verwerfen und Sektion wechseln?')) return
-  active.value = key   // altes Panel wird unmountet → lokale Änderungen verworfen
+  router.push({ query: { ...route.query, section: key } })
 }
+
+// Unsaved-Guard – greift auch beim Browser-Zurück (Query-Wechsel = Route-Update).
+onBeforeRouteUpdate((to, from) => {
+  if (to.query.section !== from.query.section && saveState.dirty) {
+    if (!confirm('Es gibt ungespeicherte Änderungen. Verwerfen und Sektion wechseln?')) return false
+  }
+  return true
+})
 
 // Warnung beim Verlassen der Seite mit ungespeicherten Änderungen.
 function onBeforeUnload(e: BeforeUnloadEvent) {
