@@ -49,6 +49,61 @@ def _audit(user: dict, action: str, **kw) -> None:
     )
 
 
+# ── Diff-Helfer fürs Audit (Bulk-Speichern schickt alles → nur echte Änderungen loggen) ──
+
+def _names_from(request) -> dict:
+    return {u["id"]: (u.get("displayName") or u.get("mail") or u["id"])
+            for u in getattr(request.app.state, "user_cache", [])}
+
+
+def _summary(parts: list[str], noun: str) -> str:
+    return parts[0] if len(parts) == 1 else f"{len(parts)} Änderungen an {noun}"
+
+
+def _diff_groups(old_list, new_list, name_of):
+    old_by = {g.get("id"): g for g in old_list}
+    new_by = {g.get("id"): g for g in new_list}
+    created = [g["name"] for g in new_list if g.get("id") not in old_by]
+    deleted = [g["name"] for g in old_list if g.get("id") not in new_by]
+    modified = []
+    for gid, ng in new_by.items():
+        og = old_by.get(gid)
+        if not og:
+            continue
+        changes: list[str] = []
+        if (og.get("name") or "") != (ng.get("name") or ""):
+            changes.append(f"umbenannt: „{og.get('name')}“ → „{ng.get('name')}“")
+        om, nm = set(og.get("members", [])), set(ng.get("members", []))
+        if nm - om: changes.append("Mitglied +: " + ", ".join(sorted(name_of(m) for m in nm - om)))
+        if om - nm: changes.append("Mitglied −: " + ", ".join(sorted(name_of(m) for m in om - nm)))
+        od, nd = set(og.get("distributions", [])), set(ng.get("distributions", []))
+        if nd - od: changes.append("Verteiler +: " + ", ".join(sorted(nd - od)))
+        if od - nd: changes.append("Verteiler −: " + ", ".join(sorted(od - nd)))
+        if bool(og.get("hidden")) != bool(ng.get("hidden")):
+            changes.append("versteckt: " + ("an" if ng.get("hidden") else "aus"))
+        if changes:
+            modified.append({"name": ng.get("name"), "changes": changes})
+    return created, deleted, modified
+
+
+def _diff_companies(old_list, new_list):
+    old_by = {c["name"]: c for c in old_list}
+    new_by = {c["name"]: c for c in new_list}
+    created = [n for n in new_by if n not in old_by]
+    deleted = [n for n in old_by if n not in new_by]
+    modified = []
+    fields = [("pnr_from", "Von"), ("pnr_to", "Bis"), ("mandant", "Mandant"), ("pnr_shared_with", "geteilt mit")]
+    for name, nc in new_by.items():
+        oc = old_by.get(name)
+        if not oc:
+            continue
+        changes = [f"{label}: {oc.get(k) or '—'} → {nc.get(k) or '—'}"
+                   for k, label in fields if (oc.get(k) or None) != (nc.get(k) or None)]
+        if changes:
+            modified.append({"name": name, "changes": changes})
+    return created, deleted, modified
+
+
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AppUserOut(BaseModel):
@@ -235,6 +290,7 @@ def get_companies_endpoint(user: dict = Depends(get_current_user)):
 @router.put("/settings/companies", response_model=DataResponse[CompaniesOut])
 def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_current_user)):
     require_admin(user)
+    old_companies = get_companies_full()
 
     cleaned: list[dict] = []
     seen = set()
@@ -289,9 +345,16 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
     except Exception as e:
         logger.exception("Failed to update companies: %s", e)
         raise HTTPException(500, "Fehler beim Speichern")
-    _audit(user, "companies_changed", entity_type="settings", entity_id="companies",
-           summary=f"{len(cleaned)} Firmen gespeichert",
-           details={"companies": [c["name"] for c in cleaned]})
+
+    created, deleted, modified = _diff_companies(old_companies, cleaned)
+    parts = ([f"„{n}“ angelegt" for n in created]
+             + [f"„{n}“ gelöscht" for n in deleted]
+             + [f"„{m['name']}“: {'; '.join(m['changes'])}" for m in modified])
+    if parts:
+        _audit(user, "companies_changed", entity_type="settings", entity_id="companies",
+               summary=_summary(parts, "Firmen"),
+               details={"created": created, "deleted": deleted, "modified": modified})
+
     return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
 
 
@@ -346,17 +409,32 @@ def set_permissions(
 ):
     require_admin(user)
     user_cache = getattr(request.app.state, "user_cache", [])
+    old_users = load_ticket_permissions()
+    old_groups = load_group_ticket_permissions()
+
     set_ticket_permissions_safe(
         {k.value: v for k, v in payload.permissions.items()},
         user_cache=user_cache,
     )
+    new_users = {k.value: v for k, v in payload.permissions.items()}
+    new_groups = {k.value: v for k, v in payload.group_permissions.items()}
     # Gruppen-Permissions speichern
     if payload.group_permissions:
-        set_group_ticket_permissions(
-            {k.value: v for k, v in payload.group_permissions.items()}
-        )
-    _audit(user, "ticket_permissions_changed", entity_type="settings", entity_id="ticket_permissions",
-           summary="Ticket-Erstellrechte geändert")
+        set_group_ticket_permissions(new_groups)
+
+    # Nur tatsächlich geänderte Auftragstypen protokollieren.
+    changed: list[str] = []
+    for t in TicketType:
+        tk = t.value
+        u_changed = set(new_users.get(tk, [])) != set(old_users.get(tk, []))
+        g_changed = tk in new_groups and set(new_groups.get(tk, [])) != set(old_groups.get(tk, []))
+        if u_changed or g_changed:
+            changed.append(TICKET_LABELS.get(t, tk))
+    if changed:
+        _audit(user, "ticket_permissions_changed", entity_type="settings", entity_id="ticket_permissions",
+               summary=_summary([f"„{c}“ geändert" for c in changed], "Erstellrechten"),
+               details={"changed": changed})
+
     return get_permissions(user)
 
 
@@ -461,6 +539,7 @@ def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depend
     from backend.services.workflow_state import required_group_names
     require_admin(user)
     valid_ids = {u["id"] for u in getattr(request.app.state, "user_cache", [])}
+    old_groups = get_groups()
 
     cleaned: list[dict] = []
     seen: set[str] = set()
@@ -491,8 +570,17 @@ def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depend
             )
 
     save_groups(cleaned)
-    _audit(user, "groups_changed", entity_type="settings", entity_id="groups",
-           summary=f"{len(cleaned)} Fachabteilungen gespeichert")
+
+    names = _names_from(request)
+    created, deleted, modified = _diff_groups(old_groups, cleaned, lambda i: names.get(i, i))
+    parts = ([f"„{n}“ angelegt" for n in created]
+             + [f"„{n}“ gelöscht" for n in deleted]
+             + [f"„{m['name']}“: {'; '.join(m['changes'])}" for m in modified])
+    if parts:
+        _audit(user, "groups_changed", entity_type="settings", entity_id="groups",
+               summary=_summary(parts, "Fachabteilungen"),
+               details={"created": created, "deleted": deleted, "modified": modified})
+
     groups = get_groups()
     for g in groups:
         g.setdefault("distributions", [])
