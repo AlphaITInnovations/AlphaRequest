@@ -410,6 +410,18 @@ class MemberIn(BaseModel):
     user_id: str
 
 
+class GroupBulkItem(BaseModel):
+    id: Optional[str] = None          # None = neue Gruppe
+    name: str
+    members: list[str] = []
+    distributions: list[str] = []
+    hidden: bool = False
+
+
+class GroupsBulkIn(BaseModel):
+    groups: list[GroupBulkItem]
+
+
 def _validate_emails(emails: list[str]) -> list[str]:
     cleaned = []
     for m in emails:
@@ -435,6 +447,52 @@ def _group_out(g: dict) -> GroupOut:
 @router.get("/settings/groups", response_model=DataResponse[list[GroupOut]])
 def list_groups(user: dict = Depends(get_current_user)):
     require_admin(user)
+    groups = get_groups()
+    for g in groups:
+        g.setdefault("distributions", [])
+    return DataResponse(data=[_group_out(g) for g in groups])
+
+
+@router.put("/settings/groups", response_model=DataResponse[list[GroupOut]])
+def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depends(get_current_user)):
+    """Bulk-Replace der Fachabteilungen (wie PUT /settings/companies): das Frontend
+    schickt die komplette gewünschte Liste; anlegen/ändern/löschen passiert in einem
+    Schritt. Pflichtgruppen dürfen nicht gelöscht/umbenannt werden."""
+    from backend.services.workflow_state import required_group_names
+    require_admin(user)
+    valid_ids = {u["id"] for u in getattr(request.app.state, "user_cache", [])}
+
+    cleaned: list[dict] = []
+    seen: set[str] = set()
+    for item in payload.groups:
+        name = item.name.strip()
+        if not name:
+            raise HTTPException(400, "Jede Fachabteilung braucht einen Namen")
+        if name.lower() in seen:
+            raise HTTPException(400, f"Doppelter Name: '{name}'")
+        seen.add(name.lower())
+        for m in item.members:
+            if m not in valid_ids:
+                raise HTTPException(400, f"Ungültige User-ID '{m}'")
+        cleaned.append({
+            "id": item.id or uuid.uuid4().hex,
+            "name": name,
+            "members": list(dict.fromkeys(item.members)),
+            "distributions": _validate_emails(item.distributions),
+            "hidden": bool(item.hidden),
+        })
+
+    # Pflichtgruppen (von den Workflows benötigt) müssen erhalten bleiben.
+    present = {c["name"].lower() for c in cleaned}
+    for req in required_group_names():
+        if (req or "").strip().lower() not in present:
+            raise HTTPException(
+                409, f"Die Pflicht-Fachabteilung '{req}' darf nicht gelöscht oder umbenannt werden.",
+            )
+
+    save_groups(cleaned)
+    _audit(user, "groups_changed", entity_type="settings", entity_id="groups",
+           summary=f"{len(cleaned)} Fachabteilungen gespeichert")
     groups = get_groups()
     for g in groups:
         g.setdefault("distributions", [])
