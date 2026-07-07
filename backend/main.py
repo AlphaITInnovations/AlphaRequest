@@ -130,7 +130,15 @@ def run_server(https: bool = False):
             "ssl_keyfile": "../data/cert/key.pem",
             "ssl_certfile": "../data/cert/cert.pem",
         }
-    uvicorn.run(app, host="0.0.0.0", port=config.PORT, reload=False, **ssl_args)
+    # Läuft hinter Traefik (TLS-Terminierung): X-Forwarded-For/-Proto auswerten,
+    # damit request.client.host die ECHTE Nutzer-IP ist (wichtig fürs Audit-Log)
+    # und das Schema als https erkannt wird. forwarded_allow_ips="*" ist ok, weil
+    # die App nur über den Proxy erreichbar ist (nicht öffentlich exponiert).
+    uvicorn.run(
+        app, host="0.0.0.0", port=config.PORT, reload=False,
+        proxy_headers=True, forwarded_allow_ips="*",
+        **ssl_args,
+    )
 
 
 def main():
