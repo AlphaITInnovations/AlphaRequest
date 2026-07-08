@@ -43,7 +43,7 @@
   "timezone": "browser",
   "title": "AlphaRequest – Übersicht",
   "uid": "alpharequest-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": "",
   "panels": [
     { "id": 100, "type": "row", "title": "Überblick", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
@@ -112,9 +112,17 @@
       "targets": [ { "refId": "A", "expr": "tickets_by_status", "legendFormat": "{{status}}" } ]
     },
     {
-      "id": 11, "type": "bargauge", "title": "Tickets nach Typ",
+      "id": 16, "type": "piechart", "title": "Tickets nach Priorität",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 6, "x": 6, "y": 6 },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "pieType": "donut", "tooltip": { "mode": "single", "sort": "none" }, "legend": { "displayMode": "list", "placement": "right", "showLegend": true, "values": ["value"] }, "displayLabels": ["percent"] },
+      "targets": [ { "refId": "A", "expr": "tickets_by_priority", "legendFormat": "{{priority}}" } ]
+    },
+    {
+      "id": 11, "type": "bargauge", "title": "Tickets nach Typ",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 6 },
       "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#3EACB6" }, "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "#3EACB6", "value": null } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "valueMode": "color" },
       "targets": [ { "refId": "A", "expr": "tickets_by_type", "legendFormat": "{{type}}" } ]
@@ -122,7 +130,7 @@
     {
       "id": 12, "type": "bargauge", "title": "Offene Tickets nach aktueller Phase",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 6 },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 6 },
       "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#3EACB6" }, "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "#3EACB6", "value": null } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "valueMode": "color" },
       "targets": [ { "refId": "A", "expr": "tickets_by_phase", "legendFormat": "{{phase}}" } ]
@@ -130,7 +138,7 @@
     {
       "id": 13, "type": "bargauge", "title": "Offen je Fachabteilung",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 6 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
       "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#3EACB6" }, "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "#3EACB6", "value": null } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "valueMode": "color" },
       "targets": [ { "refId": "A", "expr": "tickets_open_by_department", "legendFormat": "{{department}}" } ]
@@ -139,29 +147,29 @@
       "id": 14, "type": "bargauge", "title": "Ältestes offenes Ticket je Phase",
       "description": "Alter des am längsten offenen Tickets je Phase. Amber ab 1 Tag, rot ab 3 Tagen.",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 86400 }, { "color": "red", "value": 259200 } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "valueMode": "color" },
       "targets": [ { "refId": "A", "expr": "tickets_oldest_open_age_seconds", "legendFormat": "{{phase}}" } ]
     },
     {
-      "id": 15, "type": "timeseries", "title": "Durchsatz (pro Stunde)",
-      "description": "Erstellte, abgeschlossene und abgelehnte Tickets, hochgerechnet auf pro Stunde.",
+      "id": 15, "type": "timeseries", "title": "Durchsatz (letzte Stunde)",
+      "description": "Erstellte, abgeschlossene und abgelehnte Tickets, jeweils Anzahl in der zurückliegenden Stunde.",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
       "fieldConfig": {
         "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "gradientMode": "opacity", "showPoints": "never", "pointSize": 5, "axisPlacement": "auto", "scaleDistribution": { "type": "linear" }, "stacking": { "mode": "none", "group": "A" }, "spanNulls": false } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "abgelehnt/h" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
-          { "matcher": { "id": "byName", "options": "abgeschlossen/h" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
-          { "matcher": { "id": "byName", "options": "erstellt/h" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#3EACB6" } } ] }
+          { "matcher": { "id": "byName", "options": "abgelehnt" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "abgeschlossen" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "erstellt" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#3EACB6" } } ] }
         ]
       },
       "options": { "legend": { "showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "refId": "A", "expr": "sum(rate(tickets_created_total[$__rate_interval])) * 3600", "legendFormat": "erstellt/h" },
-        { "refId": "B", "expr": "sum(rate(tickets_terminal_total{outcome=\"archived\"}[$__rate_interval])) * 3600", "legendFormat": "abgeschlossen/h" },
-        { "refId": "C", "expr": "sum(rate(tickets_terminal_total{outcome=\"rejected\"}[$__rate_interval])) * 3600", "legendFormat": "abgelehnt/h" }
+        { "refId": "A", "expr": "sum(increase(tickets_created_total[1h]))", "legendFormat": "erstellt" },
+        { "refId": "B", "expr": "sum(increase(tickets_terminal_total{outcome=\"archived\"}[1h]))", "legendFormat": "abgeschlossen" },
+        { "refId": "C", "expr": "sum(increase(tickets_terminal_total{outcome=\"rejected\"}[1h]))", "legendFormat": "abgelehnt" }
       ]
     },
 
@@ -182,53 +190,54 @@
       ]
     },
     {
-      "id": 21, "type": "timeseries", "title": "Logins (pro Stunde)",
+      "id": 21, "type": "timeseries", "title": "Logins (letzte Stunde)",
+      "description": "Anzahl der Logins in der jeweils zurückliegenden Stunde (Versuche, Erfolg, Fehler).",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
       "fieldConfig": {
         "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "gradientMode": "opacity", "showPoints": "never", "scaleDistribution": { "type": "linear" }, "stacking": { "mode": "none", "group": "A" }, "spanNulls": false } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Fehler/h" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
-          { "matcher": { "id": "byName", "options": "Erfolg/h" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] }
+          { "matcher": { "id": "byName", "options": "Fehler" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "Erfolg" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] }
         ]
       },
       "options": { "legend": { "showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "refId": "A", "expr": "sum(rate(auth_login_attempts_total[$__rate_interval])) * 3600", "legendFormat": "Versuche/h" },
-        { "refId": "B", "expr": "sum(rate(auth_logins_success_total[$__rate_interval])) * 3600", "legendFormat": "Erfolg/h" },
-        { "refId": "C", "expr": "sum(rate(auth_login_failed_total[$__rate_interval])) * 3600", "legendFormat": "Fehler/h" }
+        { "refId": "A", "expr": "sum(increase(auth_login_attempts_total[1h]))", "legendFormat": "Versuche" },
+        { "refId": "B", "expr": "sum(increase(auth_logins_success_total[1h]))", "legendFormat": "Erfolg" },
+        { "refId": "C", "expr": "sum(increase(auth_login_failed_total[1h]))", "legendFormat": "Fehler" }
       ]
     },
     {
-      "id": 22, "type": "timeseries", "title": "Login-Fehler nach Grund (pro Stunde)",
+      "id": 22, "type": "timeseries", "title": "Login-Fehler nach Grund (letzte Stunde)",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 31 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "gradientMode": "none", "showPoints": "never", "scaleDistribution": { "type": "linear" }, "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] },
       "options": { "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "expr": "sum by (reason) (rate(auth_login_failed_total[$__rate_interval])) * 3600", "legendFormat": "{{reason}}" } ]
+      "targets": [ { "refId": "A", "expr": "sum by (reason) (increase(auth_login_failed_total[1h]))", "legendFormat": "{{reason}}" } ]
     },
     {
-      "id": 23, "type": "timeseries", "title": "Force-Logouts nach Scope (pro Stunde)",
+      "id": 23, "type": "timeseries", "title": "Force-Logouts nach Scope (letzte Stunde)",
       "description": "Admin-initiierte Zwangs-Abmeldungen: session (einzeln) / user (pro Person) / others (alle anderen).",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 31 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "gradientMode": "none", "showPoints": "never", "scaleDistribution": { "type": "linear" }, "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] },
       "options": { "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "expr": "sum by (scope) (rate(session_force_logouts_total[$__rate_interval])) * 3600", "legendFormat": "{{scope}}" } ]
+      "targets": [ { "refId": "A", "expr": "sum by (scope) (increase(session_force_logouts_total[1h]))", "legendFormat": "{{scope}}" } ]
     },
 
     { "id": 103, "type": "row", "title": "E-Mail", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 }, "panels": [] },
 
     {
-      "id": 30, "type": "timeseries", "title": "Mailversand nach Typ (pro Stunde)",
+      "id": 30, "type": "timeseries", "title": "Mailversand nach Typ (letzte Stunde)",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 39 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "gradientMode": "opacity", "showPoints": "never", "scaleDistribution": { "type": "linear" }, "stacking": { "mode": "none", "group": "A" }, "spanNulls": false } }, "overrides": [] },
       "options": { "legend": { "showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "expr": "sum by (type) (rate(mail_sent_total[$__rate_interval])) * 3600", "legendFormat": "{{type}}" } ]
+      "targets": [ { "refId": "A", "expr": "sum by (type) (increase(mail_sent_total[1h]))", "legendFormat": "{{type}}" } ]
     },
     {
-      "id": 31, "type": "timeseries", "title": "Mail: Erfolg vs. Fehler (pro Stunde)",
+      "id": 31, "type": "timeseries", "title": "Mail: Erfolg vs. Fehler (letzte Stunde)",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 39 },
       "fieldConfig": {
@@ -239,7 +248,7 @@
         ]
       },
       "options": { "legend": { "showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "expr": "sum by (status) (rate(mail_sent_total[$__rate_interval])) * 3600", "legendFormat": "{{status}}" } ]
+      "targets": [ { "refId": "A", "expr": "sum by (status) (increase(mail_sent_total[1h]))", "legendFormat": "{{status}}" } ]
     },
 
     { "id": 104, "type": "row", "title": "HTTP", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 47 }, "panels": [] },
@@ -279,12 +288,12 @@
       "targets": [ { "refId": "A", "expr": "sum(rate(http_requests_total{status=~\"5..\"}[$__rate_interval]))", "legendFormat": "5xx" } ]
     },
     {
-      "id": 43, "type": "timeseries", "title": "Unbehandelte Exceptions (pro Stunde)",
+      "id": 43, "type": "timeseries", "title": "Unbehandelte Exceptions (letzte Stunde)",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 6, "w": 8, "x": 8, "y": 56 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "gradientMode": "none", "showPoints": "never", "scaleDistribution": { "type": "linear" }, "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] },
       "options": { "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "expr": "sum by (exception) (rate(http_exceptions_total[$__rate_interval])) * 3600", "legendFormat": "{{exception}}" } ]
+      "targets": [ { "refId": "A", "expr": "sum by (exception) (increase(http_exceptions_total[1h]))", "legendFormat": "{{exception}}" } ]
     },
     {
       "id": 44, "type": "timeseries", "title": "Requests in Bearbeitung",
