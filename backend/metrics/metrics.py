@@ -11,10 +11,7 @@ from prometheus_client import (
 )
 
 from backend.metrics.http_metrics import MetricsMiddleware
-from backend.metrics.auth_metrics import (
-    configure_session_timeout,
-    cleanup_sessions,
-)
+from backend.metrics.auth_metrics import collect_session_metrics
 from backend.metrics.ticket_metrics import collect_ticket_metrics
 from backend.metrics.system_metrics import collect_system_metrics
 
@@ -101,7 +98,7 @@ def _collector_thread():
 
         try:
 
-            cleanup_sessions()
+            collect_session_metrics()
 
             if TICKET_MANAGER:
                 collect_ticket_metrics(TICKET_MANAGER)
@@ -116,7 +113,7 @@ def _collector_thread():
 # INITIALIZATION
 # ---------------------------------------------------------
 
-def init_metrics(app, session_timeout: int, ticket_manager):
+def init_metrics(app, ticket_manager):
 
     global TICKET_MANAGER
 
@@ -124,8 +121,6 @@ def init_metrics(app, session_timeout: int, ticket_manager):
         return
 
     TICKET_MANAGER = ticket_manager
-
-    configure_session_timeout(session_timeout)
 
     app.add_middleware(MetricsMiddleware)
 

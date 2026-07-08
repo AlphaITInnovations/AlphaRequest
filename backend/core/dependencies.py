@@ -3,7 +3,6 @@ import time
 from fastapi import Request, HTTPException, status
 from backend.utils.config import config
 from backend.utils.logger import logger
-from backend.metrics.auth_metrics import update_last_activity
 from backend.core.session import TOKENS, SERVER_BOOT_ID
 from backend.database.users import get_user_permissions
 from backend.database import sessions as session_store
@@ -53,8 +52,6 @@ def get_current_user(request: Request) -> Dict:
 
     # Serverseitige Session prüfen (Force-Logout) + Präsenz auffrischen (fail-open).
     _check_session_store(request, session)
-
-    update_last_activity(request)
 
     try:
         cookie_len = sum((len(k) + len(v)) for k, v in request.cookies.items())

@@ -1,3 +1,4 @@
+import re
 import time
 
 from fastapi import Request, Response
@@ -40,23 +41,30 @@ http_exceptions_total = Counter(
 # ROUTE NORMALIZATION
 # ---------------------------------------------------------
 
+# GUID (mit Bindestrichen, z.B. Azure oid) bzw. langer Hex-String (z.B. Session-sid = uuid4().hex).
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_HEX_RE = re.compile(r"^[0-9a-fA-F]{16,}$")
+
+
+def _is_opaque_id(segment: str) -> bool:
+    """True für Segmente, die eine ID sind (Zahl, GUID, langer Hex-String)."""
+    return bool(segment) and (
+        segment.isdigit() or _UUID_RE.match(segment) is not None or _HEX_RE.match(segment) is not None
+    )
+
+
 def normalize_path(path: str) -> str:
     """
     Prevent high-cardinality labels in Prometheus.
 
-    Example:
-    /tickets/123/delete -> /tickets/:id/delete
+    Beispiele:
+      /tickets/123/delete                 -> /tickets/:id/delete
+      /admin/sessions/9f3a...ab           -> /admin/sessions/:id   (Hex-sid)
+      /admin/sessions/user/<guid>         -> /admin/sessions/user/:id
     """
 
     parts = path.strip("/").split("/")
-    normalized = []
-
-    for p in parts:
-
-        if p.isdigit():
-            normalized.append(":id")
-        else:
-            normalized.append(p)
+    normalized = [":id" if _is_opaque_id(p) else p for p in parts]
 
     return "/" + "/".join(normalized)
 

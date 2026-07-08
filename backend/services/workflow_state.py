@@ -316,6 +316,11 @@ def advance_phase(ticket_id: int) -> dict:
         workflow["current_phase_index"] = next_idx
         set_workflow_state(ticket_id, workflow)
         update_ticket(ticket_id, status=RequestStatus.archived.value)
+        try:
+            from backend.metrics.ticket_metrics import record_ticket_terminal
+            record_ticket_terminal("archived")
+        except Exception:
+            pass
         return workflow
 
     phases[next_idx]["status"] = PHASE_STATUS_IN_PROGRESS
@@ -361,6 +366,11 @@ def reject_workflow(ticket_id: int, message: str, rejected_by: str, rejected_at:
 
     set_workflow_state(ticket_id, workflow)
     update_ticket(ticket_id, status=RequestStatus.rejected.value)
+    try:
+        from backend.metrics.ticket_metrics import record_ticket_terminal
+        record_ticket_terminal("rejected")
+    except Exception:
+        pass
 
 
 def get_current_phase(ticket_id: int) -> Optional[dict]:

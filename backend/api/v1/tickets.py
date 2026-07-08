@@ -450,7 +450,7 @@ async def create_basis_ticket(
         action="ticket_created",
         details={"priority": data.priority, "ticket_type": "basis-ticket"},
     )
-    tickets_created_total.labels(type="basis-ticket").inc()
+    tickets_created_total.labels(type=TicketType.basis_ticket.value).inc()
 
     # Beobachter: vom Client übergebene Liste (inkl. Ersteller), sonst nur Ersteller
     from backend.database.ticket_watchers import add_watcher

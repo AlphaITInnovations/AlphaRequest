@@ -59,7 +59,7 @@ def create_app() -> FastAPI:
     app.templates.env.globals["TicketTypes"] = get_ticket_type_dict()
 
     setup_session(app)
-    init_metrics(app, config.SESSION_TIMEOUT, app.state.manager)
+    init_metrics(app, app.state.manager)
 
     @app.middleware("http")
     async def _security_headers(request, call_next):

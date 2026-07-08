@@ -170,9 +170,16 @@ def build_message_payload(
     }
 
 
-def _post_sendmail(url: str, access_token: str, payload: Dict[str, Any], timeout_s: int = 30) -> None:
-    resp = requests.post(url, headers=_auth_header(access_token), json=payload, timeout=timeout_s)
+def _post_sendmail(url: str, access_token: str, payload: Dict[str, Any], timeout_s: int = 30,
+                   *, kind: str = "other") -> None:
+    from backend.metrics.mail_metrics import record_mail
+    try:
+        resp = requests.post(url, headers=_auth_header(access_token), json=payload, timeout=timeout_s)
+    except Exception:
+        record_mail(kind, "error")
+        raise
     if resp.status_code >= 400:
+        record_mail(kind, "error")
         # Graph error responses are usually JSON with "error": {"code","message",...}
         try:
             detail = resp.json()
@@ -182,6 +189,7 @@ def _post_sendmail(url: str, access_token: str, payload: Dict[str, Any], timeout
         raise GraphMailError(
             f"Graph sendMail failed: HTTP {resp.status_code} - {detail}"
         )
+    record_mail(kind, "sent")
 
 
 # -------------------------
@@ -200,6 +208,7 @@ def send_mail_delegated(
     reply_to: Optional[Sequence[Union[str, EmailRecipient]]] = None,
     attachments: Optional[Sequence[EmailAttachment]] = None,
     importance: Optional[str] = None,
+    kind: str = "other",
 ) -> None:
     """
     Sends email as the signed-in user (delegated permission).
@@ -218,7 +227,7 @@ def send_mail_delegated(
         importance=importance,
     )
     url = f"{GRAPH_BASE_URL}/me/sendMail"
-    _post_sendmail(url, access_token, payload)
+    _post_sendmail(url, access_token, payload, kind=kind)
 
 
 def send_mail_delegated_from_request(
@@ -251,6 +260,7 @@ def send_mail_app_only(
     reply_to: Optional[Sequence[Union[str, EmailRecipient]]] = None,
     attachments: Optional[Sequence[EmailAttachment]] = None,
     importance: Optional[str] = None,
+    kind: str = "other",
 ) -> None:
     """
     Sends email as a specific user using application permissions (client credentials).
@@ -274,13 +284,14 @@ def send_mail_app_only(
         importance=importance,
     )
     url = f"{GRAPH_BASE_URL}/users/{sender_upn_or_id}/sendMail"
-    _post_sendmail(url, access_token, payload)
+    _post_sendmail(url, access_token, payload, kind=kind)
 
 
 def send_test_mail(to: str):
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject="AlphaRequest Testmail",
+        kind="test",
         body=render_corporate_email(
             subject="AlphaRequest Testmail",
             headline="AlphaRequest (hier klicken)",
@@ -303,6 +314,7 @@ def send_personalnummer_warning_mail(company_name: str, remaining: int, pnr_to: 
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=f"⚠️ Personalnummern für {company_name} gehen zur Neige",
+        kind="personalnummer_warning",
         body=render_corporate_email(
             subject=f"Personalnummern-Bereich {company_name} fast erschöpft",
             headline="AlphaRequest – Einstellungen öffnen",
@@ -346,6 +358,7 @@ def send_newrequest_mail(to: str, prio: TicketPriority, titel: str, ttype: Ticke
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=f"Neuer Auftrag {readable_type} #{ticketid} in AlphaRequest",
+        kind="newrequest",
         body=render_corporate_email(
             subject=titel,
             headline="AlphaRequest (hier klicken)",
@@ -386,6 +399,7 @@ def send_mail_to_fachabteilung(to: str, prio: TicketPriority, titel: str, ttype:
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=f"Neuer Fachabteilungsauftrag #{ticketid} in AlphaRequest",
+        kind="fachabteilung",
         body=render_corporate_email(
             subject=titel,
             headline="AlphaRequest (hier klicken)",
@@ -501,6 +515,7 @@ def send_freigabe_mail(ticket, approve_url: str, reject_url: str, to_recipients:
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=f"Freigabe erforderlich: {ticket.title}",
+        kind="freigabe",
         body=render_corporate_email(
             subject=ticket.title,
             headline="Antrag neue Mitarbeiter:innen – Freigabe",
@@ -530,6 +545,7 @@ def send_nachtrag_mail(ticket, text: str, to_recipients: List[str]):
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=f"Nachtrag zu Auftrag #{ticket.id}: {ticket.title}",
+        kind="nachtrag",
         body=render_corporate_email(
             subject=ticket.title,
             headline="Nachtrag zu einem Auftrag",
@@ -556,6 +572,7 @@ def send_rejection_mail(ticket, reason: str, to: str):
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=f"Auftrag #{ticket.id} wurde abgelehnt",
+        kind="rejection",
         body=render_corporate_email(
             subject=ticket.title,
             headline="Auftrag abgelehnt",
