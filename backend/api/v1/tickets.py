@@ -1215,6 +1215,14 @@ async def set_department_status(
                 action="phase_advanced",
                 details={"new_phase": next_phase["key"]},
             )
+            # Zuständige der neu aktiven Phase benachrichtigen (z.B. Reisestelle
+            # nach der Durchführung) – analog zu create_ticket/submit_ticket.
+            # Status + Advance sind bereits persistiert, ein Mailfehler darf
+            # die Antwort nicht kippen.
+            try:
+                notify_phase_entry(request, database.get_ticket(ticket_id), next_phase)
+            except Exception:
+                logger.exception("Phasen-Benachrichtigung nach Fachabteilungs-Abschluss fehlgeschlagen (Ticket %s)", ticket_id)
         else:
             add_history_event(
                 ticket_id,
