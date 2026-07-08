@@ -11,8 +11,9 @@ import TicketPermissionsPanel from '@/components/settings/TicketPermissionsPanel
 import AppUsersPanel from '@/components/settings/AppUsersPanel.vue'
 import TestMailPanel from '@/components/settings/TestMailPanel.vue'
 import AuditLogPanel from '@/components/AuditLogPanel.vue'
+import ActiveSessionsPanel from '@/components/settings/ActiveSessionsPanel.vue'
 
-const SECTIONS = ['general', 'microsoft', 'session', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit'] as const
+const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit'] as const
 type Section = typeof SECTIONS[number]
 
 const route  = useRoute()
@@ -33,6 +34,7 @@ const nav = [
   { key: 'general',     label: 'Allgemein',          group: 'System' },
   { key: 'microsoft',   label: 'Microsoft OAuth',    group: 'System' },
   { key: 'session',     label: 'Session & Security', group: 'System' },
+  { key: 'sessions',    label: 'Aktive Sessions',    group: 'System' },
   { key: 'audit',       label: 'Audit-Log',          group: 'System' },
   { key: 'companies',   label: 'Firmen',             group: 'Organisation' },
   { key: 'groups',      label: 'Fachabteilungen',    group: 'Organisation' },
@@ -116,6 +118,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
           <EnvInfoPanel            v-if="active === 'general'"      variant="general" />
           <EnvInfoPanel            v-else-if="active === 'microsoft'" variant="microsoft" />
           <EnvInfoPanel            v-else-if="active === 'session'"  variant="session" />
+          <ActiveSessionsPanel     v-else-if="active === 'sessions'" />
           <CompaniesPanel          v-else-if="active === 'companies'" />
           <DepartmentsPanel        v-else-if="active === 'groups'" />
           <TicketPermissionsPanel  v-else-if="active === 'permissions'" />

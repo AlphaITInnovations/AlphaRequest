@@ -6,8 +6,35 @@ from backend.utils.logger import logger
 from backend.metrics.auth_metrics import update_last_activity
 from backend.core.session import TOKENS, SERVER_BOOT_ID
 from backend.database.users import get_user_permissions
+from backend.database import sessions as session_store
 
 SAFE_UPDATE_INTERVAL = 60  # seconds
+# Präsenz-Drossel: `last_seen` höchstens alle 30 s pro Session schreiben.
+PRESENCE_TOUCH_INTERVAL = 30  # seconds
+
+
+def _check_session_store(request, session: dict) -> None:
+    """Serverseitige Session prüfen (Force-Logout) und Präsenz auffrischen.
+
+    Fail-open: Ein DB-Fehler loggt NIEMANDEN aus – dann greifen weiterhin
+    Cookie + boot_id + Timeout. Nur ein tatsächlich fehlender Row (Admin hat
+    force-abgemeldet) führt zu 401.
+    """
+    sid = session.get("sid")
+    if not sid:
+        return
+    try:
+        row = session_store.get_session(sid)
+        if row is None:
+            session.clear()
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        if int(row.get("age_seconds") or 0) >= PRESENCE_TOUCH_INTERVAL:
+            ip = request.client.host if request.client else None
+            session_store.touch_session(sid, ip)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Session-Store-Check fehlgeschlagen (sid=%s) – fail-open", sid)
 
 
 def get_current_user(request: Request) -> Dict:
@@ -23,6 +50,9 @@ def get_current_user(request: Request) -> Dict:
     if session.get("boot_id") != SERVER_BOOT_ID:
         session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    # Serverseitige Session prüfen (Force-Logout) + Präsenz auffrischen (fail-open).
+    _check_session_store(request, session)
 
     update_last_activity(request)
 
@@ -53,6 +83,7 @@ def get_current_user(request: Request) -> Dict:
         try:
             if sid:
                 TOKENS.delete(sid)
+                session_store.delete_session(sid)
         except Exception:
             logger.exception("token revoke failed for sid=%s", sid)
         session.clear()
@@ -84,6 +115,9 @@ def check_session_only(request: Request) -> Dict:
         session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
+    # Force-Logout auch im Heartbeat erkennen + Präsenz auffrischen (fail-open).
+    _check_session_store(request, session)
+
     try:
         last_activity = int(session.get("last_activity") or 0)
     except Exception:
@@ -94,6 +128,7 @@ def check_session_only(request: Request) -> Dict:
         try:
             if sid:
                 TOKENS.delete(sid)
+                session_store.delete_session(sid)
         except Exception:
             logger.exception("token revoke failed for sid=%s", sid)
         session.clear()

@@ -22,6 +22,7 @@ from backend.services.microsoft_auth import (
 )
 from backend.services.microsoft_graph import get_user_profile
 from backend.database.audit_log import record_audit
+from backend.database.sessions import upsert_session, delete_session
 from backend.utils.config import config
 from backend.utils.logger import logger
 
@@ -236,6 +237,19 @@ async def auth_callback(request: Request):
                 "boot_id": SERVER_BOOT_ID,
             })
 
+        # Serverseitige Session-Row anlegen (für Live-Liste + Force-Logout).
+        # Best-effort – ein DB-Fehler darf den Login nicht verhindern.
+        try:
+            upsert_session(
+                sid=sid,
+                user_id=user_payload["id"],
+                user_name=user_payload["displayName"] or "",
+                ip=_client_ip(request),
+                user_agent=request.headers.get("user-agent"),
+            )
+        except Exception:
+            logger.exception("Session-Registrierung fehlgeschlagen (sid=%s)", sid)
+
         record_login_success(request)
         record_audit(action="login", actor_id=user_payload["id"],
                      actor_name=user_payload["displayName"] or "", entity_type="auth",
@@ -261,6 +275,7 @@ async def logout(request: Request):
     sid = request.session.get("sid")
     if sid:
         TOKENS.delete(sid)
+        delete_session(sid)
     record_logout(request)
     u = request.session.get("user") or {}
     record_audit(action="logout", actor_id=u.get("id"), actor_name=u.get("displayName") or "",

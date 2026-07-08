@@ -7,6 +7,9 @@ from backend.services.microsoft_auth import acquire_app_token
 from backend.utils.logger import logger
 from backend.database.ticket_group_permissions import ensure_table as ensure_group_perms_table
 from backend.database.ticket_locks import ensure_table as ensure_ticket_locks_table
+from backend.database.sessions import (
+    ensure_table as ensure_sessions_table, clear_all_sessions, prune_stale,
+)
 
 
 EXCLUDED_USERS = {"Administrator AlphaConsult", "CodeTwo Admin"}
@@ -56,6 +59,10 @@ async def lifespan(app):
     # DB-Tabellen anlegen
     ensure_group_perms_table()
     ensure_ticket_locks_table()
+    ensure_sessions_table()
+    # Neustart invalidiert via SERVER_BOOT_ID ohnehin alle Cookies → Tabelle leeren,
+    # damit die Live-Liste nicht mit toten Sessions startet.
+    clear_all_sessions()
 
     await sync_users_into_cache(app)
     await sync_groups_into_cache(app)
@@ -72,6 +79,11 @@ async def lifespan(app):
                 await sync_groups_into_cache(app)
             except Exception:
                 logger.exception("Group cache sync failed")
+            # Abgelaufene Session-Rows aufräumen (Präsenz-Fenster = SESSION_TIMEOUT).
+            try:
+                prune_stale(int(config.SESSION_TIMEOUT))
+            except Exception:
+                logger.exception("Session prune failed")
             await asyncio.sleep(interval)
 
     asyncio.create_task(user_sync_background())

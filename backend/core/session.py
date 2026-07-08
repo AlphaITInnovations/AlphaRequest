@@ -48,6 +48,12 @@ def rotate_sid(session: dict) -> str:
     session["sid"] = new
     if old:
         TOKENS.delete(old)
+        # Alte serverseitige Session-Row mit aufräumen (Lifecycle an einer Stelle).
+        try:
+            from backend.database.sessions import delete_session
+            delete_session(old)
+        except Exception:
+            pass
     return new
 
 
