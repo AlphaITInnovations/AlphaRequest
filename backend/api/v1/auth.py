@@ -13,7 +13,7 @@ from backend.services.admin_sync import (
     decide_group_admin_action, ACTION_PROMOTE, ACTION_REVOKE,
 )
 from backend.metrics.auth_metrics import (
-    record_login_attempt, record_login_success, record_logout,
+    record_login_attempt, record_login_success, record_login_failed,
 )
 from backend.schemas.responses import DataResponse
 from backend.schemas.ticket import UserOut
@@ -22,6 +22,7 @@ from backend.services.microsoft_auth import (
 )
 from backend.services.microsoft_graph import get_user_profile
 from backend.database.audit_log import record_audit
+from backend.database.sessions import upsert_session, delete_session
 from backend.utils.config import config
 from backend.utils.logger import logger
 
@@ -133,6 +134,7 @@ async def auth_callback(request: Request):
 
 
         if not result or "access_token" not in result:
+            record_login_failed(reason="token_error")
             record_audit(action="login_failed", actor_type="system", actor_name="?",
                          entity_type="auth", summary="Token konnte nicht bezogen werden",
                          details={"reason": "token_error"}, ip=_client_ip(request))
@@ -236,7 +238,20 @@ async def auth_callback(request: Request):
                 "boot_id": SERVER_BOOT_ID,
             })
 
-        record_login_success(request)
+        # Serverseitige Session-Row anlegen (für Live-Liste + Force-Logout).
+        # Best-effort – ein DB-Fehler darf den Login nicht verhindern.
+        try:
+            upsert_session(
+                sid=sid,
+                user_id=user_payload["id"],
+                user_name=user_payload["displayName"] or "",
+                ip=_client_ip(request),
+                user_agent=request.headers.get("user-agent"),
+            )
+        except Exception:
+            logger.exception("Session-Registrierung fehlgeschlagen (sid=%s)", sid)
+
+        record_login_success()
         record_audit(action="login", actor_id=user_payload["id"],
                      actor_name=user_payload["displayName"] or "", entity_type="auth",
                      entity_id=user_payload["id"], ip=_client_ip(request))
@@ -245,6 +260,7 @@ async def auth_callback(request: Request):
 
     except Exception:
         logger.exception("Login fehlgeschlagen")
+        record_login_failed(reason="exception")
         record_audit(action="login_failed", actor_type="system", actor_name="?",
                      entity_type="auth", summary="Login fehlgeschlagen",
                      details={"reason": "exception"}, ip=_client_ip(request))
@@ -261,7 +277,7 @@ async def logout(request: Request):
     sid = request.session.get("sid")
     if sid:
         TOKENS.delete(sid)
-    record_logout(request)
+        delete_session(sid)
     u = request.session.get("user") or {}
     record_audit(action="logout", actor_id=u.get("id"), actor_name=u.get("displayName") or "",
                  entity_type="auth", entity_id=u.get("id"), ip=_client_ip(request))

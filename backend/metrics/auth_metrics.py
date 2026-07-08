@@ -1,18 +1,23 @@
-from typing import Dict, List
-import threading
-import time
+"""
+Auth-/Session-Metriken.
 
-from fastapi import Request
-from prometheus_client import Counter, Gauge, Histogram
+Die aktiven-Sessions-Gauges werden NICHT mehr aus einem eigenen In-Memory-Dict
+gespeist, sondern im Collector direkt aus der autoritativen `active_sessions`-
+Tabelle (siehe backend/database/sessions.py). Dadurch reflektieren sie Logout,
+Force-Logout, Timeout und Server-Neustart automatisch korrekt.
+"""
+
+from prometheus_client import Counter, Gauge
+
+from backend.database import sessions as session_store
+from backend.utils.logger import logger
 
 
-# ---------------------------------------------------------
-# METRICS
-# ---------------------------------------------------------
+# ── Event-Zähler ────────────────────────────────────────────────────────────────
 
 auth_login_attempts_total = Counter(
     "auth_login_attempts_total",
-    "Total login attempts",
+    "Login flow initiations (redirects to the identity provider)",
 )
 
 auth_logins_success_total = Counter(
@@ -21,165 +26,60 @@ auth_logins_success_total = Counter(
     ["provider"],
 )
 
+auth_login_failed_total = Counter(
+    "auth_login_failed_total",
+    "Failed logins",
+    ["reason"],
+)
+
+session_force_logouts_total = Counter(
+    "session_force_logouts_total",
+    "Sessions terminated by an admin force-logout",
+    ["scope"],  # session | user | others
+)
+
+
+# ── Gauges (im Collector aus der DB gesetzt) ────────────────────────────────────
+
 auth_sessions_active = Gauge(
     "auth_sessions_active",
-    "Currently active authenticated sessions",
+    "Currently active sessions (source: active_sessions table)",
 )
 
-auth_sessions_active_by_user = Gauge(
-    "auth_sessions_active_by_user",
-    "Active sessions per user",
-    ["display_name"],
-)
-
-auth_session_duration_seconds = Histogram(
-    "auth_session_duration_seconds",
-    "Session duration",
-    buckets=(60, 300, 600, 1800, 3600, 7200, 14400, 28800),
+auth_users_online = Gauge(
+    "auth_users_online",
+    "Distinct users with at least one active session",
 )
 
 
-# ---------------------------------------------------------
-# INTERNAL SESSION STATE
-# ---------------------------------------------------------
+# ── Recorder ────────────────────────────────────────────────────────────────────
 
-_sessions: Dict[str, Dict] = {}
-
-_sessions_lock = threading.Lock()
-
-SESSION_TIMEOUT = 3600
-
-
-# ---------------------------------------------------------
-# HELPER: Sync per-user gauge from _sessions
-# ---------------------------------------------------------
-
-def _sync_user_gauges():
-    """
-    Rebuild the per-user gauge from scratch.
-    Must be called while holding _sessions_lock.
-    """
-    # Clear all label sets, then re-count
-    auth_sessions_active_by_user._metrics.clear()
-
-    counts: Dict[str, int] = {}
-    for s in _sessions.values():
-        name = s.get("display_name", "Unknown")
-        counts[name] = counts.get(name, 0) + 1
-
-    for name, count in counts.items():
-        auth_sessions_active_by_user.labels(display_name=name).set(count)
-
-
-# ---------------------------------------------------------
-# LOGIN ATTEMPT
-# ---------------------------------------------------------
-
-def record_login_attempt():
+def record_login_attempt() -> None:
     auth_login_attempts_total.inc()
 
 
-# ---------------------------------------------------------
-# LOGIN SUCCESS
-# ---------------------------------------------------------
+def record_login_success(provider: str = "oauth") -> None:
+    auth_logins_success_total.labels(provider=provider).inc()
 
-def record_login_success(request: Request):
 
-    sid = request.session.get("sid")
-    if not sid:
+def record_login_failed(reason: str = "unknown") -> None:
+    auth_login_failed_total.labels(reason=reason).inc()
+
+
+def record_force_logout(scope: str, count: int = 1) -> None:
+    if count <= 0:
         return
-
-    display_name = request.session.get("user", {}).get("displayName", "Unknown")
-
-    now = time.time()
-
-    with _sessions_lock:
-        _sessions[sid] = {
-            "login_time": now,
-            "last_activity": now,
-            "display_name": display_name,
-        }
-        _sync_user_gauges()
-
-    auth_logins_success_total.labels(provider="oauth").inc()
-    auth_sessions_active.set(len(_sessions))
+    session_force_logouts_total.labels(scope=scope).inc(count)
 
 
-# ---------------------------------------------------------
-# USER ACTIVITY
-# ---------------------------------------------------------
+# ── Collector (aus der DB) ──────────────────────────────────────────────────────
 
-def update_last_activity(request: Request):
-
-    sid = request.session.get("sid")
-    if not sid:
+def collect_session_metrics() -> None:
+    """Aktive Sessions + Online-Nutzer aus der DB spiegeln. Best-effort."""
+    try:
+        rows = session_store.list_active_sessions()
+    except Exception:
+        logger.exception("Session-Metriken konnten nicht aus der DB gelesen werden")
         return
-
-    with _sessions_lock:
-        session = _sessions.get(sid)
-        if session:
-            session["last_activity"] = time.time()
-
-
-# ---------------------------------------------------------
-# LOGOUT
-# ---------------------------------------------------------
-
-def record_logout(request: Request):
-
-    sid = request.session.get("sid")
-    if not sid:
-        return
-
-    with _sessions_lock:
-        session = _sessions.pop(sid, None)
-        if session:
-            duration = time.time() - session["login_time"]
-            auth_session_duration_seconds.observe(duration)
-        _sync_user_gauges()
-
-    auth_sessions_active.set(len(_sessions))
-
-
-# ---------------------------------------------------------
-# SESSION CLEANUP
-# ---------------------------------------------------------
-
-def cleanup_sessions():
-
-    now = time.time()
-
-    with _sessions_lock:
-        expired = []
-
-        for sid, session in _sessions.items():
-            if now - session["last_activity"] > SESSION_TIMEOUT:
-                duration = now - session["login_time"]
-                auth_session_duration_seconds.observe(duration)
-                expired.append(sid)
-
-        for sid in expired:
-            _sessions.pop(sid, None)
-
-        _sync_user_gauges()
-
-    auth_sessions_active.set(len(_sessions))
-
-
-# ---------------------------------------------------------
-# API HELPER
-# ---------------------------------------------------------
-
-def get_active_users() -> List[str]:
-    """Return display names of all currently active sessions."""
-    with _sessions_lock:
-        return [s["display_name"] for s in _sessions.values()]
-
-
-# ---------------------------------------------------------
-# CONFIG
-# ---------------------------------------------------------
-
-def configure_session_timeout(timeout: int):
-    global SESSION_TIMEOUT
-    SESSION_TIMEOUT = timeout
+    auth_sessions_active.set(len(rows))
+    auth_users_online.set(len({r.get("user_id") for r in rows if r.get("user_id")}))

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Dict, Optional
 from prometheus_client import Gauge, Counter
 from backend.models.models import RequestStatus
@@ -57,6 +58,33 @@ tickets_created_total = Counter(
     ["type"]
 )
 
+# Tickets, die einen Endzustand erreicht haben (Workflow-Ergebnis: archiviert/abgelehnt).
+# Ereignis-Zähler → ergibt Durchsatz und Ablehnquote über die Zeit.
+tickets_terminal_total = Counter(
+    "tickets_terminal_total",
+    "Tickets reaching a terminal state (workflow outcome)",
+    ["outcome"],  # archived | rejected
+)
+
+# Alter des ältesten offenen Tickets je aktueller Phase → macht Staus/Liegenbleiber sichtbar.
+tickets_oldest_open_age_seconds = Gauge(
+    "tickets_oldest_open_age_seconds",
+    "Age of the oldest open ticket per current workflow phase (seconds)",
+    ["phase"],
+)
+
+
+# ---------------------------------------------------------
+# EVENT RECORDER
+# ---------------------------------------------------------
+
+def record_ticket_terminal(outcome: str) -> None:
+    """Beim Erreichen eines Endzustands aufrufen (archived/rejected). Best-effort."""
+    try:
+        tickets_terminal_total.labels(outcome=outcome).inc()
+    except Exception:
+        pass
+
 
 # ---------------------------------------------------------
 # HELPERS
@@ -70,6 +98,19 @@ def _current_phase_label(t) -> Optional[str]:
     if 0 <= idx < len(phases):
         return phases[idx].get("label") or "unbekannt"
     return None
+
+
+def _age_seconds(created_at) -> Optional[float]:
+    """Alter eines (evtl. tz-aware) created_at in Sekunden, sonst None."""
+    if created_at is None:
+        return None
+    try:
+        ca = created_at
+        if getattr(ca, "tzinfo", None) is not None:
+            ca = ca.astimezone(timezone.utc).replace(tzinfo=None)
+        return max(0.0, (datetime.utcnow() - ca).total_seconds())
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------
@@ -87,6 +128,7 @@ def collect_ticket_metrics(ticket_manager):
     priority_count: Dict[str, int] = {}
     type_count: Dict[str, int] = {}
     phase_count: Dict[str, int] = {}
+    phase_oldest_age: Dict[str, float] = {}
     dept_open_count: Dict[str, int] = {}
 
     for t in tickets:
@@ -111,6 +153,9 @@ def collect_ticket_metrics(ticket_manager):
             label = _current_phase_label(t)
             if label:
                 phase_count[label] = phase_count.get(label, 0) + 1
+                age = _age_seconds(getattr(t, "created_at", None))
+                if age is not None and age > phase_oldest_age.get(label, -1.0):
+                    phase_oldest_age[label] = age
 
         # Offene Fachabteilungen der AKTUELLEN Phase (nur department_review liefert kind=departments)
         try:
@@ -129,6 +174,7 @@ def collect_ticket_metrics(ticket_manager):
     tickets_by_priority.clear()
     tickets_by_type.clear()
     tickets_by_phase.clear()
+    tickets_oldest_open_age_seconds.clear()
     tickets_open_by_department.clear()
 
     # set metrics
@@ -146,6 +192,9 @@ def collect_ticket_metrics(ticket_manager):
 
     for k, v in phase_count.items():
         tickets_by_phase.labels(phase=k).set(v)
+
+    for k, v in phase_oldest_age.items():
+        tickets_oldest_open_age_seconds.labels(phase=k).set(v)
 
     for k, v in dept_open_count.items():
         tickets_open_by_department.labels(department=k).set(v)
