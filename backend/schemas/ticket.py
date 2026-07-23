@@ -42,14 +42,16 @@ class TicketOut(BaseModel):
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_ticket(cls, t: Ticket, watchers: Optional[list] = None) -> "TicketOut":
+    def from_ticket(cls, t: Ticket, watchers: Optional[list] = None,
+                    user: Optional[dict] = None) -> "TicketOut":
         from backend.services.workflow_state import primary_responsibility, responsibility_label
+        from backend.services.ticket_visibility import filter_description_str
         resp = primary_responsibility(t)
         return cls(
             id=t.id,
             title=t.title,
             ticket_type=t.ticket_type,
-            description=t.description,
+            description=filter_description_str(t, user, t.description),
             owner_id=t.owner_id,
             owner_name=t.owner_name,
             comment=t.comment,

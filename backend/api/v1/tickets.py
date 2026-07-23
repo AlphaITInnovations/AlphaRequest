@@ -238,7 +238,7 @@ def get_me(user: dict = Depends(get_current_user)):
 def list_my_tickets(user: dict = Depends(get_current_user)):
     items = database.list_tickets_by_owner(user["id"])
     return ListResponse(
-        data=[TicketOut.from_ticket(t) for t in items],
+        data=[TicketOut.from_ticket(t, user=user) for t in items],
         meta=Meta(total=len(items), limit=len(items), offset=0),
     )
 
@@ -248,7 +248,7 @@ def get_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
     from backend.database.ticket_watchers import list_watchers
-    return DataResponse(data=TicketOut.from_ticket(ticket, watchers=list_watchers(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(ticket, watchers=list_watchers(ticket_id), user=user))
 
 
 # ── Beobachter (Watcher) ──────────────────────────────────────────────────────
@@ -398,7 +398,7 @@ async def create_ticket(
 
     notify_phase_entry(request, ticket, current_phase)
 
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 # ── Basis-Ticket (eigener Endpoint, keine Permission-Prüfung) ─────────────────
@@ -478,7 +478,7 @@ async def create_basis_ticket(
                     send_newrequest_mail(mail.strip(), data.priority, title, TicketType.basis_ticket, ticket_id)
             break
 
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 @router.patch("/tickets/{ticket_id}", response_model=DataResponse[TicketOut])
@@ -491,6 +491,14 @@ async def update_ticket(
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
     _assert_not_locked_by_other(ticket_id, user)
+
+    # Eingeschränkte Fachabteilungen sehen die Beschreibung nur gefiltert und dürfen
+    # sie daher nicht speichern – ihr Client kennt die versteckten Abschnitte nicht
+    # und würde sie sonst überschreiben. Sie steuern nur ihren Fachabteilungs-Status.
+    from backend.services.ticket_visibility import is_restricted_viewer
+    if is_restricted_viewer(ticket, user):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        "Kein Schreibzugriff auf die Beschreibung dieses Tickets")
 
     # assignee_id/assignee_name werden beim PATCH ignoriert (siehe unten) – daher
     # hier auch keine Assignee-Validierung mehr.
@@ -542,7 +550,7 @@ async def update_ticket(
             details={"changes": changes},
         )
 
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -763,7 +771,7 @@ async def submit_ticket(
 
     notify_phase_entry(request, ticket, next_phase)
 
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 @router.post("/tickets/{ticket_id}/reject", response_model=DataResponse[TicketOut])
@@ -803,7 +811,7 @@ async def reject_ticket(
     except Exception:
         logger.exception("Ablehnungs-Mail an Ersteller fehlgeschlagen (Ticket %s)", ticket_id)
 
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 @router.post("/tickets/{ticket_id}/nachtrag", response_model=DataResponse[TicketOut])
@@ -849,7 +857,7 @@ async def add_nachtrag(
     except Exception:
         logger.exception("Nachtrag-Mail fehlgeschlagen (Ticket %s)", ticket_id)
 
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 @router.delete("/tickets/{ticket_id}", status_code=204)
@@ -875,7 +883,7 @@ def list_all_tickets(
     items = database.list_all_tickets(limit=limit, offset=offset)
     total = database.count_all_tickets()
     return ListResponse(
-        data=[TicketOut.from_ticket(t) for t in items],
+        data=[TicketOut.from_ticket(t, user=user) for t in items],
         meta=Meta(total=total, limit=limit, offset=offset),
     )
 
@@ -900,7 +908,7 @@ def archive_ticket(
             "new_value": RequestStatus.archived.value,
         },
     )
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 @router.put("/admin/tickets/{ticket_id}/responsibility", response_model=DataResponse[TicketOut])
@@ -968,7 +976,7 @@ def override_responsibility(
             "new": new_resp["name"],
         },
     )
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 @router.delete("/admin/tickets/{ticket_id}/lock", status_code=204)
@@ -1065,7 +1073,7 @@ def admin_raw_update(
         action="admin_raw_edited",
         details={"changes": changes},
     )
-    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id)))
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
 def _client_ip(request) -> str | None:

@@ -68,7 +68,7 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
       </div>
     </div>
 
-    <div>
+    <div v-if="description?.it?.timebutler">
       <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Timebutler</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div><p class="ro-label">Urlaubsanspruch pro Jahr</p><p class="ro-value">{{ tb('vacation_year') }}</p></div>
@@ -76,7 +76,7 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
       </div>
     </div>
 
-    <div>
+    <div v-if="description?.fuhrpark">
       <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Fuhrpark</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div><p class="ro-label">Dienstwagen</p><p class="ro-value">{{ f('car') }}</p></div>
@@ -88,8 +88,8 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
     </div>
   </div>
 
-  <!-- IT Systemdaten -->
-  <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+  <!-- IT Systemdaten – nur wenn der Abschnitt für den Betrachter sichtbar ist -->
+  <div v-if="description?.it" class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
               rounded-2xl shadow-sm p-6 space-y-6">
     <h2 class="text-base font-semibold text-[#3EAAB8]">IT / Systemdaten</h2>
 

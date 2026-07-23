@@ -9,6 +9,7 @@ from backend.database import tickets as database
 from backend.schemas.responses import DataResponse, ListResponse, Meta
 from backend.services.ticket_history import get_ticket_history
 from backend.services.workflow_state import responsibility_label
+from backend.services.ticket_visibility import filter_description, filter_history
 
 router = APIRouter()
 
@@ -158,13 +159,17 @@ def list_overview_tickets(
     )
 
 
-def build_overview_detail(ticket) -> TicketOverviewDetail:
+def build_overview_detail(ticket, user: Optional[dict] = None) -> TicketOverviewDetail:
     """Baut das (read-only) Detail-Objekt eines Tickets. Wird sowohl vom normalen
-    Overview-Endpunkt als auch vom Admin-Detail (tickets.py) genutzt."""
+    Overview-Endpunkt als auch vom Admin-Detail (tickets.py) genutzt.
+
+    `user` steuert die feld-genaue Sichtbarkeit der Beschreibung/History; ohne
+    `user` (interner Aufruf) wird nicht gefiltert."""
     try:
         description = json.loads(ticket.description or "{}")
     except Exception:
         description = {}
+    description = filter_description(ticket, user, description)
 
     workflow = ticket.workflow_state_parsed or {}
     # departments aus der department_review-Phase (neues Format), Fallback altes Format.
@@ -189,7 +194,7 @@ def build_overview_detail(ticket) -> TicketOverviewDetail:
     from backend.services.workflow_state import primary_responsibility
     resp = primary_responsibility(ticket)
 
-    raw_history = get_ticket_history(ticket.id)
+    raw_history = filter_history(ticket, user, get_ticket_history(ticket.id))
     history = []
     for e in raw_history:
         actor_raw = e.get("actor", {})
@@ -247,4 +252,4 @@ def get_overview_ticket(
         raise HTTPException(404, "Ticket nicht gefunden")
 
     _assert_overview_detail_access(user, ticket)
-    return DataResponse(data=build_overview_detail(ticket))
+    return DataResponse(data=build_overview_detail(ticket, user))
