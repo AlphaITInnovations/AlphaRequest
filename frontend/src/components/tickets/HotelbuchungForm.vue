@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import UserSelect from '@/components/UserSelect.vue'
+import TicketSection from '@/components/tickets/TicketSection.vue'
 import type { useHotelbuchung } from '@/composables/useHotelbuchung'
 
 defineProps<{
@@ -22,8 +23,7 @@ defineProps<{
     <section class="space-y-6">
 
       <!-- ═══ Antragsteller ═══ -->
-      <div class="card space-y-4">
-        <h2 class="text-lg font-semibold text-[#3EAAB8]">👤 Angaben zur antragstellenden Person</h2>
+      <TicketSection title="Angaben zur antragstellenden Person" variant="base">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="label">Name, Vorname *</label>
@@ -48,11 +48,10 @@ defineProps<{
                    :class="ctx.fieldClass('buchung.kostenstelle')" inputmode="numeric" placeholder="z. B. 1234" />
           </div>
         </div>
-      </div>
+      </TicketSection>
 
       <!-- ═══ Reisedaten ═══ -->
-      <div class="card space-y-4">
-        <h2 class="text-lg font-semibold text-[#3EAAB8]">📅 Reisedaten</h2>
+      <TicketSection title="Reisedaten" variant="travel">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label class="label">Anreisedatum *</label>
@@ -69,11 +68,10 @@ defineProps<{
                    :class="ctx.fieldClass('buchung.anzahl_naechte')" inputmode="numeric"  />
           </div>
         </div>
-      </div>
+      </TicketSection>
 
       <!-- ═══ Reiseziel ═══ -->
-      <div class="card space-y-4">
-        <h2 class="text-lg font-semibold text-[#3EAAB8]">📍 Reiseziel</h2>
+      <TicketSection title="Reiseziel" variant="travel">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="label">Ort / Stadt *</label>
@@ -88,11 +86,10 @@ defineProps<{
             <input v-model="ctx.form.buchung.hotelwunsch" :class="ctx.fieldClass('buchung.hotelwunsch')" placeholder="Falls ein bestimmtes Hotel gewünscht ist" />
           </div>
         </div>
-      </div>
+      </TicketSection>
 
       <!-- ═══ Reiseanlass ═══ -->
-      <div class="card space-y-4">
-        <h2 class="text-lg font-semibold text-[#3EAAB8]">🎯 Reiseanlass (zwingend auszufüllen) *</h2>
+      <TicketSection title="Reiseanlass (zwingend auszufüllen) *" variant="travel">
 
         <!-- Radio-Auswahl -->
         <div class="space-y-3">
@@ -204,11 +201,10 @@ defineProps<{
             </div>
           </div>
         </div>
-      </div>
+      </TicketSection>
 
       <!-- ═══ Budgetvorgaben ═══ -->
-      <div class="card space-y-4">
-        <h2 class="text-lg font-semibold text-[#3EAAB8]">💰 Budgetvorgaben gemäß Reisekostenrichtlinie *</h2>
+      <TicketSection title="Budgetvorgaben gemäß Reisekostenrichtlinie *" variant="travel">
 
         <div class="space-y-3">
           <label class="flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition"
@@ -265,11 +261,10 @@ defineProps<{
             </div>
           </div>
         </div>
-      </div>
+      </TicketSection>
 
       <!-- ═══ Besondere Anforderungen ═══ -->
-      <div class="card space-y-4">
-        <h2 class="text-lg font-semibold text-[#3EAAB8]">📝 Besondere Anforderungen</h2>
+      <TicketSection title="Besondere Anforderungen" variant="travel">
         <p class="text-sm text-gray-500 dark:text-gray-400 -mt-2">
           z. B. Nähe zum Einsatzort, Parkplatz, spätes Check-in etc.
         </p>
@@ -277,7 +272,7 @@ defineProps<{
                   :class="ctx.fieldClass('buchung.besondere_anforderungen')"
                   rows="4" class="resize-none"
                   placeholder="Optional – besondere Wünsche hier eintragen" />
-      </div>
+      </TicketSection>
 
       <!-- ═══ Hinweis ═══ -->
       <div class="rounded-xl border border-amber-300/50 bg-amber-50 dark:bg-amber-900/10
@@ -311,13 +306,3 @@ defineProps<{
     />
   </div>
 </template>
-
-<style scoped>
-@reference "../../style.css";
-.label {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
-}
-.card {
-  @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-6;
-}
-</style>

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import UserSelect from '@/components/UserSelect.vue'
+import TicketSection from '@/components/tickets/TicketSection.vue'
 import { VORQUALIFIZIERUNG_OPTIONEN } from '@/composables/useMarketingStelle'
 import type { useMarketingStelle, Phase } from '@/composables/useMarketingStelle'
 
@@ -59,9 +60,7 @@ const checkboxClass = (selected: boolean) =>
       <section class="space-y-6">
 
         <!-- ── Freigabe ────────────────────────────────────────────── -->
-        <div class="card space-y-4">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1">✅ Freigabe</h2>
-
+        <TicketSection title="Freigabe" variant="default">
           <!-- Hinweis -->
           <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
             <p>Bevor wir loslegen, brauchen wir die <strong>Budget-Freigabe</strong>. Ohne bestätigte Freigabe durch den Budget-Verantwortlichen können wir die Kampagne leider nicht verbindlich einplanen.</p>
@@ -111,11 +110,10 @@ const checkboxClass = (selected: boolean) =>
               <input :value="form.stelle.freigabe_email" readonly class="input-ro" />
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ── Niederlassung & Gesellschaft ────────────────────────── -->
-        <div class="card space-y-4">
-          <h2 class="section-title">🏢 Niederlassung & Gesellschaft</h2>
+        <TicketSection title="Niederlassung & Gesellschaft" variant="base">
           <div class="grid grid-cols-1 gap-4">
             <div>
               <label class="label">Welche Niederlassung? *</label>
@@ -131,11 +129,10 @@ const checkboxClass = (selected: boolean) =>
               </select>
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ── Stelle ───────────────────────────────────────────────── -->
-        <div class="card space-y-4">
-          <h2 class="section-title">💼 Zur beworbenen Stelle</h2>
+        <TicketSection title="Zur beworbenen Stelle" variant="marketing">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
               <label class="label">Gesuchte Berufsbezeichnung *</label>
@@ -173,11 +170,10 @@ const checkboxClass = (selected: boolean) =>
                  class="text-xs text-red-500 mt-1">Pflichtfeld</p>
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ── Stellendetails ───────────────────────────────────────── -->
-        <div class="card space-y-4">
-          <h2 class="section-title">⭐ Stellendetails & Benefits</h2>
+        <TicketSection title="Stellendetails & Benefits" variant="marketing">
           <div class="space-y-4">
             <div>
               <label class="label">Mindestens 3 Benefits *</label>
@@ -219,11 +215,10 @@ const checkboxClass = (selected: boolean) =>
                         rows="3" />
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ── Erstellung der Anzeige ───────────────────────────────── -->
-        <div class="card space-y-4">
-          <h2 class="section-title">📅 Erstellung der Anzeige</h2>
+        <TicketSection title="Erstellung der Anzeige" variant="marketing">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">Wann soll die Anzeige online gehen? *</label>
@@ -260,11 +255,10 @@ const checkboxClass = (selected: boolean) =>
                      placeholder="z. B. 500" inputmode="numeric" />
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ── Funnel ───────────────────────────────────────────────── -->
-        <div class="card space-y-4">
-          <h2 class="section-title">🎯 Erstellung des Funnels</h2>
+        <TicketSection title="Erstellung des Funnels" variant="marketing">
           <p class="text-sm text-gray-600 dark:text-gray-400">Hier legen wir fest, welche Bewerberfragen im Funnel gestellt werden und welche FAQ angezeigt werden. Das ist quasi unser „Bewerbungs-Türsteher".</p>
           <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
             <p class="font-semibold mb-1">⚠️ Hinweis</p>
@@ -325,7 +319,7 @@ const checkboxClass = (selected: boolean) =>
             </div>
 
           </div>
-        </div>
+        </TicketSection>
 
       </section>
     </div>
@@ -349,9 +343,6 @@ const checkboxClass = (selected: boolean) =>
 
 <style scoped>
 @reference "../../style.css";
-.label         { @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5; }
-.card          { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-6; }
-.section-title { @apply text-lg font-semibold text-[#3EAAB8] mb-2; }
 .input-ro      { @apply w-full rounded-xl border border-gray-200 dark:border-white/10 px-3.5 py-2.5 text-sm
                         bg-gray-50 dark:bg-[#1a2333] text-gray-500 dark:text-gray-400 cursor-default; }
 </style>

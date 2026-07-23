@@ -2,6 +2,7 @@
 import UserSelect from '@/components/UserSelect.vue'
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
+import TicketSection from '@/components/tickets/TicketSection.vue'
 import type { useZugangBeantragen, Phase } from '@/composables/useZugangBeantragen'
 
 const props = defineProps<{
@@ -67,15 +68,10 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
         <!-- ═══════════════════════════════
              ERSTELLUNG: nur Basisfelder (Rest folgt im BackOffice)
         ═══════════════════════════════ -->
-        <div v-if="stage === 'erstellung'"
-             class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                    rounded-2xl shadow-sm p-6 space-y-6">
-          <div>
-            <h2 class="text-lg font-semibold text-[#3EAAB8]">Basisdaten</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Es werden zunächst nur die Basisangaben erfasst. Nach der Freigabe ergänzt das Sekretariat GL die übrigen Daten.
-            </p>
-          </div>
+        <TicketSection v-if="stage === 'erstellung'" title="Basisdaten" variant="base">
+          <p class="text-sm text-gray-500 dark:text-gray-400 -mt-1">
+            Es werden zunächst nur die Basisangaben erfasst. Nach der Freigabe ergänzt das Sekretariat GL die übrigen Daten.
+          </p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">Anrede *</label>
@@ -110,16 +106,12 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ═══════════════════════════════
              A. BASISDATEN (BackOffice + Bearbeitung)
         ═══════════════════════════════ -->
-        <div v-if="stage !== 'erstellung'"
-             class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                    rounded-2xl shadow-sm p-6 space-y-8">
-
-          <h2 class="text-lg font-semibold text-[#3EAAB8]">Basisdaten</h2>
+        <TicketSection v-if="stage !== 'erstellung'" title="Basisdaten" variant="base">
 
           <!-- Stammdaten -->
           <div class="space-y-4">
@@ -356,18 +348,15 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               </template>
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ═══════════════════════════════
              B. IT / SYSTEMDATEN (nur in der Bearbeitung)
         ═══════════════════════════════ -->
         <template v-if="stage === 'bearbeitung'">
 
-          <!-- IT Systemdaten -->
-          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                      rounded-2xl shadow-sm p-6 space-y-8">
-            <h2 class="text-lg font-semibold text-[#3EAAB8]">IT / Systemdaten</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400 -mt-4">
+          <TicketSection title="IT / Systemdaten" variant="it" badge="IT">
+            <p class="text-sm text-gray-500 dark:text-gray-400 -mt-1">
               Diese Daten werden für die E-Mail-Signatur verwendet – also für die Firma, unter der der Mitarbeitende auftreten soll.
             </p>
 
@@ -545,7 +534,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                 </div>
               </div>
             </div>
-          </div>
+          </TicketSection>
         </template>
 
       </section>
@@ -568,10 +557,3 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
     />
   </div>
 </template>
-
-<style scoped>
-@reference "../../style.css";
-.label {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
-}
-</style>

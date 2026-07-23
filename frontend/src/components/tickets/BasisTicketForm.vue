@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
 import BasisTicketContentPanel from '@/components/tickets/BasisTicketContentPanel.vue'
+import TicketSection from '@/components/tickets/TicketSection.vue'
 import type { useBasisTicket } from '@/composables/useBasisTicket'
 
 const props = defineProps<{
@@ -55,14 +56,15 @@ function handleCreate() {
 
         <!-- ═══ Create ═══ -->
         <template v-if="phase === 'create'">
-          <div class="card">
-            <label class="label">Titel *</label>
-            <input v-model="form.ticket.titel"
-                   :class="fieldClass('ticket.titel')"
-                   placeholder="Kurze Beschreibung des Anliegens…" />
-          </div>
+          <TicketSection title="Neues Ticket" variant="base">
+            <div>
+              <label class="label">Titel *</label>
+              <input v-model="form.ticket.titel"
+                     :class="fieldClass('ticket.titel')"
+                     placeholder="Kurze Beschreibung des Anliegens…" />
+            </div>
 
-          <div class="card">
+            <div>
             <label class="label">Beschreibung *</label>
             <textarea v-model="createBeschreibung"
                       class="w-full rounded-xl border px-3.5 py-2.5 text-sm transition
@@ -76,7 +78,8 @@ function handleCreate() {
                       placeholder="Beschreibe dein Anliegen ausführlich…" />
             <p v-if="validationTriggered && !createBeschreibung.trim() && ctx.errors.value.includes('ticket.beschreibung')"
                class="text-xs text-red-500 mt-1">Pflichtfeld</p>
-          </div>
+            </div>
+          </TicketSection>
         </template>
 
         <!-- ═══ Edit ═══ -->
@@ -85,8 +88,7 @@ function handleCreate() {
           <BasisTicketContentPanel :description="{ ticket: form.ticket }" />
 
           <!-- Neuer Eintrag -->
-          <div class="card">
-            <h2 class="text-lg font-semibold text-[#3EAAB8] mb-3">Neuer Eintrag</h2>
+          <TicketSection title="Neuer Eintrag" variant="default">
             <textarea v-model="ctx.newEntryText.value"
                       class="w-full rounded-xl border border-gray-200 dark:border-white/10
                              px-3.5 py-2.5 text-sm transition
@@ -98,7 +100,7 @@ function handleCreate() {
             <p class="text-xs text-gray-400 mt-1.5">
               Wird beim Speichern automatisch mit deinem Namen und Zeitstempel hinterlegt.
             </p>
-          </div>
+          </TicketSection>
         </template>
 
       </section>
@@ -120,9 +122,3 @@ function handleCreate() {
     />
   </div>
 </template>
-
-<style scoped>
-@reference "../../style.css";
-.label { @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5; }
-.card { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-6; }
-</style>

@@ -2,6 +2,7 @@
 import UserSelect from '@/components/UserSelect.vue'
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
+import TicketSection from '@/components/tickets/TicketSection.vue'
 import type { useNiederlassungUmzug, Phase } from '@/composables/useNiederlassungUmzug'
 
 const props = defineProps<{
@@ -49,8 +50,7 @@ const sc = (path: string) =>
       <section class="flex-1 space-y-6">
 
         <!-- ── Miete ── -->
-        <div class="card space-y-8">
-          <h2 class="section-title">Miete</h2>
+        <TicketSection title="Miete" variant="base">
 
           <!-- Alt -->
           <div class="space-y-4">
@@ -159,12 +159,11 @@ const sc = (path: string) =>
               </div>
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ── IT (nur edit) ── -->
         <template v-if="phase === 'edit'">
-          <div class="card space-y-6">
-            <h2 class="section-title">IT</h2>
+          <TicketSection title="IT" variant="it" badge="IT">
 
             <!-- Alt -->
             <div class="space-y-4">
@@ -249,11 +248,10 @@ const sc = (path: string) =>
                 </template>
               </div>
             </div>
-          </div>
+          </TicketSection>
 
           <!-- ── Marketing ── -->
-          <div class="card space-y-4">
-            <h2 class="section-title">Marketing</h2>
+          <TicketSection title="Marketing" variant="marketing" badge="Marketing">
             <div>
               <label class="label">Öffnungszeiten der Niederlassung *</label>
               <textarea v-model="form.marketing.opening_hours"
@@ -261,11 +259,10 @@ const sc = (path: string) =>
                         rows="4" class="resize-none"
                         placeholder="z. B. Mo–Fr 08:00–17:00" />
             </div>
-          </div>
+          </TicketSection>
 
           <!-- ── Fuhrpark ── -->
-          <div class="card space-y-4">
-            <h2 class="section-title">Fuhrpark</h2>
+          <TicketSection title="Fuhrpark" variant="fuhrpark" badge="Fuhrpark">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="label">Poolfahrzeuge benötigt? *</label>
@@ -281,7 +278,7 @@ const sc = (path: string) =>
                        :class="fieldClass('fuhrpark.pool_cars_from')" />
               </div>
             </div>
-          </div>
+          </TicketSection>
         </template>
 
       </section>
@@ -305,8 +302,5 @@ const sc = (path: string) =>
 
 <style scoped>
 @reference "../../style.css";
-.card          { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-6; }
-.section-title { @apply text-lg font-semibold text-[#3EAAB8]; }
-.subsection    { @apply text-sm font-semibold text-gray-600 dark:text-gray-400; }
-.label         { @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5; }
+.subsection { @apply text-sm font-semibold text-gray-600 dark:text-gray-400; }
 </style>

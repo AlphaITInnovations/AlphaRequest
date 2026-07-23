@@ -2,6 +2,7 @@
 import { watch } from 'vue'
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
+import TicketSection from '@/components/tickets/TicketSection.vue'
 import type { useHardware, Phase } from '@/composables/useHardware'
 
 const props = defineProps<{
@@ -65,9 +66,7 @@ const selectClass = (path: string) =>
       <section class="flex-1 space-y-6">
 
         <!-- Mitarbeitertyp -->
-        <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                    rounded-2xl shadow-sm p-6 space-y-4">
-          <h2 class="text-lg font-semibold text-[#3EAAB8]">👤 Mitarbeitertyp</h2>
+        <TicketSection title="Mitarbeitertyp" variant="default">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4"
                :class="validationTriggered && isInvalid('hardware.mitarbeiterTyp') ? 'ring-1 ring-red-400 rounded-xl p-1' : ''">
             <label v-for="typ in ['Bestandsmitarbeiter', 'Neuer Mitarbeiter']" :key="typ"
@@ -79,12 +78,10 @@ const selectClass = (path: string) =>
               <span class="text-sm font-medium text-gray-900 dark:text-white">{{ typ }}</span>
             </label>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- Basisdaten -->
-        <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                    rounded-2xl shadow-sm p-6 space-y-4">
-          <h2 class="text-lg font-semibold text-[#3EAAB8]">📇 Basisdaten</h2>
+        <TicketSection title="Basisdaten" variant="base">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">Vorname *</label>
@@ -142,13 +139,11 @@ const selectClass = (path: string) =>
               <input type="date" v-model="form.hardware.lieferungBis" :class="fieldClass('hardware.lieferungBis')" />
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- Hardware – Bestandsmitarbeiter -->
         <template v-if="form.hardware.mitarbeiterTyp === 'Bestandsmitarbeiter'">
-          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                      rounded-2xl shadow-sm p-6 space-y-6">
-            <h2 class="text-lg font-semibold text-[#3EAAB8]">🧰 Hardware & Grund</h2>
+          <TicketSection title="Hardware & Grund" variant="it" badge="IT">
 
             <!-- Artikel -->
             <div>
@@ -198,14 +193,12 @@ const selectClass = (path: string) =>
                         :class="fieldClass('hardware.grundBestellung')"
                         rows="4" class="resize-none" />
             </div>
-          </div>
+          </TicketSection>
         </template>
 
         <!-- Hardware – Neuer Mitarbeiter -->
         <template v-if="form.hardware.mitarbeiterTyp === 'Neuer Mitarbeiter'">
-          <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                      rounded-2xl shadow-sm p-6 space-y-6">
-            <h2 class="text-lg font-semibold text-[#3EAAB8]">💻 Hardwareausstattung</h2>
+          <TicketSection title="Hardwareausstattung" variant="it" badge="IT">
 
             <!-- Monitor -->
             <div>
@@ -300,7 +293,7 @@ const selectClass = (path: string) =>
                                focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition resize-none"
                         rows="3" placeholder="z. B. Standort, Sonderwünsche, Hinweise …" />
             </div>
-          </div>
+          </TicketSection>
         </template>
 
       </section>
@@ -322,8 +315,3 @@ const selectClass = (path: string) =>
     />
   </div>
 </template>
-
-<style scoped>
-@reference "../../style.css";
-.label { @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5; }
-</style>

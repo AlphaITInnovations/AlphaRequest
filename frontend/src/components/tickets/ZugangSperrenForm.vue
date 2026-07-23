@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TicketDetails from '@/components/TicketDetails.vue'
 import TicketActionBar from '@/components/TicketActionBar.vue'
+import TicketSection from '@/components/tickets/TicketSection.vue'
 import type { useZugangSperren, Phase } from '@/composables/useZugangSperren'
 
 const props = defineProps<{
@@ -49,8 +50,7 @@ const sc = (path: string) =>
       <section class="flex-1 space-y-6">
 
         <!-- ── Basisdaten (Phase 1 + 2) ── -->
-        <div class="card space-y-4">
-          <h2 class="section-title">Basisdaten</h2>
+        <TicketSection title="Basisdaten" variant="base">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">Vorname *</label>
@@ -87,13 +87,11 @@ const sc = (path: string) =>
               </select>
             </div>
           </div>
-        </div>
+        </TicketSection>
 
         <!-- ── IT (nur edit) ── -->
         <template v-if="phase === 'edit'">
-          <div class="card space-y-6">
-            <h2 class="section-title">IT</h2>
-
+          <TicketSection title="IT" variant="it" badge="IT">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
               <!-- Mailweiterleitung -->
@@ -163,11 +161,10 @@ const sc = (path: string) =>
                 </p>
               </div>
             </div>
-          </div>
+          </TicketSection>
 
           <!-- ── Fuhrpark ── -->
-          <div class="card space-y-4">
-            <h2 class="section-title">Fuhrpark</h2>
+          <TicketSection title="Fuhrpark" variant="fuhrpark" badge="Fuhrpark">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="label">Dienstwagen vorhanden? *</label>
@@ -183,7 +180,7 @@ const sc = (path: string) =>
                        :class="fieldClass('fuhrpark.car_return_date')" />
               </div>
             </div>
-          </div>
+          </TicketSection>
         </template>
 
       </section>
@@ -204,10 +201,3 @@ const sc = (path: string) =>
     />
   </div>
 </template>
-
-<style scoped>
-@reference "../../style.css";
-.card          { @apply bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl shadow-sm p-6; }
-.section-title { @apply text-lg font-semibold text-[#3EAAB8]; }
-.label         { @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5; }
-</style>
