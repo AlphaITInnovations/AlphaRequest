@@ -252,11 +252,15 @@ def list_my_tickets(user: dict = Depends(get_current_user)):
 
 
 @router.get("/tickets/{ticket_id}", response_model=DataResponse[TicketOut])
-def get_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
+def get_ticket(ticket_id: int, department: Optional[str] = Query(None),
+               user: dict = Depends(get_current_user)):
+    """`department` (optional): über den Fachabteilungs-Link gesetzt → Beschreibung
+    strikt auf Basis + genau diese eine Fachabteilung einschränken."""
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
     from backend.database.ticket_watchers import list_watchers
-    return DataResponse(data=TicketOut.from_ticket(ticket, watchers=list_watchers(ticket_id), user=user))
+    return DataResponse(data=TicketOut.from_ticket(
+        ticket, watchers=list_watchers(ticket_id), user=user, only_department=department))
 
 
 # ── Beobachter (Watcher) ──────────────────────────────────────────────────────

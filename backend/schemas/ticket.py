@@ -43,7 +43,7 @@ class TicketOut(BaseModel):
 
     @classmethod
     def from_ticket(cls, t: Ticket, watchers: Optional[list] = None,
-                    user: Optional[dict] = None) -> "TicketOut":
+                    user: Optional[dict] = None, only_department: Optional[str] = None) -> "TicketOut":
         from backend.services.workflow_state import primary_responsibility, responsibility_label
         from backend.services.ticket_visibility import filter_description_str
         resp = primary_responsibility(t)
@@ -51,7 +51,7 @@ class TicketOut(BaseModel):
             id=t.id,
             title=t.title,
             ticket_type=t.ticket_type,
-            description=filter_description_str(t, user, t.description),
+            description=filter_description_str(t, user, t.description, only_department=only_department),
             owner_id=t.owner_id,
             owner_name=t.owner_name,
             comment=t.comment,

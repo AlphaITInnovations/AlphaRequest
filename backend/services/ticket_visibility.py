@@ -143,30 +143,65 @@ def _prune(node: dict, allowed: set, prefix: str = "") -> dict:
 
 # ── Öffentliche API ────────────────────────────────────────────────────────────────
 
-def filter_description(ticket, user: Optional[dict], desc: dict) -> dict:
-    """Gefilterte Kopie der (bereits geparsten) Beschreibung für diesen Betrachter."""
-    if not isinstance(desc, dict) or user is None:
+def _department_paths_by_gid(spec: dict, gid: str) -> set:
+    """dot-Pfade GENAU einer Fachabteilung (per Gruppen-ID) aus der Spec."""
+    if not gid:
+        return set()
+    id_to_name = {g["id"]: g["name"].strip().lower() for g in get_groups()}
+    target = id_to_name.get(gid)
+    if not target:
+        return set()
+    for dept_name, paths in spec.get("departments", {}).items():
+        if dept_name.strip().lower() == target:
+            return set(paths)
+    return set()
+
+
+def filter_description(ticket, user: Optional[dict], desc: dict,
+                       only_department: Optional[str] = None) -> dict:
+    """Gefilterte Kopie der (bereits geparsten) Beschreibung für diesen Betrachter.
+
+    `only_department` (Gruppen-ID): über den Fachabteilungs-Link aufgerufen → strikt
+    Basis + GENAU diese eine Fachabteilung, auch wenn der User in mehreren
+    Fachabteilungen ist (bzw. Oversight/Ersteller). Die Abteilungs-Pfade werden nur
+    hinzugefügt, wenn der User Voll-Sicht hat ODER Mitglied dieser Gruppe ist
+    (kein Enumerieren fremder Abteilungen über den Query-Parameter)."""
+    if not isinstance(desc, dict):
         return desc
     spec = _spec_for(ticket)
-    if not spec or is_full_view(ticket, user):
+    if not spec:
+        return desc
+    if only_department is not None:
+        allowed = set(spec.get("base", []))
+        gids = set(get_group_ids_for_user(user.get("id"))) if user else set()
+        if is_full_view(ticket, user) or only_department in gids:
+            allowed |= _department_paths_by_gid(spec, only_department)
+        return _prune(desc, allowed)
+    if user is None or is_full_view(ticket, user):
         return desc
     return _prune(desc, _allowed_paths(ticket, user, spec))
 
 
-def filter_description_str(ticket, user: Optional[dict], desc_str: str) -> str:
+def filter_description_str(ticket, user: Optional[dict], desc_str: str,
+                           only_department: Optional[str] = None) -> str:
     """Wie filter_description, aber für die roh als String gehaltene desc (TicketOut)."""
-    if user is None:
+    if user is None and only_department is None:
         return desc_str
     spec = _spec_for(ticket)
-    if not spec or is_full_view(ticket, user):
+    if not spec:
+        return desc_str
+    if only_department is None and is_full_view(ticket, user):
         return desc_str
     try:
         parsed = json.loads(desc_str or "{}")
     except Exception:
-        # Kein gültiges JSON → keine Abschnitte zum Leaken; unverändert lassen.
-        return desc_str
+        # Kein gültiges JSON → beim Abteilungs-Scope restriktiv, sonst unverändert.
+        return "{}" if only_department is not None else desc_str
     try:
-        return json.dumps(_prune(parsed, _allowed_paths(ticket, user, spec)), ensure_ascii=False)
+        return json.dumps(
+            filter_description(ticket, user, parsed, only_department=only_department),
+            ensure_ascii=False,
+        )
     except Exception:
         return "{}"   # im Zweifel restriktiv
 

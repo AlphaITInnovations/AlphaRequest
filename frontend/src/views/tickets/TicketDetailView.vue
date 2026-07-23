@@ -25,7 +25,7 @@ const formCtx = entry?.useComposable('edit', ticketId)
 const { ticket, loading, submitting, phases, currentView,
         isDeptReviewPhase, isRejected,
         description, activeDepartments, reviewDepartments, showReviewDepartments, watchers,
-        load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher } = useTicket(ticketId)
+        load, markDepartmentDone, rejectTicket, addWatcher, removeWatcher } = useTicket(ticketId, deptId)
 
 const watcherBusy = ref(false)
 async function onAddWatcher(id: string, name: string) {
@@ -417,7 +417,7 @@ async function goToEdit() {
           </aside>
 
           <!-- ── Content: Export-Ansicht oder read-only Panel ── -->
-          <section class="flex-1">
+          <section class="flex-1 space-y-6">
             <component
               v-if="currentView === 'export' && entry!.exportPanel"
               :is="entry!.exportPanel"

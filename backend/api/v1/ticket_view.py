@@ -64,6 +64,10 @@ def get_ticket_view(
     except Exception:
         desc = {}
 
+    # Fachabteilungs-Ansicht: strikt Basis + genau DIESE Fachabteilung (serverseitig).
+    from backend.services.ticket_visibility import filter_description
+    desc = filter_description(ticket, user, desc, only_department=department)
+
     return DataResponse(data=TicketViewResponse(
         ticket=TicketMeta(
             id=ticket.id,

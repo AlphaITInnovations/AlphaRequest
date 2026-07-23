@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { ticketsApi } from '@/api/tickets'
 import type { Ticket, WorkflowPhase, Watcher, Department } from '@/types/ticket'
 
-export function useTicket(ticketId: number) {
+export function useTicket(ticketId: number, department?: string) {
   const ticket    = ref<Ticket | null>(null)
   const loading   = ref(false)
   const submitting = ref(false)
@@ -72,7 +72,7 @@ export function useTicket(ticketId: number) {
   async function load() {
     loading.value = true
     try {
-      const res = await ticketsApi.get(ticketId)
+      const res = await ticketsApi.get(ticketId, department)
       ticket.value = res.data.data
     } finally {
       loading.value = false
