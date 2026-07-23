@@ -109,15 +109,15 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
         </TicketSection>
 
         <!-- ═══════════════════════════════
-             A. BASISDATEN (BackOffice + Bearbeitung)
+             BackOffice + Bearbeitung – nach Zielgruppe getrennt
+             (Feld-Timing bleibt identisch: alles ab stage !== 'erstellung',
+             die IT-Systemdaten-Felder weiterhin nur in der Bearbeitung)
         ═══════════════════════════════ -->
-        <TicketSection v-if="stage !== 'erstellung'" title="Basisdaten" variant="base">
+        <template v-if="stage !== 'erstellung'">
 
-          <!-- Stammdaten -->
-          <div class="space-y-4">
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Stammdaten</h3>
+          <!-- Basisdaten – für jede Fachabteilung sichtbar -->
+          <TicketSection title="Basisdaten" variant="base">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
               <div>
                 <label class="label">Anrede *</label>
                 <select v-model="form.base.salutation" :class="selectClass('base.salutation')">
@@ -135,6 +135,29 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                 <label class="label">Nachname *</label>
                 <input v-model="form.base.last_name" :class="fieldClass('base.last_name')" placeholder="Mustermann" />
               </div>
+              <div>
+                <label class="label">Firma lt. Arbeitsvertrag *</label>
+                <select v-model="form.base.contract_company" :class="selectClass('base.contract_company')">
+                  <option value="">Bitte wählen</option>
+                  <option v-for="c in companies" :key="c">{{ c }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Niederlassung *</label>
+                <input v-model="form.base.location" :class="fieldClass('base.location')" />
+              </div>
+              <div>
+                <label class="label">Kostenstelle *</label>
+                <input v-model="form.base.cost_center"
+                       @input="form.base.cost_center = form.base.cost_center.replace(/\D/g, '')"
+                       :class="fieldClass('base.cost_center')" inputmode="numeric" />
+              </div>
+            </div>
+          </TicketSection>
+
+          <!-- Personalabteilung (HR) -->
+          <TicketSection title="Stammdaten" variant="hr" badge="Personalabteilung">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="label">Titel *</label>
                 <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
@@ -213,104 +236,267 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                        :class="fieldClass('personal.personal_number')"
                        readonly class="opacity-80 cursor-not-allowed" />
               </div>
-
             </div>
-          </div>
 
-          <!-- Organisation -->
-          <div class="space-y-4">
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Organisation</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-              <!-- Fachabteilung Dropdown -->
-              <div>
-                <label class="label">Fachabteilung *</label>
-                <select v-model="form.personal.department" :class="selectClass('personal.department')">
-                  <option value="Keine">Keine</option>
-                  <option v-for="dept in departments" :key="dept.id" :value="dept.name">{{ dept.name }}</option>
-                  <option value="Sonstige">Sonstige</option>
-                </select>
-                <p class="text-xs text-gray-400 mt-1">Nur ändern, wenn es sich um eine Fachabteilung handelt.</p>
-              </div>
-              <!-- Sonstige Freitextfeld -->
-              <div v-if="form.personal.department === 'Sonstige'">
-                <label class="label">Fachabteilung angeben *</label>
-                <input v-model="form.personal.department_other"
-                       :class="fieldClass('personal.department_other')"
-                       placeholder="Abteilungsname eingeben" />
-              </div>
-
-              <div>
-                <label class="label">Kostenstelle *</label>
-                <input v-model="form.base.cost_center"
-                       @input="form.base.cost_center = form.base.cost_center.replace(/\D/g, '')"
-                       :class="fieldClass('base.cost_center')" inputmode="numeric" />
-              </div>
-              <div>
-                <label class="label">Niederlassung *</label>
-                <input v-model="form.base.location" :class="fieldClass('base.location')" />
-              </div>
-              <div>
-                <label class="label">Bundesland *</label>
-                <select v-model="form.personal.federal_state" :class="selectClass('personal.federal_state')">
-                  <option value="">Bitte wählen</option>
-                  <option v-for="bl in BUNDESLAENDER" :key="bl">{{ bl }}</option>
-                </select>
-              </div>
-              <div>
-                <label class="label">Firma lt. Arbeitsvertrag *</label>
-                <select v-model="form.base.contract_company" :class="selectClass('base.contract_company')">
-                  <option value="">Bitte wählen</option>
-                  <option v-for="c in companies" :key="c">{{ c }}</option>
-                </select>
+            <!-- Organisation -->
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Organisation</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="label">Fachabteilung *</label>
+                  <select v-model="form.personal.department" :class="selectClass('personal.department')">
+                    <option value="Keine">Keine</option>
+                    <option v-for="dept in departments" :key="dept.id" :value="dept.name">{{ dept.name }}</option>
+                    <option value="Sonstige">Sonstige</option>
+                  </select>
+                  <p class="text-xs text-gray-400 mt-1">Nur ändern, wenn es sich um eine Fachabteilung handelt.</p>
+                </div>
+                <div v-if="form.personal.department === 'Sonstige'">
+                  <label class="label">Fachabteilung angeben *</label>
+                  <input v-model="form.personal.department_other"
+                         :class="fieldClass('personal.department_other')"
+                         placeholder="Abteilungsname eingeben" />
+                </div>
+                <div>
+                  <label class="label">Bundesland *</label>
+                  <select v-model="form.personal.federal_state" :class="selectClass('personal.federal_state')">
+                    <option value="">Bitte wählen</option>
+                    <option v-for="bl in BUNDESLAENDER" :key="bl">{{ bl }}</option>
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Beziehungen -->
-          <div class="space-y-4">
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Beziehungen</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div :class="validationTriggered && isInvalid('personal.supervisor_hr_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
-                <UserSelect
-                  label="Vorgesetzter (vertraglich) *"
-                  :model-value="form.personal.supervisor_hr_id ? { id: form.personal.supervisor_hr_id, name: form.personal.supervisor_hr_name } : null"
-                  @update:model-value="v => { form.personal.supervisor_hr_id = v?.id ?? ''; form.personal.supervisor_hr_name = v?.name ?? '' }"
-                />
-              </div>
-              <div :class="validationTriggered && isInvalid('personal.contact_person_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
-                <UserSelect
-                  label="Ansprechpartner für Rückfragen *"
-                  :model-value="form.personal.contact_person_id ? { id: form.personal.contact_person_id, name: form.personal.contact_person_name } : null"
-                  @update:model-value="v => { form.personal.contact_person_id = v?.id ?? ''; form.personal.contact_person_name = v?.name ?? '' }"
-                />
+            <!-- Beziehungen -->
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Beziehungen</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div :class="validationTriggered && isInvalid('personal.supervisor_hr_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
+                  <UserSelect
+                    label="Vorgesetzter (vertraglich) *"
+                    :model-value="form.personal.supervisor_hr_id ? { id: form.personal.supervisor_hr_id, name: form.personal.supervisor_hr_name } : null"
+                    @update:model-value="v => { form.personal.supervisor_hr_id = v?.id ?? ''; form.personal.supervisor_hr_name = v?.name ?? '' }"
+                  />
+                </div>
+                <div :class="validationTriggered && isInvalid('personal.contact_person_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
+                  <UserSelect
+                    label="Ansprechpartner für Rückfragen *"
+                    :model-value="form.personal.contact_person_id ? { id: form.personal.contact_person_id, name: form.personal.contact_person_name } : null"
+                    @update:model-value="v => { form.personal.contact_person_id = v?.id ?? ''; form.personal.contact_person_name = v?.name ?? '' }"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          </TicketSection>
 
-          <!-- Timebutler -->
-          <div class="space-y-4">
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Timebutler</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="label">Urlaubsanspruch pro Jahr *</label>
-                <input v-model="form.it.timebutler.vacation_year"
-                       @input="form.it.timebutler.vacation_year = form.it.timebutler.vacation_year.replace(/\D/g, '')"
-                       :class="fieldClass('it.timebutler.vacation_year')" inputmode="numeric" placeholder="30" />
-              </div>
-              <div class="md:col-span-2" :class="validationTriggered && isInvalid('it.timebutler.supervisor_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
-                <UserSelect
-                  label="Wer soll den Urlaub freigeben? *"
-                  :model-value="form.it.timebutler.supervisor_id ? { id: form.it.timebutler.supervisor_id, name: form.it.timebutler.supervisor_name } : null"
-                  @update:model-value="v => { form.it.timebutler.supervisor_id = v?.id ?? ''; form.it.timebutler.supervisor_name = v?.name ?? '' }"
-                />
+          <!-- IT / Systemdaten (Timebutler ab BackOffice, Rest ab Bearbeitung) -->
+          <TicketSection title="IT / Systemdaten" variant="it" badge="IT">
+
+            <!-- Timebutler -->
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Timebutler</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="label">Urlaubsanspruch pro Jahr *</label>
+                  <input v-model="form.it.timebutler.vacation_year"
+                         @input="form.it.timebutler.vacation_year = form.it.timebutler.vacation_year.replace(/\D/g, '')"
+                         :class="fieldClass('it.timebutler.vacation_year')" inputmode="numeric" placeholder="30" />
+                </div>
+                <div class="md:col-span-2" :class="validationTriggered && isInvalid('it.timebutler.supervisor_id') ? 'ring-1 ring-red-400 rounded-xl' : ''">
+                  <UserSelect
+                    label="Wer soll den Urlaub freigeben? *"
+                    :model-value="form.it.timebutler.supervisor_id ? { id: form.it.timebutler.supervisor_id, name: form.it.timebutler.supervisor_name } : null"
+                    @update:model-value="v => { form.it.timebutler.supervisor_id = v?.id ?? ''; form.it.timebutler.supervisor_name = v?.name ?? '' }"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+
+            <!-- Restliche IT-Systemdaten: erst in der Bearbeitung -->
+            <template v-if="stage === 'bearbeitung'">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Diese Daten werden für die E-Mail-Signatur verwendet – also für die Firma, unter der der Mitarbeitende auftreten soll.
+              </p>
+
+              <!-- Firma (Signatur / Webseite) -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Firma (Signatur / Webseite)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="label">Firma *</label>
+                    <select v-model="form.it.appearance_company" :class="selectClass('it.appearance_company')">
+                      <option value="">–</option>
+                      <option v-for="c in companies" :key="c">{{ c }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- E-Mail-Signatur -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">E-Mail-Signatur</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="label">Titel (Signatur) *</label>
+                    <input v-model="form.it.signature.title"
+                           @input="onSignatureTitleInput"
+                           :class="fieldClass('it.signature.title')"
+                           placeholder="Wird automatisch aus Basisdaten übernommen" />
+                    <p class="text-xs text-gray-400 mt-1">Wird aus dem Titel in den Basisdaten vorbefüllt, kann aber angepasst werden.</p>
+                  </div>
+                  <div>
+                    <label class="label">Straße *</label>
+                    <input v-model="form.it.signature.street" :class="fieldClass('it.signature.street')" />
+                  </div>
+                  <div>
+                    <label class="label">Postleitzahl *</label>
+                    <input v-model="form.it.signature.zip"
+                           @input="form.it.signature.zip = form.it.signature.zip.replace(/\D/g,'').slice(0,5)"
+                           :class="fieldClass('it.signature.zip')" inputmode="numeric" maxlength="5" />
+                  </div>
+                  <div>
+                    <label class="label">Ort *</label>
+                    <input v-model="form.it.signature.city" :class="fieldClass('it.signature.city')" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Software-Zugriffe -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Software-Zugriffe</h3>
+                <p class="text-xs text-gray-400 -mt-2">Bitte je benötigtem System anhaken und konkretisieren.</p>
+
+                <div class="space-y-3">
+                  <!-- DATEV -->
+                  <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                      <input type="checkbox" v-model="form.it.software.datev" :class="checkboxClass" />
+                      DATEV-Zugriff
+                    </label>
+                    <div v-if="form.it.software.datev" class="mt-2.5">
+                      <label class="label">Rechte wie Mitarbeiter XY?</label>
+                      <input v-model="form.it.software.datev_rights"
+                             :class="fieldClass('it.software.datev_rights')"
+                             placeholder="z. B. wie Max Mustermann" />
+                    </div>
+                  </div>
+
+                  <!-- PersoPro -->
+                  <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                      <input type="checkbox" v-model="form.it.software.persopro" :class="checkboxClass" />
+                      PersoPro-Zugriff
+                    </label>
+                    <div v-if="form.it.software.persopro" class="mt-2.5">
+                      <label class="label">Welche Zugriffe?</label>
+                      <input v-model="form.it.software.persopro_rights"
+                             :class="fieldClass('it.software.persopro_rights')"
+                             placeholder="Welche Zugriffe werden benötigt?" />
+                    </div>
+                  </div>
+
+                  <!-- TimeJob -->
+                  <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                      <input type="checkbox" v-model="form.it.software.timejob" :class="checkboxClass" />
+                      TimeJob-Zugriff
+                    </label>
+                    <div v-if="form.it.software.timejob" class="mt-2.5">
+                      <label class="label">Welche Zugriffe?</label>
+                      <input v-model="form.it.software.timejob_rights"
+                             :class="fieldClass('it.software.timejob_rights')"
+                             placeholder="Welche Zugriffe werden benötigt?" />
+                    </div>
+                  </div>
+
+                  <!-- Zvoove -->
+                  <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                      <input type="checkbox" v-model="form.it.software.zvoove" :class="checkboxClass" />
+                      Zvoove-Zugriff
+                    </label>
+                    <div v-if="form.it.software.zvoove" class="mt-2.5">
+                      <label class="label">Welche Zugriffe?</label>
+                      <input v-model="form.it.software.zvoove_rights"
+                             :class="fieldClass('it.software.zvoove_rights')"
+                             placeholder="Welche Zugriffe werden benötigt?" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Weitere Software -->
+                <div class="pt-2">
+                  <label class="label">Weitere Software</label>
+                  <textarea v-model="form.it.other_systems"
+                            :class="fieldClass('it.other_systems')"
+                            rows="3" class="resize-none"
+                            placeholder="z. B. weitere benötigte Programme" />
+                </div>
+              </div>
+
+              <!-- Postfächer & Kostenstellen -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Postfächer & Kostenstellen</h3>
+                <div class="space-y-4">
+
+                  <!-- Infopostfach der Niederlassung (standardmäßig angehakt) -->
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input type="checkbox" v-model="form.it.mailboxes.info_mailbox" :class="checkboxClass" />
+                    Infopostfach der Niederlassung
+                  </label>
+
+                  <!-- Zusätzliche Postfächer -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="label">Zusätzliche Postfächer?</label>
+                      <select v-model="form.it.mailboxes.additional" :class="selectClass('it.mailboxes.additional')">
+                        <option value="">–</option>
+                        <option>Ja</option>
+                        <option>Nein</option>
+                      </select>
+                    </div>
+                    <div v-if="form.it.mailboxes.additional === 'Ja'" class="md:col-span-2">
+                      <label class="label">Postfächer eintragen *</label>
+                      <textarea v-model="form.it.mailboxes.notes"
+                                :class="fieldClass('it.mailboxes.notes')"
+                                rows="3" class="resize-none"
+                                placeholder="z. B. max.mustermann@alphaconsult.org" />
+                    </div>
+                  </div>
+
+                  <!-- Zusätzliche Kostenstellen / Niederlassungen -->
+                  <div>
+                    <label class="label">Zusätzliche Kostenstellen / Niederlassungen</label>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
+                      Nur ausfüllen, wenn der Mitarbeitende Zugriff auf mehr als seine eigene Niederlassung benötigt (z.&nbsp;B. für Drucker oder Rechte aufs Niederlassungslaufwerk).
+                    </p>
+                    <textarea v-model="form.it.additional_cost_centers"
+                              :class="fieldClass('it.additional_cost_centers')"
+                              rows="3" class="resize-none" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hardware-Hinweis -->
+              <div class="rounded-xl border border-amber-300/50 bg-amber-50 dark:bg-amber-900/10
+                          dark:border-amber-500/20 px-4 py-3">
+                <div class="flex items-start gap-2.5">
+                  <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p class="text-sm font-medium text-amber-800 dark:text-amber-300">Hardware-Bestellungen</p>
+                    <p class="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                      Bitte bestellen Sie IT-Hardware, Mobiltelefone und Festnetzrufnummern weiterhin direkt über IT@alphaconsult.org
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </TicketSection>
 
           <!-- Fuhrpark -->
-          <div class="space-y-4">
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Fuhrpark</h3>
+          <TicketSection title="Fuhrpark" variant="fuhrpark" badge="Fuhrpark">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="label">Dienstwagen *</label>
@@ -328,213 +514,21 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                     <option v-for="n in 7" :key="n">{{ n }}</option>
                   </select>
                 </div>
-<div>
-  <label class="label">Benötigt ab? *</label>
-
-  <input
-    type="date"
-    v-model="form.fuhrpark.car_from"
-    :class="fieldClass('fuhrpark.car_from')"
-  />
-
-  <div class="mt-2 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2">
-    <p class="text-sm text-slate-700 dark:text-slate-300">
-      <strong>Hinweis:</strong> Bitte abstimmen, ob der Firmenwagen bereits
-      während der Probezeit oder erst nach deren Abschluss bereitgestellt
-      werden soll, und entsprechendes Datum eintragen.
-    </p>
-  </div>
-</div>
+                <div>
+                  <label class="label">Benötigt ab? *</label>
+                  <input type="date" v-model="form.fuhrpark.car_from" :class="fieldClass('fuhrpark.car_from')" />
+                  <div class="mt-2 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2">
+                    <p class="text-sm text-slate-700 dark:text-slate-300">
+                      <strong>Hinweis:</strong> Bitte abstimmen, ob der Firmenwagen bereits
+                      während der Probezeit oder erst nach deren Abschluss bereitgestellt
+                      werden soll, und entsprechendes Datum eintragen.
+                    </p>
+                  </div>
+                </div>
               </template>
             </div>
-          </div>
-        </TicketSection>
-
-        <!-- ═══════════════════════════════
-             B. IT / SYSTEMDATEN (nur in der Bearbeitung)
-        ═══════════════════════════════ -->
-        <template v-if="stage === 'bearbeitung'">
-
-          <TicketSection title="IT / Systemdaten" variant="it" badge="IT">
-            <p class="text-sm text-gray-500 dark:text-gray-400 -mt-1">
-              Diese Daten werden für die E-Mail-Signatur verwendet – also für die Firma, unter der der Mitarbeitende auftreten soll.
-            </p>
-
-            <!-- Firma (Signatur / Webseite) – ehemals unter "Allgemein" -->
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Firma (Signatur / Webseite)</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label class="label">Firma *</label>
-                  <select v-model="form.it.appearance_company" :class="selectClass('it.appearance_company')">
-                    <option value="">–</option>
-                    <option v-for="c in companies" :key="c">{{ c }}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <!-- E-Mail-Signatur -->
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">E-Mail-Signatur</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label class="label">Titel (Signatur) *</label>
-                  <input v-model="form.it.signature.title"
-                         @input="onSignatureTitleInput"
-                         :class="fieldClass('it.signature.title')"
-                         placeholder="Wird automatisch aus Basisdaten übernommen" />
-                  <p class="text-xs text-gray-400 mt-1">Wird aus dem Titel in den Basisdaten vorbefüllt, kann aber angepasst werden.</p>
-                </div>
-                <div>
-                  <label class="label">Straße *</label>
-                  <input v-model="form.it.signature.street" :class="fieldClass('it.signature.street')" />
-                </div>
-                <div>
-                  <label class="label">Postleitzahl *</label>
-                  <input v-model="form.it.signature.zip"
-                         @input="form.it.signature.zip = form.it.signature.zip.replace(/\D/g,'').slice(0,5)"
-                         :class="fieldClass('it.signature.zip')" inputmode="numeric" maxlength="5" />
-                </div>
-                <div>
-                  <label class="label">Ort *</label>
-                  <input v-model="form.it.signature.city" :class="fieldClass('it.signature.city')" />
-                </div>
-              </div>
-            </div>
-
-            <!-- Software-Zugriffe -->
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Software-Zugriffe</h3>
-              <p class="text-xs text-gray-400 -mt-2">Bitte je benötigtem System anhaken und konkretisieren.</p>
-
-              <div class="space-y-3">
-                <!-- DATEV -->
-                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                    <input type="checkbox" v-model="form.it.software.datev" :class="checkboxClass" />
-                    DATEV-Zugriff
-                  </label>
-                  <div v-if="form.it.software.datev" class="mt-2.5">
-                    <label class="label">Rechte wie Mitarbeiter XY?</label>
-                    <input v-model="form.it.software.datev_rights"
-                           :class="fieldClass('it.software.datev_rights')"
-                           placeholder="z. B. wie Max Mustermann" />
-                  </div>
-                </div>
-
-                <!-- PersoPro -->
-                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                    <input type="checkbox" v-model="form.it.software.persopro" :class="checkboxClass" />
-                    PersoPro-Zugriff
-                  </label>
-                  <div v-if="form.it.software.persopro" class="mt-2.5">
-                    <label class="label">Welche Zugriffe?</label>
-                    <input v-model="form.it.software.persopro_rights"
-                           :class="fieldClass('it.software.persopro_rights')"
-                           placeholder="Welche Zugriffe werden benötigt?" />
-                  </div>
-                </div>
-
-                <!-- TimeJob -->
-                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                    <input type="checkbox" v-model="form.it.software.timejob" :class="checkboxClass" />
-                    TimeJob-Zugriff
-                  </label>
-                  <div v-if="form.it.software.timejob" class="mt-2.5">
-                    <label class="label">Welche Zugriffe?</label>
-                    <input v-model="form.it.software.timejob_rights"
-                           :class="fieldClass('it.software.timejob_rights')"
-                           placeholder="Welche Zugriffe werden benötigt?" />
-                  </div>
-                </div>
-
-                <!-- Zvoove -->
-                <div class="rounded-xl border border-gray-200 dark:border-white/10 p-3.5">
-                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                    <input type="checkbox" v-model="form.it.software.zvoove" :class="checkboxClass" />
-                    Zvoove-Zugriff
-                  </label>
-                  <div v-if="form.it.software.zvoove" class="mt-2.5">
-                    <label class="label">Welche Zugriffe?</label>
-                    <input v-model="form.it.software.zvoove_rights"
-                           :class="fieldClass('it.software.zvoove_rights')"
-                           placeholder="Welche Zugriffe werden benötigt?" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Weitere Software -->
-              <div class="pt-2">
-                <label class="label">Weitere Software</label>
-                <textarea v-model="form.it.other_systems"
-                          :class="fieldClass('it.other_systems')"
-                          rows="3" class="resize-none"
-                          placeholder="z. B. weitere benötigte Programme" />
-              </div>
-            </div>
-
-            <!-- Postfächer & Kostenstellen -->
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Postfächer & Kostenstellen</h3>
-              <div class="space-y-4">
-
-                <!-- Infopostfach der Niederlassung (standardmäßig angehakt) -->
-                <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                  <input type="checkbox" v-model="form.it.mailboxes.info_mailbox" :class="checkboxClass" />
-                  Infopostfach der Niederlassung
-                </label>
-
-                <!-- Zusätzliche Postfächer -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="label">Zusätzliche Postfächer?</label>
-                    <select v-model="form.it.mailboxes.additional" :class="selectClass('it.mailboxes.additional')">
-                      <option value="">–</option>
-                      <option>Ja</option>
-                      <option>Nein</option>
-                    </select>
-                  </div>
-                  <div v-if="form.it.mailboxes.additional === 'Ja'" class="md:col-span-2">
-                    <label class="label">Postfächer eintragen *</label>
-                    <textarea v-model="form.it.mailboxes.notes"
-                              :class="fieldClass('it.mailboxes.notes')"
-                              rows="3" class="resize-none"
-                              placeholder="z. B. max.mustermann@alphaconsult.org" />
-                  </div>
-                </div>
-
-                <!-- Zusätzliche Kostenstellen / Niederlassungen -->
-                <div>
-                  <label class="label">Zusätzliche Kostenstellen / Niederlassungen</label>
-                  <p class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
-                    Nur ausfüllen, wenn der Mitarbeitende Zugriff auf mehr als seine eigene Niederlassung benötigt (z.&nbsp;B. für Drucker oder Rechte aufs Niederlassungslaufwerk).
-                  </p>
-                  <textarea v-model="form.it.additional_cost_centers"
-                            :class="fieldClass('it.additional_cost_centers')"
-                            rows="3" class="resize-none" />
-                </div>
-              </div>
-            </div>
-
-            <!-- Hardware-Hinweis -->
-            <div class="rounded-xl border border-amber-300/50 bg-amber-50 dark:bg-amber-900/10
-                        dark:border-amber-500/20 px-4 py-3">
-              <div class="flex items-start gap-2.5">
-                <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <p class="text-sm font-medium text-amber-800 dark:text-amber-300">Hardware-Bestellungen</p>
-                  <p class="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
-                    Bitte bestellen Sie IT-Hardware, Mobiltelefone und Festnetzrufnummern weiterhin direkt über IT@alphaconsult.org
-                  </p>
-                </div>
-              </div>
-            </div>
           </TicketSection>
+
         </template>
 
       </section>
