@@ -13,6 +13,8 @@ export const FIELD_LABEL: Record<string, string> = {
 // Deutsche Beschriftungen der Formularfelder (für die Verlaufs-Diffs).
 // Keyed nach dem letzten Pfadsegment des geflatteten description-Keys.
 export const DE_FIELD_LABELS: Record<string, string> = {
+  // Basisdaten
+  salutation: 'Anrede',
   // Stammdaten
   first_name: 'Vorname', last_name: 'Nachname', title: 'Titel',
   private_street: 'Straße (privat)', private_zip: 'PLZ (privat)', private_city: 'Ort (privat)',

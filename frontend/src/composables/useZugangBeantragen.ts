@@ -20,10 +20,18 @@ export interface ZugangForm {
   priority:     TicketPriority
   comment:      string
 
-  // Stammdaten
-  personal: {
+  // Basisdaten (eigener desc-Block, für jede Fachabteilung sichtbar)
+  base: {
+    salutation:        string   // Herr | Frau | Divers
     first_name:        string
     last_name:         string
+    contract_company:  string
+    location:          string
+    cost_center:       string
+  }
+
+  // Stammdaten (nur HR / Oversight / Ersteller)
+  personal: {
     title:             string
     private_street:    string
     private_zip:       string
@@ -34,9 +42,6 @@ export interface ZugangForm {
     federal_state:     string
     department:        string
     department_other:  string
-    cost_center:       string
-    location:          string
-    contract_company:  string
     personal_number:   string
     supervisor_hr_id:   string
     supervisor_hr_name: string
@@ -94,8 +99,12 @@ type Rule = {
 }
 
 const RULES_CREATE: Record<string, Rule> = {
-  'personal.first_name':       { required: true },
-  'personal.last_name':        { required: true },
+  'base.salutation':           { required: true },
+  'base.first_name':           { required: true },
+  'base.last_name':            { required: true },
+  'base.contract_company':     { required: true },
+  'base.location':             { required: true },
+  'base.cost_center':          { required: true },
   'personal.title':            { required: true },
   'personal.private_street':   { required: true },
   'personal.private_zip':      { required: true, pattern: /^[0-9]{5}$/ },
@@ -106,9 +115,6 @@ const RULES_CREATE: Record<string, Rule> = {
   'personal.federal_state':    { required: true },
   'personal.department':       { required: true },
   'personal.department_other': { requiredIf: f => f.personal.department === 'Sonstige' },
-  'personal.cost_center':      { required: true },
-  'personal.location':         { required: true },
-  'personal.contract_company': { required: true },
   // personal_number wird beim Erstellen automatisch vergeben (Backend) – kein Pflichtfeld.
   'personal.supervisor_hr_id': { required: true },
   'personal.contact_person_id':{ required: true },
@@ -133,11 +139,12 @@ const RULES_EDIT: Record<string, Rule> = {
 // Erstellung: nur die Basisfelder; der „Nächster Bearbeiter" geht automatisch
 // an die Freigabe (Herr Lutz) und ist daher gesperrt (kein Pflichtfeld).
 const RULES_ERSTELLUNG: Record<string, Rule> = {
-  'personal.first_name':       { required: true },
-  'personal.last_name':        { required: true },
+  'base.salutation':           { required: true },
+  'base.first_name':           { required: true },
+  'base.last_name':            { required: true },
+  'base.contract_company':     { required: true },
+  'base.location':             { required: true },
   'personal.title':            { required: true },
-  'personal.contract_company': { required: true },
-  'personal.location':         { required: true },
 }
 
 // Mehrstufiger Onboarding-Workflow: Erstellung (Basis) → Freigabe → BackOffice
@@ -175,12 +182,16 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     priority:    'medium',
     comment:     '',
 
+    base: {
+      salutation: '', first_name: '', last_name: '',
+      contract_company: '', location: '', cost_center: '',
+    },
+
     personal: {
-      first_name: '', last_name: '', title: '',
+      title: '',
       private_street: '', private_zip: '', private_city: '',
       start_date: '', homeoffice: '', weekly_hours: '', federal_state: '',
       department: 'Keine', department_other: '',
-      cost_center: '', location: '', contract_company: '',
       personal_number: '', supervisor_hr_id: '', supervisor_hr_name: '',
       contact_person_id: '', contact_person_name: '',
     },
@@ -315,7 +326,14 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         const curKey = wf?.phases?.[wf?.current_phase_index ?? 0]?.key
         stage.value = curKey === 'backoffice' ? 'backoffice' : 'bearbeitung'
 
+        if (desc.base) Object.assign(form.base, desc.base)
         if (desc.personal) Object.assign(form.personal, desc.personal)
+
+        // Legacy: alte Tickets hatten diese Basisfelder noch unter personal.
+        const legacy = desc.personal || {}
+        for (const k of ['first_name', 'last_name', 'contract_company', 'location', 'cost_center'] as const) {
+          if (!form.base[k] && legacy[k] != null) form.base[k] = legacy[k]
+        }
 
         // Leere Fachabteilung → "Keine" (wird als '' gespeichert)
         if (!form.personal.department) {
@@ -377,6 +395,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     }
 
     const desc: Record<string, any> = {
+      base: { ...form.base },
       personal,
       it: form.it,
       fuhrpark: form.fuhrpark,

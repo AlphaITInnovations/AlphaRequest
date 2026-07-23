@@ -18,16 +18,30 @@ GROUPS = [
     {"id": "g-backoffice", "name": "Sekretariat GL"},
 ]
 
+# Neues Format: Basisdaten in eigenem 'base'-Block; personal nur noch HR-Felder.
 DESC = {
+    "base": {
+        "salutation": "Frau", "first_name": "Anna", "last_name": "Muster",
+        "contract_company": "Alpha", "location": "Berlin", "cost_center": "CC-1",
+    },
     "personal": {
-        "first_name": "Anna", "last_name": "Muster", "title": "Frau",
-        "start_date": "2026-01-01", "location": "Berlin", "contract_company": "Alpha",
+        "title": "Leiterin", "start_date": "2026-01-01",
+        "personal_number": "12345", "private_street": "Weg 1",
         "department": "IT", "department_other": "",
-        "personal_number": "12345", "cost_center": "CC-1", "private_street": "Weg 1",
     },
     "it": {"appearance_company": "Alpha", "software": {"datev": True}},
     "fuhrpark": {"car": "Ja", "car_class": "M"},
     "_next_assignee": {"id": "u-next", "name": "Next"},
+}
+
+# Alt-Ticket: Basisfelder liegen noch unter personal, kein 'base'-Block.
+DESC_LEGACY = {
+    "personal": {
+        "first_name": "Old", "last_name": "Legacy", "contract_company": "Alpha",
+        "location": "Berlin", "cost_center": "CC-9",
+        "title": "X", "personal_number": "999",
+    },
+    "it": {"appearance_company": "Alpha"},
 }
 
 
@@ -52,7 +66,6 @@ def _ticket(owner_id="owner-1", phases=None):
 @pytest.fixture(autouse=True)
 def _mock_groups(monkeypatch):
     monkeypatch.setattr(tv, "get_groups", lambda: GROUPS)
-    # user-id -> gruppen
     members = {
         "it-user": ["g-it"],
         "hr-user": ["g-hr"],
@@ -80,7 +93,6 @@ def test_full_view_for_owner():
 
 
 def test_full_view_for_assignment_group():
-    # Mitglied der BackOffice-Gruppe = verarbeitende Assignment-Phase → voll
     assert tv.is_full_view(_ticket(), _user("backoffice-user")) is True
 
 
@@ -88,35 +100,34 @@ def test_restricted_for_department_member():
     assert tv.is_full_view(_ticket(), _user("it-user")) is False
 
 
-# ── filter_description ──────────────────────────────────────────────────────────────
+# ── filter_description (neues base-Format) ─────────────────────────────────────────
 
 def test_it_member_sees_base_plus_it_only():
     out = tv.filter_description(_ticket(), _user("it-user"), DESC)
-    # Basisfelder
-    assert out["personal"]["first_name"] == "Anna"
-    assert out["personal"]["location"] == "Berlin"
+    # Basisdaten-Block komplett
+    assert out["base"]["first_name"] == "Anna"
+    assert out["base"]["cost_center"] == "CC-1"
+    assert out["base"]["salutation"] == "Frau"
     # IT-Abschnitt komplett
     assert out["it"]["software"]["datev"] is True
     # NICHT sichtbar:
-    assert "personal_number" not in out["personal"]
-    assert "cost_center" not in out["personal"]
-    assert "private_street" not in out["personal"]
+    assert "personal" not in out          # HR-Block
     assert "fuhrpark" not in out
     assert "_next_assignee" not in out
 
 
-def test_hr_member_sees_full_personal_but_not_it():
+def test_hr_member_sees_base_and_full_personal_but_not_it():
     out = tv.filter_description(_ticket(), _user("hr-user"), DESC)
+    assert out["base"]["first_name"] == "Anna"
     assert out["personal"]["personal_number"] == "12345"
-    assert out["personal"]["cost_center"] == "CC-1"
+    assert out["personal"]["title"] == "Leiterin"
     assert "it" not in out
     assert "fuhrpark" not in out
 
 
 def test_stranger_sees_only_base():
     out = tv.filter_description(_ticket(), _user("stranger"), DESC)
-    assert set(out.keys()) == {"personal"}
-    assert "personal_number" not in out["personal"]
+    assert set(out.keys()) == {"base"}
 
 
 def test_oversight_and_owner_see_everything():
@@ -138,8 +149,20 @@ def test_string_variant_filters_and_roundtrips():
     s = tv.filter_description_str(_ticket(), _user("it-user"), json.dumps(DESC))
     parsed = json.loads(s)
     assert "fuhrpark" not in parsed
-    assert parsed["personal"]["first_name"] == "Anna"
-    assert "personal_number" not in parsed["personal"]
+    assert "personal" not in parsed
+    assert parsed["base"]["first_name"] == "Anna"
+
+
+def test_legacy_ticket_base_fields_visible_via_personal_fallback():
+    # Alt-Ticket ohne base-Block: IT sieht die Basis-Felder weiter (Legacy-Pfade),
+    # aber NICHT die HR-only-Felder aus personal.
+    out = tv.filter_description(_ticket(), _user("it-user"), DESC_LEGACY)
+    assert out["personal"]["first_name"] == "Old"
+    assert out["personal"]["contract_company"] == "Alpha"
+    assert out["personal"]["cost_center"] == "CC-9"
+    assert "title" not in out["personal"]
+    assert "personal_number" not in out["personal"]
+    assert out["it"]["appearance_company"] == "Alpha"
 
 
 def test_is_restricted_viewer():
@@ -164,9 +187,9 @@ def _history():
 def test_history_redacted_for_restricted():
     out = tv.filter_history(_ticket(), _user("it-user"), _history())
     upd = out[1]["details"]["changes"]
-    assert upd["priority"] == {"old": "low", "new": "high"}   # bleibt
-    assert upd["description"] == {"redacted": True}            # Werte weg
-    assert out[0] == _history()[0]                             # anderes Event unangetastet
+    assert upd["priority"] == {"old": "low", "new": "high"}
+    assert upd["description"] == {"redacted": True}
+    assert out[0] == _history()[0]
 
 
 def test_history_untouched_for_full_view():
@@ -175,7 +198,6 @@ def test_history_untouched_for_full_view():
 
 
 def test_history_redacts_any_action_with_description():
-    # auch admin_raw_edited (nicht nur ticket_updated) muss redigiert werden
     hist = [{"action": "admin_raw_edited", "details": {"changes": {
         "description": {"old": DESC, "new": DESC},
         "status": {"old": "in_progress", "new": "archived"},

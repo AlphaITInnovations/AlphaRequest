@@ -78,23 +78,32 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
+              <label class="label">Anrede *</label>
+              <select v-model="form.base.salutation" :class="selectClass('base.salutation')">
+                <option value="">Bitte wählen</option>
+                <option>Herr</option>
+                <option>Frau</option>
+                <option>Divers</option>
+              </select>
+            </div>
+            <div>
               <label class="label">Vorname *</label>
-              <input v-model="form.personal.first_name" :class="fieldClass('personal.first_name')" placeholder="Max" />
+              <input v-model="form.base.first_name" :class="fieldClass('base.first_name')" placeholder="Max" />
             </div>
             <div>
               <label class="label">Nachname *</label>
-              <input v-model="form.personal.last_name" :class="fieldClass('personal.last_name')" placeholder="Mustermann" />
+              <input v-model="form.base.last_name" :class="fieldClass('base.last_name')" placeholder="Mustermann" />
             </div>
             <div>
               <label class="label">Firma *</label>
-              <select v-model="form.personal.contract_company" :class="selectClass('personal.contract_company')">
+              <select v-model="form.base.contract_company" :class="selectClass('base.contract_company')">
                 <option value="">Bitte wählen</option>
                 <option v-for="c in companies" :key="c">{{ c }}</option>
               </select>
             </div>
             <div>
               <label class="label">Niederlassung *</label>
-              <input v-model="form.personal.location" :class="fieldClass('personal.location')" />
+              <input v-model="form.base.location" :class="fieldClass('base.location')" />
             </div>
             <div class="md:col-span-2">
               <label class="label">Titel *</label>
@@ -118,12 +127,21 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
               <div>
+                <label class="label">Anrede *</label>
+                <select v-model="form.base.salutation" :class="selectClass('base.salutation')">
+                  <option value="">Bitte wählen</option>
+                  <option>Herr</option>
+                  <option>Frau</option>
+                  <option>Divers</option>
+                </select>
+              </div>
+              <div>
                 <label class="label">Vorname *</label>
-                <input v-model="form.personal.first_name" :class="fieldClass('personal.first_name')" placeholder="Max" />
+                <input v-model="form.base.first_name" :class="fieldClass('base.first_name')" placeholder="Max" />
               </div>
               <div>
                 <label class="label">Nachname *</label>
-                <input v-model="form.personal.last_name" :class="fieldClass('personal.last_name')" placeholder="Mustermann" />
+                <input v-model="form.base.last_name" :class="fieldClass('base.last_name')" placeholder="Mustermann" />
               </div>
               <div>
                 <label class="label">Titel *</label>
@@ -192,8 +210,8 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                   <p class="text-sm text-gray-600 dark:text-gray-300">
                     Beim Abschluss durch das Sekretariat&nbsp;GL wird die nächste freie Nummer aus dem
                     Bereich
-                    <template v-if="form.personal.contract_company">
-                      der Firma „<strong>{{ form.personal.contract_company }}</strong>“
+                    <template v-if="form.base.contract_company">
+                      der Firma „<strong>{{ form.base.contract_company }}</strong>“
                     </template>
                     <template v-else>der gewählten „Firma lt. Arbeitsvertrag“</template>
                     vergeben.
@@ -232,13 +250,13 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
 
               <div>
                 <label class="label">Kostenstelle *</label>
-                <input v-model="form.personal.cost_center"
-                       @input="form.personal.cost_center = form.personal.cost_center.replace(/\D/g, '')"
-                       :class="fieldClass('personal.cost_center')" inputmode="numeric" />
+                <input v-model="form.base.cost_center"
+                       @input="form.base.cost_center = form.base.cost_center.replace(/\D/g, '')"
+                       :class="fieldClass('base.cost_center')" inputmode="numeric" />
               </div>
               <div>
                 <label class="label">Niederlassung *</label>
-                <input v-model="form.personal.location" :class="fieldClass('personal.location')" />
+                <input v-model="form.base.location" :class="fieldClass('base.location')" />
               </div>
               <div>
                 <label class="label">Bundesland *</label>
@@ -249,7 +267,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               </div>
               <div>
                 <label class="label">Firma lt. Arbeitsvertrag *</label>
-                <select v-model="form.personal.contract_company" :class="selectClass('personal.contract_company')">
+                <select v-model="form.base.contract_company" :class="selectClass('base.contract_company')">
                   <option value="">Bitte wählen</option>
                   <option v-for="c in companies" :key="c">{{ c }}</option>
                 </select>

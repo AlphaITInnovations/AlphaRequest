@@ -33,20 +33,22 @@ from backend.database.groups import get_groups, get_group_ids_for_user
 # departments: Gruppenname -> dot-Pfade, die NUR diese Fachabteilung zusätzlich sieht
 VISIBILITY: dict[TicketType, dict] = {
     TicketType.zugang_beantragen: {
+        # Basisdaten sind ein eigener desc-Block (salutation, first_name, last_name,
+        # contract_company, location, cost_center) und fuer jede beteiligte
+        # Fachabteilung sichtbar. Die personal.*-Eintraege sind reine Legacy-Fallbacks
+        # fuer Alt-Tickets, die diese Felder noch unter personal hatten.
         "base": [
+            "base",
             "personal.first_name",
             "personal.last_name",
-            "personal.title",
-            "personal.start_date",
-            "personal.location",
             "personal.contract_company",
-            "personal.department",
-            "personal.department_other",
+            "personal.location",
+            "personal.cost_center",
         ],
         "departments": {
             "IT": ["it"],
             "Fuhrpark": ["fuhrpark"],
-            # HR sieht den kompletten personal-Block (inkl. personal_number, cost_center …)
+            # HR sieht den kompletten personal-Block (inkl. personal_number, title, start_date …)
             "Personalabteilung": ["personal"],
         },
     },

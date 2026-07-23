@@ -45,16 +45,24 @@ def _user_can_delete_ticket(user: dict, ticket_id: int) -> bool:
     return any(t.id == ticket_id for t in owned)
 
 
+def _onb_field(desc: dict, key: str, default: str = "") -> str:
+    """Onboarding-Basisfeld lesen: neu aus 'base', Fallback altes 'personal'
+    (Legacy-Tickets vor der Basisdaten-Umstellung). Greift auch fuer
+    zugang_sperren, wo Name/Firma weiterhin unter personal liegen."""
+    base = desc.get("base") or {}
+    val = base.get(key)
+    if val not in (None, ""):
+        return val
+    return (desc.get("personal") or {}).get(key, default)
+
+
 def generate_title(ticket_type, user, desc):
     now_str = datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M")
 
     if isinstance(desc, str):
         desc = json.loads(desc)
 
-    personal = desc.get("personal", {})
-    first_name = personal.get("first_name", "")
-    last_name = personal.get("last_name", "")
-    name = f"{first_name} {last_name}".strip()
+    name = f"{_onb_field(desc, 'first_name')} {_onb_field(desc, 'last_name')}".strip()
 
     if ticket_type == TicketType.zugang_beantragen:
         label = f"Onboarding Mitarbeiter:innen – {name}"
@@ -628,7 +636,7 @@ def _assign_onboarding_personalnummer(ticket_id: int, user: dict) -> None:
     if str(personal.get("personal_number") or "").strip():
         return  # bereits vergeben – nicht erneut
 
-    company = str(personal.get("contract_company") or "").strip()
+    company = str(_onb_field(desc_obj, "contract_company") or "").strip()
     if not company:
         raise api_error(400, "PERSONALNUMMER_FAILED",
                         "Bitte zuerst die „Firma lt. Arbeitsvertrag“ auswählen.")
@@ -660,7 +668,7 @@ def _assign_onboarding_personalnummer(ticket_id: int, user: dict) -> None:
     desc_obj["personal"] = personal
     database.update_ticket(ticket_id=ticket_id, description=json.dumps(desc_obj, ensure_ascii=False))
 
-    person_name = f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
+    person_name = f"{_onb_field(desc_obj, 'first_name')} {_onb_field(desc_obj, 'last_name')}".strip()
     record_audit(
         action="personalnummer_assigned", actor_id=user.get("id"),
         actor_name=user.get("displayName") or "", entity_type="ticket", entity_id=str(ticket_id),

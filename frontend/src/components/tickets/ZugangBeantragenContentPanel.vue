@@ -1,6 +1,8 @@
 <script setup lang="ts">
 const props = defineProps<{ description: any }>()
 
+// Basisdaten (eigener Block); Fallback auf personal für Alt-Tickets vor der Umstellung.
+const b   = (k: string) => props.description?.base?.[k] ?? props.description?.personal?.[k] ?? '—'
 const p   = (k: string) => props.description?.personal?.[k]          ?? '—'
 const it  = (k: string) => props.description?.it?.[k]                ?? '—'
 const sig = (k: string) => props.description?.it?.signature?.[k]     ?? '—'
@@ -22,8 +24,9 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
     <div>
       <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Stammdaten</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p class="ro-label">Vorname</p><p class="ro-value">{{ p('first_name') }}</p></div>
-        <div><p class="ro-label">Nachname</p><p class="ro-value">{{ p('last_name') }}</p></div>
+        <div><p class="ro-label">Anrede</p><p class="ro-value">{{ b('salutation') }}</p></div>
+        <div><p class="ro-label">Vorname</p><p class="ro-value">{{ b('first_name') }}</p></div>
+        <div><p class="ro-label">Nachname</p><p class="ro-value">{{ b('last_name') }}</p></div>
         <div><p class="ro-label">Titel</p><p class="ro-value">{{ p('title') }}</p></div>
         <div><p class="ro-label">Eintrittsdatum (laut Vertrag)</p><p class="ro-value">{{ p('start_date') }}</p></div>
 
@@ -53,10 +56,10 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
             {{ p('department') === 'Sonstige' ? p('department_other') || 'Sonstige' : p('department') }}
           </p>
         </div>
-        <div><p class="ro-label">Kostenstelle</p><p class="ro-value">{{ p('cost_center') }}</p></div>
-        <div><p class="ro-label">Niederlassung</p><p class="ro-value">{{ p('location') }}</p></div>
+        <div><p class="ro-label">Kostenstelle</p><p class="ro-value">{{ b('cost_center') }}</p></div>
+        <div><p class="ro-label">Niederlassung</p><p class="ro-value">{{ b('location') }}</p></div>
         <div><p class="ro-label">Bundesland</p><p class="ro-value">{{ p('federal_state') }}</p></div>
-        <div><p class="ro-label">Firma lt. Arbeitsvertrag</p><p class="ro-value">{{ p('contract_company') }}</p></div>
+        <div><p class="ro-label">Firma lt. Arbeitsvertrag</p><p class="ro-value">{{ b('contract_company') }}</p></div>
       </div>
     </div>
 

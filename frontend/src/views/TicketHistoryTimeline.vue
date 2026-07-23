@@ -170,7 +170,10 @@ function hasSimpleFields(e: HistoryEvent): boolean {
             <template v-if="e.details.changes.description">
               <div class="space-y-2">
                 <p class="text-xs text-gray-400 font-medium uppercase tracking-wider">Formular-Änderungen</p>
-                <template v-if="descriptionDiff(e.details.changes.description.old, e.details.changes.description.new).length > 0">
+                <p v-if="e.details.changes.description.redacted" class="text-xs text-gray-400 italic">
+                  Details für Ihre Fachabteilung ausgeblendet
+                </p>
+                <template v-else-if="descriptionDiff(e.details.changes.description.old, e.details.changes.description.new).length > 0">
                   <div v-for="diff in descriptionDiff(e.details.changes.description.old, e.details.changes.description.new)"
                        :key="diff.key"
                        class="text-xs rounded-lg bg-white dark:bg-white/[0.03]
