@@ -27,6 +27,7 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
       <TicketField label="Firma lt. Arbeitsvertrag" :value="b('contract_company')" />
       <TicketField label="Niederlassung" :value="b('location')" />
       <TicketField label="Kostenstelle" :value="b('cost_center')" />
+      <TicketField label="Arbeitsbeginn (laut Vertrag)" :value="b('start_date')" />
     </TicketFieldGrid>
   </TicketSection>
 
@@ -35,7 +36,6 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
     <div class="space-y-3">
       <TicketFieldGrid>
         <TicketField label="Titel" :value="p('title')" />
-        <TicketField label="Eintrittsdatum (laut Vertrag)" :value="p('start_date')" />
         <TicketField label="Straße & Hausnummer" :value="p('private_street')" wide />
         <TicketField label="PLZ" :value="p('private_zip')" />
         <TicketField label="Ort" :value="p('private_city')" />

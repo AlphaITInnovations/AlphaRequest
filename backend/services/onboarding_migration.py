@@ -21,13 +21,14 @@ from backend.utils.logger import logger
 
 
 # Basisfelder, die im Alt-Format unter `personal` lagen und nach `base` gehören.
-_BASE_FROM_PERSONAL = ("first_name", "last_name", "contract_company", "location", "cost_center")
+# start_date (Arbeitsbeginn) ist seit der Verschiebung in die Basisdaten ebenfalls base.
+_BASE_FROM_PERSONAL = ("first_name", "last_name", "contract_company", "location", "cost_center", "start_date")
 
 
 def migrate_onboarding_desc(desc: dict) -> dict:
     """Alt-Onboarding-Beschreibung ins neue `base`-Format überführen (pure, idempotent).
 
-    - `personal.{first_name,last_name,contract_company,location,cost_center}` → `base.*`
+    - `personal.{first_name,last_name,contract_company,location,cost_center,start_date}` → `base.*`
     - `personal.private_address` → `personal.private_street`
     - `allgemein.appearance_company` → `it.appearance_company`
     Die Alt-Schlüssel (inkl. `allgemein`) werden entfernt. Ein neues Format bleibt

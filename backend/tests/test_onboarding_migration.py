@@ -9,7 +9,7 @@ from backend.services.onboarding_migration import migrate_onboarding_desc
 DESC_LEGACY = {
     "personal": {
         "first_name": "Old", "last_name": "Legacy", "contract_company": "Alpha",
-        "location": "Berlin", "cost_center": "CC-9",
+        "location": "Berlin", "cost_center": "CC-9", "start_date": "2026-08-01",
         "title": "Leiter", "personal_number": "999",
         "private_address": "Musterweg 1",
     },
@@ -23,6 +23,7 @@ DESC_NEW = {
     "base": {
         "salutation": "Frau", "first_name": "Anna", "last_name": "Muster",
         "contract_company": "Alpha", "location": "Berlin", "cost_center": "CC-1",
+        "start_date": "2026-01-01",
     },
     "personal": {
         "title": "Leiterin", "personal_number": "12345", "private_street": "Weg 1",
@@ -42,11 +43,12 @@ def test_legacy_desc_is_migrated_to_base_format():
     assert out["base"]["contract_company"] == "Alpha"
     assert out["base"]["location"] == "Berlin"
     assert out["base"]["cost_center"] == "CC-9"
+    assert out["base"]["start_date"] == "2026-08-01"
     # Anrede gab es im Alt-Format nicht → leer.
     assert out["base"]["salutation"] == ""
 
     # … und aus personal entfernt; HR-Felder bleiben.
-    for k in ("first_name", "last_name", "contract_company", "location", "cost_center"):
+    for k in ("first_name", "last_name", "contract_company", "location", "cost_center", "start_date"):
         assert k not in out["personal"]
     assert out["personal"]["title"] == "Leiter"
     assert out["personal"]["personal_number"] == "999"

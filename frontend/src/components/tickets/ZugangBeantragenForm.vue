@@ -101,6 +101,16 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               <label class="label">Niederlassung *</label>
               <input v-model="form.base.location" :class="fieldClass('base.location')" />
             </div>
+            <div>
+              <label class="label">Kostenstelle *</label>
+              <input v-model="form.base.cost_center"
+                     @input="form.base.cost_center = form.base.cost_center.replace(/\D/g, '')"
+                     :class="fieldClass('base.cost_center')" inputmode="numeric" />
+            </div>
+            <div>
+              <label class="label">Arbeitsbeginn (laut Vertrag) *</label>
+              <input type="date" v-model="form.base.start_date" :class="fieldClass('base.start_date')" />
+            </div>
             <div class="md:col-span-2">
               <label class="label">Titel *</label>
               <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
@@ -152,6 +162,10 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                        @input="form.base.cost_center = form.base.cost_center.replace(/\D/g, '')"
                        :class="fieldClass('base.cost_center')" inputmode="numeric" />
               </div>
+              <div>
+                <label class="label">Arbeitsbeginn (laut Vertrag) *</label>
+                <input type="date" v-model="form.base.start_date" :class="fieldClass('base.start_date')" />
+              </div>
             </div>
           </TicketSection>
 
@@ -161,10 +175,6 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               <div>
                 <label class="label">Titel *</label>
                 <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
-              </div>
-              <div>
-                <label class="label">Eintrittsdatum (laut Vertrag) *</label>
-                <input type="date" v-model="form.personal.start_date" :class="fieldClass('personal.start_date')" />
               </div>
 
               <!-- Privatadresse: zusammengefasst & klar umrahmt -->

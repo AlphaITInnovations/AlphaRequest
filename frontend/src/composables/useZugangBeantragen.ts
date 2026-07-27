@@ -28,6 +28,7 @@ export interface ZugangForm {
     contract_company:  string
     location:          string
     cost_center:       string
+    start_date:        string   // Arbeitsbeginn (laut Vertrag)
   }
 
   // Stammdaten (nur HR / Oversight / Ersteller)
@@ -36,7 +37,6 @@ export interface ZugangForm {
     private_street:    string
     private_zip:       string
     private_city:      string
-    start_date:        string
     homeoffice:        string
     weekly_hours:      string
     federal_state:     string
@@ -105,11 +105,11 @@ const RULES_CREATE: Record<string, Rule> = {
   'base.contract_company':     { required: true },
   'base.location':             { required: true },
   'base.cost_center':          { required: true },
+  'base.start_date':           { required: true },
   'personal.title':            { required: true },
   'personal.private_street':   { required: true },
   'personal.private_zip':      { required: true, pattern: /^[0-9]{5}$/ },
   'personal.private_city':     { required: true },
-  'personal.start_date':       { required: true },
   'personal.homeoffice':       { required: true },
   'personal.weekly_hours':     { required: true },
   'personal.federal_state':    { required: true },
@@ -144,6 +144,8 @@ const RULES_ERSTELLUNG: Record<string, Rule> = {
   'base.last_name':            { required: true },
   'base.contract_company':     { required: true },
   'base.location':             { required: true },
+  'base.cost_center':          { required: true },
+  'base.start_date':           { required: true },
   'personal.title':            { required: true },
 }
 
@@ -184,13 +186,13 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
     base: {
       salutation: '', first_name: '', last_name: '',
-      contract_company: '', location: '', cost_center: '',
+      contract_company: '', location: '', cost_center: '', start_date: '',
     },
 
     personal: {
       title: '',
       private_street: '', private_zip: '', private_city: '',
-      start_date: '', homeoffice: '', weekly_hours: '', federal_state: '',
+      homeoffice: '', weekly_hours: '', federal_state: '',
       department: 'Keine', department_other: '',
       personal_number: '', supervisor_hr_id: '', supervisor_hr_name: '',
       contact_person_id: '', contact_person_name: '',
