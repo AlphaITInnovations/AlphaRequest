@@ -29,6 +29,10 @@ class PhaseDefinition:
     # Optional: feste Zuweisung einer assignment-Phase an eine Gruppe (per Name).
     # build_workflow() löst den Namen auf und setzt die responsibility.
     assign_group: str | None = None
+    # Optional: erzwingt beim Aktivieren dieser Phase einen abweichenden Ticket-
+    # Status (RequestStatus-Wert, z.B. "waiting_contract"). Ohne Angabe gilt die
+    # Standardlogik (in_request bei department_review, sonst in_progress).
+    enter_status: str | None = None
 
     @property
     def effective_view(self) -> PhaseView:
@@ -48,15 +52,28 @@ _DURCHFUEHRUNG = lambda: PhaseDefinition("durchfuehrung", "Durchführung", Phase
 
 
 TICKET_PHASES: dict[TicketType, List[PhaseDefinition]] = {
-    # Onboarding Mitarbeiter:innen – mehrstufig:
-    #   Erstellung (Basisfelder) → Freigabe Herr Lutz (Mail JA/NEIN + In-App)
-    #   → BackOffice (Felder + nächsten Bearbeiter wählen) → Bearbeitung → Durchführung
-    TicketType.zugang_beantragen: _flow(
-        # Onboarding-spezifische, sprechende Phasen-Labels (Keys/Typen unverändert).
-        PhaseDefinition("erstellung", "Prozesserstellung", PhaseType.creation),
+    # Onboarding – Prozess 1 „Einstellung Mitarbeiter:in":
+    #   Erstellung (Vorgesetzte:r: Basis + Vertrauliches) → Freigabe Herr Lutz
+    #   → Arbeitsvertrag erstellen/versenden (Sekretariat GL)
+    #   → Warten auf Vertragsrücklauf (Sekretariat GL); beim Rücklauf wird
+    #     automatisch Prozess 2 (zugang-beantragen) erzeugt und P1 archiviert.
+    TicketType.einstellung: _flow(
+        PhaseDefinition("erstellung", "Einstellungsdaten erfassen", PhaseType.creation),
         PhaseDefinition("freigabe", "Freigabe durch Udo Lutz", PhaseType.assignment,
                         view=PhaseView.approval, assign_group="FreigabeHerrLutz"),
-        PhaseDefinition("backoffice", "Bearbeitung durch Sekretariat GL", PhaseType.assignment,
+        PhaseDefinition("vertrag", "Arbeitsvertrag erstellen & versenden", PhaseType.assignment,
+                        assign_group="Sekretariat GL"),
+        PhaseDefinition("vertragsruecklauf", "Warten auf Vertragsrücklauf", PhaseType.assignment,
+                        assign_group="Sekretariat GL", enter_status="waiting_contract"),
+    ),
+    # Onboarding – Prozess 2 „Onboarding nach Vertragsrücklauf":
+    #   Erstellung → Bearbeitung Sekretariat GL (HR-Felder) → Bearbeitung
+    #   Vorgesetzte:r (IT/Signatur) → Durchführung Fachabteilungen → archiviert.
+    #   Gekoppelt aus P1 gestartet (Daten übernommen, Start ab Bearbeitung
+    #   Sekretariat GL) oder eigenständig angelegt.
+    TicketType.zugang_beantragen: _flow(
+        PhaseDefinition("erstellung", "Prozesserstellung", PhaseType.creation),
+        PhaseDefinition("bearbeitung_sgl", "Bearbeitung durch Sekretariat GL", PhaseType.assignment,
                         assign_group="Sekretariat GL"),
         PhaseDefinition("bearbeitung", "Bearbeitung durch Vorgesetzten", PhaseType.assignment),
         PhaseDefinition("durchfuehrung", "Durchführung durch Fachabteilungen", PhaseType.department_review),

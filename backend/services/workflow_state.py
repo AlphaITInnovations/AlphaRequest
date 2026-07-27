@@ -276,6 +276,8 @@ def build_workflow(ticket: Ticket) -> dict:
             "view": phase_def.effective_view.value,
             "status": PHASE_STATUS_IN_PROGRESS if i == 0 else PHASE_STATUS_PENDING,
         }
+        if phase_def.enter_status:
+            phase["enter_status"] = phase_def.enter_status
         if phase_def.type == PhaseType.creation:
             # Zuständigkeit der Erstellungsphase ist immer der Ersteller.
             phase["responsibility"] = {"kind": "owner", "id": ticket.owner_id, "name": ticket.owner_name}
@@ -341,10 +343,17 @@ def advance_phase(ticket_id: int) -> dict:
             except Exception:
                 desc = {}
             phases[next_idx]["departments"] = builder(desc)
-        update_ticket(ticket_id, status=RequestStatus.in_request.value)
+        new_status = RequestStatus.in_request.value
     else:
-        update_ticket(ticket_id, status=RequestStatus.in_progress.value)
+        new_status = RequestStatus.in_progress.value
 
+    # Eine Phase kann beim Aktivieren einen abweichenden Ziel-Status erzwingen
+    # (z.B. 'waiting_contract' beim Warten auf den Vertragsrücklauf).
+    enter_status = phases[next_idx].get("enter_status")
+    if enter_status:
+        new_status = enter_status
+
+    update_ticket(ticket_id, status=new_status)
     set_workflow_state(ticket_id, workflow)
     return workflow
 

@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 class RequestStatus(str, Enum):
     in_progress = "in_progress"
     in_request  = "in_request"
+    waiting_contract = "waiting_contract"   # Einstellung: wartet auf Vertragsrücklauf
     archived    = "archived"
     rejected    = "rejected"
 
@@ -18,7 +19,8 @@ class TicketType(str, Enum):
     niederlassung_anmelden = "niederlassung-anmelden"
     niederlassung_schliessen = "niederlassung-schliessen"
     niederlassung_umzug = "niederlassung-umzug"
-    zugang_beantragen = "zugang-beantragen"
+    einstellung = "einstellung"              # Onboarding P1: Einstellung → Vertragsversand
+    zugang_beantragen = "zugang-beantragen"  # Onboarding P2: nach Vertragsrücklauf
     zugang_sperren = "zugang-sperren"
     marketing_stellenanzeige = "marketing-stellenanzeige"
     hotelbuchung = "hotelbuchung"

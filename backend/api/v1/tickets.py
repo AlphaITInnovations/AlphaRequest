@@ -739,7 +739,7 @@ async def submit_ticket(
     # „Firma lt. Arbeitsvertrag"). Schlägt es fehl (kein Bereich / erschöpft),
     # wird NICHT weitergegeben (advance_phase folgt erst danach).
     tt = ticket.ticket_type.value if hasattr(ticket.ticket_type, "value") else ticket.ticket_type
-    if tt == TicketType.zugang_beantragen.value and completed_key == "backoffice":
+    if tt == TicketType.zugang_beantragen.value and completed_key == "bearbeitung_sgl":
         _assign_onboarding_personalnummer(ticket_id, user)
 
     updated_workflow = advance_phase(ticket_id)
