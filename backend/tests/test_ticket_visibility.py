@@ -34,16 +34,6 @@ DESC = {
     "_next_assignee": {"id": "u-next", "name": "Next"},
 }
 
-# Alt-Ticket: Basisfelder liegen noch unter personal, kein 'base'-Block.
-DESC_LEGACY = {
-    "personal": {
-        "first_name": "Old", "last_name": "Legacy", "contract_company": "Alpha",
-        "location": "Berlin", "cost_center": "CC-9",
-        "title": "X", "personal_number": "999",
-    },
-    "it": {"appearance_company": "Alpha"},
-}
-
 
 def _ticket(owner_id="owner-1", phases=None, status="in_progress"):
     wf = {"phases": phases if phases is not None else [
@@ -164,18 +154,6 @@ def test_string_variant_filters_and_roundtrips():
     assert "fuhrpark" not in parsed
     assert "personal" not in parsed
     assert parsed["base"]["first_name"] == "Anna"
-
-
-def test_legacy_ticket_base_fields_visible_via_personal_fallback():
-    # Alt-Ticket ohne base-Block: IT sieht die Basis-Felder weiter (Legacy-Pfade),
-    # aber NICHT die HR-only-Felder aus personal.
-    out = tv.filter_description(_ticket(), _user("it-user"), DESC_LEGACY)
-    assert out["personal"]["first_name"] == "Old"
-    assert out["personal"]["contract_company"] == "Alpha"
-    assert out["personal"]["cost_center"] == "CC-9"
-    assert "title" not in out["personal"]
-    assert "personal_number" not in out["personal"]
-    assert out["it"]["appearance_company"] == "Alpha"
 
 
 def test_is_restricted_viewer():

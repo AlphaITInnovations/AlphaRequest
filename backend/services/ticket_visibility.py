@@ -36,16 +36,10 @@ VISIBILITY: dict[TicketType, dict] = {
     TicketType.zugang_beantragen: {
         # Basisdaten sind ein eigener desc-Block (salutation, first_name, last_name,
         # contract_company, location, cost_center) und fuer jede beteiligte
-        # Fachabteilung sichtbar. Die personal.*-Eintraege sind reine Legacy-Fallbacks
-        # fuer Alt-Tickets, die diese Felder noch unter personal hatten.
-        "base": [
-            "base",
-            "personal.first_name",
-            "personal.last_name",
-            "personal.contract_company",
-            "personal.location",
-            "personal.cost_center",
-        ],
+        # Fachabteilung sichtbar. Alt-Tickets wurden per Migration ins base-Format
+        # ueberfuehrt (backend/services/onboarding_migration.py), daher kein
+        # personal.*-Fallback mehr noetig.
+        "base": ["base"],
         "departments": {
             "IT": ["it"],
             "Fuhrpark": ["fuhrpark"],

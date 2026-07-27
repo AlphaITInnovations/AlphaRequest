@@ -49,6 +49,16 @@ def init_db():
     except Exception as e:
         logger.warning(f"Responsibility-Backfill übersprungen: {e}")
 
+    # Bestehende Onboarding-Tickets einmalig ins neue base-Format migrieren
+    # (Basisdaten aus personal → base, private_address → private_street,
+    # allgemein.appearance_company → it.appearance_company). Danach greifen alle
+    # Tickets einheitlich ohne Legacy-Fallbacks.
+    try:
+        from backend.services.onboarding_migration import backfill_onboarding_descriptions
+        backfill_onboarding_descriptions()
+    except Exception as e:
+        logger.warning(f"Onboarding-Format-Migration übersprungen: {e}")
+
     # Workflow-Pflichtgruppen (Fachabteilungen) sicherstellen: fehlende werden
     # leer angelegt, damit jeder Workflow eine zuständige Gruppe auflösen kann.
     try:

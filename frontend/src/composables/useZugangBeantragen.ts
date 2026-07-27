@@ -329,28 +329,13 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         if (desc.base) Object.assign(form.base, desc.base)
         if (desc.personal) Object.assign(form.personal, desc.personal)
 
-        // Legacy: alte Tickets hatten diese Basisfelder noch unter personal.
-        const legacy = desc.personal || {}
-        for (const k of ['first_name', 'last_name', 'contract_company', 'location', 'cost_center'] as const) {
-          if (!form.base[k] && legacy[k] != null) form.base[k] = legacy[k]
-        }
-
         // Leere Fachabteilung → "Keine" (wird als '' gespeichert)
         if (!form.personal.department) {
           form.personal.department = 'Keine'
         }
 
-        // Legacy migration: old private_address → new fields
-        if (desc.personal?.private_address && !desc.personal?.private_street) {
-          form.personal.private_street = desc.personal.private_address
-        }
-
         if (desc.it) {
           if (desc.it.appearance_company != null) form.it.appearance_company = desc.it.appearance_company
-          // Legacy: migrate from old allgemein section
-          if (desc.allgemein?.appearance_company && !desc.it.appearance_company) {
-            form.it.appearance_company = desc.allgemein.appearance_company
-          }
           if (desc.it.signature)    Object.assign(form.it.signature,    desc.it.signature)
           if (desc.it.software)     Object.assign(form.it.software,     desc.it.software)
           if (desc.it.timebutler)   Object.assign(form.it.timebutler,   desc.it.timebutler)

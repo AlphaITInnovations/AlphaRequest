@@ -5,8 +5,8 @@ import TicketField from '@/components/tickets/TicketField.vue'
 
 const props = defineProps<{ description: any }>()
 
-// Basisdaten (eigener Block); Fallback auf personal für Alt-Tickets vor der Umstellung.
-const b   = (k: string) => props.description?.base?.[k] ?? props.description?.personal?.[k] ?? '—'
+// Basisdaten liegen im eigenen base-Block (Alt-Tickets wurden migriert).
+const b   = (k: string) => props.description?.base?.[k] ?? '—'
 const p   = (k: string) => props.description?.personal?.[k]          ?? '—'
 const it  = (k: string) => props.description?.it?.[k]                ?? '—'
 const sig = (k: string) => props.description?.it?.signature?.[k]     ?? '—'
@@ -36,7 +36,7 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
       <TicketFieldGrid>
         <TicketField label="Titel" :value="p('title')" />
         <TicketField label="Eintrittsdatum (laut Vertrag)" :value="p('start_date')" />
-        <TicketField label="Straße & Hausnummer" wide>{{ p('private_street') !== '—' ? p('private_street') : p('private_address') }}</TicketField>
+        <TicketField label="Straße & Hausnummer" :value="p('private_street')" wide />
         <TicketField label="PLZ" :value="p('private_zip')" />
         <TicketField label="Ort" :value="p('private_city')" />
         <TicketField label="Homeoffice" :value="p('homeoffice')" />
