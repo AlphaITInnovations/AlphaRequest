@@ -27,11 +27,11 @@ export interface EinstellungForm {
     cost_center:      string
     start_date:       string
   }
-  // Titel (Berufsbezeichnung) – für den Arbeitsvertrag; wandert später in P2.
-  title: string
-  // Vertrauliche Informationen – NICHT für Fachabteilungen sichtbar (eigener Block,
-  // steht in keiner Sichtbarkeits-Registry ⇒ nur Voll-Sicht sieht ihn).
-  confidential: {
+  // Personaldaten (nur Personalabteilung / Voll-Sicht sichtbar): Titel +
+  // Gehalt/Konditionen. Liegen im personal-Block, damit die Sichtbarkeit wie bei
+  // den übrigen HR-Feldern gilt (Fachabteilungen sehen sie in P2 NICHT).
+  personal: {
+    title:      string
     salary:     string
     conditions: string
   }
@@ -47,8 +47,8 @@ const RULES_ERSTELLUNG: Record<string, Rule> = {
   'base.location':         { required: true },
   'base.cost_center':      { required: true },
   'base.start_date':       { required: true },
-  'title':                 { required: true },
-  // confidential.* bewusst optional (Freitext) – kann später verschärft werden.
+  'personal.title':        { required: true },
+  // personal.salary/conditions bewusst optional (Freitext) – kann später verschärft werden.
 }
 
 function getDeep(obj: Record<string, unknown>, path: string): unknown {
@@ -80,8 +80,7 @@ export function useEinstellung(phase: Phase, ticketId?: number) {
       salutation: '', first_name: '', last_name: '',
       contract_company: '', location: '', cost_center: '', start_date: '',
     },
-    title: '',
-    confidential: { salary: '', conditions: '' },
+    personal: { title: '', salary: '', conditions: '' },
   })
 
   // ── Validierung (nur bei der Erstellung greifen Pflichtfelder) ──────────────
@@ -138,8 +137,7 @@ export function useEinstellung(phase: Phase, ticketId?: number) {
         }
 
         if (desc.base) Object.assign(form.base, desc.base)
-        if (desc.personal?.title != null) form.title = desc.personal.title
-        if (desc.confidential) Object.assign(form.confidential, desc.confidential)
+        if (desc.personal) Object.assign(form.personal, desc.personal)
         for (const k of Object.keys(desc)) if (k.startsWith('_')) meta.value[k] = desc[k]
 
         form.priority = t.priority as TicketPriority
@@ -154,8 +152,7 @@ export function useEinstellung(phase: Phase, ticketId?: number) {
   function buildDescriptionObject(): Record<string, any> {
     return {
       base: { ...form.base },
-      personal: { title: form.title },
-      confidential: { ...form.confidential },
+      personal: { ...form.personal },
       ...meta.value,   // interne Meta-Felder (_spawned_process_id …) erhalten
     }
   }

@@ -14,7 +14,6 @@ const tb  = (k: string) => props.description?.it?.timebutler?.[k]    ?? '—'
 const sw  = (k: string) => props.description?.it?.software?.[k]      ?? false
 const mb  = (k: string) => props.description?.it?.mailboxes?.[k]     ?? '—'
 const f   = (k: string) => props.description?.fuhrpark?.[k]          ?? '—'
-const conf = (k: string) => props.description?.confidential?.[k]     ?? '—'
 const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
 </script>
 
@@ -32,16 +31,16 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
     </TicketFieldGrid>
   </TicketSection>
 
-  <!-- Vertrauliche Informationen – nur Voll-Sicht (serverseitig gefiltert) -->
-  <TicketSection v-if="description?.confidential" title="Vertrauliche Informationen" variant="default" badge="Vertraulich">
-    <TicketFieldGrid>
-      <TicketField label="Gehalt" :value="conf('salary')" />
-      <TicketField label="Konditionen" :value="conf('conditions')" wide pre />
-    </TicketFieldGrid>
-  </TicketSection>
-
   <!-- Personalabteilung (HR) -->
   <TicketSection v-if="description?.personal" title="Stammdaten" variant="hr" badge="Personalabteilung">
+    <div class="space-y-3">
+      <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400">Gehalt & Konditionen</h3>
+      <TicketFieldGrid>
+        <TicketField label="Gehalt" :value="p('salary')" />
+        <TicketField label="Konditionen" :value="p('conditions')" wide pre />
+      </TicketFieldGrid>
+    </div>
+
     <div class="space-y-3">
       <TicketFieldGrid>
         <TicketField label="Titel" :value="p('title')" />

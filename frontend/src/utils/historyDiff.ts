@@ -21,6 +21,7 @@ export const DE_FIELD_LABELS: Record<string, string> = {
   private_address: 'Adresse (privat)',
   start_date: 'Eintrittsdatum', homeoffice: 'Homeoffice', weekly_hours: 'Wochenstunden',
   personal_number: 'Personalnummer',
+  salary: 'Gehalt', conditions: 'Konditionen',
   // Organisation
   federal_state: 'Bundesland', department: 'Fachabteilung', department_other: 'Fachabteilung (sonstige)',
   cost_center: 'Kostenstelle', location: 'Niederlassung', contract_company: 'Firma (Vertrag)',

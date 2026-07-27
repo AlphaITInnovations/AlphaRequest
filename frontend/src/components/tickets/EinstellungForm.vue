@@ -65,7 +65,7 @@ const selectClass = (path: string) =>
               </div>
               <div>
                 <label class="label">Titel *</label>
-                <input v-model="form.title" :class="fieldClass('title')" placeholder="z. B. Niederlassungsleiter" />
+                <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
               </div>
               <div>
                 <label class="label">Vorname *</label>
@@ -99,20 +99,20 @@ const selectClass = (path: string) =>
             </div>
           </TicketSection>
 
-          <TicketSection title="Vertrauliche Informationen" variant="default" badge="Vertraulich">
+          <TicketSection title="Gehalt & Konditionen" variant="hr" badge="Personalabteilung">
             <p class="text-sm text-gray-500 dark:text-gray-400 -mt-1">
-              Diese Angaben sind für die Fachabteilungen in der späteren Durchführung NICHT sichtbar.
+              Personaldaten – in der späteren Durchführung nur für die Personalabteilung sichtbar.
             </p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="label">Gehalt</label>
-                <input v-model="form.confidential.salary" :class="fieldClass('confidential.salary')"
+                <input v-model="form.personal.salary" :class="fieldClass('personal.salary')"
                        placeholder="z. B. 3.500 € / Monat" />
               </div>
               <div class="md:col-span-2">
                 <label class="label">Konditionen</label>
-                <textarea v-model="form.confidential.conditions" rows="3" class="resize-none"
-                          :class="fieldClass('confidential.conditions')"
+                <textarea v-model="form.personal.conditions" rows="3" class="resize-none"
+                          :class="fieldClass('personal.conditions')"
                           placeholder="z. B. 13. Gehalt, 30 Tage Urlaub, Probezeit …" />
               </div>
             </div>

@@ -11,39 +11,32 @@ P1_DESC = {
         "contract_company": "Alpha", "location": "Berlin",
         "cost_center": "12345", "start_date": "2026-09-01",
     },
-    "personal": {"title": "Sachbearbeiterin"},
-    "confidential": {"salary": "50000", "conditions": "13. Gehalt, 30 Tage Urlaub"},
-    "_creator": {"id": "vg-1", "name": "Chef:in"},
+    # Gehalt/Konditionen liegen jetzt im personal-Block (nur Personalabteilung/Voll-Sicht).
+    "personal": {"title": "Sachbearbeiterin", "salary": "50000", "conditions": "13. Gehalt, 30 Tage Urlaub"},
 }
 
 
-def test_transfers_base_title_confidential_and_link():
+def test_transfers_base_and_full_personal_and_link():
     p2 = build_p2_description(P1_DESC, 42)
     assert p2["base"]["first_name"] == "Anna"
     assert p2["base"]["cost_center"] == "12345"
     assert p2["base"]["start_date"] == "2026-09-01"
     assert p2["personal"]["title"] == "Sachbearbeiterin"
-    assert p2["confidential"]["salary"] == "50000"
-    assert p2["confidential"]["conditions"].startswith("13. Gehalt")
+    assert p2["personal"]["salary"] == "50000"
+    assert p2["personal"]["conditions"].startswith("13. Gehalt")
     assert p2["_origin_process"] == 42
 
 
-def test_does_not_carry_hr_it_fuhrpark_fields():
-    # Nur base/title/confidential wandern mit; der Rest bleibt leer (füllt P2).
+def test_does_not_carry_it_fuhrpark_fields():
+    # base + personal wandern mit; IT/Fuhrpark bleiben leer (füllt P2).
     p2 = build_p2_description(P1_DESC, 1)
-    assert set(p2["personal"].keys()) == {"title"}
     assert "it" not in p2
     assert "fuhrpark" not in p2
+    assert "confidential" not in p2   # aufgelöst → personal
 
 
-def test_missing_confidential_yields_empty_block():
+def test_missing_personal_yields_empty_block():
     p2 = build_p2_description({"base": {"first_name": "X"}}, 1)
-    assert p2["confidential"] == {}
-    assert p2["personal"] == {}   # kein Titel vorhanden
-
-
-def test_empty_title_not_carried():
-    p2 = build_p2_description({"base": {}, "personal": {"title": ""}}, 1)
     assert p2["personal"] == {}
 
 
@@ -55,4 +48,4 @@ def test_input_not_mutated():
 
 def test_non_dict_input_is_safe():
     p2 = build_p2_description(None, 5)
-    assert p2["base"] == {} and p2["confidential"] == {} and p2["_origin_process"] == 5
+    assert p2["base"] == {} and p2["personal"] == {} and p2["_origin_process"] == 5

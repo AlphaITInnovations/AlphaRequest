@@ -34,6 +34,10 @@ export interface ZugangForm {
   // Stammdaten (nur HR / Oversight / Ersteller)
   personal: {
     title:             string
+    // Gehalt/Konditionen (aus P1 „Einstellung" übernommen): liegen im personal-Block,
+    // damit sie – wie die übrigen HR-Felder – NUR die Personalabteilung + Voll-Sicht sehen.
+    salary:            string
+    conditions:        string
     private_street:    string
     private_zip:       string
     private_city:      string
@@ -87,13 +91,6 @@ export interface ZugangForm {
     car:       string
     car_class: string
     car_from:  string
-  }
-
-  // Vertrauliche Informationen (aus P1 „Einstellung" übernommen; nur Voll-Sicht,
-  // NICHT für Fachabteilungen sichtbar). Bei separatem Start leer & optional.
-  confidential: {
-    salary:     string
-    conditions: string
   }
 }
 
@@ -200,7 +197,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     },
 
     personal: {
-      title: '',
+      title: '', salary: '', conditions: '',
       private_street: '', private_zip: '', private_city: '',
       homeoffice: '', weekly_hours: '', federal_state: '',
       department: 'Keine', department_other: '',
@@ -224,8 +221,6 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     },
 
     fuhrpark: { car: '', car_class: '', car_from: '' },
-
-    confidential: { salary: '', conditions: '' },
   })
 
   // ── Auto-fill signature title from personal title ───────────────────────────
@@ -343,7 +338,6 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
 
         if (desc.base) Object.assign(form.base, desc.base)
         if (desc.personal) Object.assign(form.personal, desc.personal)
-        if (desc.confidential) Object.assign(form.confidential, desc.confidential)
         for (const k of Object.keys(desc)) if (k.startsWith('_') && k !== '_next_assignee') meta.value[k] = desc[k]
 
         // Leere Fachabteilung → "Keine" (wird als '' gespeichert)
@@ -404,7 +398,6 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       ...meta.value,   // interne Meta-Felder (_origin_process …) erhalten
       base: { ...form.base },
       personal,
-      confidential: { ...form.confidential },
       it: form.it,
       fuhrpark: form.fuhrpark,
     }
