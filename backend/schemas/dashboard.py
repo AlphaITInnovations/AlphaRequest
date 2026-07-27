@@ -29,12 +29,20 @@ class DashboardTicket(BaseModel):
     created_at: str
 
 
+class DepartmentRef(BaseModel):
+    id: str
+    name: str
+
+
 class DashboardResponse(BaseModel):
     orders: list[DashboardTicket]
     # Tickets, die der Nutzer beobachtet (Ersteller ist automatisch Beobachter).
     watched_orders: list[DashboardTicket]
     # Einheitliche „Meine Abteilung"-Liste (Assignment + Durchführung, dedupliziert).
     department_board: list[DepartmentGroup]
+    # Alle (sichtbaren) Fachabteilungen, in denen der Nutzer Mitglied ist – auch
+    # ohne offene Aufträge (für die dezente Anzeige im Abteilungs-Tab).
+    my_departments: list[DepartmentRef] = []
     allowed_ticket_types: list[str]
 
 

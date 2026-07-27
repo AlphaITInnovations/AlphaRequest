@@ -22,18 +22,20 @@ interface DeptBoardTicket {
   department_id: string | null
 }
 interface DeptBoardGroup { group_id: string; group_name: string; tickets: DeptBoardTicket[] }
+interface DepartmentRef { id: string; name: string }
 // Involviertes Ticket: wie DashboardTicket + Rollen des Nutzers
 interface InvolvedTicket extends DashboardTicket { roles: string[] }
 interface DashboardData {
   orders: DashboardTicket[]
   watched_orders: DashboardTicket[]
   department_board: DeptBoardGroup[]
+  my_departments: DepartmentRef[]
   allowed_ticket_types: string[]
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading   = ref(true)
-const data      = ref<DashboardData>({ orders: [], watched_orders: [], department_board: [], allowed_ticket_types: [] })
+const data      = ref<DashboardData>({ orders: [], watched_orders: [], department_board: [], my_departments: [], allowed_ticket_types: [] })
 
 // Involvierte Tickets (Archiv) – serverseitig gefiltert & paginiert
 const involved         = ref<InvolvedTicket[]>([])   // aktuelle Seite
@@ -208,6 +210,13 @@ const myDepartmentGroups = computed<DeptBoardGroup[]>(() =>
     .filter(g => g.tickets.length > 0)
 )
 
+// Abteilungen, in denen der Nutzer Mitglied ist, für die aktuell aber KEIN Auftrag
+// vorliegt – dezent im Abteilungs-Tab anzeigen (unabhängig von Suche/Filter).
+const emptyDepartments = computed<DepartmentRef[]>(() => {
+  const withOrders = new Set((data.value.department_board ?? []).map(g => g.group_id))
+  return (data.value.my_departments ?? []).filter(d => !withOrders.has(d.id))
+})
+
 const currentCount = computed(() => {
   if (activeTab.value === 'mine') return filteredMine.value.length
   if (activeTab.value === 'group') return myDepartmentGroups.value.reduce((s, g) => s + g.tickets.length, 0)
@@ -239,6 +248,7 @@ onMounted(async () => {
       orders:               d.orders ?? [],
       watched_orders:       d.watched_orders ?? [],
       department_board:     d.department_board ?? [],
+      my_departments:       d.my_departments ?? [],
       allowed_ticket_types: d.allowed_ticket_types ?? [],
     }
     // Auto-open department accordions
@@ -467,7 +477,26 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
-            <p v-if="myDepartmentGroups.length === 0" class="empty">Keine Aufträge für deine Abteilung.</p>
+
+            <!-- Dezente Mitgliedschafts-Info: Abteilungen ohne aktuelle Aufträge -->
+            <div v-if="emptyDepartments.length"
+                 class="px-5 py-3.5 border-t border-gray-100 dark:border-white/[0.04]">
+              <p class="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
+                Mitglied · derzeit keine Aufträge
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <span v-for="d in emptyDepartments" :key="d.id"
+                      class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full
+                             bg-gray-100/70 dark:bg-white/[0.05] text-gray-500 dark:text-gray-400">
+                  <span class="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-white/20" />
+                  {{ d.name }}
+                </span>
+              </div>
+            </div>
+
+            <p v-if="myDepartmentGroups.length === 0 && emptyDepartments.length === 0" class="empty">
+              Keine Aufträge für deine Abteilung.
+            </p>
           </div>
 
           <!-- ═══ TAB: Beobachter (nur aktive – Archiv unter „Involviert") ═══ -->

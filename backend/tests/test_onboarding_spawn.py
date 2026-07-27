@@ -16,19 +16,19 @@ P1_DESC = {
 }
 
 
-def test_transfers_base_and_full_personal_and_link():
+def test_transfers_base_and_title_but_not_salary():
     p2 = build_p2_description(P1_DESC, 42)
     assert p2["base"]["first_name"] == "Anna"
     assert p2["base"]["cost_center"] == "12345"
     assert p2["base"]["start_date"] == "2026-09-01"
     assert p2["personal"]["title"] == "Sachbearbeiterin"
-    assert p2["personal"]["salary"] == "50000"
-    assert p2["personal"]["conditions"].startswith("13. Gehalt")
+    # Gehalt/Konditionen werden NICHT nach P2 übernommen (Leak-Risiko).
+    assert "salary" not in p2["personal"]
+    assert "conditions" not in p2["personal"]
     assert p2["_origin_process"] == 42
 
 
 def test_does_not_carry_it_fuhrpark_fields():
-    # base + personal wandern mit; IT/Fuhrpark bleiben leer (füllt P2).
     p2 = build_p2_description(P1_DESC, 1)
     assert "it" not in p2
     assert "fuhrpark" not in p2

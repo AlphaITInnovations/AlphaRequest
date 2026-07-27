@@ -6,7 +6,7 @@ from backend.services.ticket_permissions import can_user_create_ticket
 from backend.services.workflow_state import get_dashboard_work, get_involved_tickets
 from backend.schemas.dashboard import (
     DashboardResponse, DashboardTicket, DepartmentGroup, DepartmentTicket,
-    InvolvedTicket, InvolvedResponse,
+    DepartmentRef, InvolvedTicket, InvolvedResponse,
 )
 from backend.schemas.responses import DataResponse
 
@@ -80,10 +80,20 @@ def get_dashboard(user: dict = Depends(get_current_user)):
         if can_user_create_ticket(t.value, user_id, user_groups)
     ]
 
+    # ── Alle (sichtbaren) Fachabteilungen des Nutzers (auch ohne Aufträge) ──────
+    from backend.database.groups import get_groups, get_group_ids_for_user
+    member_ids = set(get_group_ids_for_user(user_id))
+    my_departments = [
+        DepartmentRef(id=g["id"], name=g.get("name") or g["id"])
+        for g in get_groups()
+        if g.get("id") in member_ids and not g.get("hidden")
+    ]
+
     return DataResponse(data=DashboardResponse(
         orders=my_orders,
         watched_orders=watched_orders,
         department_board=department_board,
+        my_departments=my_departments,
         allowed_ticket_types=allowed,
     ))
 

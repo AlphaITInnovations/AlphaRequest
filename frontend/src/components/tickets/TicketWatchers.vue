@@ -47,5 +47,13 @@ function onSelect(v: { id: string; name: string } | null) {
       :model-value="selected"
       @update:model-value="onSelect"
     />
+
+    <!-- Datenschutz-Hinweis: Beobachter haben Voll-Sicht auf den Auftrag -->
+    <p class="mt-2 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400/90">
+      <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span>Beobachter sehen <strong>alle Informationen</strong> des Auftrags.</span>
+    </p>
   </div>
 </template>
