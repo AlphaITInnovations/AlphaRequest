@@ -34,14 +34,6 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
   <!-- Personalabteilung (HR) -->
   <TicketSection v-if="description?.personal" title="Personaldaten" variant="hr" badge="Personalabteilung">
     <div class="space-y-3">
-      <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400">Gehalt & Konditionen</h3>
-      <TicketFieldGrid>
-        <TicketField label="Gehalt" :value="p('salary')" />
-        <TicketField label="Konditionen" :value="p('conditions')" wide pre />
-      </TicketFieldGrid>
-    </div>
-
-    <div class="space-y-3">
       <TicketFieldGrid>
         <TicketField label="Titel" :value="p('title')" />
         <TicketField label="Straße & Hausnummer" :value="p('private_street')" wide />

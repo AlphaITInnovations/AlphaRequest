@@ -34,10 +34,6 @@ export interface ZugangForm {
   // Stammdaten (nur HR / Oversight / Ersteller)
   personal: {
     title:             string
-    // Gehalt/Konditionen (aus P1 „Einstellung" übernommen): liegen im personal-Block,
-    // damit sie – wie die übrigen HR-Felder – NUR die Personalabteilung + Voll-Sicht sehen.
-    salary:            string
-    conditions:        string
     private_street:    string
     private_zip:       string
     private_city:      string
@@ -206,7 +202,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     },
 
     personal: {
-      title: '', salary: '', conditions: '',
+      title: '',
       private_street: '', private_zip: '', private_city: '',
       homeoffice: '', weekly_hours: '', federal_state: '',
       department: 'Keine', department_other: '',

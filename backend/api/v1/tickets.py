@@ -532,17 +532,27 @@ async def update_ticket(
         if stripped != ticket.comment:
             changes["comment"] = {"old": ticket.comment, "new": stripped}
 
+    protected_description = None
     if data.description is not None and data.description != ticket.description:
         try:
             old_desc = json.loads(ticket.description) if ticket.description else {}
             new_desc = json.loads(data.description)
         except Exception:
             old_desc, new_desc = ticket.description, data.description
+        # Vertrauliche Felder (z.B. Gehalt/Konditionen) darf ein Betrachter ohne
+        # Sicht darauf NICHT überschreiben – aus der alten Beschreibung übernehmen.
+        if isinstance(new_desc, dict):
+            from backend.services.ticket_visibility import preserve_confidential
+            new_desc = preserve_confidential(
+                ticket, user, new_desc, old_desc if isinstance(old_desc, dict) else {})
+            protected_description = json.dumps(new_desc, ensure_ascii=False)
+        else:
+            protected_description = data.description
         changes["description"] = {"old": old_desc, "new": new_desc}
 
     # --- DB Update ---
     updates = {k: v for k, v in {
-        "description": data.description,
+        "description": protected_description,
         "comment":     data.comment.strip() if data.comment else None,
         "priority":    data.priority.value if data.priority else None,
     }.items() if v is not None}

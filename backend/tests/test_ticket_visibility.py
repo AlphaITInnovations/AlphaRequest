@@ -193,3 +193,64 @@ def test_processor_full_view_only_while_active():
     # dann sieht der archivierte Bearbeiter nur noch Basis (keine Fachabteilung)
     out = tv.filter_description(_ticket(status="archived"), _user("backoffice-user"), DESC)
     assert set(out.keys()) == {"base"}
+
+
+# ── Vertrauliche Felder (Einstellung P1): Gehalt/Konditionen nur Personalabteilung ──
+
+DESC_EINSTELLUNG = {
+    "base": {"first_name": "Max", "last_name": "Muster"},
+    "personal": {"title": "Chef:in", "salary": "5000", "conditions": "30 Tage Urlaub"},
+}
+
+
+def _einstellung(owner_id="owner-1", status="in_progress"):
+    return SimpleNamespace(
+        id=2, ticket_type=TicketType.einstellung, owner_id=owner_id, status=status,
+        description=json.dumps(DESC_EINSTELLUNG),
+        workflow_state_parsed={"phases": [{"key": "erstellung", "type": "creation"}],
+                               "current_phase_index": 0},
+    )
+
+
+def test_confidential_visible_to_personalabteilung():
+    out = tv.filter_description(_einstellung(), _user("hr-user"), DESC_EINSTELLUNG)
+    assert out["personal"]["salary"] == "5000"
+    assert out["personal"]["conditions"] == "30 Tage Urlaub"
+
+
+def test_confidential_hidden_from_owner_and_others():
+    # Selbst Ersteller (Voll-Sicht) und fremde sehen Gehalt/Konditionen NICHT,
+    # der Rest (Basis + Titel) bleibt sichtbar (kein normaler Spec für einstellung).
+    for uid in ("owner-1", "stranger", "it-user"):
+        out = tv.filter_description(_einstellung(), _user(uid), DESC_EINSTELLUNG)
+        assert "salary" not in out["personal"]
+        assert "conditions" not in out["personal"]
+        assert out["personal"]["title"] == "Chef:in"
+        assert out["base"]["first_name"] == "Max"
+
+
+def test_confidential_visible_to_admin_and_internal():
+    admin_out = tv.filter_description(_einstellung(), _user("x", ["admin"]), DESC_EINSTELLUNG)
+    assert admin_out["personal"]["salary"] == "5000"
+    internal = tv.filter_description(_einstellung(), None, DESC_EINSTELLUNG)   # z.B. Admin-Detail
+    assert internal["personal"]["salary"] == "5000"
+
+
+def test_confidential_string_variant_strips_for_non_hr():
+    s = tv.filter_description_str(_einstellung(), _user("owner-1"), json.dumps(DESC_EINSTELLUNG))
+    parsed = json.loads(s)
+    assert "salary" not in parsed["personal"]
+    assert parsed["personal"]["title"] == "Chef:in"
+
+
+def test_preserve_confidential_on_write():
+    old = {"personal": {"title": "Chef", "salary": "5000", "conditions": "X"}}
+    new = {"personal": {"title": "Chef 2", "salary": "", "conditions": ""}}
+    # Nicht-HR: Gehalt/Konditionen bleiben erhalten, Titel darf geändert werden.
+    merged = tv.preserve_confidential(_einstellung(), _user("owner-1"), new, old)
+    assert merged["personal"]["salary"] == "5000"
+    assert merged["personal"]["conditions"] == "X"
+    assert merged["personal"]["title"] == "Chef 2"
+    # HR darf die vertraulichen Felder ändern.
+    merged_hr = tv.preserve_confidential(_einstellung(), _user("hr-user"), new, old)
+    assert merged_hr["personal"]["salary"] == ""

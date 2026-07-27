@@ -177,25 +177,6 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                 <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
               </div>
 
-              <!-- Gehalt & Konditionen (aus P1 übernommen; nur Personalabteilung + Voll-Sicht) -->
-              <div class="md:col-span-2 rounded-xl border border-gray-200 dark:border-white/10
-                          bg-gray-50/60 dark:bg-white/[0.02] p-4 space-y-3">
-                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Gehalt &amp; Konditionen</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="label">Gehalt</label>
-                    <input v-model="form.personal.salary" :class="fieldClass('personal.salary')"
-                           placeholder="z. B. 3.500 € / Monat" />
-                  </div>
-                  <div class="md:col-span-2">
-                    <label class="label">Konditionen</label>
-                    <textarea v-model="form.personal.conditions" rows="3" class="resize-none"
-                              :class="fieldClass('personal.conditions')"
-                              placeholder="z. B. 13. Gehalt, 30 Tage Urlaub, Probezeit …" />
-                  </div>
-                </div>
-              </div>
-
               <!-- Privatadresse: zusammengefasst & klar umrahmt -->
               <div class="md:col-span-2 rounded-xl border border-gray-200 dark:border-white/10
                           bg-gray-50/60 dark:bg-white/[0.02] p-4 space-y-3">

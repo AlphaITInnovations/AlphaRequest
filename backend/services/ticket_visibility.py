@@ -20,6 +20,7 @@ Betrachters nicht sauber verarbeitet werden, wird lieber nichts als zu viel
 zurückgegeben.
 """
 
+import copy
 import json
 from typing import Optional
 
@@ -49,6 +50,111 @@ VISIBILITY: dict[TicketType, dict] = {
     },
     # Weitere Tickettypen nach Bedarf ergänzen. Ohne Eintrag => keine Filterung.
 }
+
+
+# ── Vertrauliche Felder (hartes Gate, ÜBERSCHREIBT die Voll-Sicht) ────────────────
+# Diese dot-Pfade sehen AUSSCHLIESSLICH Mitglieder einer der genannten Gruppen
+# (plus Admins) – unabhängig von Owner/Oversight/Beobachter/Bearbeiter/Involviert.
+# Anwendungsfall: Gehalt/Konditionen im Einstellungs-Prozess (P1) – nur die
+# Personalabteilung. Werden zusätzlich zur normalen Feld-Sichtbarkeit angewandt
+# und beim Schreiben geschützt (siehe preserve_confidential).
+CONFIDENTIAL_FIELDS: dict[TicketType, dict] = {
+    TicketType.einstellung: {
+        "paths": ["personal.salary", "personal.conditions"],
+        "groups": ["Personalabteilung"],
+    },
+}
+
+
+def _confidential_spec_for(ticket) -> Optional[dict]:
+    tt = getattr(ticket, "ticket_type", None)
+    if isinstance(tt, TicketType):
+        return CONFIDENTIAL_FIELDS.get(tt)
+    if isinstance(tt, str):
+        for member in TicketType:
+            if tt in (member.value, member.name):
+                return CONFIDENTIAL_FIELDS.get(member)
+    return None
+
+
+def _may_see_confidential(user: Optional[dict], spec: dict) -> bool:
+    """True, wenn der Betrachter die vertraulichen Felder sehen darf: interner Aufruf
+    (user=None, z.B. Admin-Detail), Admin, oder Mitglied einer erlaubten Gruppe."""
+    if user is None:
+        return True
+    perms = user.get("permissions", []) or []
+    if "admin" in perms:
+        return True
+    uid = user.get("id")
+    if not uid:
+        return False
+    gids = set(get_group_ids_for_user(uid))
+    groups_by_name = {g["name"].strip().lower(): g["id"] for g in get_groups()}
+    allowed = {groups_by_name.get(n.strip().lower()) for n in spec.get("groups", [])}
+    allowed.discard(None)
+    return bool(gids & allowed)
+
+
+def _get_path(node, path: str):
+    for p in path.split("."):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(p)
+    return node
+
+
+def _delete_path(node: dict, path: str) -> None:
+    parts = path.split(".")
+    for p in parts[:-1]:
+        node = node.get(p) if isinstance(node, dict) else None
+        if not isinstance(node, dict):
+            return
+    if isinstance(node, dict):
+        node.pop(parts[-1], None)
+
+
+def _set_path(node: dict, path: str, value) -> None:
+    parts = path.split(".")
+    for p in parts[:-1]:
+        nxt = node.get(p)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            node[p] = nxt
+        node = nxt
+    node[parts[-1]] = value
+
+
+def _strip_confidential(ticket, user: Optional[dict], desc):
+    """Entfernt vertrauliche Felder, wenn der Betrachter sie nicht sehen darf."""
+    if not isinstance(desc, dict):
+        return desc
+    spec = _confidential_spec_for(ticket)
+    if not spec or _may_see_confidential(user, spec):
+        return desc
+    out = copy.deepcopy(desc)
+    for path in spec.get("paths", []):
+        _delete_path(out, path)
+    return out
+
+
+def preserve_confidential(ticket, user: Optional[dict], new_desc: dict, old_desc: dict) -> dict:
+    """Schreibschutz für vertrauliche Felder: darf der Betrachter sie nicht sehen,
+    werden sie aus der ALTEN Beschreibung übernommen – ein gefilterter Client kann
+    sie so nicht (mit leeren Werten) überschreiben."""
+    spec = _confidential_spec_for(ticket)
+    if not spec or _may_see_confidential(user, spec):
+        return new_desc
+    if not isinstance(new_desc, dict):
+        return new_desc
+    out = copy.deepcopy(new_desc)
+    old_desc = old_desc if isinstance(old_desc, dict) else {}
+    for path in spec.get("paths", []):
+        old_val = _get_path(old_desc, path)
+        if old_val is None:
+            _delete_path(out, path)
+        else:
+            _set_path(out, path, old_val)
+    return out
 
 
 # ── Spec-Auflösung ──────────────────────────────────────────────────────────────
@@ -187,6 +293,16 @@ def filter_description(ticket, user: Optional[dict], desc: dict,
     „Alle Aufträge"-Ansicht wechseln."""
     if not isinstance(desc, dict):
         return desc
+    # Vertrauliche Felder werden IMMER zusätzlich beschnitten (überschreibt Voll-Sicht).
+    return _strip_confidential(
+        ticket, user,
+        _apply_field_visibility(ticket, user, desc, only_department, force_scope),
+    )
+
+
+def _apply_field_visibility(ticket, user: Optional[dict], desc: dict,
+                            only_department: Optional[str], force_scope: bool) -> dict:
+    """Normale Feld-Sichtbarkeit (Basis/Fachabteilungen) ohne das Confidential-Gate."""
     spec = _spec_for(ticket)
     if not spec:
         return desc
@@ -208,10 +324,12 @@ def filter_description_str(ticket, user: Optional[dict], desc_str: str,
     """Wie filter_description, aber für die roh als String gehaltene desc (TicketOut)."""
     if user is None and only_department is None:
         return desc_str
+    has_conf = _confidential_spec_for(ticket) is not None
     spec = _spec_for(ticket)
-    if not spec:
+    if not spec and not has_conf:
         return desc_str
-    if only_department is None and is_full_view(ticket, user):
+    # Voll-Sicht-Abkürzung nur, wenn KEINE vertraulichen Felder zu beschneiden sind.
+    if only_department is None and not has_conf and is_full_view(ticket, user):
         return desc_str
     try:
         parsed = json.loads(desc_str or "{}")
