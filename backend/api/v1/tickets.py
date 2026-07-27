@@ -51,11 +51,13 @@ def generate_title(ticket_type, user, desc):
     if isinstance(desc, str):
         desc = json.loads(desc)
 
-    if ticket_type == TicketType.zugang_beantragen:
-        # Onboarding: Name im eigenen base-Block.
+    if ticket_type in (TicketType.zugang_beantragen, TicketType.einstellung):
+        # Onboarding (P1 Einstellung / P2 nach Vertragsrücklauf): Name im base-Block.
         base = desc.get("base") or {}
         name = f"{base.get('first_name', '')} {base.get('last_name', '')}".strip()
-        label = f"Onboarding Mitarbeiter:innen – {name}"
+        label = (f"Einstellung Mitarbeiter:in – {name}"
+                 if ticket_type == TicketType.einstellung
+                 else f"Onboarding Mitarbeiter:innen – {name}")
     elif ticket_type == TicketType.zugang_sperren:
         # Offboarding: kein base-Block, Name liegt unter personal.
         personal = desc.get("personal") or {}
@@ -705,6 +707,77 @@ def _assign_onboarding_personalnummer(ticket_id: int, user: dict) -> None:
             logger.exception("Personalnummern-Warn-Mail fehlgeschlagen (Firma %s)", company)
 
 
+def _spawn_onboarding_process(p1_ticket, request, user: dict) -> Optional[int]:
+    """Aus einem abgeschlossenen Einstellungs-Ticket (P1) das Onboarding-Ticket (P2,
+    `zugang-beantragen`) erzeugen: Basis/Titel/Vertrauliches übernehmen, Vorgesetzte:r
+    = P1-Ersteller:in, Start direkt in der Sekretariat-GL-Bearbeitung. Idempotent –
+    ein bereits erzeugter Folgeprozess wird nicht erneut angelegt."""
+    from backend.services.onboarding_spawn import build_p2_description
+    from backend.services.workflow_state import set_phase_responsibility
+    from backend.models.models import TicketPriority
+
+    try:
+        p1_desc = json.loads(p1_ticket.description or "{}")
+    except Exception:
+        p1_desc = {}
+
+    if p1_desc.get("_spawned_process_id"):
+        return p1_desc["_spawned_process_id"]   # schon erzeugt
+
+    creator = {"id": p1_ticket.owner_id, "name": p1_ticket.owner_name}
+    p2_desc = build_p2_description(p1_desc, p1_ticket.id)
+    p2_desc_str = json.dumps(p2_desc, ensure_ascii=False)
+
+    prio = p1_ticket.priority if isinstance(p1_ticket.priority, TicketPriority) \
+        else TicketPriority(str(p1_ticket.priority))
+    p2_id = request.app.state.manager.create_ticket(
+        title=generate_title(TicketType.zugang_beantragen, user, p2_desc_str),
+        ticket_type=TicketType.zugang_beantragen,
+        description=p2_desc_str,
+        owner_id=p1_ticket.owner_id,
+        owner_name=p1_ticket.owner_name,
+        owner_info=p1_ticket.owner_info or "",
+        comment="",
+        priority=prio,
+    )
+
+    # Ersteller:in (Vorgesetzte:r) als Beobachter:in – wie beim normalen Create.
+    from backend.database.ticket_watchers import add_watcher
+    add_watcher(p2_id, p1_ticket.owner_id, p1_ticket.owner_name)
+
+    # Workflow aufbauen + Erstellungsphase überspringen ⇒ landet in „Bearbeitung
+    # Sekretariat GL" (assign_group). Danach die spätere „Bearbeitung durch
+    # Vorgesetzten" fest der/dem P1-Ersteller:in zuweisen.
+    p2 = database.get_ticket(p2_id)
+    updated = _build_and_init_workflow(p2)
+    for idx, ph in enumerate(updated.get("phases", [])):
+        if ph.get("key") == "bearbeitung":
+            set_phase_responsibility(p2_id, idx,
+                {"kind": "user", "id": creator["id"], "name": creator["name"]})
+            break
+
+    # Vorwärts-Verlinkung in P1 (Rück-Link `_origin_process` steckt schon in P2).
+    p1_desc["_spawned_process_id"] = p2_id
+    database.update_ticket(p1_ticket.id, description=json.dumps(p1_desc, ensure_ascii=False))
+
+    add_history_event(p2_id, actor_id=None, actor_name="System", actor_type="system",
+                      action="ticket_created",
+                      details={"ticket_type": TicketType.zugang_beantragen.value,
+                               "origin_process": p1_ticket.id})
+    add_history_event(p1_ticket.id, actor_id=user["id"], actor_name=user["displayName"],
+                      action="onboarding_spawned", details={"process_id": p2_id})
+
+    # Zuständige der neu aktiven Phase (Sekretariat GL) benachrichtigen (best-effort).
+    try:
+        phases = updated.get("phases", [])
+        cur = phases[updated.get("current_phase_index", 0)] if phases else None
+        notify_phase_entry(request, database.get_ticket(p2_id), cur)
+    except Exception:
+        logger.exception("Benachrichtigung nach Onboarding-Spawn fehlgeschlagen (P2 %s)", p2_id)
+
+    return p2_id
+
+
 @router.post("/tickets/{ticket_id}/submit", response_model=DataResponse[TicketOut])
 async def submit_ticket(
     ticket_id: int,
@@ -788,6 +861,16 @@ async def submit_ticket(
         )
 
     notify_phase_entry(request, ticket, next_phase)
+
+    # Einstellung (P1) mit Vertragsrücklauf abgeschlossen ⇒ automatisch das
+    # Onboarding (P2) erzeugen. „Prozess 1 hat immer einen Prozess 2 zur Folge."
+    if tt == TicketType.einstellung.value and completed_key == "vertragsruecklauf" and next_phase is None:
+        try:
+            _spawn_onboarding_process(ticket, request, user)
+        except Exception:
+            logger.exception("Onboarding-Folgeprozess (P2) konnte nicht erzeugt werden (P1 %s)", ticket_id)
+            add_history_event(ticket_id, actor_id=None, actor_name="System", actor_type="system",
+                              action="onboarding_spawn_failed", details={})
 
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 

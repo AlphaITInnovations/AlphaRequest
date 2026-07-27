@@ -145,7 +145,9 @@ def collect_ticket_metrics(ticket_manager):
         tt = t.ticket_type.value
         type_count[tt] = type_count.get(tt, 0) + 1
 
-        is_open = t.status in (RequestStatus.in_progress, RequestStatus.in_request)
+        is_open = t.status in (
+            RequestStatus.in_progress, RequestStatus.in_request, RequestStatus.waiting_contract,
+        )
         if is_open:
             open_count += 1
 
