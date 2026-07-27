@@ -3,6 +3,7 @@ import { ref, computed, type Component } from 'vue'
 import { client } from '@/api/client'
 import TicketHistoryTimeline from '@/views/TicketHistoryTimeline.vue'
 import PhaseProgress from '@/components/tickets/PhaseProgress.vue'
+import EinstellungContentPanel from '@/components/tickets/EinstellungContentPanel.vue'
 import ZugangBeantragenContentPanel from '@/components/tickets/ZugangBeantragenContentPanel.vue'
 import ZugangSperrenContentPanel from '@/components/tickets/ZugangSperrenContentPanel.vue'
 import HardwareContentPanel from '@/components/tickets/HardwareContentPanel.vue'
@@ -19,6 +20,7 @@ const props = defineProps<{ data: any }>()
 const emit  = defineEmits<{ (e: 'reload'): void }>()
 
 const PANEL_MAP: Record<string, Component> = {
+  'einstellung':              EinstellungContentPanel,
   'zugang-beantragen':        ZugangBeantragenContentPanel,
   'zugang-sperren':           ZugangSperrenContentPanel,
   'hardware':                 HardwareContentPanel,
@@ -31,6 +33,12 @@ const PANEL_MAP: Record<string, Component> = {
 }
 const contentPanel = computed(() =>
   props.data ? PANEL_MAP[props.data.type_key] ?? null : null
+)
+
+// Generischer Fallback (Typ ohne eigenes Panel): interne Meta-Felder (mit '_',
+// z.B. _origin_process / _spawned_process_id) NICHT anzeigen.
+const descEntries = computed<[string, unknown][]>(() =>
+  Object.entries(props.data?.description ?? {}).filter(([k]) => !k.startsWith('_'))
 )
 
 const STATUS_LABEL: Record<string, string> = {
@@ -265,8 +273,8 @@ async function submitNachtrag() {
              class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                     rounded-2xl shadow-sm p-6 space-y-3">
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">Auftragsinhalt</h2>
-          <template v-if="data.description && Object.keys(data.description).length > 0">
-            <details v-for="(section, key) in data.description" :key="key"
+          <template v-if="descEntries.length > 0">
+            <details v-for="[key, section] in descEntries" :key="key"
                      class="border border-gray-200 dark:border-white/[0.06] rounded-xl overflow-hidden">
               <summary class="cursor-pointer px-4 py-3 font-medium text-sm
                               text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5">
