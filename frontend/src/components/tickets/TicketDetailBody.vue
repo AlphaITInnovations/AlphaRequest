@@ -192,7 +192,8 @@ async function submitNachtrag() {
     </aside>
 
     <!-- ── Main Content ── -->
-    <section class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 items-start">
+    <section class="grid grid-cols-1 gap-5 items-start"
+             :class="data.history && data.history.length ? 'xl:grid-cols-[1fr_360px]' : ''">
 
       <div class="space-y-5">
         <!-- Nachträge (nur bei archivierten Aufträgen) -->
@@ -278,8 +279,9 @@ async function submitNachtrag() {
         </div>
       </div>
 
-      <!-- Verlauf -->
-      <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+      <!-- Verlauf – nur wenn sichtbar (eingeschränkte Betrachter erhalten keinen Verlauf) -->
+      <div v-if="data.history && data.history.length"
+           class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                   rounded-2xl shadow-sm p-6 xl:sticky xl:top-4 max-h-[75vh] overflow-auto">
         <TicketHistoryTimeline :history="data.history" />
       </div>

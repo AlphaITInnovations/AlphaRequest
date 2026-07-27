@@ -9,7 +9,7 @@ from backend.database import tickets as database
 from backend.schemas.responses import DataResponse, ListResponse, Meta
 from backend.services.ticket_history import get_ticket_history
 from backend.services.workflow_state import responsibility_label
-from backend.services.ticket_visibility import filter_description, filter_history
+from backend.services.ticket_visibility import filter_description, history_visible
 
 router = APIRouter()
 
@@ -194,7 +194,8 @@ def build_overview_detail(ticket, user: Optional[dict] = None) -> TicketOverview
     from backend.services.workflow_state import primary_responsibility
     resp = primary_responsibility(ticket)
 
-    raw_history = filter_history(ticket, user, get_ticket_history(ticket.id))
+    # Verlauf nur für Voll-Sicht-Betrachter; Eingeschränkte sehen keinen Verlauf.
+    raw_history = get_ticket_history(ticket.id) if history_visible(ticket, user) else []
     history = []
     for e in raw_history:
         actor_raw = e.get("actor", {})

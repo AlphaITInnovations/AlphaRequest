@@ -23,9 +23,10 @@ zurückgegeben.
 import json
 from typing import Optional
 
-from backend.models.models import TicketType
+from backend.models.models import TicketType, RequestStatus
 from backend.services.phase_definitions import PhaseType
 from backend.database.groups import get_groups, get_group_ids_for_user
+from backend.database.ticket_watchers import is_watcher
 
 
 # ── Registry ────────────────────────────────────────────────────────────────────
@@ -72,17 +73,35 @@ def _spec_for(ticket) -> Optional[dict]:
 # ── Betrachter-Einordnung ────────────────────────────────────────────────────────
 
 def is_full_view(ticket, user: dict) -> bool:
-    """True, wenn der Betrachter die ganze Beschreibung sehen darf."""
+    """True, wenn der Betrachter die ganze Beschreibung UND den Verlauf sehen darf:
+      - Oversight (view/manage/admin), Ersteller, Beobachter → immer;
+      - Zuständige der Assignment-Phasen (die den Vorgang bearbeiten) → nur solange
+        das Ticket AKTIV ist. Nach Archivierung/Ablehnung fällt diese Bearbeiter-
+        Voll-Sicht weg (Need-to-know), sie sehen dann nur noch ihre erlaubten Felder.
+    """
     perms = user.get("permissions", []) or []
     if any(p in perms for p in ("view", "manage", "admin")):
         return True
 
     uid = user.get("id")
-    if uid and getattr(ticket, "owner_id", None) == uid:
+    if not uid:
+        return False
+    if getattr(ticket, "owner_id", None) == uid:
         return True
+    try:
+        if is_watcher(getattr(ticket, "id", None), uid):
+            return True
+    except Exception:
+        pass
+
+    # Bearbeiter-Voll-Sicht nur bei aktiven Tickets.
+    status = getattr(ticket, "status", None)
+    status = status.value if hasattr(status, "value") else status
+    if status in (RequestStatus.archived.value, RequestStatus.rejected.value):
+        return False
 
     wf = ticket.workflow_state_parsed if hasattr(ticket, "workflow_state_parsed") else (ticket or {})
-    gids = set(get_group_ids_for_user(uid)) if uid else set()
+    gids = set(get_group_ids_for_user(uid))
     for phase in wf.get("phases", []):
         # Nur Assignment-Phasen gelten als "verarbeitende" Stelle. Die
         # department_review-Phase ist genau die, die eingeschränkt werden soll.
@@ -206,27 +225,7 @@ def filter_description_str(ticket, user: Optional[dict], desc_str: str,
         return "{}"   # im Zweifel restriktiv
 
 
-def filter_history(ticket, user: Optional[dict], history: list) -> list:
-    """Für eingeschränkte Betrachter die desc-Diff-Werte aus dem Verlauf entfernen.
-
-    Die Tatsache „Beschreibung geändert" bleibt sichtbar; die konkreten Alt/Neu-Werte
-    (die sonst die gesamte desc enthielten) werden entfernt. Andere Änderungen
-    (Priorität, Kommentar, Status) bleiben erhalten. Aktionsunabhängig, damit auch
-    admin_raw_edited & Co. abgedeckt sind.
-    """
-    if user is None:
-        return history
-    spec = _spec_for(ticket)
-    if not spec or is_full_view(ticket, user):
-        return history
-
-    out: list = []
-    for e in history:
-        details = e.get("details") or {}
-        changes = details.get("changes") or {}
-        if "description" in changes:
-            new_changes = {k: v for k, v in changes.items() if k != "description"}
-            new_changes["description"] = {"redacted": True}
-            e = {**e, "details": {**details, "changes": new_changes}}
-        out.append(e)
-    return out
+def history_visible(ticket, user: Optional[dict]) -> bool:
+    """Verlauf ist nur für Voll-Sicht-Betrachter sichtbar (Oversight, Ersteller,
+    Beobachter, aktive Bearbeiter). Eingeschränkte sehen KEINEN Verlauf."""
+    return user is None or is_full_view(ticket, user)

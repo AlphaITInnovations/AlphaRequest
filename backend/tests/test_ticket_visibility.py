@@ -45,7 +45,7 @@ DESC_LEGACY = {
 }
 
 
-def _ticket(owner_id="owner-1", phases=None):
+def _ticket(owner_id="owner-1", phases=None, status="in_progress"):
     wf = {"phases": phases if phases is not None else [
         {"key": "erstellung", "type": "creation"},
         {"key": "backoffice", "type": "assignment",
@@ -56,8 +56,10 @@ def _ticket(owner_id="owner-1", phases=None):
                          "g-hr": {"name": "Personalabteilung", "required": True, "status": "open"}}},
     ]}
     return SimpleNamespace(
+        id=1,
         ticket_type=TicketType.zugang_beantragen,
         owner_id=owner_id,
+        status=status,
         description=json.dumps(DESC),
         workflow_state_parsed=wf,
     )
@@ -74,6 +76,7 @@ def _mock_groups(monkeypatch):
         "owner-1": [],
     }
     monkeypatch.setattr(tv, "get_group_ids_for_user", lambda uid: members.get(uid, []))
+    monkeypatch.setattr(tv, "is_watcher", lambda tid, uid: False)
 
 
 def _user(uid, perms=None):
@@ -172,36 +175,33 @@ def test_is_restricted_viewer():
     assert tv.is_restricted_viewer(t, _user("it-user")) is False
 
 
-# ── filter_history ──────────────────────────────────────────────────────────────────
+# ── history_visible / Beobachter / archiviert ────────────────────────────────────
 
-def _history():
-    return [
-        {"action": "ticket_created", "details": {"priority": "medium"}},
-        {"action": "ticket_updated", "details": {"changes": {
-            "priority": {"old": "low", "new": "high"},
-            "description": {"old": DESC, "new": DESC},
-        }}},
-    ]
+def test_history_hidden_for_restricted():
+    assert tv.history_visible(_ticket(), _user("it-user")) is False
+    assert tv.history_visible(_ticket(), _user("stranger")) is False
 
 
-def test_history_redacted_for_restricted():
-    out = tv.filter_history(_ticket(), _user("it-user"), _history())
-    upd = out[1]["details"]["changes"]
-    assert upd["priority"] == {"old": "low", "new": "high"}
-    assert upd["description"] == {"redacted": True}
-    assert out[0] == _history()[0]
+def test_history_visible_for_oversight_and_owner():
+    assert tv.history_visible(_ticket(), _user("x", ["admin"])) is True
+    assert tv.history_visible(_ticket(owner_id="owner-1"), _user("owner-1")) is True
+    assert tv.history_visible(_ticket(), None) is True   # interner Aufruf (Admin-Detail)
 
 
-def test_history_untouched_for_full_view():
-    hist = _history()
-    assert tv.filter_history(_ticket(), _user("x", ["admin"]), hist) == hist
+def test_watcher_has_full_view_and_history(monkeypatch):
+    monkeypatch.setattr(tv, "is_watcher", lambda tid, uid: uid == "watch-user")
+    assert tv.is_full_view(_ticket(), _user("watch-user")) is True
+    assert tv.history_visible(_ticket(), _user("watch-user")) is True
+    # sieht auch die volle Beschreibung
+    assert tv.filter_description(_ticket(), _user("watch-user"), DESC) == DESC
 
 
-def test_history_redacts_any_action_with_description():
-    hist = [{"action": "admin_raw_edited", "details": {"changes": {
-        "description": {"old": DESC, "new": DESC},
-        "status": {"old": "in_progress", "new": "archived"},
-    }}}]
-    out = tv.filter_history(_ticket(), _user("it-user"), hist)
-    assert out[0]["details"]["changes"]["description"] == {"redacted": True}
-    assert out[0]["details"]["changes"]["status"] == {"old": "in_progress", "new": "archived"}
+def test_processor_full_view_only_while_active():
+    # aktiv: BackOffice-Bearbeiter sieht alles
+    assert tv.is_full_view(_ticket(status="in_progress"), _user("backoffice-user")) is True
+    # archiviert/abgelehnt: Bearbeiter-Voll-Sicht fällt weg → eingeschränkt
+    assert tv.is_full_view(_ticket(status="archived"), _user("backoffice-user")) is False
+    assert tv.is_full_view(_ticket(status="rejected"), _user("backoffice-user")) is False
+    # dann sieht der archivierte Bearbeiter nur noch Basis (keine Fachabteilung)
+    out = tv.filter_description(_ticket(status="archived"), _user("backoffice-user"), DESC)
+    assert set(out.keys()) == {"base"}
