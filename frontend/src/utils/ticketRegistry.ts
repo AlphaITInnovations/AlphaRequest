@@ -1,4 +1,5 @@
 import { defineAsyncComponent } from 'vue'
+import { useEinstellung }           from '@/composables/useEinstellung'
 import { useZugangBeantragen }       from '@/composables/useZugangBeantragen'
 import { useZugangSperren }          from '@/composables/useZugangSperren'
 import { useHardware }               from '@/composables/useHardware'
@@ -22,8 +23,14 @@ export interface TicketRegistryEntry {
 }
 
 export const TICKET_REGISTRY: Record<TicketType, TicketRegistryEntry> = {
+  'einstellung': {
+    label: 'Einstellung Mitarbeiter:in',
+    form:  defineAsyncComponent(() => import('@/components/tickets/EinstellungForm.vue')),
+    panel: defineAsyncComponent(() => import('@/components/tickets/EinstellungContentPanel.vue')),
+    useComposable: useEinstellung,
+  },
   'zugang-beantragen': {
-    label: 'Onboarding Mitarbeiter:in',
+    label: 'Onboarding nach Vertragsrücklauf',
     form:  defineAsyncComponent(() => import('@/components/tickets/ZugangBeantragenForm.vue')),
     panel: defineAsyncComponent(() => import('@/components/tickets/ZugangBeantragenContentPanel.vue')),
     useComposable: useZugangBeantragen,

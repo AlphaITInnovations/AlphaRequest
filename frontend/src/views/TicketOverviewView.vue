@@ -36,17 +36,19 @@ const page     = ref(1)
 
 // ── Labels & Farben ─────────────────────────────────────────────────────────
 const TYPE_LABEL: Record<string, string> = {
-  'hardware': 'Hardwarebestellung', 'zugang-beantragen': 'Onboarding',
+  'hardware': 'Hardwarebestellung', 'einstellung': 'Einstellung', 'zugang-beantragen': 'Onboarding (Vertragsrücklauf)',
   'zugang-sperren': 'Offboarding', 'niederlassung-anmelden': 'Niederlassung anmelden',
   'niederlassung-umzug': 'Niederlassung Umzug', 'niederlassung-schliessen': 'Niederlassung schließen',
   'marketing-stellenanzeige': 'Stellenanzeige', 'hotelbuchung': 'Hotelbuchung', 'basis-ticket': 'Ticket',
 }
 const STATUS_LABEL: Record<string, string> = {
-  in_progress: 'Bearbeitung', in_request: 'Durchführung', archived: 'Archiviert', rejected: 'Abgelehnt',
+  in_progress: 'Bearbeitung', in_request: 'Durchführung',
+  waiting_contract: 'Wartet auf Vertrag', archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
   in_request:  'bg-[#3EAAB8]/15 text-[#3EAAB8]',
+  waiting_contract: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
   archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 }
@@ -57,10 +59,10 @@ const PRIORITY_CLASS: Record<string, string> = {
   high: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
   critical: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 }
-const STATUS_ORDER: Record<string, number>   = { in_progress: 0, in_request: 1, archived: 2, rejected: 3 }
+const STATUS_ORDER: Record<string, number>   = { in_progress: 0, in_request: 1, waiting_contract: 2, archived: 3, rejected: 4 }
 const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
 
-const STATUSES = ['all', 'in_progress', 'in_request', 'archived', 'rejected']
+const STATUSES = ['all', 'in_progress', 'in_request', 'waiting_contract', 'archived', 'rejected']
 
 // ── Abgeleitete Listen ──────────────────────────────────────────────────────
 const typeOptions = computed(() =>

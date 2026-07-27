@@ -164,7 +164,7 @@ async function removeTicket() {
 
 // ── Raw-JSON-Editor ──────────────────────────────────────────────────────────
 const PRIORITIES = ['low', 'medium', 'high', 'critical']
-const STATUSES   = ['in_progress', 'in_request', 'archived', 'rejected']
+const STATUSES   = ['in_progress', 'in_request', 'waiting_contract', 'archived', 'rejected']
 
 const showRaw   = ref(false)
 const rawSaving = ref(false)

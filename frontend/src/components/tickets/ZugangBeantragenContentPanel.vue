@@ -14,6 +14,7 @@ const tb  = (k: string) => props.description?.it?.timebutler?.[k]    ?? '—'
 const sw  = (k: string) => props.description?.it?.software?.[k]      ?? false
 const mb  = (k: string) => props.description?.it?.mailboxes?.[k]     ?? '—'
 const f   = (k: string) => props.description?.fuhrpark?.[k]          ?? '—'
+const conf = (k: string) => props.description?.confidential?.[k]     ?? '—'
 const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
 </script>
 
@@ -28,6 +29,14 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
       <TicketField label="Niederlassung" :value="b('location')" />
       <TicketField label="Kostenstelle" :value="b('cost_center')" />
       <TicketField label="Arbeitsbeginn (laut Vertrag)" :value="b('start_date')" />
+    </TicketFieldGrid>
+  </TicketSection>
+
+  <!-- Vertrauliche Informationen – nur Voll-Sicht (serverseitig gefiltert) -->
+  <TicketSection v-if="description?.confidential" title="Vertrauliche Informationen" variant="default" badge="Vertraulich">
+    <TicketFieldGrid>
+      <TicketField label="Gehalt" :value="conf('salary')" />
+      <TicketField label="Konditionen" :value="conf('conditions')" wide pre />
     </TicketFieldGrid>
   </TicketSection>
 

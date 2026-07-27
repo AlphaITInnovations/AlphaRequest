@@ -41,6 +41,7 @@ const ACTION_META: Record<string, { label: string; icon: string; color: string }
 
 const STATUS_LABEL: Record<string, string> = {
   in_request: 'Zu bearbeiten', in_progress: 'In Bearbeitung',
+  waiting_contract: 'Wartet auf Vertrag',
   archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 

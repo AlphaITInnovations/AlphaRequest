@@ -53,8 +53,8 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
             :accountable-error="validationTriggered && isInvalid('accountable')"
             :accountable-locked="stage === 'erstellung'"
             accountable-locked-hint="Wird automatisch Herrn Lutz zur Freigabe vorgelegt."
-            :accountable-editable="stage === 'backoffice'"
-            :accountable-editable-hint="stage === 'backoffice' ? 'Weitergabe an z. B. Vorgesetzte für fachliche Rückfragen.' : ''"
+            :accountable-editable="stage === 'bearbeitung_sgl'"
+            :accountable-editable-hint="stage === 'bearbeitung_sgl' ? 'Weitergabe an z. B. Vorgesetzte für fachliche Rückfragen.' : ''"
             @update:priority="form.priority = $event"
             @update:comment="form.comment = $event"
             @update:accountable="form.accountable = $event"
@@ -118,6 +118,26 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
           </div>
         </TicketSection>
 
+        <!-- Vertrauliche Informationen (nur bei separatem Start / Erstellung) -->
+        <TicketSection v-if="stage === 'erstellung'" title="Vertrauliche Informationen" variant="default" badge="Vertraulich">
+          <p class="text-sm text-gray-500 dark:text-gray-400 -mt-1">
+            Für die Fachabteilungen in der späteren Durchführung NICHT sichtbar.
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">Gehalt</label>
+              <input v-model="form.confidential.salary" :class="fieldClass('confidential.salary')"
+                     placeholder="z. B. 3.500 € / Monat" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="label">Konditionen</label>
+              <textarea v-model="form.confidential.conditions" rows="3" class="resize-none"
+                        :class="fieldClass('confidential.conditions')"
+                        placeholder="z. B. 13. Gehalt, 30 Tage Urlaub, Probezeit …" />
+            </div>
+          </div>
+        </TicketSection>
+
         <!-- ═══════════════════════════════
              BackOffice + Bearbeitung – nach Zielgruppe getrennt
              (Feld-Timing bleibt identisch: alles ab stage !== 'erstellung',
@@ -165,6 +185,26 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               <div>
                 <label class="label">Arbeitsbeginn (laut Vertrag) *</label>
                 <input type="date" v-model="form.base.start_date" :class="fieldClass('base.start_date')" />
+              </div>
+            </div>
+          </TicketSection>
+
+          <!-- Vertrauliche Informationen – aus P1 übernommen, editierbar; NICHT für Fachabteilungen -->
+          <TicketSection title="Vertrauliche Informationen" variant="default" badge="Vertraulich">
+            <p class="text-sm text-gray-500 dark:text-gray-400 -mt-1">
+              Für die Fachabteilungen in der Durchführung NICHT sichtbar.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="label">Gehalt</label>
+                <input v-model="form.confidential.salary" :class="fieldClass('confidential.salary')"
+                       placeholder="z. B. 3.500 € / Monat" />
+              </div>
+              <div class="md:col-span-2">
+                <label class="label">Konditionen</label>
+                <textarea v-model="form.confidential.conditions" rows="3" class="resize-none"
+                          :class="fieldClass('confidential.conditions')"
+                          placeholder="z. B. 13. Gehalt, 30 Tage Urlaub, Probezeit …" />
               </div>
             </div>
           </TicketSection>
@@ -548,7 +588,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
     <TicketActionBar
       :phase="phase"
       :loading="submitting"
-      :complete-label="stage === 'backoffice' ? 'Weitergeben' : 'Abschließen'"
+      :complete-label="stage === 'bearbeitung_sgl' ? 'Weitergeben' : 'Abschließen'"
       :confirm-create-open="ctx.pendingConfirm.value"
       :confirm-complete-open="ctx.pendingComplete.value"
       @create="ctx.submitCreate()"

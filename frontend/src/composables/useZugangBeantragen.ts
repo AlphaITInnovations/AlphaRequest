@@ -88,6 +88,13 @@ export interface ZugangForm {
     car_class: string
     car_from:  string
   }
+
+  // Vertrauliche Informationen (aus P1 „Einstellung" übernommen; nur Voll-Sicht,
+  // NICHT für Fachabteilungen sichtbar). Bei separatem Start leer & optional.
+  confidential: {
+    salary:     string
+    conditions: string
+  }
 }
 
 // ── Validierungsregeln ────────────────────────────────────────────────────────
@@ -151,7 +158,7 @@ const RULES_ERSTELLUNG: Record<string, Rule> = {
 
 // Mehrstufiger Onboarding-Workflow: Erstellung (Basis) → Freigabe → BackOffice
 // (voller Erstellungs-Feldsatz + nächsten Bearbeiter wählen) → Bearbeitung (alle Felder).
-export type ZugangStage = 'erstellung' | 'backoffice' | 'bearbeitung'
+export type ZugangStage = 'erstellung' | 'bearbeitung_sgl' | 'bearbeitung'
 
 // ── Hilfsfunktion: tief lesen ─────────────────────────────────────────────────
 
@@ -214,6 +221,8 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     },
 
     fuhrpark: { car: '', car_class: '', car_from: '' },
+
+    confidential: { salary: '', conditions: '' },
   })
 
   // ── Auto-fill signature title from personal title ───────────────────────────
@@ -255,7 +264,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
   const rules = computed(() => {
     if (stage.value === 'erstellung') return RULES_ERSTELLUNG
     if (stage.value === 'bearbeitung') return RULES_EDIT
-    return RULES_CREATE  // backoffice: voller Erstellungs-Feldsatz inkl. accountable
+    return RULES_CREATE  // bearbeitung_sgl: voller Feldsatz (SekretariatGL) inkl. accountable
   })
 
   function isEmpty(v: unknown): boolean {
@@ -326,10 +335,11 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         // Stufe aus der aktuellen Workflow-Phase ableiten
         const wf = t.workflow_state
         const curKey = wf?.phases?.[wf?.current_phase_index ?? 0]?.key
-        stage.value = curKey === 'backoffice' ? 'backoffice' : 'bearbeitung'
+        stage.value = curKey === 'bearbeitung_sgl' ? 'bearbeitung_sgl' : 'bearbeitung'
 
         if (desc.base) Object.assign(form.base, desc.base)
         if (desc.personal) Object.assign(form.personal, desc.personal)
+        if (desc.confidential) Object.assign(form.confidential, desc.confidential)
 
         // Leere Fachabteilung → "Keine" (wird als '' gespeichert)
         if (!form.personal.department) {
@@ -350,11 +360,15 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         form.priority    = t.priority as TicketPriority
         form.comment     = t.comment ?? ''
         form.assignee    = t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null
-        // BackOffice: gewählten nächsten Bearbeiter aus dem Entwurf (_next_assignee)
-        // wiederherstellen – so bleibt er auch nach „Speichern und später weiter" erhalten.
-        // Sonst (Bearbeitung) den bereits Zuständigen anzeigen.
-        form.accountable = stage.value === 'backoffice'
-          ? (desc._next_assignee ? { id: desc._next_assignee.id, name: desc._next_assignee.name } : null)
+        // Bearbeitung Sekretariat GL: nächste:n Bearbeiter:in (Vorgesetzte:r) vorbelegen –
+        // aus dem Entwurf (_next_assignee), sonst aus der bereits gesetzten Zuständigkeit
+        // der „bearbeitung"-Phase (z.B. aus P1 übernommen). Sonst (Bearbeitung) den
+        // bereits Zuständigen anzeigen.
+        const bearbeitungResp = (wf?.phases ?? []).find((p: any) => p.key === 'bearbeitung')?.responsibility
+        form.accountable = stage.value === 'bearbeitung_sgl'
+          ? (desc._next_assignee
+              ? { id: desc._next_assignee.id, name: desc._next_assignee.name }
+              : (bearbeitungResp?.id ? { id: bearbeitungResp.id, name: bearbeitungResp.name } : null))
           : (t.responsible ? { id: t.responsible.id, name: t.responsible.name } : null)
 
         // Mark signature title as manually edited if it differs from personal title
@@ -384,13 +398,14 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     const desc: Record<string, any> = {
       base: { ...form.base },
       personal,
+      confidential: { ...form.confidential },
       it: form.it,
       fuhrpark: form.fuhrpark,
     }
-    // BackOffice: gewählten nächsten Bearbeiter als Entwurf sichern (mit '_' als
-    // interne Meta-Angabe gekennzeichnet → wird im Verlauf/Panel ausgeblendet),
+    // Bearbeitung Sekretariat GL: gewählte:n nächste:n Bearbeiter:in als Entwurf
+    // sichern (mit '_' als interne Meta-Angabe → wird im Verlauf/Panel ausgeblendet),
     // damit er beim „Speichern und später weiterbearbeiten" nicht verloren geht.
-    if (stage.value === 'backoffice' && form.accountable) {
+    if (stage.value === 'bearbeitung_sgl' && form.accountable) {
       desc._next_assignee = { id: form.accountable.id, name: form.accountable.name }
     }
     return JSON.stringify(desc)
@@ -457,8 +472,8 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         assignee_name:    form.assignee?.name,
       })
       if (action === 'complete') {
-        // BackOffice: gewählten nächsten Bearbeiter mitgeben (Person/Fachabteilung).
-        const body = stage.value === 'backoffice' && form.accountable
+        // Sekretariat GL: gewählte:n nächste:n Bearbeiter:in (Vorgesetzte:r) mitgeben.
+        const body = stage.value === 'bearbeitung_sgl' && form.accountable
           ? { assignee_id: form.accountable.id, assignee_name: form.accountable.name }
           : undefined
         await ticketsApi.submit(ticketId, body)

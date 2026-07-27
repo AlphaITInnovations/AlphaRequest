@@ -1,10 +1,11 @@
-export type TicketStatus   = 'in_progress' | 'in_request' | 'archived' | 'rejected'
+export type TicketStatus   = 'in_progress' | 'in_request' | 'waiting_contract' | 'archived' | 'rejected'
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical'
 export type TicketType =
   | 'hardware'
   | 'niederlassung-anmelden'
   | 'niederlassung-schliessen'
   | 'niederlassung-umzug'
+  | 'einstellung'
   | 'zugang-beantragen'
   | 'zugang-sperren'
   | 'marketing-stellenanzeige'

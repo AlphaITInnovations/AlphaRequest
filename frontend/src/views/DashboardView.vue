@@ -57,7 +57,8 @@ watch(activeTab, () => {
 // ── Labels ────────────────────────────────────────────────────────────────────
 const ticketTypes = [
   { key: 'hardware',                 label: 'Hardwarebestellung' },
-  { key: 'zugang-beantragen',        label: 'Onboarding Mitarbeiter:innen' },
+  { key: 'einstellung',              label: 'Einstellung Mitarbeiter:in' },
+  { key: 'zugang-beantragen',        label: 'Onboarding nach Vertragsrücklauf' },
   { key: 'zugang-sperren',           label: 'Offboarding Mitarbeiter:innen' },
   { key: 'niederlassung-anmelden',   label: 'Niederlassung anmelden' },
   { key: 'niederlassung-umzug',      label: 'Niederlassung umziehen' },
@@ -72,11 +73,13 @@ const TYPE_LABEL: Record<string, string> = Object.fromEntries(ticketTypes.map(t 
 // in_progress = Bearbeitung, in_request = Durchführung.
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'Bearbeitung', in_request: 'Durchführung',
+  waiting_contract: 'Wartet auf Vertrag',
   archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   in_request:  'bg-[#3EAAB8]/10 text-[#3EAAB8] dark:bg-[#3EAAB8]/20',
+  waiting_contract: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
   archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 }
@@ -88,7 +91,7 @@ const PRIORITY_CLASS: Record<string, string> = {
 }
 
 function dotClass(s: string) {
-  return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', archived: 'bg-gray-400', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
+  return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', waiting_contract: 'bg-violet-400', archived: 'bg-gray-400', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
 }
 
 // ── Rollen (Involviert-Tab) ─────────────────────────────────────────────────────
@@ -363,6 +366,7 @@ onMounted(async () => {
               <option value="all">Alle Phasen</option>
               <option value="in_progress">Bearbeitung</option>
               <option value="in_request">Durchführung</option>
+              <option value="waiting_contract">Wartet auf Vertrag</option>
               <option value="archived">Archiviert</option>
               <option value="rejected">Abgelehnt</option>
             </select>

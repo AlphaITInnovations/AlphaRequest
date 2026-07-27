@@ -85,6 +85,7 @@ async function handleApprove() {
 
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In Bearbeitung', in_request: 'Zu bearbeiten',
+  waiting_contract: 'Wartet auf Vertrag',
   archived: 'Archiviert', rejected: 'Abgelehnt',
 }
 const PRIORITY_LABEL: Record<string, string> = {

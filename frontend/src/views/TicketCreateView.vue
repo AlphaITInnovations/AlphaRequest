@@ -10,7 +10,7 @@ const allowed = ref<string[]>([])
 const search  = ref('')
 
 const ticketTypes = [
-  { key: 'zugang-beantragen',        icon: '🔑', label: 'Onboarding Mitarbeiter:innen',  desc: 'Neuen Mitarbeitenden anlegen, Zugänge und Ausstattung einrichten.' },
+  { key: 'onboarding',               icon: '🔑', label: 'Onboarding Mitarbeiter:innen',  desc: 'Neuen Mitarbeitenden einstellen und onboarden – von den Einstellungsdaten bis zur Durchführung.' },
   { key: 'zugang-sperren',           icon: '🔒', label: 'Offboarding Mitarbeiter:innen',  desc: 'Zugänge sperren, Geräte zurücknehmen, Accounts deaktivieren.' },
   { key: 'hardware',                 icon: '📦', label: 'Hardwarebestellung',              desc: 'Notebooks, Monitore, Peripherie und weitere Hardware bestellen.' },
   { key: 'niederlassung-anmelden',   icon: '🏢', label: 'Niederlassung anmelden',          desc: 'Neue Niederlassung anmelden, IT und Marketing vorbereiten.' },
@@ -20,15 +20,33 @@ const ticketTypes = [
   { key: 'hotelbuchung',             icon: '🏨', label: 'Hotelbuchung',                    desc: 'Hotelzimmer für Dienstreisen buchen lassen.' },
 ]
 
+// Der Onboarding-Sammel-Eintrag ist aktiv, wenn EINE der beiden Varianten erlaubt ist.
+const einstellungAllowed  = computed(() => allowed.value.includes('einstellung'))
+const onboardingP2Allowed = computed(() => allowed.value.includes('zugang-beantragen'))
+
 const filteredTypes = computed(() => {
   const q = search.value.toLowerCase().trim()
   return ticketTypes
     .filter(t => !q || t.label.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q))
-    .map(t => ({ ...t, enabled: allowed.value.includes(t.key) }))
+    .map(t => ({
+      ...t,
+      enabled: t.key === 'onboarding'
+        ? (einstellungAllowed.value || onboardingP2Allowed.value)
+        : allowed.value.includes(t.key),
+    }))
 })
 
+// Start-Modal für Onboarding: erst Variante wählen, dann zum passenden Formular.
+const showOnboarding = ref(false)
+
 function openNew(key: string) {
+  if (key === 'onboarding') { showOnboarding.value = true; return }
   router.push(`/tickets/new/${key}`)
+}
+
+function chooseOnboarding(type: 'einstellung' | 'zugang-beantragen') {
+  showOnboarding.value = false
+  router.push(`/tickets/new/${type}`)
 }
 
 onMounted(async () => {
@@ -122,5 +140,74 @@ onMounted(async () => {
         Kein passender Auftragstyp gefunden.
       </p>
     </div>
+
+    <!-- ── Start-Modal: Onboarding-Variante wählen ── -->
+    <Teleport to="body">
+      <div v-if="showOnboarding"
+           class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showOnboarding = false" />
+        <div class="relative w-full max-w-lg rounded-2xl bg-white dark:bg-[#212B3A]
+                    border border-gray-200 dark:border-white/10 shadow-xl p-6 space-y-4">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Onboarding starten</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Wo möchtest du beginnen?</p>
+          </div>
+
+          <div class="space-y-3">
+            <!-- Prozess 1 -->
+            <button @click="einstellungAllowed && chooseOnboarding('einstellung')"
+                    :disabled="!einstellungAllowed"
+                    class="w-full flex items-start gap-3 p-4 rounded-2xl text-left border transition-all duration-150"
+                    :class="einstellungAllowed
+                      ? 'bg-white dark:bg-[#263040] border-gray-200/80 dark:border-white/[0.09] hover:border-[#3EAAB8]/40 hover:shadow-md cursor-pointer group'
+                      : 'bg-gray-50 dark:bg-[#1A2130] border-gray-100 dark:border-white/[0.05] opacity-50 cursor-not-allowed'">
+              <span class="text-xl mt-0.5">🧑‍💼</span>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold"
+                   :class="einstellungAllowed ? 'text-gray-900 dark:text-white group-hover:text-[#3EAAB8]' : 'text-gray-400'">
+                  Einstellung Mitarbeiter:in
+                </p>
+                <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+                  Von den Einstellungsdaten bis zum Versand des Arbeitsvertrags.
+                </p>
+                <p v-if="!einstellungAllowed" class="text-[10px] text-gray-400 mt-1.5 uppercase tracking-wider font-medium">
+                  Keine Berechtigung
+                </p>
+              </div>
+            </button>
+
+            <!-- Prozess 2 -->
+            <button @click="onboardingP2Allowed && chooseOnboarding('zugang-beantragen')"
+                    :disabled="!onboardingP2Allowed"
+                    class="w-full flex items-start gap-3 p-4 rounded-2xl text-left border transition-all duration-150"
+                    :class="onboardingP2Allowed
+                      ? 'bg-white dark:bg-[#263040] border-gray-200/80 dark:border-white/[0.09] hover:border-[#3EAAB8]/40 hover:shadow-md cursor-pointer group'
+                      : 'bg-gray-50 dark:bg-[#1A2130] border-gray-100 dark:border-white/[0.05] opacity-50 cursor-not-allowed'">
+              <span class="text-xl mt-0.5">📨</span>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold"
+                   :class="onboardingP2Allowed ? 'text-gray-900 dark:text-white group-hover:text-[#3EAAB8]' : 'text-gray-400'">
+                  Onboarding nach Vertragsrücklauf
+                </p>
+                <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+                  Start nach Rücksendung des unterschriebenen Arbeitsvertrags.
+                </p>
+                <p v-if="!onboardingP2Allowed" class="text-[10px] text-gray-400 mt-1.5 uppercase tracking-wider font-medium">
+                  Keine Berechtigung
+                </p>
+              </div>
+            </button>
+          </div>
+
+          <div class="flex justify-end pt-1">
+            <button @click="showOnboarding = false"
+                    class="px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10
+                           text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </AppLayout>
 </template>

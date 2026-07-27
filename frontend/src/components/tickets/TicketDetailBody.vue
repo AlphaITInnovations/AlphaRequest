@@ -36,12 +36,14 @@ const contentPanel = computed(() =>
 const STATUS_LABEL: Record<string, string> = {
   in_request:  'Zu bearbeiten',
   in_progress: 'In Bearbeitung',
+  waiting_contract: 'Wartet auf Vertrag',
   archived:    'Archiviert',
   rejected:    'Abgelehnt',
 }
 const STATUS_CLASS: Record<string, string> = {
   in_request:  'bg-[#3EAAB8]/15 text-[#3EAAB8]',
   in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  waiting_contract: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
   archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 }
