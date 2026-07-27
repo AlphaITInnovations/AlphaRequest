@@ -335,7 +335,8 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         // Stufe aus der aktuellen Workflow-Phase ableiten
         const wf = t.workflow_state
         const curKey = wf?.phases?.[wf?.current_phase_index ?? 0]?.key
-        stage.value = curKey === 'bearbeitung_sgl' ? 'bearbeitung_sgl' : 'bearbeitung'
+        // 'backoffice' = Legacy-Schlüssel laufender Alt-Tickets → wie 'bearbeitung_sgl' behandeln.
+        stage.value = (curKey === 'bearbeitung_sgl' || curKey === 'backoffice') ? 'bearbeitung_sgl' : 'bearbeitung'
 
         if (desc.base) Object.assign(form.base, desc.base)
         if (desc.personal) Object.assign(form.personal, desc.personal)
