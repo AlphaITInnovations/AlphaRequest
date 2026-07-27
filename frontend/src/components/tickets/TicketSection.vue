@@ -25,9 +25,12 @@ const v = computed(() => VARIANTS[props.variant])
 </script>
 
 <template>
-  <section class="relative overflow-hidden rounded-2xl border border-gray-200/80 dark:border-white/[0.09]
+  <!-- overflow NICHT clippen: sonst werden aufklappende Dropdowns (UserSelect) am
+       Sektionsrand abgeschnitten. Die Akzentleiste oben wird stattdessen selbst
+       abgerundet, damit die Ecken sauber bleiben. -->
+  <section class="relative rounded-2xl border border-gray-200/80 dark:border-white/[0.09]
                   bg-white dark:bg-[#212B3A] shadow-sm">
-    <span class="absolute inset-x-0 top-0 h-1" :class="v.bar" />
+    <span class="absolute inset-x-0 top-0 h-1 rounded-t-2xl" :class="v.bar" />
     <div class="p-6 space-y-4">
       <div class="flex items-center gap-3">
         <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-base leading-none"

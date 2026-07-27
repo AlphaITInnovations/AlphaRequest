@@ -83,7 +83,8 @@ export interface ZugangForm {
       additional:   string
       notes:        string
     }
-    additional_cost_centers: string
+    additional_cost_centers_needed: string   // '' | 'Ja' | 'Nein'
+    additional_cost_centers: string           // Detailtext (Pflicht bei 'Ja')
   }
 
   // Fuhrpark
@@ -138,6 +139,14 @@ const RULES_EDIT: Record<string, Rule> = {
   'it.signature.zip':         { required: true, pattern: /^[0-9]{5}$/ },
   'it.signature.city':        { required: true },
   'it.mailboxes.notes':       { requiredIf: f => f.it.mailboxes.additional === 'Ja' },
+  // Software-Rechte sind Pflicht, sobald die jeweilige Software angehakt ist
+  // (dann taucht das Textfeld auf und muss ausgefüllt werden).
+  'it.software.datev_rights':    { requiredIf: f => f.it.software.datev },
+  'it.software.persopro_rights': { requiredIf: f => f.it.software.persopro },
+  'it.software.timejob_rights':  { requiredIf: f => f.it.software.timejob },
+  'it.software.zvoove_rights':   { requiredIf: f => f.it.software.zvoove },
+  // Zusätzliche Kostenstellen/Niederlassungen: erst Ja/Nein, bei Ja Pflichtfeld.
+  'it.additional_cost_centers':  { requiredIf: f => f.it.additional_cost_centers_needed === 'Ja' },
 }
 
 // Erstellung: nur die Basisfelder; der „Nächster Bearbeiter" geht automatisch
@@ -217,6 +226,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
       },
       other_systems: '',
       mailboxes: { info_mailbox: true, additional: '', notes: '' },
+      additional_cost_centers_needed: '',
       additional_cost_centers: '',
     },
 
@@ -353,6 +363,12 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
           if (desc.it.mailboxes)    Object.assign(form.it.mailboxes,    desc.it.mailboxes)
           if (desc.it.other_systems != null)          form.it.other_systems = desc.it.other_systems
           if (desc.it.additional_cost_centers != null) form.it.additional_cost_centers = desc.it.additional_cost_centers
+          if (desc.it.additional_cost_centers_needed != null) {
+            form.it.additional_cost_centers_needed = desc.it.additional_cost_centers_needed
+          } else if (desc.it.additional_cost_centers) {
+            // Alt-Ticket ohne Flag, aber mit Text → als „Ja" interpretieren.
+            form.it.additional_cost_centers_needed = 'Ja'
+          }
         }
         if (desc.fuhrpark) Object.assign(form.fuhrpark, desc.fuhrpark)
 

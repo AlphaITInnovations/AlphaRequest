@@ -32,7 +32,7 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
   </TicketSection>
 
   <!-- Personalabteilung (HR) -->
-  <TicketSection v-if="description?.personal" title="Stammdaten" variant="hr" badge="Personalabteilung">
+  <TicketSection v-if="description?.personal" title="Personaldaten" variant="hr" badge="Personalabteilung">
     <div class="space-y-3">
       <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400">Gehalt & Konditionen</h3>
       <TicketFieldGrid>
@@ -98,7 +98,8 @@ const swText = (k: string) => props.description?.it?.software?.[k] ?? ''
         <TicketField label="Infopostfach der Niederlassung">{{ description?.it?.mailboxes?.info_mailbox ? 'Ja' : 'Nein' }}</TicketField>
         <TicketField label="Zusätzliche Postfächer?" :value="mb('additional')" />
         <TicketField v-if="mb('additional') === 'Ja'" label="Postfächer" :value="mb('notes')" wide pre />
-        <TicketField label="Zusätzliche Kostenstellen / Niederlassungen" :value="it('additional_cost_centers')" wide pre />
+        <TicketField label="Zusätzliche Kostenstellen / Niederlassungen?" :value="it('additional_cost_centers_needed')" />
+        <TicketField v-if="it('additional_cost_centers_needed') === 'Ja'" label="Kostenstellen / Niederlassungen" :value="it('additional_cost_centers')" wide pre />
       </TicketFieldGrid>
     </div>
 

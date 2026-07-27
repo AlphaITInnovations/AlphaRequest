@@ -170,7 +170,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
           </TicketSection>
 
           <!-- Personalabteilung (HR) -->
-          <TicketSection title="Stammdaten" variant="hr" badge="Personalabteilung">
+          <TicketSection title="Personaldaten" variant="hr" badge="Personalabteilung">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="label">Titel *</label>
@@ -494,14 +494,25 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                   </div>
 
                   <!-- Zusätzliche Kostenstellen / Niederlassungen -->
-                  <div>
-                    <label class="label">Zusätzliche Kostenstellen / Niederlassungen</label>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
-                      Nur ausfüllen, wenn der Mitarbeitende Zugriff auf mehr als seine eigene Niederlassung benötigt (z.&nbsp;B. für Drucker oder Rechte aufs Niederlassungslaufwerk).
-                    </p>
-                    <textarea v-model="form.it.additional_cost_centers"
-                              :class="fieldClass('it.additional_cost_centers')"
-                              rows="3" class="resize-none" />
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="label">Zusätzliche Kostenstellen / Niederlassungen?</label>
+                      <select v-model="form.it.additional_cost_centers_needed"
+                              :class="selectClass('it.additional_cost_centers_needed')">
+                        <option value="">–</option>
+                        <option>Ja</option>
+                        <option>Nein</option>
+                      </select>
+                    </div>
+                    <div v-if="form.it.additional_cost_centers_needed === 'Ja'" class="md:col-span-2">
+                      <label class="label">Kostenstellen / Niederlassungen eintragen *</label>
+                      <p class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
+                        Für Zugriff auf mehr als die eigene Niederlassung (z.&nbsp;B. Drucker oder Rechte aufs Niederlassungslaufwerk).
+                      </p>
+                      <textarea v-model="form.it.additional_cost_centers"
+                                :class="fieldClass('it.additional_cost_centers')"
+                                rows="3" class="resize-none" />
+                    </div>
                   </div>
                 </div>
               </div>

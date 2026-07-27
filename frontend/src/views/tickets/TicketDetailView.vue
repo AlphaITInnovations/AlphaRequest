@@ -37,6 +37,10 @@ async function onRemoveWatcher(id: string) {
   try { await removeWatcher(id) } finally { watcherBusy.value = false }
 }
 
+// Verhindert das kurze Aufblitzen eines leeren Formulars: Inhalt wird erst
+// gezeigt, wenn Laden UND (bei Formular-Ansicht) formCtx.init() fertig sind.
+const booting = ref(true)
+
 // Notfall-Bearbeitung: macht die Felder in der aktuellen Ansicht editierbar,
 // OHNE die Phase zu ändern. Speichern = PATCH, danach zurück zum Dashboard.
 const emergencyEdit = ref(false)
@@ -167,19 +171,24 @@ function onPageHide() {
 }
 
 onMounted(async () => {
-  if (!entry) { router.replace('/dashboard'); return }
+  try {
+    if (!entry) { router.replace('/dashboard'); return }
 
-  await load()
+    await load()
 
-  if (!ticket.value) { router.replace('/dashboard'); return }
+    if (!ticket.value) { router.replace('/dashboard'); return }
 
-  // Nur die Formularansicht sperren; erst Lock holen, dann Formular initialisieren.
-  if (currentView.value === 'form') {
-    window.addEventListener('pagehide', onPageHide)
-    const ok = await acquireLock()
-    if (ok && formCtx) {
-      await formCtx.init()
+    // Nur die Formularansicht sperren; erst Lock holen, dann Formular initialisieren.
+    if (currentView.value === 'form') {
+      window.addEventListener('pagehide', onPageHide)
+      const ok = await acquireLock()
+      if (ok && formCtx) {
+        await formCtx.init()
+      }
     }
+  } finally {
+    // Erst jetzt (Daten + Formular initialisiert) den Inhalt anzeigen.
+    booting.value = false
   }
 })
 
@@ -233,7 +242,7 @@ async function goToEdit() {
   <AppLayout :title="entry?.label ?? 'Ticket'">
 
     <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-24">
+    <div v-if="loading || booting" class="flex items-center justify-center py-24">
       <div class="w-8 h-8 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin"/>
     </div>
 
