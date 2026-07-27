@@ -13,7 +13,7 @@ from backend.services.ticket_permissions import can_user_create_ticket
 from backend.schemas.ticket import (
     TicketOut, TicketCreateRequest, TicketUpdateRequest, UserOut, BasisTicketCreateRequest,
     ResponsibilityOverrideRequest, LockState,
-    RawTicketUpdateRequest, BulkTicketActionRequest, BulkActionResult,
+    RawTicketUpdateRequest, ReopenTicketRequest, BulkTicketActionRequest, BulkActionResult,
 )
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, ErrorCode, api_error,
@@ -164,6 +164,17 @@ def _require_manage(user: dict) -> dict:
 
 def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return _require_admin(user)
+
+
+def _assert_not_terminal(ticket) -> None:
+    """Verhindert Mutationen an abgeschlossenen/abgelehnten Aufträgen. Terminale
+    Tickets werden ausschließlich über die (Admin-)Wiedereröffnung reaktiviert –
+    ohne diesen Guard ließe sich ein abgelehntes Ticket via submit/Fachabteilungs-
+    PATCH still weiterschalten (der Workflow-Zeiger bleibt beim Ablehnen aktiv)."""
+    status = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
+    if status in (RequestStatus.archived.value, RequestStatus.rejected.value):
+        raise api_error(409, ErrorCode.INVALID_STATUS,
+                        "Auftrag ist abgeschlossen oder abgelehnt. Bitte zuerst wiedereröffnen.")
 
 
 # ── Ticket helpers ─────────────────────────────────────────────────────────────
@@ -702,6 +713,7 @@ async def submit_ticket(
 ):
     ticket = _get_ticket_or_404(ticket_id)
     _assert_ticket_access(ticket, user)
+    _assert_not_terminal(ticket)
     _assert_not_locked_by_other(ticket_id, user)
 
     current_phase = get_current_phase(ticket_id)
@@ -931,7 +943,13 @@ def override_responsibility(
     werden die Fachabteilungen separat verwaltet.
     """
     _require_admin(user)
-    _get_ticket_or_404(ticket_id)   # 404, falls es das Ticket nicht gibt
+    ticket = _get_ticket_or_404(ticket_id)   # 404, falls es das Ticket nicht gibt
+
+    status = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
+    if status in (RequestStatus.archived.value, RequestStatus.rejected.value):
+        raise api_error(409, ErrorCode.INVALID_STATUS,
+                        "Zuständigkeit kann bei archivierten oder abgelehnten Aufträgen nicht "
+                        "geändert werden. Bitte den Auftrag zuerst wiedereröffnen.")
 
     from backend.services.workflow_state import (
         get_workflow_state, set_phase_responsibility, PhaseType as WfPhaseType,
@@ -982,6 +1000,94 @@ def override_responsibility(
             "new": new_resp["name"],
         },
     )
+    return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
+
+
+@router.post("/admin/tickets/{ticket_id}/reopen", response_model=DataResponse[TicketOut])
+def reopen_ticket(
+    ticket_id: int,
+    data: ReopenTicketRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Admin-Notfall: einen ARCHIVIERTEN Auftrag in eine gewählte Phase wiedereröffnen.
+    Je nach Zielphase sind Zusatzangaben nötig:
+      - Durchführung (Fachabteilungen): `departments` = {group_id: 'open'|'done'} –
+        welche Fachabteilung wieder offen ist und welche 'erledigt' bleibt.
+      - Bearbeitungsphase: `assignee_id`/`assignee_name` – wer künftig zuständig ist.
+    Baut den Workflow konsistent um (Phasen davor 'done', Ziel aktiv, danach 'pending')
+    und setzt den Ticket-Status zurück. Nur für archivierte Aufträge.
+    """
+    _require_admin(user)
+    ticket = _get_ticket_or_404(ticket_id)
+
+    status = ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)
+    if status != RequestStatus.archived.value:
+        raise api_error(409, ErrorCode.INVALID_STATUS,
+                        "Nur archivierte Aufträge können wiedereröffnet werden.")
+
+    from backend.services.workflow_state import (
+        get_workflow_state, set_workflow_state, build_reopened_workflow,
+    )
+    wf = get_workflow_state(ticket_id)
+
+    # Zuständigkeit (nur für eine Bearbeitungs-Zielphase relevant) auflösen – analog
+    # zu override_responsibility (Gruppe/Fachabteilung vs. Person).
+    responsibility = None
+    if data.assignee_id:
+        from backend.database.groups import get_groups
+        group_map = {g["id"]: g["name"] for g in get_groups()}
+        if data.assignee_id in group_map:
+            responsibility = {"kind": "group", "id": data.assignee_id,
+                              "name": group_map[data.assignee_id]}
+        else:
+            if not validate_assignee(request.app.state.user_cache, data.assignee_id):
+                raise api_error(400, ErrorCode.INVALID_ASSIGNEE,
+                                f"Unbekannte Person/Gruppe '{data.assignee_id}'")
+            responsibility = {"kind": "user", "id": data.assignee_id,
+                              "name": data.assignee_name or data.assignee_id}
+
+    try:
+        new_wf, new_status = build_reopened_workflow(
+            wf, data.phase_index, departments=data.departments, responsibility=responsibility,
+        )
+    except ValueError as e:
+        raise api_error(400, ErrorCode.INVALID_STATUS, str(e))
+
+    set_workflow_state(ticket_id, new_wf)
+    database.update_ticket(ticket_id, status=new_status)
+
+    target_phase = new_wf["phases"][data.phase_index]
+    add_history_event(
+        ticket_id,
+        actor_id=user["id"],
+        actor_name=user["displayName"],
+        action="ticket_reopened",
+        details={
+            "phase_key": target_phase.get("key"),
+            "phase_label": target_phase.get("label"),
+            "phase_index": data.phase_index,
+            "new_status": new_status,
+            "departments": data.departments or None,
+            "responsibility": responsibility["name"] if responsibility else None,
+        },
+    )
+
+    # Neu Zuständige benachrichtigen (best-effort – ein Mailfehler darf die Antwort
+    # nicht kippen, Workflow ist bereits persistiert). Bei der Durchführung NUR die
+    # (wieder) offenen Fachabteilungen mailen – die bewusst auf 'erledigt' belassenen
+    # sollen keine neue Anfrage bekommen.
+    notify_phase = target_phase
+    if target_phase.get("type") == "department_review":
+        open_depts = {gid: d for gid, d in (target_phase.get("departments") or {}).items()
+                      if d.get("status") == "open"}
+        notify_phase = {**target_phase, "departments": open_depts}
+    try:
+        notify_phase_entry(request, database.get_ticket(ticket_id), notify_phase)
+    except Exception:
+        logger.exception("Benachrichtigung nach Wiedereröffnung fehlgeschlagen (Ticket %s)", ticket_id)
+
     return DataResponse(data=TicketOut.from_ticket(database.get_ticket(ticket_id), user=user))
 
 
@@ -1190,6 +1296,8 @@ async def set_department_status(
         user_can_complete_department, set_department_status,
     )
     from backend.database.groups import get_group_name_from_id
+
+    _assert_not_terminal(_get_ticket_or_404(ticket_id))
 
     body = await request.json()
     status = body.get("status")

@@ -26,6 +26,12 @@ async function load() {
 onMounted(load)
 
 const isArchived = computed(() => data.value?.status === 'archived')
+const isTerminal = computed(() => ['archived', 'rejected'].includes(data.value?.status))
+const phases     = computed<any[]>(() => data.value?.phases ?? [])
+// Wiedereröffnen nur in Bearbeitungs-/Durchführungsphasen – die Erstellungsphase
+// ist kein gültiges Ziel (ließe sich nicht weiterschalten).
+const reopenablePhases = computed<any[]>(() =>
+  phases.value.map((p, i) => ({ ...p, _idx: i })).filter((p) => p.type !== 'creation'))
 
 function errMsg(e: any, fallback: string) {
   return e?.response?.data?.error?.message ?? e?.response?.data?.detail ?? fallback
@@ -47,6 +53,68 @@ async function saveResponsibility() {
     alert(errMsg(e, 'Zuständigkeit konnte nicht gesetzt werden (nur in einer Bearbeitungsphase möglich).'))
   } finally {
     respSaving.value = false
+  }
+}
+
+// ── Wiedereröffnen (nur archiviert) ──────────────────────────────────────────
+const showReopen   = ref(false)
+const reopenIdx    = ref<number | null>(null)
+const reopenResp   = ref<{ id: string; name: string } | null>(null)
+const reopenDept   = ref<Record<string, boolean>>({})   // group_id -> wieder öffnen?
+const reopenSaving = ref(false)
+const reopenError  = ref('')
+
+const reopenPhase = computed<any | null>(() =>
+  reopenIdx.value !== null ? (phases.value[reopenIdx.value] ?? null) : null)
+
+function onReopenPhaseChange() {
+  reopenResp.value = null
+  reopenDept.value = {}
+  reopenError.value = ''
+  const p = reopenPhase.value
+  if (p?.type === 'department_review' && p.departments) {
+    for (const gid of Object.keys(p.departments)) reopenDept.value[gid] = false
+  }
+}
+
+function toggleReopen() {
+  showReopen.value = !showReopen.value
+  if (showReopen.value) { reopenIdx.value = null; onReopenPhaseChange() }
+}
+
+async function saveReopen() {
+  const p = reopenPhase.value
+  if (!p || reopenIdx.value === null) { reopenError.value = 'Bitte eine Zielphase wählen.'; return }
+  const payload: { phase_index: number; assignee_id?: string; assignee_name?: string; departments?: Record<string, string> } =
+    { phase_index: reopenIdx.value }
+
+  if (p.type === 'department_review') {
+    const depts: Record<string, string> = {}
+    let anyOpen = false
+    for (const gid of Object.keys(p.departments ?? {})) {
+      const open = !!reopenDept.value[gid]
+      depts[gid] = open ? 'open' : 'done'
+      if (open) anyOpen = true
+    }
+    if (!anyOpen) { reopenError.value = 'Mindestens eine Fachabteilung muss wieder geöffnet werden.'; return }
+    payload.departments = depts
+  } else if (p.type === 'assignment') {
+    if (!reopenResp.value) { reopenError.value = 'Bitte eine zuständige Person/Fachabteilung wählen.'; return }
+    payload.assignee_id = reopenResp.value.id
+    payload.assignee_name = reopenResp.value.name
+  }
+
+  reopenSaving.value = true
+  reopenError.value = ''
+  try {
+    await ticketsApi.reopen(id, payload)
+    showReopen.value = false
+    reopenIdx.value = null
+    await load()
+  } catch (e: any) {
+    reopenError.value = errMsg(e, 'Wiedereröffnen fehlgeschlagen.')
+  } finally {
+    reopenSaving.value = false
   }
 }
 
@@ -184,10 +252,15 @@ async function saveRaw() {
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <button @click="showResp = !showResp"
+          <button v-if="!isTerminal" @click="showResp = !showResp"
                   class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
                          bg-[#3EAAB8] hover:bg-[#2B7D89] text-white transition">
             👤 Zuständigkeit ändern
+          </button>
+          <button v-if="isArchived" @click="toggleReopen"
+                  class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                         bg-emerald-600 hover:bg-emerald-700 text-white transition">
+            🔓 Wiedereröffnen
           </button>
           <button v-if="data.lock?.locked" @click="forceUnlock" :disabled="unlocking"
                   class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
@@ -231,6 +304,63 @@ async function saveRaw() {
                     class="px-4 py-2 text-sm rounded-xl bg-[#3EAAB8] hover:bg-[#2B7D89] text-white font-medium
                            disabled:opacity-50 disabled:cursor-not-allowed transition">
               {{ respSaving ? 'Wird gesetzt…' : 'Zuständigkeit setzen' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Wiedereröffnen (ausklappbar, nur archiviert) -->
+        <div v-if="showReopen"
+             class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#212B3A] p-4 space-y-3">
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            Archivierten Auftrag in eine gewählte Phase wiedereröffnen. Je nach Phase sind
+            Zusatzangaben nötig (Fachabteilungen bzw. Zuständigkeit).
+          </p>
+
+          <label class="block">
+            <span class="text-xs text-gray-400 uppercase tracking-wider">Zielphase</span>
+            <select v-model.number="reopenIdx" @change="onReopenPhaseChange"
+                    class="mt-1 w-full rounded-lg border border-gray-200 dark:border-white/10
+                           bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100 px-3 py-2 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30">
+              <option :value="null" disabled>Phase wählen…</option>
+              <option v-for="p in reopenablePhases" :key="p._idx" :value="p._idx">{{ p._idx + 1 }}. {{ p.label }}</option>
+            </select>
+          </label>
+
+          <!-- Durchführung: Fachabteilungen wählen -->
+          <div v-if="reopenPhase && reopenPhase.type === 'department_review'" class="space-y-2">
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              Welche Fachabteilungen sollen <strong>wieder geöffnet</strong> werden?
+              Nicht gewählte bleiben „erledigt".
+            </p>
+            <label v-for="(d, gid) in (reopenPhase.departments || {})" :key="gid"
+                   class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+              <input type="checkbox" v-model="reopenDept[gid]"
+                     class="rounded border-gray-300 text-[#3EAAB8] focus:ring-[#3EAAB8]/30" />
+              <span>{{ d.name }}</span>
+              <span v-if="d.status === 'done'" class="text-[10px] text-gray-400">(war: erledigt)</span>
+            </label>
+          </div>
+
+          <!-- Bearbeitungsphase: Zuständigkeit wählen -->
+          <div v-else-if="reopenPhase && reopenPhase.type === 'assignment'" class="space-y-2">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Wer ist in dieser Phase zuständig?</p>
+            <UserSelect v-model="reopenResp" :show-groups="true" :show-users="true"
+                        label="" placeholder="Person / Fachabteilung…" />
+          </div>
+
+          <p v-if="reopenError" class="text-sm text-red-600 dark:text-red-400">{{ reopenError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button @click="showReopen = false"
+                    class="px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10
+                           text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+              Abbrechen
+            </button>
+            <button @click="saveReopen" :disabled="reopenSaving || reopenIdx === null"
+                    class="px-4 py-2 text-sm rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium
+                           disabled:opacity-50 disabled:cursor-not-allowed transition">
+              {{ reopenSaving ? 'Wird wiedereröffnet…' : 'Wiedereröffnen' }}
             </button>
           </div>
         </div>

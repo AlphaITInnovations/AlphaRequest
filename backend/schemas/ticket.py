@@ -118,6 +118,18 @@ class ResponsibilityOverrideRequest(BaseModel):
     phase_index: Optional[int] = None
 
 
+class ReopenTicketRequest(BaseModel):
+    """Admin-Notfall: archivierten Auftrag in eine gewählte Zielphase wiedereröffnen."""
+    phase_index: int
+    # Nur für eine Bearbeitungs-(assignment)-Zielphase: neue Zuständigkeit (Person/Gruppe).
+    assignee_id: Optional[str] = None
+    assignee_name: Optional[str] = None
+    # Nur für die Durchführungs-(department_review)-Zielphase: gewünschter Status je
+    # Fachabteilung ('open' = wieder offen | 'done' = bleibt erledigt). Nicht genannte
+    # Fachabteilungen bleiben unverändert.
+    departments: Optional[dict[str, str]] = None
+
+
 class RawTicketUpdateRequest(BaseModel):
     """Admin-Notfall: rohe Bearbeitung einzelner Ticket-Felder. Alle Felder
     optional – nur gesetzte werden geändert. `description` ist ein roher

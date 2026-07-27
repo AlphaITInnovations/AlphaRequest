@@ -1,3 +1,4 @@
+import copy
 import json
 from typing import Optional
 
@@ -371,6 +372,72 @@ def reject_workflow(ticket_id: int, message: str, rejected_by: str, rejected_at:
         record_ticket_terminal("rejected")
     except Exception:
         pass
+
+
+def build_reopened_workflow(workflow: dict, phase_index: int,
+                            departments: Optional[dict] = None,
+                            responsibility: Optional[dict] = None) -> tuple[dict, str]:
+    """Baut den Workflow für eine Wiedereröffnung in eine Zielphase um (rein, ohne DB).
+
+    Rückgabe: (neuer_workflow, neuer_ticket_status). Semantik:
+      - Phasen VOR der Zielphase → 'done', Zielphase → 'in_progress', danach → 'pending';
+        current_phase_index = phase_index; ein evtl. gesetztes 'rejected'-Flag wird entfernt.
+      - Zielphase department_review: `departments` = {group_id: 'open'|'done'} wird auf die
+        Fachabteilungen der Phase angewandt (nicht genannte bleiben unverändert). Mindestens
+        eine Fachabteilung muss danach 'open' sein. Ticket-Status → in_request.
+      - Zielphase assignment: `responsibility` (falls angegeben) wird gesetzt, sonst muss die
+        Phase bereits eine Zuständigkeit besitzen. Ticket-Status → in_progress.
+      - sonstige (creation): Ticket-Status → in_progress.
+    Wirft ValueError bei ungültigen Eingaben (der Aufrufer übersetzt das in eine API-Fehlermeldung).
+    """
+    phases = workflow.get("phases")
+    if not phases:
+        raise ValueError("Ticket hat keinen Workflow im neuen Format")
+    if not (0 <= phase_index < len(phases)):
+        raise ValueError(f"Phase-Index {phase_index} ungültig (erlaubt: 0..{len(phases) - 1})")
+
+    wf = copy.deepcopy(workflow)
+    phases = wf["phases"]
+    for i, phase in enumerate(phases):
+        if i < phase_index:
+            phase["status"] = PHASE_STATUS_DONE
+        elif i == phase_index:
+            phase["status"] = PHASE_STATUS_IN_PROGRESS
+        else:
+            phase["status"] = PHASE_STATUS_PENDING
+    wf["current_phase_index"] = phase_index
+    wf.pop("rejected", None)
+
+    target = phases[phase_index]
+    ttype = target.get("type")
+
+    if ttype == PhaseType.department_review.value:
+        dept_map = target.get("departments") or {}
+        if not dept_map:
+            raise ValueError("Zielphase 'Durchführung' hat keine Fachabteilungen")
+        for gid, status in (departments or {}).items():
+            if gid not in dept_map:
+                raise ValueError(f"Fachabteilung '{gid}' ist nicht Teil dieses Workflows")
+            if status not in (DEPARTMENT_STATUS_OPEN, DEPARTMENT_STATUS_DONE):
+                raise ValueError("Fachabteilungs-Status muss 'open' oder 'done' sein")
+            dept_map[gid]["status"] = status
+        if not any(d.get("status") == DEPARTMENT_STATUS_OPEN for d in dept_map.values()):
+            raise ValueError("Mindestens eine Fachabteilung muss auf 'offen' gesetzt werden")
+        new_status = RequestStatus.in_request.value
+    elif ttype == PhaseType.assignment.value:
+        if responsibility:
+            target["responsibility"] = responsibility
+        elif not target.get("responsibility"):
+            raise ValueError("Für eine Bearbeitungsphase muss eine Zuständigkeit angegeben werden")
+        new_status = RequestStatus.in_progress.value
+    else:
+        # Nur Bearbeitungs-/Durchführungsphasen sind sinnvolle Ziele. In die
+        # Erstellungsphase kann NICHT wiedereröffnet werden – sie lässt sich über
+        # keinen Endpoint weiterschalten, das Ticket bliebe unsichtbar hängen.
+        raise ValueError("In diese Phase kann nicht wiedereröffnet werden "
+                         "(nur Bearbeitungs- oder Durchführungsphasen sind möglich).")
+
+    return wf, new_status
 
 
 def get_current_phase(ticket_id: int) -> Optional[dict]:

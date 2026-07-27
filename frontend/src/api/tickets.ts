@@ -22,6 +22,9 @@ export const ticketsApi = {
   // Admin-Notfall: Zuständigkeit einer Phase (Standard: aktuelle) setzen.
   setResponsibility: (id: number, assignee_id: string, assignee_name?: string, phase_index?: number) =>
     client.put<DataResponse<Ticket>>(`/admin/tickets/${id}/responsibility`, { assignee_id, assignee_name, phase_index }),
+  // Admin-Notfall: archivierten Auftrag in eine Zielphase wiedereröffnen.
+  reopen: (id: number, payload: { phase_index: number; assignee_id?: string; assignee_name?: string; departments?: Record<string, string> }) =>
+    client.post<DataResponse<Ticket>>(`/admin/tickets/${id}/reopen`, payload),
 
   // ── Admin-Detail / Notfall-Werkzeuge ──
   adminDetail: (id: number) => client.get<DataResponse<any>>(`/admin/tickets/${id}/detail`),
