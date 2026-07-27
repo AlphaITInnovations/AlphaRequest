@@ -88,6 +88,15 @@ def test_reopen_into_assignment_with_responsibility():
     assert new_wf["phases"][3]["responsibility"] == resp
 
 
+def test_reopen_into_assignment_respects_enter_status():
+    # Phase mit erzwungenem Eintritts-Status (z.B. Einstellung 'vertragsruecklauf')
+    # behält diesen auch beim Wiedereröffnen (nicht in_progress).
+    wf = _archived_onboarding_wf()
+    wf["phases"][3]["enter_status"] = "waiting_contract"
+    _, new_status = build_reopened_workflow(wf, 3, responsibility={"kind": "group", "id": "g", "name": "SGL"})
+    assert new_status == "waiting_contract"
+
+
 def test_reopen_into_assignment_keeps_existing_responsibility_if_none_given():
     wf = _archived_onboarding_wf()
     new_wf, _ = build_reopened_workflow(wf, 1)   # Freigabe hat bereits eine Gruppe

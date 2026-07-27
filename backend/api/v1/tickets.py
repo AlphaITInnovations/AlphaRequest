@@ -722,7 +722,19 @@ def _spawn_onboarding_process(p1_ticket, request, user: dict) -> Optional[int]:
         p1_desc = {}
 
     if p1_desc.get("_spawned_process_id"):
-        return p1_desc["_spawned_process_id"]   # schon erzeugt
+        return p1_desc["_spawned_process_id"]   # schon erzeugt (schneller Pfad)
+
+    # Autoritative Idempotenz (unabhängig vom client-überschreibbaren desc-Marker):
+    # existiert bereits ein Onboarding-Ticket, das auf dieses P1 zurückverweist?
+    for cand in database.list_all_tickets():
+        ctt = cand.ticket_type.value if hasattr(cand.ticket_type, "value") else cand.ticket_type
+        if ctt != TicketType.zugang_beantragen.value:
+            continue
+        try:
+            if json.loads(cand.description or "{}").get("_origin_process") == p1_ticket.id:
+                return cand.id
+        except Exception:
+            continue
 
     creator = {"id": p1_ticket.owner_id, "name": p1_ticket.owner_name}
     p2_desc = build_p2_description(p1_desc, p1_ticket.id)

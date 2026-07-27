@@ -438,7 +438,9 @@ def build_reopened_workflow(workflow: dict, phase_index: int,
             target["responsibility"] = responsibility
         elif not target.get("responsibility"):
             raise ValueError("Für eine Bearbeitungsphase muss eine Zuständigkeit angegeben werden")
-        new_status = RequestStatus.in_progress.value
+        # Phasen mit erzwungenem Eintritts-Status behalten diesen auch beim Reopen
+        # (z.B. 'vertragsruecklauf' → waiting_contract statt in_progress).
+        new_status = target.get("enter_status") or RequestStatus.in_progress.value
     else:
         # Nur Bearbeitungs-/Durchführungsphasen sind sinnvolle Ziele. In die
         # Erstellungsphase kann NICHT wiedereröffnet werden – sie lässt sich über

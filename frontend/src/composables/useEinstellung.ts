@@ -66,6 +66,9 @@ export function useEinstellung(phase: Phase, ticketId?: number) {
   const submitting  = ref(false)
   const validationTriggered = ref(false)
   const errors      = ref<string[]>([])
+  // Interne Meta-Felder der geladenen Beschreibung (mit '_' beginnend, z.B.
+  // _spawned_process_id / _origin_process) – müssen beim PATCH erhalten bleiben.
+  const meta        = ref<Record<string, any>>({})
 
   // Im Create immer 'erstellung'; im Edit aus der aktuellen Workflow-Phase.
   const stage = ref<EinstellungStage>('erstellung')
@@ -137,6 +140,7 @@ export function useEinstellung(phase: Phase, ticketId?: number) {
         if (desc.base) Object.assign(form.base, desc.base)
         if (desc.personal?.title != null) form.title = desc.personal.title
         if (desc.confidential) Object.assign(form.confidential, desc.confidential)
+        for (const k of Object.keys(desc)) if (k.startsWith('_')) meta.value[k] = desc[k]
 
         form.priority = t.priority as TicketPriority
         form.comment  = t.comment ?? ''
@@ -152,6 +156,7 @@ export function useEinstellung(phase: Phase, ticketId?: number) {
       base: { ...form.base },
       personal: { title: form.title },
       confidential: { ...form.confidential },
+      ...meta.value,   // interne Meta-Felder (_spawned_process_id …) erhalten
     }
   }
   function buildDescription(): string {

@@ -180,6 +180,9 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
   const submitting      = ref(false)
   const validationTriggered = ref(false)
   const errors          = ref<string[]>([])
+  // Interne Meta-Felder der geladenen Beschreibung (mit '_', z.B. _origin_process) –
+  // beim PATCH erhalten. _next_assignee wird separat behandelt (Entwurf je Stufe).
+  const meta            = ref<Record<string, any>>({})
 
   // Aktuelle Stufe: im Create immer 'erstellung'; im Edit aus der Workflow-Phase
   // ('backoffice' oder 'bearbeitung') – wird in init() gesetzt.
@@ -341,6 +344,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
         if (desc.base) Object.assign(form.base, desc.base)
         if (desc.personal) Object.assign(form.personal, desc.personal)
         if (desc.confidential) Object.assign(form.confidential, desc.confidential)
+        for (const k of Object.keys(desc)) if (k.startsWith('_') && k !== '_next_assignee') meta.value[k] = desc[k]
 
         // Leere Fachabteilung → "Keine" (wird als '' gespeichert)
         if (!form.personal.department) {
@@ -397,6 +401,7 @@ export function useZugangBeantragen(phase: Phase, ticketId?: number) {
     }
 
     const desc: Record<string, any> = {
+      ...meta.value,   // interne Meta-Felder (_origin_process …) erhalten
       base: { ...form.base },
       personal,
       confidential: { ...form.confidential },
