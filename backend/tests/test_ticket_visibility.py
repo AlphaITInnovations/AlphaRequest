@@ -138,6 +138,16 @@ def test_oversight_and_owner_see_everything():
     assert tv.filter_description(_ticket(owner_id="owner-1"), _user("owner-1"), DESC) == DESC
 
 
+def test_force_scope_ignores_role():
+    # Involviert-Kontext: Rolle/Voll-Sicht wird ignoriert, es zählt nur die Abteilung.
+    admin_out = tv.filter_description(_ticket(), _user("x", ["admin"]), DESC, force_scope=True)
+    assert set(admin_out.keys()) == {"base"}   # Admin ohne Fachabteilung → nur Basis
+    owner_out = tv.filter_description(_ticket(owner_id="owner-1"), _user("owner-1"), DESC, force_scope=True)
+    assert set(owner_out.keys()) == {"base"}   # Ersteller ohne Fachabteilung → nur Basis
+    it_out = tv.filter_description(_ticket(), _user("it-user"), DESC, force_scope=True)
+    assert "it" in it_out and "personal" not in it_out and "fuhrpark" not in it_out
+
+
 def test_unknown_type_is_passthrough():
     t = _ticket()
     t.ticket_type = TicketType.hardware   # kein VISIBILITY-Eintrag

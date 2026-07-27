@@ -177,14 +177,20 @@ def _department_paths_by_gid(spec: dict, gid: str) -> set:
 
 
 def filter_description(ticket, user: Optional[dict], desc: dict,
-                       only_department: Optional[str] = None) -> dict:
+                       only_department: Optional[str] = None,
+                       force_scope: bool = False) -> dict:
     """Gefilterte Kopie der (bereits geparsten) Beschreibung für diesen Betrachter.
 
     `only_department` (Gruppen-ID): über den Fachabteilungs-Link aufgerufen → strikt
     Basis + GENAU diese eine Fachabteilung, auch wenn der User in mehreren
     Fachabteilungen ist (bzw. Oversight/Ersteller). Die Abteilungs-Pfade werden nur
     hinzugefügt, wenn der User Voll-Sicht hat ODER Mitglied dieser Gruppe ist
-    (kein Enumerieren fremder Abteilungen über den Query-Parameter)."""
+    (kein Enumerieren fremder Abteilungen über den Query-Parameter).
+
+    `force_scope` (Involviert-Tab): IMMER nach Fachabteilungs-Mitgliedschaft scopen
+    (Basis ∪ eigene Abteilungen) – Rolle/Voll-Sicht (Oversight/Ersteller/Beobachter/
+    Bearbeiter) wird bewusst ignoriert. Wer mehr sehen darf, muss dafür in die
+    „Alle Aufträge"-Ansicht wechseln."""
     if not isinstance(desc, dict):
         return desc
     spec = _spec_for(ticket)
@@ -196,6 +202,8 @@ def filter_description(ticket, user: Optional[dict], desc: dict,
         if is_full_view(ticket, user) or only_department in gids:
             allowed |= _department_paths_by_gid(spec, only_department)
         return _prune(desc, allowed)
+    if force_scope and user is not None:
+        return _prune(desc, _allowed_paths(ticket, user, spec))
     if user is None or is_full_view(ticket, user):
         return desc
     return _prune(desc, _allowed_paths(ticket, user, spec))
