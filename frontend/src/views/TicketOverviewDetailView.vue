@@ -8,13 +8,17 @@ import TicketDetailBody from '@/components/tickets/TicketDetailBody.vue'
 const route  = useRoute()
 const router = useRouter()
 const id     = Number(route.params.id)
+// Aufruf über den Involviert-Tab → Verlauf ausblenden (nur erlaubte Abschnitte).
+const involved = route.query.involved === '1' || route.query.involved === 'true'
 
 const loading = ref(true)
 const data    = ref<any>(null)
 
 async function load() {
   try {
-    const { data: res } = await client.get(`/overview/tickets/${id}`)
+    const { data: res } = await client.get(`/overview/tickets/${id}`, {
+      params: involved ? { involved: 1 } : {},
+    })
     data.value = res.data
   } catch {
     // Kein Zugriff / nicht gefunden → zurück zum Dashboard.

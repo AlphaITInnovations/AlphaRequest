@@ -216,6 +216,8 @@ const currentCount = computed(() => {
 function openTicket(o: DashboardTicket) { router.push(`/tickets/view/${o.type_key}/${o.id}`) }
 // Beobachter öffnen die read-only Gesamtansicht
 function openWatchedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
+// Involviert-Tab: Overview OHNE Verlauf (nur die erlaubten Abschnitte).
+function openInvolved(o: { id: number }) { router.push(`/tickets/overview/${o.id}?involved=1`) }
 // Durchführung (department_id gesetzt) → ?department=<id> für die Aktionsleiste,
 // Bearbeitung → Formular ohne department.
 function openDeptItem(t: DeptBoardTicket) {
@@ -496,7 +498,7 @@ onMounted(async () => {
 
               <ul v-else class="divide-y divide-gray-100 dark:divide-white/[0.06] transition-opacity"
                   :class="involvedLoading ? 'opacity-50' : ''">
-                <li v-for="o in involved" :key="o.id" @click="openWatchedTicket(o)" class="row group">
+                <li v-for="o in involved" :key="o.id" @click="openInvolved(o)" class="row group">
                   <div class="flex items-center gap-3.5 min-w-0">
                     <div class="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 self-start" :class="dotClass(o.status)" />
                     <div class="min-w-0">

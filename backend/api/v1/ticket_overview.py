@@ -159,12 +159,15 @@ def list_overview_tickets(
     )
 
 
-def build_overview_detail(ticket, user: Optional[dict] = None) -> TicketOverviewDetail:
+def build_overview_detail(ticket, user: Optional[dict] = None,
+                          hide_history: bool = False) -> TicketOverviewDetail:
     """Baut das (read-only) Detail-Objekt eines Tickets. Wird sowohl vom normalen
     Overview-Endpunkt als auch vom Admin-Detail (tickets.py) genutzt.
 
     `user` steuert die feld-genaue Sichtbarkeit der Beschreibung/History; ohne
-    `user` (interner Aufruf) wird nicht gefiltert."""
+    `user` (interner Aufruf) wird nicht gefiltert.
+    `hide_history=True` (Aufruf über den Involviert-Tab): Verlauf wird für ALLE
+    ausgeblendet – der Verlauf ist dann nur über die „Alle Aufträge"-Liste sichtbar."""
     try:
         description = json.loads(ticket.description or "{}")
     except Exception:
@@ -194,8 +197,8 @@ def build_overview_detail(ticket, user: Optional[dict] = None) -> TicketOverview
     from backend.services.workflow_state import primary_responsibility
     resp = primary_responsibility(ticket)
 
-    # Verlauf nur für Voll-Sicht-Betrachter; Eingeschränkte sehen keinen Verlauf.
-    raw_history = get_ticket_history(ticket.id) if history_visible(ticket, user) else []
+    # Verlauf nur für Voll-Sicht-Betrachter UND nicht im Involviert-Kontext.
+    raw_history = get_ticket_history(ticket.id) if (not hide_history and history_visible(ticket, user)) else []
     history = []
     for e in raw_history:
         actor_raw = e.get("actor", {})
@@ -246,11 +249,14 @@ def build_overview_detail(ticket, user: Optional[dict] = None) -> TicketOverview
 @router.get("/overview/tickets/{ticket_id}", response_model=DataResponse[TicketOverviewDetail])
 def get_overview_ticket(
     ticket_id: int,
+    involved: bool = Query(False),
     user: dict = Depends(get_current_user),
 ):
+    """`involved=true` (Aufruf über den Involviert-Tab): Verlauf wird ausgeblendet –
+    nur die für die Rolle erlaubten Abschnitte, kein Verlauf."""
     ticket = database.get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(404, "Ticket nicht gefunden")
 
     _assert_overview_detail_access(user, ticket)
-    return DataResponse(data=build_overview_detail(ticket, user))
+    return DataResponse(data=build_overview_detail(ticket, user, hide_history=involved))
