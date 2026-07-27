@@ -111,7 +111,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
               <label class="label">Arbeitsbeginn (laut Vertrag) *</label>
               <input type="date" v-model="form.base.start_date" :class="fieldClass('base.start_date')" />
             </div>
-            <div class="md:col-span-2">
+            <div>
               <label class="label">Titel *</label>
               <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
             </div>
