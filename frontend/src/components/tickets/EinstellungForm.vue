@@ -64,16 +64,16 @@ const selectClass = (path: string) =>
                 </select>
               </div>
               <div>
-                <label class="label">Titel *</label>
-                <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
-              </div>
-              <div>
                 <label class="label">Vorname *</label>
                 <input v-model="form.base.first_name" :class="fieldClass('base.first_name')" placeholder="Max" />
               </div>
               <div>
                 <label class="label">Nachname *</label>
                 <input v-model="form.base.last_name" :class="fieldClass('base.last_name')" placeholder="Mustermann" />
+              </div>
+              <div>
+                <label class="label">Titel *</label>
+                <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
               </div>
               <div>
                 <label class="label">Firma lt. Arbeitsvertrag *</label>
