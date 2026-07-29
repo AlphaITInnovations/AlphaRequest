@@ -73,7 +73,7 @@ const selectClass = (path: string) =>
               </div>
               <div>
                 <label class="label">Titel *</label>
-                <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
+                <input v-model="form.base.title" :class="fieldClass('base.title')" placeholder="z. B. Niederlassungsleiter" />
               </div>
               <div>
                 <label class="label">Firma lt. Arbeitsvertrag *</label>

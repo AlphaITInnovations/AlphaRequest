@@ -18,16 +18,15 @@ DESC_LEGACY = {
     "fuhrpark": {"car": "Ja"},
 }
 
-# Neues Format: eigener base-Block, personal nur HR-Felder.
+# Neues Format: eigener base-Block (inkl. Titel), personal nur HR-Felder.
 DESC_NEW = {
     "base": {
         "salutation": "Frau", "first_name": "Anna", "last_name": "Muster",
         "contract_company": "Alpha", "location": "Berlin", "cost_center": "CC-1",
-        "start_date": "2026-01-01",
+        "start_date": "2026-01-01", "title": "Leiterin",
     },
     "personal": {
-        "title": "Leiterin", "personal_number": "12345", "private_street": "Weg 1",
-        "department": "IT",
+        "personal_number": "12345", "private_street": "Weg 1", "department": "IT",
     },
     "it": {"appearance_company": "Alpha", "software": {"datev": True}},
     "fuhrpark": {"car": "Ja"},
@@ -44,13 +43,13 @@ def test_legacy_desc_is_migrated_to_base_format():
     assert out["base"]["location"] == "Berlin"
     assert out["base"]["cost_center"] == "CC-9"
     assert out["base"]["start_date"] == "2026-08-01"
+    assert out["base"]["title"] == "Leiter"   # Berufsbezeichnung ist Basisdatum
     # Anrede gab es im Alt-Format nicht → leer.
     assert out["base"]["salutation"] == ""
 
     # … und aus personal entfernt; HR-Felder bleiben.
-    for k in ("first_name", "last_name", "contract_company", "location", "cost_center", "start_date"):
+    for k in ("first_name", "last_name", "contract_company", "location", "cost_center", "start_date", "title"):
         assert k not in out["personal"]
-    assert out["personal"]["title"] == "Leiter"
     assert out["personal"]["personal_number"] == "999"
 
     # private_address → private_street; alter Schlüssel weg.

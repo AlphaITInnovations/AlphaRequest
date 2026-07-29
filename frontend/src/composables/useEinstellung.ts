@@ -26,12 +26,10 @@ export interface EinstellungForm {
     location:         string
     cost_center:      string
     start_date:       string
+    title:            string   // Berufsbezeichnung – Basisdatum (bleibt auch in P2 base)
   }
-  // Personaldaten (nur Personalabteilung / Voll-Sicht sichtbar): Titel +
-  // Gehalt/Konditionen. Liegen im personal-Block, damit die Sichtbarkeit wie bei
-  // den übrigen HR-Feldern gilt (Fachabteilungen sehen sie in P2 NICHT).
+  // Nur Personalabteilung / Voll-Sicht sichtbar (streng vertraulich, nur in P1).
   personal: {
-    title:      string
     salary:     string
     conditions: string
   }
@@ -47,7 +45,7 @@ const RULES_ERSTELLUNG: Record<string, Rule> = {
   'base.location':         { required: true },
   'base.cost_center':      { required: true },
   'base.start_date':       { required: true },
-  'personal.title':        { required: true },
+  'base.title':            { required: true },
   // personal.salary/conditions bewusst optional (Freitext) – kann später verschärft werden.
 }
 
@@ -78,9 +76,9 @@ export function useEinstellung(phase: Phase, ticketId?: number) {
     comment:  '',
     base: {
       salutation: '', first_name: '', last_name: '',
-      contract_company: '', location: '', cost_center: '', start_date: '',
+      contract_company: '', location: '', cost_center: '', start_date: '', title: '',
     },
-    personal: { title: '', salary: '', conditions: '' },
+    personal: { salary: '', conditions: '' },
   })
 
   // ── Validierung (nur bei der Erstellung greifen Pflichtfelder) ──────────────

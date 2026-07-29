@@ -9,10 +9,10 @@ P1_DESC = {
     "base": {
         "salutation": "Frau", "first_name": "Anna", "last_name": "Muster",
         "contract_company": "Alpha", "location": "Berlin",
-        "cost_center": "12345", "start_date": "2026-09-01",
+        "cost_center": "12345", "start_date": "2026-09-01", "title": "Sachbearbeiterin",
     },
-    # Gehalt/Konditionen liegen jetzt im personal-Block (nur Personalabteilung/Voll-Sicht).
-    "personal": {"title": "Sachbearbeiterin", "salary": "50000", "conditions": "13. Gehalt, 30 Tage Urlaub"},
+    # Gehalt/Konditionen: streng vertraulich, nur in P1 (nur Personalabteilung/Voll-Sicht).
+    "personal": {"salary": "50000", "conditions": "13. Gehalt, 30 Tage Urlaub"},
 }
 
 
@@ -21,7 +21,8 @@ def test_transfers_base_and_title_but_not_salary():
     assert p2["base"]["first_name"] == "Anna"
     assert p2["base"]["cost_center"] == "12345"
     assert p2["base"]["start_date"] == "2026-09-01"
-    assert p2["personal"]["title"] == "Sachbearbeiterin"
+    # Titel ist ein Basisdatum und wird über base übernommen.
+    assert p2["base"]["title"] == "Sachbearbeiterin"
     # Gehalt/Konditionen werden NICHT nach P2 übernommen (Leak-Risiko).
     assert "salary" not in p2["personal"]
     assert "conditions" not in p2["personal"]

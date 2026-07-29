@@ -113,7 +113,7 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
             </div>
             <div>
               <label class="label">Titel *</label>
-              <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
+              <input v-model="form.base.title" :class="fieldClass('base.title')" placeholder="z. B. Niederlassungsleiter" />
             </div>
           </div>
         </TicketSection>
@@ -146,11 +146,20 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
                 <input v-model="form.base.last_name" :class="fieldClass('base.last_name')" placeholder="Mustermann" />
               </div>
               <div>
+                <label class="label">Titel *</label>
+                <input v-model="form.base.title" :class="fieldClass('base.title')" placeholder="z. B. Niederlassungsleiter" />
+              </div>
+              <div>
                 <label class="label">Firma lt. Arbeitsvertrag *</label>
-                <select v-model="form.base.contract_company" :class="selectClass('base.contract_company')">
+                <select v-model="form.base.contract_company"
+                        :disabled="!!form.personal.personal_number"
+                        :class="[selectClass('base.contract_company'), form.personal.personal_number ? 'opacity-60 cursor-not-allowed' : '']">
                   <option value="">Bitte wählen</option>
                   <option v-for="c in companies" :key="c">{{ c }}</option>
                 </select>
+                <p v-if="form.personal.personal_number" class="text-xs text-gray-400 mt-1">
+                  Nach Vergabe der Personalnummer nicht mehr änderbar.
+                </p>
               </div>
               <div>
                 <label class="label">Niederlassung *</label>
@@ -172,10 +181,6 @@ const checkboxClass = 'h-4 w-4 rounded border-gray-300 dark:border-white/20 text
           <!-- Personalabteilung (HR) -->
           <TicketSection title="Personaldaten" variant="hr" badge="Personalabteilung">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="label">Titel *</label>
-                <input v-model="form.personal.title" :class="fieldClass('personal.title')" placeholder="z. B. Niederlassungsleiter" />
-              </div>
 
               <!-- Privatadresse: zusammengefasst & klar umrahmt -->
               <div class="md:col-span-2 rounded-xl border border-gray-200 dark:border-white/10

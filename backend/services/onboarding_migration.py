@@ -21,8 +21,10 @@ from backend.utils.logger import logger
 
 
 # Basisfelder, die im Alt-Format unter `personal` lagen und nach `base` gehören.
-# start_date (Arbeitsbeginn) ist seit der Verschiebung in die Basisdaten ebenfalls base.
-_BASE_FROM_PERSONAL = ("first_name", "last_name", "contract_company", "location", "cost_center", "start_date")
+# start_date (Arbeitsbeginn) und title (Berufsbezeichnung) sind seit der Verschiebung
+# in die Basisdaten ebenfalls base.
+_BASE_FROM_PERSONAL = ("first_name", "last_name", "contract_company", "location",
+                       "cost_center", "start_date", "title")
 
 
 def migrate_onboarding_desc(desc: dict) -> dict:
@@ -99,10 +101,11 @@ def backfill_onboarding_descriptions() -> int:
     einzelnen Ticket brechen die Migration NICHT ab (werden geloggt und übersprungen)."""
     from backend.database.tickets import list_all_tickets
 
+    onboarding_types = {TicketType.zugang_beantragen.value, TicketType.einstellung.value}
     count = 0
     for ticket in list_all_tickets():
         tt = ticket.ticket_type.value if hasattr(ticket.ticket_type, "value") else ticket.ticket_type
-        if tt != TicketType.zugang_beantragen.value:
+        if tt not in onboarding_types:
             continue
         try:
             old = json.loads(ticket.description or "{}")

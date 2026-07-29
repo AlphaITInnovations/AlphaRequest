@@ -16,7 +16,7 @@ const p = (k: string) => props.description?.personal?.[k] ?? '—'
       <TicketField label="Anrede" :value="b('salutation')" />
       <TicketField label="Vorname" :value="b('first_name')" />
       <TicketField label="Nachname" :value="b('last_name')" />
-      <TicketField label="Titel" :value="p('title')" />
+      <TicketField label="Titel" :value="b('title')" />
       <TicketField label="Firma lt. Arbeitsvertrag" :value="b('contract_company')" />
       <TicketField label="Niederlassung" :value="b('location')" />
       <TicketField label="Kostenstelle" :value="b('cost_center')" mono />
