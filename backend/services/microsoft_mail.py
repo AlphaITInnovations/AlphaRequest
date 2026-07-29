@@ -170,13 +170,51 @@ def build_message_payload(
     }
 
 
+def _audit_mail(payload: Dict[str, Any], kind: str, outcome: str, detail: Optional[str] = None) -> None:
+    """Schreibt einen Audit-Eintrag pro Mailversand (an wen, welcher Typ, Betreff,
+    Ergebnis). Rein informativ – darf den Versand nie stören (best-effort)."""
+    try:
+        msg = payload.get("message", {}) if isinstance(payload, dict) else {}
+
+        def _addrs(key: str) -> list:
+            return [
+                (r.get("emailAddress") or {}).get("address")
+                for r in (msg.get(key) or [])
+                if (r.get("emailAddress") or {}).get("address")
+            ]
+
+        to = _addrs("toRecipients")
+        cc = _addrs("ccRecipients")
+        subject = msg.get("subject")
+        recips = ", ".join(to) or "—"
+        summary = (f"Mail '{kind}' an {recips}" if outcome == "sent"
+                   else f"Mailversand '{kind}' an {recips} fehlgeschlagen")
+
+        from backend.database.audit_log import record_audit
+        record_audit(
+            action="mail_sent" if outcome == "sent" else "mail_failed",
+            actor_type="system",
+            actor_name="System",
+            entity_type="mail",
+            entity_id=kind,
+            summary=summary,
+            details={
+                "kind": kind, "to": to, "cc": cc, "subject": subject,
+                "outcome": outcome, **({"error": detail} if detail else {}),
+            },
+        )
+    except Exception:
+        pass
+
+
 def _post_sendmail(url: str, access_token: str, payload: Dict[str, Any], timeout_s: int = 30,
                    *, kind: str = "other") -> None:
     from backend.metrics.mail_metrics import record_mail
     try:
         resp = requests.post(url, headers=_auth_header(access_token), json=payload, timeout=timeout_s)
-    except Exception:
+    except Exception as e:
         record_mail(kind, "error")
+        _audit_mail(payload, kind, "failed", str(e)[:200])
         raise
     if resp.status_code >= 400:
         record_mail(kind, "error")
@@ -186,10 +224,12 @@ def _post_sendmail(url: str, access_token: str, payload: Dict[str, Any], timeout
         except Exception:
             detail = resp.text
 
+        _audit_mail(payload, kind, "failed", f"HTTP {resp.status_code}")
         raise GraphMailError(
             f"Graph sendMail failed: HTTP {resp.status_code} - {detail}"
         )
     record_mail(kind, "sent")
+    _audit_mail(payload, kind, "sent")
 
 
 # -------------------------
