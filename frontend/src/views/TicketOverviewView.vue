@@ -149,12 +149,35 @@ function reportBulk(res: { ok: number[]; failed: { id: number; error: string }[]
   }
 }
 
-async function deleteSelected() {
+// Ab dieser Menge wird eine bewusste Bestätigung durch Eingabe von „löschen" verlangt.
+const DELETE_CONFIRM_THRESHOLD = 5
+const showDeleteConfirm = ref(false)
+const deleteConfirmText = ref('')
+const deleteConfirmValid = computed(() => deleteConfirmText.value.trim().toLowerCase() === 'löschen')
+
+async function performDelete() {
   if (!selected.value.length) return
-  if (!confirm(`${selected.value.length} Ticket(s) endgültig löschen?\n\nDas kann NICHT rückgängig gemacht werden.`)) return
   const { data } = await ticketsApi.bulk(selected.value, 'delete')
   reportBulk(data.data)
   await load()
+}
+
+async function deleteSelected() {
+  if (!selected.value.length) return
+  if (selected.value.length > DELETE_CONFIRM_THRESHOLD) {
+    // Größere Löschmengen: Tippbestätigung statt einfachem OK (Fehlklick-Schutz).
+    deleteConfirmText.value = ''
+    showDeleteConfirm.value = true
+    return
+  }
+  if (!confirm(`${selected.value.length} Ticket(s) endgültig löschen?\n\nDas kann NICHT rückgängig gemacht werden.`)) return
+  await performDelete()
+}
+
+async function confirmDeleteTyped() {
+  if (!deleteConfirmValid.value) return
+  showDeleteConfirm.value = false
+  await performDelete()
 }
 
 async function archiveSelected() {
@@ -339,6 +362,43 @@ onMounted(load)
       </div>
 
     </div>
+
+    <!-- ── Löschen bestätigen (ab >5: Eingabe „löschen") ── -->
+    <Teleport to="body">
+      <div v-if="showDeleteConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showDeleteConfirm = false" />
+        <div class="relative w-full max-w-md rounded-2xl bg-white dark:bg-[#212B3A]
+                    border border-gray-200 dark:border-white/10 shadow-xl p-6 space-y-4">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg leading-none">🗑️</span>
+            <h3 class="font-semibold text-gray-900 dark:text-white">{{ selected.length }} Tickets endgültig löschen</h3>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            Du löschst <strong>{{ selected.length }}</strong> Tickets unwiderruflich. Das kann
+            <strong>nicht rückgängig</strong> gemacht werden. Gib zur Bestätigung
+            <span class="font-mono font-semibold text-red-600 dark:text-red-400">löschen</span> ein.
+          </p>
+          <input v-model="deleteConfirmText" type="text" autocomplete="off" placeholder="löschen"
+                 @keydown.enter="confirmDeleteTyped"
+                 class="w-full rounded-xl border border-gray-200 dark:border-white/10
+                        bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+                        px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400/30
+                        focus:border-red-400/50" />
+          <div class="flex justify-end gap-2">
+            <button @click="showDeleteConfirm = false"
+                    class="px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10
+                           text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+              Abbrechen
+            </button>
+            <button @click="confirmDeleteTyped" :disabled="!deleteConfirmValid"
+                    class="px-4 py-2 text-sm rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium
+                           disabled:opacity-50 disabled:cursor-not-allowed transition">
+              Endgültig löschen
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </AppLayout>
 </template>
 
