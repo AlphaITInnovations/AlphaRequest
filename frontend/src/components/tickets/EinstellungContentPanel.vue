@@ -24,10 +24,10 @@ const p = (k: string) => props.description?.personal?.[k] ?? '—'
     </TicketFieldGrid>
   </TicketSection>
 
-  <!-- Gehalt & Konditionen – nur Personalabteilung/Admin (serverseitig gefiltert);
+  <!-- Gehalt & Konditionen – nur Sekretariat GL/Admin (serverseitig gefiltert);
        für alle anderen ist der Block nicht vorhanden und wird ausgeblendet. -->
   <TicketSection v-if="description?.personal?.salary || description?.personal?.conditions"
-                 title="Gehalt & Konditionen" variant="hr" badge="Personalabteilung">
+                 title="Gehalt & Konditionen" variant="hr" badge="Sekretariat GL">
     <TicketFieldGrid>
       <TicketField label="Gehalt" :value="p('salary')" />
       <TicketField label="Konditionen" :value="p('conditions')" wide pre />

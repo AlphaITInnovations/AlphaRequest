@@ -99,9 +99,9 @@ const selectClass = (path: string) =>
             </div>
           </TicketSection>
 
-          <TicketSection title="Gehalt & Konditionen" variant="hr" badge="Personalabteilung">
+          <TicketSection title="Gehalt & Konditionen" variant="hr" badge="Sekretariat GL">
             <p class="text-sm text-gray-500 dark:text-gray-400 -mt-1">
-              Personaldaten – in der späteren Durchführung nur für die Personalabteilung sichtbar.
+              Vertraulich – nur für Sekretariat GL sichtbar.
             </p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

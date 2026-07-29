@@ -61,7 +61,9 @@ VISIBILITY: dict[TicketType, dict] = {
 CONFIDENTIAL_FIELDS: dict[TicketType, dict] = {
     TicketType.einstellung: {
         "paths": ["personal.salary", "personal.conditions"],
-        "groups": ["Personalabteilung"],
+        # Sekretariat GL erstellt/versendet in P1 den Arbeitsvertrag → nur diese
+        # Fachabteilung (plus Admin) sieht Gehalt/Konditionen.
+        "groups": ["Sekretariat GL"],
     },
 }
 
