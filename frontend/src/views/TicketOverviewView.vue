@@ -22,6 +22,7 @@ const selected = ref<number[]>([])
 // ── Filter ──────────────────────────────────────────────────────────────────
 const search            = ref('')
 const statusFilter      = ref('all')
+const hideArchived      = ref(false)   // im „Alle"-Modus archivierte ausblenden
 const typeFilter        = ref('all')
 const responsibleFilter = ref('all')
 
@@ -74,6 +75,8 @@ const responsibleOptions = computed(() =>
 const filtered = computed(() => {
   let list = tickets.value
   if (statusFilter.value !== 'all')      list = list.filter(t => t.status === statusFilter.value)
+  // Im „Alle"-Modus optional archivierte ausblenden (besser die offenen sehen).
+  else if (hideArchived.value)           list = list.filter(t => t.status !== 'archived')
   if (typeFilter.value !== 'all')        list = list.filter(t => t.type_key === typeFilter.value)
   if (responsibleFilter.value !== 'all') list = list.filter(t => t.responsible === responsibleFilter.value)
   const q = search.value.toLowerCase().trim()
@@ -101,7 +104,7 @@ const sorted = computed(() => {
 const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / pageSize)))
 const paged      = computed(() => sorted.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 
-watch([statusFilter, typeFilter, responsibleFilter, search, sortKey, sortDir], () => { page.value = 1 })
+watch([statusFilter, hideArchived, typeFilter, responsibleFilter, search, sortKey, sortDir], () => { page.value = 1 })
 
 // ── Sortierung umschalten ──────────────────────────────────────────────────────
 function setSort(k: SortKey) {
@@ -190,7 +193,7 @@ async function archiveSelected() {
 }
 
 function resetFilters() {
-  search.value = ''; statusFilter.value = 'all'; typeFilter.value = 'all'; responsibleFilter.value = 'all'
+  search.value = ''; statusFilter.value = 'all'; hideArchived.value = false; typeFilter.value = 'all'; responsibleFilter.value = 'all'
 }
 
 function formatDate(ts: string) {
@@ -249,6 +252,15 @@ onMounted(load)
               : 'bg-white dark:bg-[#263040] border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:border-[#3EAAB8]/40'">
             {{ s === 'all' ? 'Alle' : STATUS_LABEL[s] ?? s }}
           </button>
+
+          <!-- Im „Alle"-Modus: archivierte ausblenden, um offene besser zu sehen -->
+          <label v-if="statusFilter === 'all'"
+                 class="ml-auto inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300
+                        cursor-pointer select-none whitespace-nowrap">
+            <input type="checkbox" v-model="hideArchived"
+                   class="rounded border-gray-300 dark:border-white/20 text-[#3EAAB8] focus:ring-[#3EAAB8]/30" />
+            Archivierte ausblenden
+          </label>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
           <div class="relative">
