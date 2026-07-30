@@ -56,6 +56,37 @@ async function saveResponsibility() {
   }
 }
 
+// ── Fachabteilungen einzeln abschließen (Admin, in Durchführung) ─────────────
+const DEPT_STATUS_LABEL: Record<string, string> = {
+  open: 'Offen', in_progress: 'In Bearbeitung', done: 'Ausgeführt',
+  rejected: 'Abgelehnt', skipped: 'Übersprungen',
+}
+const DEPT_STATUS_CLASS: Record<string, string> = {
+  open:        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  done:        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  skipped:     'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+}
+// Nur wenn der Auftrag aktuell in der Durchführung steht (Status in_request).
+const reviewDepartments = computed<Record<string, any>>(() =>
+  data.value?.status === 'in_request' ? (data.value?.departments ?? {}) : {})
+const hasReviewDepartments = computed(() => Object.keys(reviewDepartments.value).length > 0)
+const deptBusy = ref<string | null>(null)
+
+async function completeDepartment(gid: string, name: string) {
+  if (!confirm(`Fachabteilung „${name}" als ausgeführt markieren?`)) return
+  deptBusy.value = gid
+  try {
+    await ticketsApi.setDepartmentStatus(id, gid, 'done')
+    await load()
+  } catch (e: any) {
+    alert(errMsg(e, 'Fachabteilung konnte nicht abgeschlossen werden.'))
+  } finally {
+    deptBusy.value = null
+  }
+}
+
 // ── Wiedereröffnen (nur archiviert) ──────────────────────────────────────────
 const showReopen   = ref(false)
 const reopenIdx    = ref<number | null>(null)
@@ -364,6 +395,40 @@ async function saveRaw() {
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Durchführung: Fachabteilungen einzeln abschließen (Admin) -->
+      <div v-if="hasReviewDepartments"
+           class="rounded-2xl border border-gray-200/80 dark:border-white/[0.09]
+                  bg-white dark:bg-[#212B3A] shadow-sm p-5 space-y-3">
+        <div class="flex items-center gap-2">
+          <span class="text-lg leading-none">🏭</span>
+          <h2 class="font-semibold text-gray-900 dark:text-white">Durchführung – Fachabteilungen</h2>
+          <span class="text-xs text-gray-500 dark:text-gray-400">— einzeln als ausgeführt markieren</span>
+        </div>
+        <ul class="divide-y divide-gray-100 dark:divide-white/[0.06]">
+          <li v-for="(dept, gid) in reviewDepartments" :key="gid"
+              class="flex items-center justify-between gap-3 py-2.5">
+            <span class="flex items-center gap-2 min-w-0">
+              <span class="text-sm text-gray-900 dark:text-white truncate">{{ dept.name }}</span>
+              <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    :class="DEPT_STATUS_CLASS[dept.status] ?? 'bg-gray-100 text-gray-500'">
+                {{ DEPT_STATUS_LABEL[dept.status] ?? dept.status }}
+              </span>
+              <span v-if="!dept.required" class="text-[10px] text-gray-400">(optional)</span>
+            </span>
+            <button v-if="dept.status !== 'done'" @click="completeDepartment(gid, dept.name)"
+                    :disabled="deptBusy === gid"
+                    class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-sm font-medium
+                           bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition flex-shrink-0">
+              {{ deptBusy === gid ? 'Wird gespeichert…' : '✔ Ausgeführt' }}
+            </button>
+            <span v-else class="text-xs font-medium text-green-600 dark:text-green-400 flex-shrink-0">✔ erledigt</span>
+          </li>
+        </ul>
+        <p class="text-xs text-gray-400 dark:text-gray-500">
+          Sobald alle erforderlichen Fachabteilungen ausgeführt sind, wird der Auftrag automatisch archiviert.
+        </p>
       </div>
 
       <!-- Read-only Detail -->

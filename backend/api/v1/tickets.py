@@ -1408,7 +1408,10 @@ async def set_department_status(
     body = await request.json()
     status = body.get("status")
 
-    if not user_can_complete_department(ticket_id, user["id"], group_id):
+    # Admins dürfen jede Fachabteilung abschließen (auch ohne Mitgliedschaft),
+    # z.B. aus der Admin-Detailansicht. Alle anderen nur ihre eigene Fachabteilung.
+    is_admin = PERM_ADMIN in (user.get("permissions", []) or [])
+    if not is_admin and not user_can_complete_department(ticket_id, user["id"], group_id):
         raise api_error(403, ErrorCode.DEPARTMENT_FORBIDDEN,
                         "Keine Berechtigung für diese Fachabteilung")
     if status not in {"done", "rejected", "skipped"}:
