@@ -61,10 +61,11 @@ const PRIORITY_CLASS: Record<string, string> = {
 const STATUS_ORDER: Record<string, number>   = { in_progress: 0, in_request: 1, waiting_contract: 2, archived: 3, rejected: 4 }
 const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
 
-// Status-Filter als Mehrfachauswahl (kein „Alle"-Button): standardmäßig alle aktiv
-// = alles sichtbar; einzelne abwählen, um z.B. Archivierte auszublenden.
+// Status-Filter als Mehrfachauswahl (kein „Alle"-Button). Default: alle Phasen
+// AUSSER „Archiviert" aktiv (offene im Fokus); einzelne zu-/abwählbar.
 const STATUSES = ['in_progress', 'in_request', 'waiting_contract', 'archived', 'rejected']
-const activeStatuses = ref<Set<string>>(new Set(STATUSES))
+const defaultStatuses = () => new Set(STATUSES.filter(s => s !== 'archived'))
+const activeStatuses = ref<Set<string>>(defaultStatuses())
 function toggleStatus(s: string) {
   if (activeStatuses.value.has(s)) activeStatuses.value.delete(s)
   else activeStatuses.value.add(s)
@@ -197,7 +198,7 @@ async function archiveSelected() {
 }
 
 function resetFilters() {
-  search.value = ''; activeStatuses.value = new Set(STATUSES); typeFilter.value = 'all'; responsibleFilter.value = 'all'
+  search.value = ''; activeStatuses.value = defaultStatuses(); typeFilter.value = 'all'; responsibleFilter.value = 'all'
 }
 
 function formatDate(ts: string) {
@@ -252,11 +253,10 @@ onMounted(load)
           <!-- Mehrfachauswahl: aktive Status sind hervorgehoben; abwählen blendet aus.
                Alle aktiv = alles sichtbar (es gibt bewusst keinen „Alle"-Button). -->
           <button v-for="s in STATUSES" :key="s" @click="toggleStatus(s)"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition"
+            class="px-3 py-1.5 rounded-xl text-sm font-medium border transition"
             :class="activeStatuses.has(s)
               ? 'bg-[#3EAAB8] text-white border-[#3EAAB8]'
               : 'bg-white dark:bg-[#263040] border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:border-[#3EAAB8]/40'">
-            <span class="text-[11px]">{{ activeStatuses.has(s) ? '✓' : '+' }}</span>
             {{ STATUS_LABEL[s] ?? s }}
           </button>
         </div>
