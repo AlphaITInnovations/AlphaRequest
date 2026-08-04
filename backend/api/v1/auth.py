@@ -35,7 +35,6 @@ def _client_ip(request: Request) -> str | None:
 
 router = APIRouter()
 
-
 # ── /auth/refresh-session ─────────────────────────────────────────────────────
 
 @router.post("/auth/refresh-session", response_model=DataResponse[UserOut])
