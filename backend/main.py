@@ -26,6 +26,7 @@ from backend.api.v1 import feedback as feedback_v1
 from backend.api.v1 import freigabe as freigabe_v1
 from backend.api.v1 import sessions as sessions_v1
 from backend.api.v1 import health as health_v1
+from backend.api.v1 import attachments as attachments_v1
 
 
 def get_ticket_type_dict():
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback_v1.router, prefix="/api/v1")
     app.include_router(freigabe_v1.router, prefix="/api/v1")
     app.include_router(sessions_v1.router, prefix="/api/v1")
+    app.include_router(attachments_v1.router, prefix="/api/v1")
 
     # Öffentlicher Health-/Uptime-Endpunkt – unter /health UND /api/v1/health
     # erreichbar (Root für interne/Container-Checks, /api/v1 hinter dem Proxy).

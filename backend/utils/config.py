@@ -41,6 +41,10 @@ class Config:
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://ai-ms-01.dom.local:5173")
     BACKEND_URL:  str = os.getenv("BACKEND_URL",  "https://ai-ms-01.dom.local:5000")
 
+    # Datei-Anhänge: Blobs liegen auf dem Dateisystem (Metadaten in der DB).
+    ATTACHMENTS_DIR: str = os.getenv("ATTACHMENTS_DIR", str(BASE_DIR.parent / "data" / "attachments"))
+    MAX_UPLOAD_MB: int = int(os.getenv("MAX_UPLOAD_MB", "25"))
+
     @property
     def COMPANIES(self):
         return db.get_companies()
