@@ -12,8 +12,9 @@ import AppUsersPanel from '@/components/settings/AppUsersPanel.vue'
 import TestMailPanel from '@/components/settings/TestMailPanel.vue'
 import AuditLogPanel from '@/components/AuditLogPanel.vue'
 import ActiveSessionsPanel from '@/components/settings/ActiveSessionsPanel.vue'
+import AttachmentsPanel from '@/components/settings/AttachmentsPanel.vue'
 
-const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit'] as const
+const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit', 'attachments'] as const
 type Section = typeof SECTIONS[number]
 
 const route  = useRoute()
@@ -36,6 +37,7 @@ const nav = [
   { key: 'session',     label: 'Session & Security', group: 'System' },
   { key: 'sessions',    label: 'Aktive Sessions',    group: 'System' },
   { key: 'audit',       label: 'Audit-Log',          group: 'System' },
+  { key: 'attachments', label: 'Dateien & Anhänge',  group: 'System' },
   { key: 'companies',   label: 'Firmen',             group: 'Organisation' },
   { key: 'groups',      label: 'Fachabteilungen',    group: 'Organisation' },
   { key: 'permissions', label: 'Erstellrechte',      group: 'Berechtigungen' },
@@ -124,6 +126,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
           <TicketPermissionsPanel  v-else-if="active === 'permissions'" />
           <AppUsersPanel           v-else-if="active === 'app-users'" />
           <AuditLogPanel           v-else-if="active === 'audit'" />
+          <AttachmentsPanel        v-else-if="active === 'attachments'" />
           <TestMailPanel           v-else-if="active === 'testmail'" />
         </div>
 
