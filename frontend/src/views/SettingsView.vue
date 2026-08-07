@@ -13,8 +13,9 @@ import TestMailPanel from '@/components/settings/TestMailPanel.vue'
 import AuditLogPanel from '@/components/AuditLogPanel.vue'
 import ActiveSessionsPanel from '@/components/settings/ActiveSessionsPanel.vue'
 import AttachmentsPanel from '@/components/settings/AttachmentsPanel.vue'
+import ProcessesPanel from '@/components/settings/ProcessesPanel.vue'
 
-const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit', 'attachments'] as const
+const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit', 'attachments', 'processes'] as const
 type Section = typeof SECTIONS[number]
 
 const route  = useRoute()
@@ -40,6 +41,7 @@ const nav = [
   { key: 'attachments', label: 'Dateien & Anhänge',  group: 'System' },
   { key: 'companies',   label: 'Firmen',             group: 'Organisation' },
   { key: 'groups',      label: 'Fachabteilungen',    group: 'Organisation' },
+  { key: 'processes',   label: 'Prozesse',           group: 'Organisation' },
   { key: 'permissions', label: 'Erstellrechte',      group: 'Berechtigungen' },
   { key: 'app-users',   label: 'Benutzer & Rollen',  group: 'Berechtigungen' },
   { key: 'testmail',    label: 'Testmail',           group: 'Kommunikation' },
@@ -127,6 +129,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
           <AppUsersPanel           v-else-if="active === 'app-users'" />
           <AuditLogPanel           v-else-if="active === 'audit'" />
           <AttachmentsPanel        v-else-if="active === 'attachments'" />
+          <ProcessesPanel          v-else-if="active === 'processes'" />
           <TestMailPanel           v-else-if="active === 'testmail'" />
         </div>
 

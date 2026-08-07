@@ -67,6 +67,36 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresPermission: 'admin' },
     },
 
+    // ── Dynamische Prozesse ────────────────────────────────────────────────────
+    // Editor: nur Admin (die Definitions-Endpunkte sind ebenfalls admin-gated).
+    {
+      path: '/prozesse/:key/:version',
+      component: () => import('@/views/ProcessEditorView.vue'),
+      meta: { requiresAuth: true, requiresPermission: 'admin' },
+    },
+    // Aufträge aus dynamischen Prozessen. Die API ist aktuell admin-only; sobald
+    // sie für Beteiligte geöffnet wird, kann requiresPermission hier entfallen.
+    {
+      path: '/prozess-auftraege',
+      component: () => import('@/views/processes/ProcessTicketListView.vue'),
+      meta: { requiresAuth: true, requiresPermission: 'admin' },
+    },
+    {
+      path: '/prozess-auftraege/neu',
+      component: () => import('@/views/processes/ProcessTicketCreateView.vue'),
+      meta: { requiresAuth: true, requiresPermission: 'admin' },
+    },
+    {
+      path: '/prozess-auftraege/neu/:key',
+      component: () => import('@/views/processes/ProcessTicketCreateView.vue'),
+      meta: { requiresAuth: true, requiresPermission: 'admin' },
+    },
+    {
+      path: '/prozess-auftraege/:id',
+      component: () => import('@/views/processes/ProcessTicketDetailView.vue'),
+      meta: { requiresAuth: true, requiresPermission: 'admin' },
+    },
+
     // ── Backend Down ───────────────────────────────────────────────────────────
     {
       path: '/backend-down',
