@@ -62,8 +62,12 @@ def _install_error_handlers(app: FastAPI) -> None:
     async def _on_validation_error(request, exc: RequestValidationError):
         fields = []
         for e in exc.errors():
-            loc = [str(p) for p in e.get("loc", []) if p not in ("body", "query", "path")]
-            fields.append({"path": ".".join(loc) or "body",
+            loc = list(e.get("loc", []))
+            # Nur den führenden Quell-Marker entfernen (body/query/path), nicht ein
+            # gleichnamiges Feld an tieferer Stelle.
+            if loc and loc[0] in ("body", "query", "path"):
+                loc = loc[1:]
+            fields.append({"path": ".".join(str(p) for p in loc) or "body",
                            "code": str(e.get("type", "invalid")),
                            "message": e.get("msg", "ungültig")})
         return JSONResponse(status_code=422, content={"error": {

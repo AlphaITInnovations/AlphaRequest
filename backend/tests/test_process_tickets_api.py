@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from backend.core.dependencies import get_current_user
 from backend.main import _install_error_handlers
 from backend.api.v1 import process_tickets as pt
+from backend.database.process_tickets import ProcessTicketConflict
 
 
 DEFN = {
@@ -33,13 +34,16 @@ DEFN = {
 
 
 class FakeStore:
+    ProcessTicketConflict = ProcessTicketConflict   # damit `store.ProcessTicketConflict` im Endpunkt greift
+
     def __init__(self):
         self.rows: dict[int, dict] = {}
         self.seq = 0
 
     def create(self, **kw):
         self.seq += 1
-        row = {"id": self.seq, "next_timer_due_at": None, "created_at": "t", "updated_at": "t", **kw}
+        row = {"id": self.seq, "rev": 0, "next_timer_due_at": None,
+               "created_at": "t", "updated_at": "t", **kw}
         row["values"] = json.loads(kw["values_json"])
         row["runtime"] = json.loads(kw["runtime_json"])
         self.rows[self.seq] = row
@@ -49,20 +53,28 @@ class FakeStore:
         r = self.rows.get(tid)
         return dict(r) if r else None
 
-    def update_values(self, tid, values_json, title=None):
+    def _guard(self, r, expected_rev):
+        if expected_rev is not None and r["rev"] != expected_rev:
+            raise ProcessTicketConflict(f"#{r['id']} geändert")
+
+    def update_values(self, tid, values_json, title=None, expected_rev=None):
         r = self.rows[tid]
+        self._guard(r, expected_rev)
         r["values_json"] = values_json
         r["values"] = json.loads(values_json)
         if title is not None:
             r["title"] = title
+        r["rev"] += 1
         return dict(r)
 
-    def update_runtime(self, tid, *, runtime_json, status, next_timer_due_at=None):
+    def update_runtime(self, tid, *, runtime_json, status, next_timer_due_at=None, expected_rev=None):
         r = self.rows[tid]
+        self._guard(r, expected_rev)
         r["runtime_json"] = runtime_json
         r["runtime"] = json.loads(runtime_json)
         r["status"] = status
         r["next_timer_due_at"] = next_timer_due_at
+        r["rev"] += 1
         return dict(r)
 
     def list_tickets(self, **kw):

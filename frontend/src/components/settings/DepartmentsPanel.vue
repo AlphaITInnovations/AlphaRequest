@@ -89,7 +89,7 @@ async function saveGroups() {
     back()
     showToast('Gespeichert', true)
   } catch (e: any) {
-    showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
+    showToast(e?.response?.data?.error?.message || e?.response?.data?.detail || 'Fehler beim Speichern', false)
   } finally {
     setSaving(false)
   }

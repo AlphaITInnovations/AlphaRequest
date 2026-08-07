@@ -107,10 +107,32 @@ ALLOWED_ENTER_STATUS = {
     "in_progress", "in_request", "waiting_contract", "archived", "rejected",
 }
 
+ALLOWED_PRIORITY = {"low", "normal", "high", "urgent"}
+
 # Boolean-Operatoren der Condition-DSL (§6.1). Die Auswertung kommt in Stufe 4;
 # hier wird nur die STRUKTUR geprüft.
 _DSL_BINARY = {"==", "!=", "in"}
 _DSL_LIST = {"and", "or"}
+
+
+def dsl_refs(cond: Any) -> set:
+    """Sammelt alle Feld-Refs (Dot-Paths) aus einem (wohlgeformten) DSL-Ausdruck."""
+    out: set = set()
+    if not isinstance(cond, dict) or len(cond) != 1:
+        return out
+    op, arg = next(iter(cond.items()))
+    if op in ("==", "!=", "in"):
+        if isinstance(arg, list) and arg and isinstance(arg[0], str):
+            out.add(arg[0])
+    elif op == "truthy":
+        if isinstance(arg, str):
+            out.add(arg)
+    elif op in ("and", "or"):
+        for sub in (arg or []):
+            out |= dsl_refs(sub)
+    elif op == "not":
+        out |= dsl_refs(arg)
+    return out
 
 
 def validate_condition(cond: Any, path: str = "condition") -> None:
@@ -154,6 +176,26 @@ class FieldConstraints(_Base):
     max: Optional[float] = None
     minDate: Optional[str] = None
     maxDate: Optional[str] = None
+
+    @field_validator("pattern")
+    @classmethod
+    def _valid_regex(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            try:
+                re.compile(v)
+            except re.error as e:
+                raise ValueError(f"ungültiges Regex-Pattern: {e}")
+        return v
+
+    @model_validator(mode="after")
+    def _ranges_ordered(self) -> "FieldConstraints":
+        if self.minLength is not None and self.maxLength is not None and self.minLength > self.maxLength:
+            raise ValueError("minLength > maxLength")
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError("min > max")
+        if self.minDate is not None and self.maxDate is not None and self.minDate > self.maxDate:
+            raise ValueError("minDate > maxDate")
+        return self
 
 
 class FieldVisibility(_Base):
@@ -225,6 +267,8 @@ class FieldDef(_Base):
             raise ValueError(f"Feld „{self.key}“: `item` nur bei widget=collection erlaubt")
         if self.widget == Widget.server_generated and not self.assign:
             raise ValueError(f"Feld „{self.key}“: server_generated braucht `assign`")
+        if self.widget == Widget.server_stamped:
+            raise ValueError(f"Feld „{self.key}“: server_stamped ist nur innerhalb einer collection erlaubt")
         return self
 
 
@@ -299,6 +343,27 @@ class Action(_Base):
     value: Optional[Any] = None
     process: Optional[str] = None    # bei spawn_process
     counter: Optional[str] = None    # bei assign_sequence
+
+    @model_validator(mode="after")
+    def _action_rules(self) -> "Action":
+        t = self.type
+        if t in (ActionType.notify, ActionType.escalate) and not self.to:
+            raise ValueError(f"action {t.value} erfordert `to`")
+        if t == ActionType.set_field and (not self.field or self.value is None):
+            raise ValueError("action set_field erfordert `field` und `value`")
+        if t == ActionType.set_status:
+            if self.value not in ALLOWED_ENTER_STATUS:
+                raise ValueError(f"action set_status: unbekannter Status „{self.value}“")
+        if t == ActionType.set_priority:
+            if self.value not in ALLOWED_PRIORITY:
+                raise ValueError(f"action set_priority: unbekannte Priorität „{self.value}“")
+        if t == ActionType.spawn_process and not self.process:
+            raise ValueError("action spawn_process erfordert `process`")
+        if t == ActionType.assign_sequence and not self.counter:
+            raise ValueError("action assign_sequence erfordert `counter`")
+        if t == ActionType.require_attachment and not self.field:
+            raise ValueError("action require_attachment erfordert `field`")
+        return self
 
 
 class Automation(_Base):
@@ -407,9 +472,55 @@ class ProcessDefinition(_Base):
                     raise ValueError(f"Phase „{p.key}“: fieldRef „{fr.ref}“ ist nicht im Feld-Katalog")
 
         # Automation-IDs eindeutig (über den ganzen Prozess)
-        aids = [a.id for a in self.automations] + [a.id for p in self.phases for a in p.automations]
+        all_autos = list(self.automations) + [a for p in self.phases for a in p.automations]
+        aids = [a.id for a in all_autos]
         adupes = {a for a in aids if aids.count(a) > 1}
         if adupes:
             raise ValueError(f"doppelte Automation-IDs: {', '.join(sorted(adupes))}")
+
+        # ── Alle Feld-Referenzen müssen im Katalog existieren (sonst stiller No-op /
+        #    Datenverlust zur Laufzeit). Betrifft computed.from, DSL-Leaf-Refs in
+        #    requiredWhen/visibleWhen/constraints/when/guard und Trigger/Action.field.
+        def _need(ref: str, where: str):
+            if ref not in catalog:
+                raise ValueError(f"{where}: Referenz „{ref}“ ist nicht im Feld-Katalog")
+
+        for f in self.fields:
+            if f.computed:
+                _need(f.computed.from_, f"Feld „{f.key}“.computed.from")
+
+        for p in self.phases:
+            for fr in p.fields:
+                for cond, lbl in ((fr.requiredWhen, "requiredWhen"), (fr.visibleWhen, "visibleWhen")):
+                    if cond:
+                        for r in dsl_refs(cond):
+                            _need(r, f"{p.key}.{fr.ref}.{lbl}")
+            for i, c in enumerate(p.constraints):
+                for r in dsl_refs(c.get("when", {})):
+                    _need(r, f"{p.key}.constraints[{i}].when")
+            resp = p.responsibility
+            for dr in resp.rule:
+                if dr.when:
+                    for r in dsl_refs(dr.when):
+                        _need(r, f"{p.key}.responsibility[{dr.group}].when")
+
+        for a in all_autos:
+            if a.guard:
+                for r in dsl_refs(a.guard):
+                    _need(r, f"automation[{a.id}].guard")
+            if a.trigger.field:
+                _need(a.trigger.field, f"automation[{a.id}].trigger.field")
+            if a.action.field:
+                _need(a.action.field, f"automation[{a.id}].action.field")
+
+        # Non-overridable computed-Felder dürfen nicht als editierbar referenziert
+        # werden – apply_computed würde die Eingabe bei jedem Speichern überschreiben.
+        ro_computed = {f.key for f in self.fields if f.computed and not f.overridable}
+        for p in self.phases:
+            for fr in p.fields:
+                if fr.ref in ro_computed and fr.mode in (FieldMode.editable, FieldMode.append_only):
+                    raise ValueError(
+                        f"Phase „{p.key}“: computed-Feld „{fr.ref}“ (non-overridable) darf nicht "
+                        f"editierbar sein")
 
         return self

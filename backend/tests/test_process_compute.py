@@ -35,3 +35,19 @@ def test_non_overridable_always_derives():
 def test_empty_source_leaves_overridable_empty():
     out = apply_computed(DEFN, {})
     assert "sig.title" not in out or out.get("sig.title") in (None, "")
+
+
+def test_computed_from_computed_resolves_regardless_of_order():
+    # B leitet aus A ab, A aus base – B steht VOR A deklariert (fixpoint nötig)
+    defn = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "b", "widget": "text", "computed": {"from": "a"}},
+            {"key": "a", "widget": "text", "computed": {"from": "base"}},
+            {"key": "base", "widget": "text"},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "base"}]}],
+    })
+    out = apply_computed(defn, {"base": "X"})
+    assert out["a"] == "X" and out["b"] == "X"

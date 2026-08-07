@@ -15,6 +15,10 @@ from typing import Optional
 from backend.database.connection import get_connection, _exec, _fetchone, _fetchall
 
 
+class ProcessTicketConflict(Exception):
+    """Optimistic-Concurrency-Konflikt: das Ticket wurde zwischenzeitlich geändert."""
+
+
 PROCESS_TICKETS_DDL = """
 CREATE TABLE IF NOT EXISTS process_tickets (
     id                INT AUTO_INCREMENT PRIMARY KEY,
@@ -27,6 +31,7 @@ CREATE TABLE IF NOT EXISTS process_tickets (
     owner_name        VARCHAR(255) NULL,
     values_json       LONGTEXT NOT NULL,
     runtime_json      LONGTEXT NOT NULL,
+    rev               INT NOT NULL DEFAULT 0,
     next_timer_due_at DATETIME NULL,
     created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -38,7 +43,7 @@ CREATE TABLE IF NOT EXISTS process_tickets (
 """
 
 _COLS = ("id, process_key, process_version, title, status, priority, owner_id, owner_name, "
-         "values_json, runtime_json, next_timer_due_at, created_at, updated_at")
+         "values_json, runtime_json, rev, next_timer_due_at, created_at, updated_at")
 
 
 def ensure_table() -> None:
@@ -130,14 +135,28 @@ def create(*, process_key: str, process_version: int, title: str, status: str,
     return get(new_id)
 
 
-def update_values(ticket_id: int, values_json: str, title: Optional[str] = None) -> dict:
+def _run_guarded(conn, set_sql: str, params: list, ticket_id: int, expected_rev: Optional[int]):
+    """Führt ein UPDATE mit rev-Bump aus; bei expected_rev zusätzlich
+    WHERE rev=%s → rowcount 0 ⇒ Konflikt (zwischenzeitlich geändert)."""
+    sql = f"UPDATE process_tickets SET {set_sql}, rev=rev+1 WHERE id=%s"
+    params = list(params) + [ticket_id]
+    if expected_rev is not None:
+        sql += " AND rev=%s"
+        params.append(expected_rev)
+    cur = _exec(conn, sql, tuple(params))
+    if expected_rev is not None and cur.rowcount == 0:
+        conn.rollback()
+        raise ProcessTicketConflict(f"Ticket #{ticket_id} wurde zwischenzeitlich geändert")
+
+
+def update_values(ticket_id: int, values_json: str, title: Optional[str] = None,
+                  expected_rev: Optional[int] = None) -> dict:
     conn = get_connection()
     try:
         if title is not None:
-            _exec(conn, "UPDATE process_tickets SET values_json=%s, title=%s WHERE id=%s",
-                  (values_json, title, ticket_id))
+            _run_guarded(conn, "values_json=%s, title=%s", [values_json, title], ticket_id, expected_rev)
         else:
-            _exec(conn, "UPDATE process_tickets SET values_json=%s WHERE id=%s", (values_json, ticket_id))
+            _run_guarded(conn, "values_json=%s", [values_json], ticket_id, expected_rev)
         conn.commit()
     finally:
         conn.close()
@@ -145,14 +164,12 @@ def update_values(ticket_id: int, values_json: str, title: Optional[str] = None)
 
 
 def update_runtime(ticket_id: int, *, runtime_json: str, status: str,
-                   next_timer_due_at: Optional[str] = None) -> dict:
+                   next_timer_due_at: Optional[str] = None,
+                   expected_rev: Optional[int] = None) -> dict:
     conn = get_connection()
     try:
-        _exec(
-            conn,
-            "UPDATE process_tickets SET runtime_json=%s, status=%s, next_timer_due_at=%s WHERE id=%s",
-            (runtime_json, status, next_timer_due_at, ticket_id),
-        )
+        _run_guarded(conn, "runtime_json=%s, status=%s, next_timer_due_at=%s",
+                     [runtime_json, status, next_timer_due_at], ticket_id, expected_rev)
         conn.commit()
     finally:
         conn.close()

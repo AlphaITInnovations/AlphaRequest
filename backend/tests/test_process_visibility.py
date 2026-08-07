@@ -2,7 +2,7 @@
 
 from backend.schemas.process_definition import ProcessDefinition
 from backend.services.process_visibility import (
-    ViewerCtx, can_see_field, filter_values, editable_field_keys, apply_writes,
+    ViewerCtx, can_see_field, filter_values, editable_field_keys, apply_writes, writable_keys,
 )
 
 DEFN = ProcessDefinition.model_validate({
@@ -94,3 +94,41 @@ def test_apply_writes_discards_forbidden():
     assert merged["it.host"] == "PC-2"          # erlaubt
     assert merged["personal.salary"] == "50k"   # vertraulich → verworfen, Bestand bleibt
     assert merged["base.name"] == "Max"         # readonly → verworfen, Bestand bleibt
+
+
+# ── Regression: vertraulicher Wert leckt NICHT über ein computed-Spiegelfeld ──
+
+CONF_MIRROR = ProcessDefinition.model_validate({
+    "schemaVersion": 1, "key": "k", "name": "N",
+    "fields": [
+        {"key": "salary", "widget": "text", "visibility": {"confidential": True, "visibleToGroups": ["g_hr"]}},
+        {"key": "salary_copy", "widget": "text", "computed": {"from": "salary"}},   # nicht-vertraulich (geteilt)
+    ],
+    "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                "fields": [{"ref": "salary", "mode": "editable"}]}],
+})
+
+
+def test_computed_mirror_inherits_source_visibility():
+    vals = {"salary": "90k", "salary_copy": "90k"}
+    hr = ViewerCtx(full_view=False, is_admin=False, group_ids={"g_hr"})
+    outsider = ViewerCtx(full_view=True, is_admin=False, group_ids=set())  # Vollsicht, aber nicht HR
+    # HR sieht beides; der Außenstehende (sogar Vollsicht) sieht WEDER salary NOCH die Kopie
+    assert filter_values(CONF_MIRROR, vals, hr) == vals
+    assert filter_values(CONF_MIRROR, vals, outsider) == {}
+
+
+def test_writable_keys_no_unlock_via_noneditable_body():
+    # secret nur sichtbar/pflicht, wenn ctrl=='x'; ctrl ist readonly in dieser Phase
+    defn = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "ctrl", "widget": "text"}, {"key": "secret", "widget": "text"}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "ctrl", "mode": "readonly"},
+                               {"ref": "secret", "mode": "editable",
+                                "visibleWhen": {"==": ["ctrl", "x"]}}]}],
+    })
+    stored = {"ctrl": "y"}                       # gate ist zu
+    submitted = {"ctrl": "x", "secret": "evil"}  # Angreifer versucht Freischaltung über readonly ctrl
+    allowed = writable_keys(defn, defn.phases[0], FULL, stored, submitted)
+    assert "secret" not in allowed              # bleibt gesperrt (ctrl aus Body ignoriert)

@@ -61,6 +61,10 @@ def _check_field(f: FieldDef, val: Any) -> list[dict]:
     elif w == Widget.checkbox:
         if not isinstance(val, bool):
             return [_err(f.key, "TYPE", "Ja/Nein (bool) erwartet")]
+    elif w == Widget.collection:
+        if not isinstance(val, list):
+            return [_err(f.key, "TYPE", "Liste erwartet")]
+        return _check_collection(f, val)
     elif w in _LIST_WIDGETS:
         if not isinstance(val, list):
             return [_err(f.key, "TYPE", "Liste erwartet")]
@@ -77,6 +81,37 @@ def _check_field(f: FieldDef, val: Any) -> list[dict]:
     # Constraints
     if f.constraints:
         e.extend(_check_constraints(f, val))
+    return e
+
+
+_SUB_SCALAR_TEXT = {Widget.text, Widget.textarea, Widget.date, Widget.select}
+
+
+def _check_collection(f: FieldDef, val: list) -> list[dict]:
+    """Validiert collection-Einträge gegen die deklarierten Sub-Felder. server_stamped
+    ist serverseitig gesetzt und wird nicht vom Client geprüft."""
+    e: list[dict] = []
+    submap = {sf.key: sf for sf in f.item}
+    for idx, entry in enumerate(val):
+        if not isinstance(entry, dict):
+            e.append(_err(f"{f.key}[{idx}]", "TYPE", "Objekt erwartet"))
+            continue
+        for k, v in entry.items():
+            sf = submap.get(k)
+            if sf is None:
+                e.append(_err(f"{f.key}[{idx}].{k}", "UNKNOWN_FIELD", f"Unbekanntes Unterfeld „{k}“"))
+                continue
+            if sf.widget == Widget.server_stamped or v is None:
+                continue
+            if sf.widget == Widget.number:
+                if isinstance(v, bool) or not isinstance(v, (int, float)):
+                    e.append(_err(f"{f.key}[{idx}].{k}", "TYPE", "Zahl erwartet"))
+            elif sf.widget == Widget.checkbox:
+                if not isinstance(v, bool):
+                    e.append(_err(f"{f.key}[{idx}].{k}", "TYPE", "Ja/Nein erwartet"))
+            elif sf.widget in _SUB_SCALAR_TEXT:
+                if not isinstance(v, str):
+                    e.append(_err(f"{f.key}[{idx}].{k}", "TYPE", "Text erwartet"))
     return e
 
 

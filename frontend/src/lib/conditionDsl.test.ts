@@ -21,6 +21,19 @@ describe('evaluate (condition DSL, mirror of backend)', () => {
     expect(evaluate({ '==': ['a', 1], or: [] } as any, v)).toBe(false)
     expect(evaluate({ unknown: [1] } as any, v)).toBe(false)
   })
+
+  it('matches Python semantics (truthy of empties, value-equality)', () => {
+    // truthy: [] und {} und 0 und false sind falsy (wie Python bool())
+    expect(evaluate({ truthy: 'e' }, { e: [] })).toBe(false)
+    expect(evaluate({ truthy: 'e' }, { e: {} })).toBe(false)
+    expect(evaluate({ truthy: 'e' }, { e: 0 })).toBe(false)
+    expect(evaluate({ truthy: 'e' }, { e: false })).toBe(false)
+    expect(evaluate({ truthy: 'e' }, { e: 'x' })).toBe(true)
+    // == mit fehlendem Key == null; Arrays wertgleich
+    expect(evaluate({ '==': ['missing', null] }, {})).toBe(true)
+    expect(evaluate({ '==': ['a', [1, 2]] }, { a: [1, 2] })).toBe(true)
+    expect(evaluate({ in: ['a', [[1], [2]]] }, { a: [2] })).toBe(true)
+  })
 })
 
 describe('isEmpty', () => {

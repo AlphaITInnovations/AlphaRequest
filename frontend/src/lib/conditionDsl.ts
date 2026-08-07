@@ -12,7 +12,26 @@
 export type Values = Record<string, unknown>
 export type Condition = Record<string, any>
 
-/** Wertet einen (wohlgeformten) DSL-Ausdruck gegen die Feldwerte aus. */
+/** Python-Truthiness (bool()): None/undefined, false, 0, '', [], {} sind falsy. */
+function pyTruthy(v: unknown): boolean {
+  if (v === null || v === undefined) return false
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'number') return v !== 0
+  if (typeof v === 'string') return v.length > 0
+  if (Array.isArray(v)) return v.length > 0
+  if (typeof v === 'object') return Object.keys(v as object).length > 0
+  return !!v
+}
+
+/** Python-Gleichheit für JSON-Werte: fehlender Key = null; Listen/Objekte wertgleich. */
+function pyEq(a: unknown, b: unknown): boolean {
+  const x = a === undefined ? null : a
+  const y = b === undefined ? null : b
+  if (x === null || y === null || typeof x !== 'object' || typeof y !== 'object') return x === y
+  return JSON.stringify(x) === JSON.stringify(y)
+}
+
+/** Wertet einen (wohlgeformten) DSL-Ausdruck aus – deckungsgleich mit condition_dsl.py. */
 export function evaluate(cond: Condition | null | undefined, values: Values): boolean {
   if (!cond || typeof cond !== 'object' || Array.isArray(cond)) return false
   const keys = Object.keys(cond)
@@ -21,13 +40,14 @@ export function evaluate(cond: Condition | null | undefined, values: Values): bo
   const arg = cond[op]
   switch (op) {
     case '==':
-      return Array.isArray(arg) && values[arg[0]] === arg[1]
+      return Array.isArray(arg) && pyEq(values[arg[0]], arg[1])
     case '!=':
-      return Array.isArray(arg) && values[arg[0]] !== arg[1]
+      return Array.isArray(arg) && !pyEq(values[arg[0]], arg[1])
     case 'in':
-      return Array.isArray(arg) && Array.isArray(arg[1]) && arg[1].includes(values[arg[0]] as never)
+      return Array.isArray(arg) && Array.isArray(arg[1]) &&
+        arg[1].some((el) => pyEq(el, values[arg[0]]))
     case 'truthy':
-      return typeof arg === 'string' && !!values[arg]
+      return typeof arg === 'string' && pyTruthy(values[arg])
     case 'and':
       return Array.isArray(arg) && arg.every((c) => evaluate(c, values))
     case 'or':
@@ -58,14 +78,19 @@ export interface ComputedFieldDef {
  */
 export function applyComputed(fields: ComputedFieldDef[], values: Values): Values {
   const out: Values = { ...values }
-  for (const f of fields) {
-    if (!f.computed) continue
-    const src = out[f.computed.from]
-    if (f.overridable) {
-      if (isEmpty(out[f.key]) && !isEmpty(src)) out[f.key] = src
-    } else {
-      out[f.key] = src
+  const computed = fields.filter((f) => f.computed)
+  for (let i = 0; i <= computed.length; i++) {
+    let changed = false
+    for (const f of computed) {
+      const src = out[f.computed!.from]
+      if (f.overridable) {
+        if (isEmpty(out[f.key]) && !isEmpty(src)) { out[f.key] = src; changed = true }
+      } else if (out[f.key] !== src) {
+        out[f.key] = src
+        changed = true
+      }
     }
+    if (!changed) break
   }
   return out
 }

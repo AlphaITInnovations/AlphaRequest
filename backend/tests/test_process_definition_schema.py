@@ -116,6 +116,61 @@ def test_validate_condition_accepts_wellformed():
     validate_condition({"and": [{"truthy": "a"}, {"not": {"==": ["b", 1]}}]})
 
 
+def _base(**over):
+    d = {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "b", "widget": "text"}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "a"}]}],
+    }
+    d.update(over)
+    return d
+
+
+def _reject(d):
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_dsl_ref_must_exist_in_catalog():
+    d = _base()
+    d["phases"][0]["fields"] = [{"ref": "a", "requiredWhen": {"==": ["ghost", "x"]}}]
+    _reject(d)
+
+
+def test_computed_from_must_exist():
+    _reject(_base(fields=[{"key": "a", "widget": "text", "computed": {"from": "ghost"}}]))
+
+
+def test_non_overridable_computed_not_editable():
+    d = _base(fields=[{"key": "a", "widget": "text"},
+                      {"key": "c", "widget": "text", "computed": {"from": "a"}}])  # overridable default False
+    d["phases"][0]["fields"] = [{"ref": "c", "mode": "editable"}]
+    _reject(d)
+
+
+def test_bad_regex_pattern_rejected():
+    _reject(_base(fields=[{"key": "a", "widget": "text", "constraints": {"pattern": "["}}]))
+
+
+def test_top_level_server_stamped_rejected():
+    _reject(_base(fields=[{"key": "a", "widget": "server_stamped"}]))
+
+
+def test_action_set_status_validated():
+    d = _base()
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+                                      "action": {"type": "set_status", "value": "bogus"}}]
+    _reject(d)
+
+
+def test_action_notify_requires_to():
+    d = _base()
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+                                      "action": {"type": "notify"}}]
+    _reject(d)
+
+
 def test_group_reference_detector():
     from backend.database.process_definitions import _refs_group
     d = {

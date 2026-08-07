@@ -43,10 +43,28 @@ def can_see_field(f: FieldDef, ctx: ViewerCtx) -> bool:
     return ctx.full_view or bool(ctx.group_ids & groups)
 
 
+def _effective_can_see(f: FieldDef, ctx: ViewerCtx, fmap: dict, _seen: Optional[set] = None) -> bool:
+    """Sichtbarkeit inkl. Quelle: ein computed-Feld ist nur sichtbar, wenn der
+    Betrachter AUCH sein Quellfeld sehen darf – sonst würde ein Spiegelfeld einen
+    vertraulichen Wert offenlegen (§5, hartes Gate darf nicht umgangen werden)."""
+    if not can_see_field(f, ctx):
+        return False
+    if f.computed:
+        _seen = _seen or set()
+        if f.key in _seen:
+            return True                       # Zyklus-Schutz
+        _seen.add(f.key)
+        src = fmap.get(f.computed.from_)
+        if src is not None and not _effective_can_see(src, ctx, fmap, _seen):
+            return False
+    return True
+
+
 def visible_field_keys(defn: Optional[ProcessDefinition], ctx: ViewerCtx) -> set:
     if defn is None:
         return set()                          # default-deny
-    return {f.key for f in defn.fields if can_see_field(f, ctx)}
+    fmap = {f.key: f for f in defn.fields}
+    return {f.key for f in defn.fields if _effective_can_see(f, ctx, fmap)}
 
 
 def filter_values(defn: Optional[ProcessDefinition], values: dict, ctx: ViewerCtx) -> dict:
@@ -60,14 +78,15 @@ def filter_values(defn: Optional[ProcessDefinition], values: dict, ctx: ViewerCt
 def editable_field_keys(defn: ProcessDefinition, phase: PhaseDef, ctx: ViewerCtx,
                         values: dict) -> set:
     """Felder, die dieser Betrachter in DIESER Phase schreiben darf:
-    editable/append_only-Modus UND sichtbar UND (kein visibleWhen oder erfüllt)."""
+    editable/append_only-Modus UND sichtbar (inkl. Quelle) UND (kein visibleWhen
+    oder erfüllt gegen `values`)."""
     fmap = {f.key: f for f in defn.fields}
     out = set()
     for fr in phase.fields:
         if fr.mode not in (FieldMode.editable, FieldMode.append_only):
             continue
         f = fmap.get(fr.ref)
-        if f is None or not can_see_field(f, ctx):
+        if f is None or not _effective_can_see(f, ctx, fmap):
             continue
         if fr.visibleWhen is not None and not evaluate(fr.visibleWhen, values):
             continue
@@ -75,13 +94,26 @@ def editable_field_keys(defn: ProcessDefinition, phase: PhaseDef, ctx: ViewerCtx
     return out
 
 
+def writable_keys(defn: ProcessDefinition, phase: PhaseDef, ctx: ViewerCtx,
+                  stored: dict, submitted: dict) -> set:
+    """Schreibbare Felder – wie editable_field_keys, aber visibleWhen wird gegen
+    einen SICHEREN Kontext ausgewertet: gespeicherte Werte + nur solche gesendeten
+    Felder, deren FieldRef in dieser Phase selbst editierbar ist. So kann ein
+    Aufrufer NICHT über ein nicht-editierbares (readonly/hidden) Feld im Body ein
+    anderes, per visibleWhen gesperrtes Feld freischalten."""
+    editable_refs = {fr.ref for fr in phase.fields
+                     if fr.mode in (FieldMode.editable, FieldMode.append_only)}
+    eval_values = {**stored, **{k: v for k, v in submitted.items() if k in editable_refs}}
+    return editable_field_keys(defn, phase, ctx, eval_values)
+
+
 def apply_writes(defn: ProcessDefinition, phase: PhaseDef, stored: dict,
                  submitted: dict, ctx: ViewerCtx) -> dict:
     """Schreibschutz-Merge: Basis = gespeicherte Werte; nur erlaubte (sichtbare +
-    editierbare) Felder werden übernommen, der Rest verworfen. Verborgene Felder
-    behalten immer ihren Bestandswert."""
+    in dieser Phase editierbare) Felder werden übernommen, der Rest verworfen.
+    Verborgene Felder behalten immer ihren Bestandswert."""
     merged = dict(stored)
-    allowed = editable_field_keys(defn, phase, ctx, {**stored, **submitted})
+    allowed = writable_keys(defn, phase, ctx, stored, submitted)
     for k, v in submitted.items():
         if k in allowed:
             merged[k] = v

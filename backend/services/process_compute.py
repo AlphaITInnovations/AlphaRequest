@@ -21,14 +21,23 @@ def _is_empty(v: Any) -> bool:
 
 
 def apply_computed(defn: ProcessDefinition, values: dict) -> dict:
+    """Löst computed-Felder bis zum Fixpunkt auf (deklarationsreihenfolge-unabhängig,
+    auch computed-from-computed). Iterationen durch die Feldanzahl begrenzt (Zyklen
+    laufen einfach aus)."""
     out = dict(values)
-    for f in defn.fields:
-        if not f.computed:
-            continue
-        src_val = out.get(f.computed.from_)
-        if f.overridable:
-            if _is_empty(out.get(f.key)) and not _is_empty(src_val):
-                out[f.key] = src_val
-        else:
-            out[f.key] = src_val
+    computed = [f for f in defn.fields if f.computed]
+    for _ in range(len(computed) + 1):
+        changed = False
+        for f in computed:
+            src_val = out.get(f.computed.from_)
+            if f.overridable:
+                if _is_empty(out.get(f.key)) and not _is_empty(src_val):
+                    out[f.key] = src_val
+                    changed = True
+            else:
+                if out.get(f.key) != src_val:
+                    out[f.key] = src_val
+                    changed = True
+        if not changed:
+            break
     return out

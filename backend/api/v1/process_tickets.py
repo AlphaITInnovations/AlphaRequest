@@ -217,14 +217,20 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     stored = row.get("values") or {}
     # Schreibschutz: nur sichtbare + in dieser Phase editierbare Felder übernehmen;
     # der Rest wird verworfen (verborgene Felder behalten ihren Bestandswert).
-    allowed = vis.editable_field_keys(defn, phase, ctx, {**stored, **submitted})
+    # writable_keys wertet visibleWhen gegen einen sicheren Kontext aus (keine
+    # Freischaltung über nicht-editierbare Body-Felder).
+    allowed = vis.writable_keys(defn, phase, ctx, stored, submitted)
     to_apply = {k: v for k, v in submitted.items() if k in allowed}
     errs = pv.validate_values(defn, to_apply)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig", fields=errs)
 
     merged = compute.apply_computed(defn, {**stored, **to_apply})
-    row = store.update_values(ticket_id, json.dumps(merged, ensure_ascii=False), title=body.title)
+    try:
+        row = store.update_values(ticket_id, json.dumps(merged, ensure_ascii=False),
+                                  title=body.title, expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
     _audit(user, "process_ticket_updated", ticket_id, fields=list(to_apply.keys()))
     return DataResponse(data=_out(row, defn, ctx))
 
@@ -249,7 +255,11 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Phase kann nicht abgeschlossen werden", fields=errs)
 
     runtime, status = pr.advance(defn, runtime, utcnow_iso())
-    row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False), status=status)
+    try:
+        row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                   status=status, expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
     _audit(user, "process_ticket_advanced", ticket_id, from_phase=phase.key, status=status)
     return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
 
@@ -263,7 +273,11 @@ def reject_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist bereits abgeschlossen/abgelehnt")
     runtime = pr.reject(row["runtime"])
-    row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False), status="rejected")
+    try:
+        row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                   status="rejected", expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
     _audit(user, "process_ticket_rejected", ticket_id)
     try:
         defn = _load_pinned_defn(row)

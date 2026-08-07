@@ -14,7 +14,7 @@ async function sendTestMail() {
     const { data } = await client.post('/settings/test-mail', { to: mailTo.value.trim() })
     mailResult.value = { ok: true, msg: data.data.message }
   } catch (e: any) {
-    mailResult.value = { ok: false, msg: e.response?.data?.detail ?? 'Fehler' }
+    mailResult.value = { ok: false, msg: e.response?.data?.error?.message ?? e.response?.data?.detail ?? 'Fehler' }
   } finally { mailLoading.value = false }
 }
 </script>

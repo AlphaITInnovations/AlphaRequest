@@ -204,6 +204,11 @@ def create_process(key: str, name: str, definition_json: str,
             (key, name, definition_json, created_by, created_by_name),
         )
         conn.commit()
+    except pymysql.err.IntegrityError:
+        # Race: zweiter paralleler Create desselben Keys (Gap-Locks koexistieren) →
+        # der Verlierer verletzt uq_key_version. Als sauberen 409 zurückgeben.
+        conn.rollback()
+        raise ProcessKeyExists(key)
     except Exception:
         conn.rollback()
         raise
