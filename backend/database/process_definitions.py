@@ -98,17 +98,16 @@ def _row_to_dict(row: Optional[dict]) -> Optional[dict]:
 
 
 def _count_pinning_tickets(conn, key: str, version: int) -> int:
-    """Wie viele Tickets pinnen (key,version)? 0, falls die Spalten (noch) fehlen
-    (Ticket-Runtime kommt erst in Stufe 2)."""
+    """Wie viele Tickets pinnen (key,version)? 0, falls die Tabelle (noch) fehlt."""
     try:
         row = _fetchone(
             conn,
-            "SELECT COUNT(*) AS n FROM tickets WHERE process_key=%s AND process_version=%s",
+            "SELECT COUNT(*) AS n FROM process_tickets WHERE process_key=%s AND process_version=%s",
             (key, version),
         )
         return int(row["n"]) if row else 0
     except pymysql.err.OperationalError:
-        return 0  # Spalte existiert noch nicht
+        return 0  # process_tickets existiert noch nicht
 
 
 def _max_version(conn, key: str) -> int:

@@ -6,6 +6,7 @@ from backend.database.ticket_watchers import TICKET_WATCHERS_DDL, backfill_owner
 from backend.database.audit_log import AUDIT_LOG_DDL
 from backend.database.attachments import ATTACHMENTS_DDL
 from backend.database.process_definitions import PROCESS_DEFINITIONS_DDL
+from backend.database.process_tickets import PROCESS_TICKETS_DDL
 from backend.utils.logger import logger
 
 
@@ -22,6 +23,7 @@ def init_db():
         _exec(conn, AUDIT_LOG_DDL)
         _exec(conn, ATTACHMENTS_DDL)
         _exec(conn, PROCESS_DEFINITIONS_DDL)
+        _exec(conn, PROCESS_TICKETS_DDL)
         conn.commit()
         logger.info("All tables ready")
     finally:
