@@ -76,7 +76,7 @@ function setValue(key: string, value: unknown) {
           :field="r.field"
           :model-value="values[r.field.key]"
           :disabled="disabled || !r.editable"
-          :append-only="r.ref.mode === 'append_only'"
+          :append-only="r.ref.mode === 'append_only' || r.field.mode === 'append_only'"
           :sources="sources"
           @update:model-value="setValue(r.field.key, $event)"
         />

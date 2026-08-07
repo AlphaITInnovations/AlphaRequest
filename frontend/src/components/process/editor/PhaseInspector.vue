@@ -22,6 +22,7 @@ const props = defineProps<{
   users: { id: string; displayName: string }[]
   fieldKeys: string[]
   fieldLabels?: Record<string, string>
+  takenIds?: string[]
   readonly?: boolean
 }>()
 
@@ -244,6 +245,7 @@ function labelFor(ref: string) {
     <section class="card-section">
       <AutomationList :model-value="modelValue.automations" :field-keys="fieldKeys"
                       :field-labels="fieldLabels" :groups="groups" title="Automationen dieser Phase"
+                      :taken-ids="takenIds" :readonly="readonly"
                       @update:model-value="patch({ automations: $event })" />
     </section>
   </div>

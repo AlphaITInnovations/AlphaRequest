@@ -243,19 +243,26 @@ onUnmounted(() => {
                         @select="selectedPhase = $event" />
           </div>
           <div>
-            <PhaseInspector v-if="currentPhase" :model-value="currentPhase" :index="selectedPhase"
-                            :catalog="ed.draft.value.fields" :groups="ed.sources.groups"
-                            :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
-                            :field-labels="ed.fieldLabels.value" :readonly="ed.readonly.value"
-                            @update:model-value="setPhase" />
-            <p v-else class="text-sm text-gray-400 italic">Keine Phase ausgewählt.</p>
+            <fieldset :disabled="ed.readonly.value" class="contents">
+              <PhaseInspector v-if="currentPhase" :model-value="currentPhase" :index="selectedPhase"
+                              :catalog="ed.draft.value.fields" :groups="ed.sources.groups"
+                              :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
+                              :field-labels="ed.fieldLabels.value" :taken-ids="ed.automationIds.value"
+                              :readonly="ed.readonly.value"
+                              @update:model-value="setPhase" />
+              <p v-else class="text-sm text-gray-400 italic">Keine Phase ausgewählt.</p>
+            </fieldset>
           </div>
         </div>
 
         <!-- Felder -->
         <div v-else-if="tab === 'fields'">
-          <FieldCatalogPanel :model-value="ed.draft.value.fields" :groups="ed.sources.groups"
-                             @update:model-value="onFieldsChanged" @renamed="onFieldRenamed" />
+          <!-- fieldset deaktiviert nativ ALLE Bedienelemente darin – so kann kein
+               Unter-Editor den Schreibschutz vergessen. -->
+          <fieldset :disabled="ed.readonly.value" class="contents">
+            <FieldCatalogPanel :model-value="ed.draft.value.fields" :groups="ed.sources.groups"
+                               @update:model-value="onFieldsChanged" @renamed="onFieldRenamed" />
+          </fieldset>
         </div>
 
         <!-- Prozessweite Automationen -->
@@ -264,10 +271,12 @@ onUnmounted(() => {
             Diese Automationen gelten in <b>jeder</b> Phase des Prozesses – z. B. eine
             Erinnerung, die überall greift.
           </p>
-          <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
-                          :field-labels="ed.fieldLabels.value" :groups="ed.sources.groups"
-                          title="Prozessweite Automationen"
-                          @update:model-value="setDefinition({ automations: $event })" />
+          <fieldset :disabled="ed.readonly.value" class="contents">
+            <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
+                            :field-labels="ed.fieldLabels.value" :groups="ed.sources.groups"
+                            title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
+                            @update:model-value="setDefinition({ automations: $event })" />
+          </fieldset>
         </div>
 
         <!-- Vorschau -->

@@ -12,7 +12,8 @@
 import { computed, reactive, ref, shallowRef } from 'vue'
 import type { OptionSources, ProcessDefinition, ProcessIssue, ProcessOut } from '@/types/process'
 import * as api from '@/api/processes'
-import { client } from '@/api/client'
+import { loadOptionSources } from '@/lib/processSources'
+import { renameRefsInDefinition } from '@/lib/processRename'
 import { canonicalJson, cloneDefinition, normalizeDefinition } from '@/lib/processNormalize'
 import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
 import { errorCount, validateDefinition } from '@/lib/processValidate'
@@ -48,6 +49,12 @@ export function useProcessEditor() {
 
   /** Feld-Schlüssel und -Beschriftungen für Picker in den Unter-Editoren. */
   const fieldKeys = computed(() => draft.value?.fields.map((f) => f.key) ?? [])
+  /** ALLE Automations-IDs (prozessweit + je Phase) – Eindeutigkeit gilt global. */
+  const automationIds = computed(() => [
+    ...(draft.value?.automations ?? []),
+    ...(draft.value?.phases ?? []).flatMap((p) => p.automations),
+  ].map((a) => a.id))
+
   const fieldLabels = computed(() => {
     const out: Record<string, string> = {}
     for (const f of draft.value?.fields ?? []) out[f.key] = f.label || f.key
@@ -55,22 +62,12 @@ export function useProcessEditor() {
   })
 
   async function loadSources() {
-    // Fachabteilungen aus den Settings (enthält auch versteckte – sonst sähen
-    // gültige Gruppen im Editor wie Tippfehler aus).
-    try {
-      const { data } = await client.get('/settings/groups')
-      sources.groups = (data.data || []).map((g: any) => ({ id: g.id, name: g.name }))
-    } catch { /* ohne Gruppen bleibt der Editor nutzbar, nur ohne Namen */ }
-    try {
-      const { data } = await client.get('/users')
-      const list = data.data || data || []
-      sources.users = list.map((u: any) => ({ id: u.id, displayName: u.displayName || u.name || u.id }))
-    } catch { /* optional */ }
-    try {
-      const { data } = await client.get('/companies')
-      const list = data.data || data || []
-      sources.companies = list.map((c: any) => (typeof c === 'string' ? c : c.name)).filter(Boolean)
-    } catch { /* optional */ }
+    // Admin-Variante: /settings/groups liefert auch versteckte Gruppen – sonst
+    // sähen gültige Gruppen im Editor wie Tippfehler aus.
+    const loaded = await loadOptionSources(true)
+    sources.groups = loaded.groups
+    sources.users = loaded.users
+    sources.companies = loaded.companies
   }
 
   async function load(key: string, version: number) {
@@ -97,13 +94,18 @@ export function useProcessEditor() {
     if (serverIssues.value.length) serverIssues.value = []
   }
 
-  /** Feld-Umbenennung: alle Referenzen mitziehen (Phasen, Bedingungen, Automationen). */
+  /**
+   * Feld-Umbenennung: zieht die Referenzen strukturell nach.
+   *
+   * WICHTIG: bewusst KEIN blindes Ersetzen aller gleichlautenden Strings – das
+   * würde auch Options-Werte, Meldungstexte, Phasen-Schlüssel oder gar den
+   * Prozess-Key mit umbenennen (Phasen- und Feld-Alphabet überschneiden sich).
+   * Angefasst werden nur echte Referenzpositionen.
+   */
   function renameFieldKey(from: string, to: string) {
-    if (!draft.value || from === to || !from) return
-    const json = JSON.stringify(draft.value)
-    // Referenzen sind immer vollständige Strings – gezielt ersetzen statt global.
-    const next = normalizeDefinition(JSON.parse(json, (_k, v) => (v === from ? to : v)))
-    draft.value = next
+    if (!draft.value || from === to || !from || !to) return
+    draft.value = renameRefsInDefinition(draft.value, from, to)
+    if (serverIssues.value.length) serverIssues.value = []
   }
 
   async function save(): Promise<boolean> {
@@ -165,7 +167,7 @@ export function useProcessEditor() {
   return {
     loading, saving, meta, draft, dirty, readonly, isDraft, conflict, loadError,
     issues, clientIssues, serverIssues, errors, warnings, canSave, canPublish,
-    sources, fieldKeys, fieldLabels,
+    sources, fieldKeys, fieldLabels, automationIds,
     load, loadSources, update, renameFieldKey, save, publish, reloadFromServer, revert,
   }
 }

@@ -13,9 +13,10 @@ import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import { PRIORITIES } from '@/lib/processSchema'
+import { emptySources, loadOptionSources } from '@/lib/processSources'
+import { applyComputed } from '@/lib/conditionDsl'
 import * as processesApi from '@/api/processes'
 import { createTicket } from '@/api/processTickets'
-import { client } from '@/api/client'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 
 const route = useRoute()
@@ -31,29 +32,12 @@ const values = ref<Record<string, unknown>>({})
 const title = ref('')
 const priority = ref('normal')
 const errors = ref<SimFieldError[]>([])
-const sources = ref<OptionSources>({ groups: [], users: [], companies: [] })
+const sources = ref<OptionSources>(emptySources())
 
 /** Aus Sicht der erstellenden Person: Owner ⇒ Vollsicht. */
 const viewer = { fullView: true, isAdmin: false, groupIds: [] }
 
 const startPhase = computed(() => definition.value?.phases?.[0] ?? null)
-
-async function loadSources() {
-  try {
-    const { data } = await client.get('/settings/groups')
-    sources.value.groups = (data.data || []).map((g: any) => ({ id: g.id, name: g.name }))
-  } catch { /* Namen sind optional */ }
-  try {
-    const { data } = await client.get('/users')
-    const list = data.data || data || []
-    sources.value.users = list.map((u: any) => ({ id: u.id, displayName: u.displayName || u.id }))
-  } catch { /* optional */ }
-  try {
-    const { data } = await client.get('/companies')
-    const list = data.data || data || []
-    sources.value.companies = list.map((c: any) => (typeof c === 'string' ? c : c.name)).filter(Boolean)
-  } catch { /* optional */ }
-}
 
 async function loadProcess(key: string) {
   if (!key) { definition.value = null; return }
@@ -68,6 +52,19 @@ async function loadProcess(key: string) {
     showToast(errorMessage(e, 'Prozess konnte nicht geladen werden'), false)
   }
 }
+
+/** Abgeleitete Felder wie auf dem Server nachziehen (sonst blieben sie leer und
+ *  ein berechnetes Pflichtfeld wäre nie erfüllbar). */
+function onValues(next: Record<string, unknown>) {
+  values.value = definition.value ? applyComputed(definition.value.fields, next) : next
+}
+
+/** Fehler ohne Feldbezug (Phasen-Regeln, Server-Meldungen) – die zeigt das
+ *  Formular selbst nicht an, sie brauchen eine eigene Liste. */
+const generalErrors = computed(() => {
+  const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
+  return errors.value.filter((e) => !fieldKeys.has(e.path))
+})
 
 async function submit() {
   if (!definition.value || !startPhase.value) return
@@ -99,7 +96,7 @@ async function submit() {
 }
 
 onMounted(async () => {
-  await loadSources()
+  sources.value = await loadOptionSources(true)
   try {
     catalog.value = await processesApi.listProcesses()
   } catch { /* Katalog optional, wenn der Key aus der Route kommt */ }
@@ -123,9 +120,8 @@ onMounted(async () => {
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Prozess</label>
           <select v-model="selectedKey" class="afi w-full" @change="loadProcess(selectedKey)">
             <option value="">– bitte wählen –</option>
-            <option v-for="p in catalog" :key="p.key" :value="p.key">
-              {{ p.definition?.icon || '' }} {{ p.name }}
-            </option>
+            <!-- Kein Symbol: Listen-Routen liefern `definition` grundsätzlich als null. -->
+            <option v-for="p in catalog" :key="p.key" :value="p.key">{{ p.name }}</option>
           </select>
           <p v-if="!catalog.length" class="text-xs text-gray-400 mt-2">
             Es ist noch kein Prozess veröffentlicht.
@@ -150,7 +146,18 @@ onMounted(async () => {
 
           <SchemaForm :definition="definition" :phase="startPhase" :model-value="values"
                       :viewer="viewer" :errors="errors" :sources="sources"
-                      @update:model-value="values = $event" />
+                      @update:model-value="onValues($event)" />
+
+          <div v-if="generalErrors.length"
+               class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
+                      px-4 py-3 text-sm text-red-800 dark:text-red-200 mt-3">
+            <div class="font-medium mb-1">Auftrag kann nicht angelegt werden:</div>
+            <ul class="list-disc list-inside">
+              <li v-for="(e, i) in generalErrors" :key="i">
+                <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
+              </li>
+            </ul>
+          </div>
 
           <div class="flex justify-end gap-2 mt-4">
             <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>

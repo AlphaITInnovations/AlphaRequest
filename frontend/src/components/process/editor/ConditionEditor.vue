@@ -160,7 +160,9 @@ function addChild() {
  * auch die Gruppe weg – eine leere UND-Gruppe wäre serverseitig ungültig.
  */
 function updateChild(i: number, v: Condition | null) {
-  if (op.value === 'not') { push(v ?? null); return }
+  // NICHT: das Kind MUSS wieder eingepackt werden – sonst verschwindet die
+  // Negation und die Bedingung würde ins Gegenteil verkehrt gespeichert.
+  if (op.value === 'not') { push(v ? { not: v } : null); return }
   if (!isGroup.value || !op.value) return
   const next = v === null
     ? children.value.filter((_, j) => j !== i)

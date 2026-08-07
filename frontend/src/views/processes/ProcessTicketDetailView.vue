@@ -13,9 +13,10 @@ import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
+import { emptySources, loadOptionSources } from '@/lib/processSources'
+import { applyComputed } from '@/lib/conditionDsl'
 import * as processesApi from '@/api/processes'
 import * as ticketsApi from '@/api/processTickets'
-import { client } from '@/api/client'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
 
@@ -30,7 +31,7 @@ const ticket = ref<ProcessTicketOut | null>(null)
 const definition = ref<ProcessDefinition | null>(null)
 const values = ref<Record<string, unknown>>({})
 const errors = ref<SimFieldError[]>([])
-const sources = ref<OptionSources>({ groups: [], users: [], companies: [] })
+const sources = ref<OptionSources>(emptySources())
 const loadError = ref<string | null>(null)
 
 /** Endpunkte sind derzeit admin-only – daher volle Sicht. Sobald der Zugriff für
@@ -50,22 +51,16 @@ const terminal = computed(() =>
 const dirty = computed(() =>
   JSON.stringify(values.value) !== JSON.stringify(ticket.value?.values ?? {}))
 
-async function loadSources() {
-  try {
-    const { data } = await client.get('/settings/groups')
-    sources.value.groups = (data.data || []).map((g: any) => ({ id: g.id, name: g.name }))
-  } catch { /* optional */ }
-  try {
-    const { data } = await client.get('/users')
-    const list = data.data || data || []
-    sources.value.users = list.map((u: any) => ({ id: u.id, displayName: u.displayName || u.id }))
-  } catch { /* optional */ }
-  try {
-    const { data } = await client.get('/companies')
-    const list = data.data || data || []
-    sources.value.companies = list.map((c: any) => (typeof c === 'string' ? c : c.name)).filter(Boolean)
-  } catch { /* optional */ }
+/** Abgeleitete Felder wie auf dem Server nachziehen. */
+function onValues(next: Record<string, unknown>) {
+  values.value = definition.value ? applyComputed(definition.value.fields, next) : next
 }
+
+/** Fehler ohne Feldbezug (Phasen-Regeln, Server-Meldungen). */
+const generalErrors = computed(() => {
+  const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
+  return errors.value.filter((e) => !fieldKeys.has(e.path))
+})
 
 async function load() {
   loading.value = true
@@ -131,7 +126,7 @@ async function reject() {
 
 const groupName = (gid: string) => sources.value.groups.find((g) => g.id === gid)?.name || gid
 
-onMounted(async () => { await loadSources(); await load() })
+onMounted(async () => { sources.value = await loadOptionSources(true); await load() })
 </script>
 
 <template>
@@ -208,13 +203,14 @@ onMounted(async () => { await loadSources(); await load() })
         <template v-if="!terminal && phase">
           <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                       :viewer="viewer" :errors="errors" :sources="sources"
-                      @update:model-value="values = $event" />
-          <div v-if="errors.length"
+                      @update:model-value="onValues($event)" />
+          <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst an. -->
+          <div v-if="generalErrors.length"
                class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
                       px-4 py-3 text-sm text-red-800 dark:text-red-200 mt-3">
             <ul class="list-disc list-inside">
-              <li v-for="(e, i) in errors" :key="i">
-                <span class="font-mono text-xs opacity-70">{{ e.path }}</span> — {{ e.message }}
+              <li v-for="(e, i) in generalErrors" :key="i">
+                <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
               </li>
             </ul>
           </div>

@@ -17,6 +17,11 @@ const props = defineProps<{
   fieldLabels?: Record<string, string>
   groups?: { id: string; name: string }[]
   title?: string
+  /** ALLE Automations-IDs des Prozesses – IDs müssen prozessweit eindeutig sein,
+   *  nicht nur innerhalb dieser Liste (sonst hieße die erste Automation jeder
+   *  Phase "auto-1" und der Server lehnt das Speichern ab). */
+  takenIds?: string[]
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: Automation[]] }>()
@@ -69,7 +74,7 @@ function remove(i: number) {
 
 /** Freie Kennung suchen, damit keine doppelten IDs entstehen (Server lehnt ab). */
 function add() {
-  const taken = new Set(list.value.map((a) => a?.id))
+  const taken = new Set([...(props.takenIds ?? []), ...list.value.map((a) => a?.id)])
   let n = 1
   while (taken.has(`auto-${n}`)) n++
   emit('update:modelValue', [...list.value, blankAutomation(`auto-${n}`)])

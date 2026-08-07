@@ -22,9 +22,11 @@ export const WIDGETS_TOP: readonly Widget[] = [
 ]
 
 /** Widgets in collection-Unterfeldern: kein collection, aber server_stamped erlaubt. */
+// Auswahl-Widgets fehlen bewusst: SubField trägt serverseitig KEINE Optionen,
+// ein Auswahlfeld bliebe damit dauerhaft leer.
 export const WIDGETS_SUB: readonly Widget[] = [
-  'text', 'textarea', 'number', 'date', 'select', 'multiselect', 'checkbox',
-  'checkbox-group', 'attachment', 'user', 'company', 'group', 'server_stamped',
+  'text', 'textarea', 'number', 'date', 'checkbox',
+  'attachment', 'user', 'company', 'group', 'server_stamped',
 ]
 
 export const PHASE_KINDS: readonly PhaseKind[] = ['start', 'task', 'review', 'end']

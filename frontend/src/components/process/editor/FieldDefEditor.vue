@@ -10,7 +10,7 @@
  * visibility, computed): Der Server liefert genau diese Form zurück, und ein
  * leeres Objekt statt `null` würde den Entwurf dauerhaft als geändert zeigen.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   FieldConstraints, FieldDef, FieldVisibility, OptionsSource, Widget,
 } from '@/types/process'
@@ -71,6 +71,21 @@ function toggle(k: SectionKey) {
 
 function patch(p: Partial<FieldDef>) {
   emit('update:modelValue', { ...props.modelValue, ...p })
+}
+
+/**
+ * Der Schlüssel wird lokal gepuffert und erst bei Blur/Enter übernommen.
+ * Grund: eine Schlüssel-Änderung zieht ALLE Referenzen nach (Phasen, Bedingungen,
+ * Automationen). Bei jedem Tastendruck zu benennen hätte Zwischenstände wie
+ * „emai" als eigenständige Umbenennung behandelt und fremde Felder mitgerissen.
+ */
+const keyDraft = ref(props.modelValue.key)
+watch(() => props.modelValue.key, (v) => { keyDraft.value = v })
+
+function commitKey() {
+  const next = keyDraft.value.trim()
+  if (next !== props.modelValue.key) patch({ key: next })
+  else keyDraft.value = props.modelValue.key
 }
 
 function setWidget(w: Widget) {
@@ -201,8 +216,8 @@ const computedSummary = computed(() =>
     <div class="grid md:grid-cols-2 gap-3">
       <div>
         <label class="lbl">Schlüssel</label>
-        <input :value="modelValue.key"
-               @input="patch({ key: ($event.target as HTMLInputElement).value })"
+        <input v-model="keyDraft" @change="commitKey" @blur="commitKey"
+               @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
                placeholder="z. B. person.vorname" class="pfi font-mono"
                :class="keyError ? 'border-red-400 bg-red-50 dark:bg-red-900/20' : ''" />
         <p v-if="keyError" class="text-xs text-red-500 mt-1">{{ keyError }}</p>

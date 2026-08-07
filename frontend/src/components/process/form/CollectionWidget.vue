@@ -47,7 +47,7 @@ export function withoutEntry(
  * Der Wert ist immer ein Array von Objekten – ein Objekt je Eintrag, die Keys
  * sind die Unterfeld-Keys aus field.item.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { FieldDef, OptionSources, SubField } from '@/types/process'
 import { blankFieldDef } from '@/lib/processSchema'
 import SchemaWidget from './SchemaWidget.vue'
@@ -58,6 +58,9 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   appendOnly?: boolean
   sources?: OptionSources
+  /** Zahl der bereits GESPEICHERTEN Einträge. Nur diese sind bei append_only
+   *  gesperrt. Ohne Angabe: der Stand beim Einhängen der Komponente. */
+  persistedCount?: number
 }>(), { disabled: false, appendOnly: false })
 
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, unknown>[]] }>()
@@ -67,21 +70,23 @@ const subFields = computed<SubField[]>(() => props.field?.item ?? [])
 
 // ── Sperre für bereits gespeicherte Einträge ─────────────────────────────────
 
-// Anzahl der Einträge beim ersten Laden. Die Werte können asynchron nachkommen,
-// darum wird erst gemerkt, wenn überhaupt ein Array anliegt.
-const initialCount = ref(entries.value.length)
-const counted = ref(Array.isArray(props.modelValue))
+/**
+ * Grundlinie der bereits gespeicherten Einträge.
+ *
+ * WICHTIG: Sie wird EINMAL beim Einhängen bestimmt (bzw. vom Host per
+ * `persistedCount` vorgegeben) und danach NICHT mehr nachgezogen. Ein früherer
+ * Watcher übernahm die Länge des ersten eintreffenden Arrays – das war aber das
+ * Array, das dieses Widget beim Klick auf „Eintrag hinzufügen" selbst erzeugt
+ * hatte, wodurch sich der allererste Eintrag sofort selbst gesperrt hat.
+ */
+const mountedCount = ref(entries.value.length)
+onMounted(() => { mountedCount.value = toEntries(props.modelValue).length })
 
-watch(() => props.modelValue, (v) => {
-  if (!counted.value && Array.isArray(v)) {
-    initialCount.value = toEntries(v).length
-    counted.value = true
-  }
-})
+const baseline = computed(() => props.persistedCount ?? mountedCount.value)
 
-const locked = (i: number) => isLockedEntry(i, initialCount.value, props.appendOnly)
+const locked = (i: number) => isLockedEntry(i, baseline.value, props.appendOnly)
 /** Neu hinzugefügt = noch nicht gespeichert – Systemstempel gibt es erst danach. */
-const isNew = (i: number) => i >= initialCount.value
+const isNew = (i: number) => i >= baseline.value
 
 // ── Unterfelder ──────────────────────────────────────────────────────────────
 
