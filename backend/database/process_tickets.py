@@ -174,3 +174,52 @@ def update_runtime(ticket_id: int, *, runtime_json: str, status: str,
     finally:
         conn.close()
     return get(ticket_id)
+
+
+# ── Scheduler-Support ─────────────────────────────────────────────────────────
+
+_ACTIVE_CLAUSE = "status NOT IN ('archived', 'rejected')"
+
+
+def list_due(now_iso: str, limit: int = 200) -> list[dict]:
+    """Aktive Tickets mit fälligem Timer (next_timer_due_at <= now)."""
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            f"SELECT {_COLS} FROM process_tickets WHERE next_timer_due_at IS NOT NULL "
+            f"AND next_timer_due_at <= %s AND {_ACTIVE_CLAUSE} "
+            "ORDER BY next_timer_due_at LIMIT %s",
+            (now_iso, limit),
+        )
+    finally:
+        conn.close()
+    return [_row_to_dict(r) for r in rows]
+
+
+def set_next_timer(ticket_id: int, next_timer_due_at: Optional[str]) -> None:
+    conn = get_connection()
+    try:
+        _exec(conn, "UPDATE process_tickets SET next_timer_due_at=%s WHERE id=%s",
+              (next_timer_due_at, ticket_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_priority(ticket_id: int, priority: str) -> None:
+    conn = get_connection()
+    try:
+        _exec(conn, "UPDATE process_tickets SET priority=%s WHERE id=%s", (priority, ticket_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_status(ticket_id: int, status: str) -> None:
+    conn = get_connection()
+    try:
+        _exec(conn, "UPDATE process_tickets SET status=%s WHERE id=%s", (status, ticket_id))
+        conn.commit()
+    finally:
+        conn.close()

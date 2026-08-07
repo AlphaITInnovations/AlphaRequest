@@ -88,4 +88,12 @@ async def lifespan(app):
 
     asyncio.create_task(user_sync_background())
 
+    # Prozess-Automations-Scheduler (Timer/Eskalation) – eigener, gegateter Task,
+    # sweept off-the-event-loop. Fehler beim Start dürfen den App-Start nicht kippen.
+    try:
+        from backend.services import process_scheduler
+        process_scheduler.start(app)
+    except Exception:
+        logger.exception("Prozess-Scheduler-Start fehlgeschlagen")
+
     yield

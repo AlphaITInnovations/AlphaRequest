@@ -24,10 +24,14 @@ from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
+from backend.services import process_actions as pactions
+from backend.services import process_automations as pa
 from backend.services import process_compute as compute
 from backend.services import process_runtime as pr
 from backend.services import process_validation as pv
 from backend.services import process_visibility as vis
+from backend.schemas.process_definition import TriggerType
+from backend.utils.logger import logger
 from backend.utils.timeutil import utcnow_iso
 
 router = APIRouter()
@@ -99,6 +103,43 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx) -> Pr
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
     data["responsibility"] = resp
     return ProcessTicketOut(**data)
+
+
+def _stamp_next_timer(row: dict, defn: ProcessDefinition) -> None:
+    """Setzt next_timer_due_at für die aktuelle Phase (Ledger leer bei Phaseneintritt),
+    damit der Scheduler das Ticket findet. Best-effort."""
+    try:
+        rt = row.get("runtime") or {}
+        phase = pr.current_phase(defn, rt)
+        if phase is None or pr.is_terminal(rt):
+            store.set_next_timer(row["id"], None)
+            return
+        idx = rt.get("current_index", 0)
+        entered = rt["phases"][idx].get("entered_at") if 0 <= idx < len(rt.get("phases", [])) else None
+        paused = int(rt.get("sla_paused_ms", 0))
+        nd = pa.compute_next_timer_due(phase, entered, paused, {}) if entered else None
+        store.set_next_timer(row["id"], nd.isoformat() if nd else None)
+    except Exception:
+        logger.exception("next_timer_due_at-Stamping fehlgeschlagen für #%s", row.get("id"))
+
+
+def _run_inline_automations(row: dict, defn: ProcessDefinition, phase, trigger_types: set,
+                            changed_fields: Optional[set] = None) -> None:
+    """Führt nicht-Timer-Automations der Phase inline aus (on_enter/on_exit/
+    on_field_change). Best-effort: Fehler brechen den Request nicht."""
+    if phase is None:
+        return
+    for a in phase.automations:
+        if a.trigger.type not in trigger_types:
+            continue
+        if a.trigger.type == TriggerType.on_field_change:
+            if not changed_fields or a.trigger.field not in changed_fields:
+                continue
+        try:
+            changes = pactions.run_action(a.action, row, defn, phase)
+            pactions.apply_action_changes(row, defn, changes, store)
+        except Exception:
+            logger.exception("Inline-Automation „%s“ (#%s) fehlgeschlagen", a.id, row.get("id"))
 
 
 def _audit(user: dict, action: str, ticket_id, **details) -> None:
@@ -176,6 +217,8 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         runtime_json=json.dumps(runtime, ensure_ascii=False),
     )
     _audit(user, "process_ticket_created", row["id"], process_key=defn.key, version=pub["version"])
+    _run_inline_automations(row, defn, pr.current_phase(defn, row["runtime"]), {TriggerType.on_enter})
+    _stamp_next_timer(row, defn)
     return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
 
 
@@ -232,6 +275,10 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
     _audit(user, "process_ticket_updated", ticket_id, fields=list(to_apply.keys()))
+    if to_apply:
+        _run_inline_automations(row, defn, phase, {TriggerType.on_field_change},
+                                changed_fields=set(to_apply.keys()))
+        _stamp_next_timer(row, defn)
     return DataResponse(data=_out(row, defn, ctx))
 
 
@@ -261,6 +308,9 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
     _audit(user, "process_ticket_advanced", ticket_id, from_phase=phase.key, status=status)
+    _run_inline_automations(row, defn, phase, {TriggerType.on_exit})          # verlassene Phase
+    _run_inline_automations(row, defn, pr.current_phase(defn, row["runtime"]), {TriggerType.on_enter})
+    _stamp_next_timer(row, defn)
     return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
 
 
