@@ -24,6 +24,7 @@ from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
+from backend.services import process_compute as compute
 from backend.services import process_runtime as pr
 from backend.services import process_validation as pv
 from backend.services import process_visibility as vis
@@ -164,6 +165,7 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     errs = pv.validate_values(defn, values)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig", fields=errs)
+    values = compute.apply_computed(defn, values)   # abgeleitete Felder füllen
 
     status = pr.enter_status_for(start_phase)
     row = store.create(
@@ -221,7 +223,7 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig", fields=errs)
 
-    merged = {**stored, **to_apply}
+    merged = compute.apply_computed(defn, {**stored, **to_apply})
     row = store.update_values(ticket_id, json.dumps(merged, ensure_ascii=False), title=body.title)
     _audit(user, "process_ticket_updated", ticket_id, fields=list(to_apply.keys()))
     return DataResponse(data=_out(row, defn, ctx))
