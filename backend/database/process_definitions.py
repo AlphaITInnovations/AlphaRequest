@@ -60,14 +60,27 @@ CREATE TABLE IF NOT EXISTS process_definitions (
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     published_at     DATETIME NULL,
+    rev              INT NOT NULL DEFAULT 0,
     UNIQUE KEY uq_key_version (`key`, version),
     UNIQUE KEY uq_published (`published_marker`),
-    INDEX idx_key_status (`key`, status)
+    INDEX idx_key_status (`key`, status),
+    INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
-_COLS = ("id, `key`, version, status, name, definition_json, base_version, "
+# Idempotente In-Place-Migrationen (für bereits bestehende Tabellen).
+PROCESS_DEFINITIONS_MIGRATIONS = [
+    "ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS rev INT NOT NULL DEFAULT 0",
+    "ALTER TABLE process_definitions ADD INDEX IF NOT EXISTS idx_status (status)",
+]
+
+_COLS = ("id, `key`, version, status, name, definition_json, base_version, rev, "
          "created_by, created_by_name, created_at, updated_at, published_at")
+
+# Listen-Projektion OHNE definition_json: Kataloge/Versionslisten schleppen sonst
+# jede vollständige Definition mit (und geben sie an jeden Leser aus).
+_LIST_COLS = ("id, `key`, version, status, name, base_version, rev, "
+              "created_by, created_by_name, created_at, updated_at, published_at")
 
 
 def ensure_table() -> None:
@@ -92,8 +105,9 @@ def _row_to_dict(row: Optional[dict]) -> Optional[dict]:
         out["definition"] = json.loads(out["definition_json"]) if out.get("definition_json") else None
     except Exception:
         out["definition"] = None
-    # ETag = updated_at (für If-Match)
-    out["etag"] = out.get("updated_at")
+    # ETag = monotone Revision. Ein Zeitstempel mit Sekundenauflösung konnte zwei
+    # Änderungen innerhalb derselben Sekunde nicht unterscheiden (Lost Update).
+    out["etag"] = str(out["rev"]) if out.get("rev") is not None else None
     return out
 
 
@@ -162,11 +176,12 @@ def get_published(key: str) -> Optional[dict]:
 
 
 def list_versions(key: str) -> list[dict]:
+    """Versionsliste OHNE definition_json (Detailroute liefert den Inhalt)."""
     conn = get_connection()
     try:
         rows = _fetchall(
             conn,
-            f"SELECT {_COLS} FROM process_definitions WHERE `key`=%s ORDER BY version DESC",
+            f"SELECT {_LIST_COLS} FROM process_definitions WHERE `key`=%s ORDER BY version DESC",
             (key,),
         )
     finally:
@@ -175,11 +190,13 @@ def list_versions(key: str) -> list[dict]:
 
 
 def list_published_catalog() -> list[dict]:
+    """Veröffentlichter Katalog OHNE definition_json."""
     conn = get_connection()
     try:
         rows = _fetchall(
             conn,
-            f"SELECT {_COLS} FROM process_definitions WHERE status='published' ORDER BY name, `key`",
+            f"SELECT {_LIST_COLS} FROM process_definitions WHERE status='published' "
+            "ORDER BY name, `key`",
         )
     finally:
         conn.close()
@@ -271,16 +288,14 @@ def update_draft(key: str, version: int, name: str, definition_json: str,
             raise ProcessNotFound(f"{key} v{version}")
         if row["status"] != "draft":
             raise ProcessInvalidState(f"Version ist {row['status']}, nur draft ist editierbar")
-        if if_match is not None:
-            cur = row["updated_at"]
-            cur_iso = cur.isoformat() if hasattr(cur, "isoformat") else str(cur)
-            if if_match != cur_iso:
-                raise ProcessVersionConflict("Definition wurde zwischenzeitlich geändert")
+        if if_match is not None and str(if_match).strip('"') != str(row.get("rev")):
+            raise ProcessVersionConflict("Definition wurde zwischenzeitlich geändert")
         if _count_pinning_tickets(conn, key, version) > 0:
             raise ProcessVersionInUse(f"{key} v{version} wird von Tickets referenziert")
         _exec(
             conn,
-            "UPDATE process_definitions SET name=%s, definition_json=%s WHERE `key`=%s AND version=%s",
+            "UPDATE process_definitions SET name=%s, definition_json=%s, rev=rev+1 "
+            "WHERE `key`=%s AND version=%s",
             (name, definition_json, key, version),
         )
         conn.commit()

@@ -5,9 +5,13 @@ from backend.database.users import USERS_DDL, USERS_MIGRATIONS
 from backend.database.ticket_watchers import TICKET_WATCHERS_DDL, backfill_owner_watchers
 from backend.database.audit_log import AUDIT_LOG_DDL
 from backend.database.attachments import ATTACHMENTS_DDL
-from backend.database.process_definitions import PROCESS_DEFINITIONS_DDL
-from backend.database.process_tickets import PROCESS_TICKETS_DDL
-from backend.database.process_timer_fires import PROCESS_TIMER_FIRES_DDL
+from backend.database.process_definitions import (
+    PROCESS_DEFINITIONS_DDL, PROCESS_DEFINITIONS_MIGRATIONS,
+)
+from backend.database.process_tickets import PROCESS_TICKETS_DDL, PROCESS_TICKETS_MIGRATIONS
+from backend.database.process_timer_fires import (
+    PROCESS_TIMER_FIRES_DDL, PROCESS_TIMER_FIRES_MIGRATIONS,
+)
 from backend.utils.logger import logger
 
 
@@ -31,17 +35,22 @@ def init_db():
     finally:
         conn.close()
 
-    # Indizes idempotent nachrüsten (in-place, non-fatal – reine Performance).
+    # Indizes/Spalten idempotent nachrüsten (in-place, non-fatal – reine Performance
+    # bzw. additive Spalten). Greift nur für bereits bestehende Tabellen; neu
+    # angelegte enthalten alles schon aus dem DDL.
     try:
         conn = get_connection()
         try:
-            for migration in TICKETS_MIGRATIONS:
+            for migration in (list(TICKETS_MIGRATIONS)
+                              + list(PROCESS_DEFINITIONS_MIGRATIONS)
+                              + list(PROCESS_TICKETS_MIGRATIONS)
+                              + list(PROCESS_TIMER_FIRES_MIGRATIONS)):
                 _exec(conn, migration)
             conn.commit()
         finally:
             conn.close()
     except Exception as e:
-        logger.warning(f"Ticket-Index-Migrationen übersprungen: {e}")
+        logger.warning(f"Index-/Spalten-Migrationen übersprungen: {e}")
 
     # Bestehende Tickets: Ersteller als Beobachter nachtragen (idempotent)
     try:

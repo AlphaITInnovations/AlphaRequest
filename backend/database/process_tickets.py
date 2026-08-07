@@ -39,9 +39,19 @@ CREATE TABLE IF NOT EXISTS process_tickets (
     INDEX idx_status (status),
     INDEX idx_process (process_key, process_version),
     INDEX idx_owner (owner_id),
-    INDEX idx_next_timer (next_timer_due_at)
+    INDEX idx_next_timer (next_timer_due_at),
+    INDEX idx_status_updated (status, updated_at),
+    INDEX idx_updated (updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
+
+# Idempotente In-Place-Migrationen (für bereits bestehende Tabellen).
+PROCESS_TICKETS_MIGRATIONS = [
+    "ALTER TABLE process_tickets ADD COLUMN IF NOT EXISTS rev INT NOT NULL DEFAULT 0",
+    "ALTER TABLE process_tickets ADD INDEX IF NOT EXISTS idx_status_updated (status, updated_at)",
+    "ALTER TABLE process_tickets ADD INDEX IF NOT EXISTS idx_updated (updated_at)",
+    "ALTER TABLE process_tickets ADD INDEX IF NOT EXISTS idx_next_timer (next_timer_due_at)",
+]
 
 _COLS = ("id, process_key, process_version, title, status, priority, owner_id, owner_name, "
          "values_json, runtime_json, rev, next_timer_due_at, created_at, updated_at")

@@ -23,10 +23,15 @@ CREATE TABLE IF NOT EXISTS process_timer_fires (
     occurrence     INT NOT NULL,
     suppressed     TINYINT(1) NOT NULL DEFAULT 0,
     fired_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_fire (ticket_id, phase_key, epoch, automation_id, occurrence),
-    INDEX idx_ticket (ticket_id)
+    UNIQUE KEY uq_fire (ticket_id, phase_key, epoch, automation_id, occurrence)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
+# uq_fire beginnt mit ticket_id und deckt Abfragen nach Ticket bereits ab – ein
+# separater idx_ticket wäre ein reines Duplikat (zweiter B-Baum pro INSERT).
+
+PROCESS_TIMER_FIRES_MIGRATIONS = [
+    "ALTER TABLE process_timer_fires DROP INDEX IF EXISTS idx_ticket",
+]
 
 
 def ensure_table() -> None:

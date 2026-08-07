@@ -76,12 +76,24 @@ class ProcessTicketOut(BaseModel):
 
 # ── Helfer ─────────────────────────────────────────────────────────────────
 
-def _load_pinned_defn(row: dict) -> ProcessDefinition:
-    d = defstore.get_definition(row["process_key"], row["process_version"])
+def _load_pinned_defn(row: dict, cache: Optional[dict] = None) -> ProcessDefinition:
+    """Gepinnte Definition laden und parsen.
+
+    `cache` (pro Request) verhindert das N+1-Muster in Listen: ohne ihn würde je
+    Zeile eine DB-Abfrage UND eine vollständige Pydantic-Validierung derselben
+    Definition laufen. Gepinnte (key, version) sind unveränderlich (§4), das
+    Ergebnis ist also innerhalb eines Requests sicher wiederverwendbar."""
+    pin = (row["process_key"], row["process_version"])
+    if cache is not None and pin in cache:
+        return cache[pin]
+    d = defstore.get_definition(*pin)
     if not d or not d.get("definition"):
         raise api_error(500, "PROCESS_DEFINITION_MISSING",
-                        f"Gepinnte Definition {row['process_key']} v{row['process_version']} fehlt")
-    return ProcessDefinition.model_validate(d["definition"])
+                        f"Gepinnte Definition {pin[0]} v{pin[1]} fehlt")
+    defn = ProcessDefinition.model_validate(d["definition"])
+    if cache is not None:
+        cache[pin] = defn
+    return defn
 
 
 def _is_terminal(row: dict) -> bool:
@@ -151,13 +163,17 @@ def list_process_tickets(
     _require_admin(user)
     rows, total = store.list_tickets(status=status, process_key=process_key, q=q,
                                      limit=limit, offset=offset)
+    # Definitionen je (key, version) nur EINMAL laden/parsen und die Gruppen-
+    # Mitgliedschaft einmal abfragen – sonst 2 DB-Abfragen + 1 Validierung pro Zeile.
+    defn_cache: dict = {}
+    gids = vis.user_group_ids(user)
     out = []
     for r in rows:
         try:
-            d = _load_pinned_defn(r)
+            d = _load_pinned_defn(r, defn_cache)
         except Exception:
             d = None
-        out.append(_out(r, d, vis.build_viewer_ctx(user, r, d)))
+        out.append(_out(r, d, vis.build_viewer_ctx(user, r, d, group_ids=gids)))
     return ListResponse(data=out, meta=Meta(total=total, limit=limit, offset=offset))
 
 

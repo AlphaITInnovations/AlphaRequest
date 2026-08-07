@@ -151,23 +151,33 @@ def apply_writes(defn: ProcessDefinition, phase: PhaseDef, stored: dict,
 
 # ── Betrachter-Kontext (DB: Gruppenmitgliedschaft) ────────────────────────────
 
-def build_viewer_ctx(user: dict, ticket_row: dict, defn: Optional[ProcessDefinition]) -> ViewerCtx:
-    from backend.database.users import PERM_VIEW, PERM_MANAGE, PERM_ADMIN
+def user_group_ids(user: dict) -> set:
+    """Gruppen-Mitgliedschaft (eine DB-Abfrage). In Listen EINMAL aufrufen und an
+    build_viewer_ctx durchreichen – sonst eine Abfrage pro Zeile (N+1).
+
+    Fail-restriktiv: kann die Mitgliedschaft nicht geladen werden, gilt „keine
+    Gruppen" (= weniger Sicht), nie mehr."""
     from backend.database.groups import get_group_ids_for_user
+    uid = user.get("id")
+    if not uid:
+        return set()
+    try:
+        return set(get_group_ids_for_user(uid))
+    except Exception:
+        from backend.utils.logger import logger
+        logger.warning("Gruppen-Mitgliedschaft für %s nicht ladbar – fail-restriktiv", uid)
+        return set()
+
+
+def build_viewer_ctx(user: dict, ticket_row: dict, defn: Optional[ProcessDefinition],
+                     group_ids: Optional[set] = None) -> ViewerCtx:
+    from backend.database.users import PERM_VIEW, PERM_MANAGE, PERM_ADMIN
 
     perms = set(user.get("permissions") or [])
     is_admin = PERM_ADMIN in perms
     oversight = bool(perms & {PERM_VIEW, PERM_MANAGE, PERM_ADMIN})
     uid = user.get("id")
-    # Fail-restriktiv: kann die Mitgliedschaft nicht geladen werden, gilt „keine
-    # Gruppen“ (= weniger Sicht), nie mehr. Loggen statt durchreichen.
-    group_ids: set = set()
-    if uid:
-        try:
-            group_ids = set(get_group_ids_for_user(uid))
-        except Exception:
-            from backend.utils.logger import logger
-            logger.warning("Gruppen-Mitgliedschaft für %s nicht ladbar – fail-restriktiv", uid)
+    group_ids = user_group_ids(user) if group_ids is None else group_ids
     is_owner = ticket_row.get("owner_id") == uid and uid is not None
     terminal = (ticket_row.get("status") in ("archived", "rejected")
                 or bool((ticket_row.get("runtime") or {}).get("rejected")))

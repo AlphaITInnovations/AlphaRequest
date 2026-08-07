@@ -92,10 +92,14 @@ class FakeStore:
 
 
 class FakeDefs:
+    def __init__(self):
+        self.definition_loads = 0
+
     def get_published(self, key):
         return {"version": 1, "definition": DEFN} if key == "demo" else None
 
     def get_definition(self, key, ver):
+        self.definition_loads += 1
         return {"version": ver, "definition": DEFN} if key == "demo" else None
 
 
@@ -110,11 +114,16 @@ class FakeFires:
 
 
 @pytest.fixture
-def client(monkeypatch):
+def defs():
+    return FakeDefs()
+
+
+@pytest.fixture
+def client(monkeypatch, defs):
     from backend.services import process_engine as engine
     fake_store = FakeStore()
     monkeypatch.setattr(pt, "store", fake_store)
-    monkeypatch.setattr(pt, "defstore", FakeDefs())
+    monkeypatch.setattr(pt, "defstore", defs)
     # Die Engine hält eigene Modul-Aliasse (store/fires) – in Tests mitziehen.
     monkeypatch.setattr(engine, "store", fake_store)
     monkeypatch.setattr(engine, "fires", FakeFires())
@@ -195,3 +204,14 @@ def test_list_returns_meta(client):
     assert r.status_code == 200
     body = r.json()
     assert body["meta"]["total"] == 2 and len(body["data"]) == 2
+
+
+def test_list_does_not_load_definition_per_row(client, defs):
+    """Regression N+1: gepinnte Definitionen sind unveränderlich und werden je
+    (key, version) nur EINMAL pro Request geladen – nicht pro Zeile."""
+    for name in ("A", "B", "C", "D"):
+        client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": name}})
+    defs.definition_loads = 0
+    r = client.get("/process-tickets")
+    assert r.status_code == 200 and len(r.json()["data"]) == 4
+    assert defs.definition_loads == 1, f"{defs.definition_loads} Definitions-Ladevorgänge für 4 Zeilen"
