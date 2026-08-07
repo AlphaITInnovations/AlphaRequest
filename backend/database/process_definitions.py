@@ -339,39 +339,64 @@ def duplicate(src_key: str, new_key: str, definition_json: str,
     return create_process(new_key, name, definition_json, created_by, created_by_name)
 
 
-def _refs_group(defn: dict, gid: str) -> bool:
-    """Referenziert eine Definition (dict) die Gruppen-ID – in Feld-Sichtbarkeit
-    oder Phasen-Zuständigkeit?"""
+def _referenced_group_ids(defn: dict) -> set:
+    """Alle Gruppen-IDs, die eine Definition referenziert: Feld-Sichtbarkeit,
+    Phasen-Zuständigkeit (group + Abteilungs-Regeln) und Automation-Empfänger
+    (`to: "group:<id>"`)."""
+    out: set = set()
     for f in defn.get("fields", []) or []:
         vis = f.get("visibility") or {}
-        if gid in (vis.get("visibleToGroups") or []):
-            return True
+        out |= set(vis.get("visibleToGroups") or [])
+
+    def _from_automations(items):
+        for a in items or []:
+            to = ((a.get("action") or {}).get("to") or "")
+            if isinstance(to, str) and to.startswith("group:"):
+                out.add(to.split(":", 1)[1])
+
+    _from_automations(defn.get("automations"))
     for p in defn.get("phases", []) or []:
         r = p.get("responsibility") or {}
-        if r.get("group") == gid:
-            return True
+        if r.get("group"):
+            out.add(r["group"])
         for dr in (r.get("rule") or []):
-            if dr.get("group") == gid:
-                return True
-    return False
+            if dr.get("group"):
+                out.add(dr["group"])
+        _from_automations(p.get("automations"))
+    return out
 
 
-def group_referenced_in_definitions(group_id: str) -> bool:
-    """True, wenn IRGENDEINE Definitionsversion die Gruppe referenziert (auch
-    archivierte – gepinnte Tickets können sie nutzen). Basis für den Löschschutz."""
+def _refs_group(defn: dict, gid: str) -> bool:
+    return gid in _referenced_group_ids(defn)
+
+
+def groups_referenced_in_definitions(group_ids: set) -> set:
+    """Teilmenge von `group_ids`, die von IRGENDEINER Definitionsversion
+    referenziert wird (auch archivierte – gepinnte Tickets nutzen sie).
+    Ein Durchlauf über alle Definitionen statt einer Abfrage pro Gruppe."""
+    wanted = {g for g in (group_ids or set()) if g}
+    if not wanted:
+        return set()
     conn = get_connection()
     try:
         rows = _fetchall(conn, "SELECT definition_json FROM process_definitions")
     finally:
         conn.close()
+    found: set = set()
     for r in rows:
         try:
             d = json.loads(r["definition_json"])
         except Exception:
             continue
-        if _refs_group(d, group_id):
-            return True
-    return False
+        found |= (_referenced_group_ids(d) & wanted)
+        if found == wanted:
+            break
+    return found
+
+
+def group_referenced_in_definitions(group_id: str) -> bool:
+    """Einzelabfrage (Bequemlichkeit) – intern über die Mengenvariante."""
+    return bool(groups_referenced_in_definitions({group_id}))
 
 
 def delete_version(key: str, version: int) -> None:

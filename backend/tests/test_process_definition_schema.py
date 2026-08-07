@@ -20,8 +20,6 @@ VALID = {
         {"key": "eintraege", "widget": "collection", "mode": "append_only",
          "item": [{"key": "text", "widget": "textarea"},
                   {"key": "author", "widget": "server_stamped", "value": "actor"}]},
-        {"key": "personal.personal_number", "widget": "server_generated",
-         "assign": {"action": "assign_sequence", "counter": "per_company"}},
     ],
     "phases": [
         {"key": "start", "label": "Erstellung", "kind": "start",
@@ -83,8 +81,11 @@ def test_bad_key_slug():
     _invalid(lambda d: d.__setitem__("key", "Nicht Erlaubt!"))
 
 
-def test_server_generated_needs_assign():
-    _invalid(lambda d: d["fields"].append({"key": "x", "widget": "server_generated"}))
+def test_server_generated_rejected_until_implemented():
+    # Ehrlichkeits-Regel: was die Laufzeit nicht umsetzt, wird beim Speichern abgelehnt
+    _invalid(lambda d: d["fields"].append(
+        {"key": "x", "widget": "server_generated",
+         "assign": {"action": "assign_sequence", "counter": "c"}}))
 
 
 def test_collection_needs_item():

@@ -11,8 +11,8 @@ In Stufe 5 umgesetzt: notify, escalate, set_status, set_priority, set_field,
 auto_advance. Erkannt-aber-noch-nicht-ausgeführt (geloggt): spawn_process,
 assign_sequence, require_attachment (Attachments hängen noch am Alt-Ticket-System).
 """
+import html
 import json
-from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from backend.schemas.process_definition import ProcessDefinition, PhaseDef, Action, ActionType
@@ -57,12 +57,14 @@ def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
 
 
 def _build_message(action: Action, row: dict, phase: Optional[PhaseDef]) -> tuple[str, str]:
-    title = row.get("title") or f"Auftrag #{row.get('id')}"
+    title = str(row.get("title") or f"Auftrag #{row.get('id')}")
     verb = "Eskalation" if action.type == ActionType.escalate else "Erinnerung"
-    phase_lbl = (phase.label or phase.key) if phase else "—"
-    subject = f"[AlphaRequest] {verb}: {title}"
-    body = (f"<p><b>{verb}</b> für den Auftrag „{title}“ (Phase: {phase_lbl}).</p>"
-            f"<p>Bitte im System bearbeiten: {config.FRONTEND_URL}</p>")
+    phase_lbl = str((phase.label or phase.key) if phase else "—")
+    # Betreff: keine Zeilenumbrüche (Header-Injection); Body: HTML escapen.
+    subject = f"[AlphaRequest] {verb}: {title}".replace("\r", " ").replace("\n", " ")[:200]
+    body = (f"<p><b>{html.escape(verb)}</b> für den Auftrag „{html.escape(title)}“ "
+            f"(Phase: {html.escape(phase_lbl)}).</p>"
+            f"<p>Bitte im System bearbeiten: {html.escape(config.FRONTEND_URL)}</p>")
     return subject, body
 
 
@@ -107,8 +109,12 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
 
 def apply_action_changes(row: dict, defn: ProcessDefinition, changes: dict, store) -> None:
     """Persistiert die von run_action gelieferten Zustandsänderungen und
-    aktualisiert das übergebene row-Dict in place (kein next_timer-Restamp – das
-    macht der Aufrufer). `store` wird injiziert (Testbarkeit)."""
+    aktualisiert das übergebene row-Dict in place. `store` wird injiziert
+    (Testbarkeit).
+
+    `advance` wird hier NICHT behandelt – der Phasenübergang läuft ausschließlich
+    über process_engine.transition (damit on_exit/on_enter und das Neustempeln
+    des Timers garantiert mitlaufen)."""
     tid = row["id"]
     if "priority" in changes:
         store.set_priority(tid, changes["priority"])
@@ -120,8 +126,3 @@ def apply_action_changes(row: dict, defn: ProcessDefinition, changes: dict, stor
         merged = {**(row.get("values") or {}), **changes["values"]}
         store.update_values(tid, json.dumps(merged, ensure_ascii=False))
         row["values"] = merged
-    if changes.get("advance"):
-        runtime, status = pr.advance(defn, row["runtime"], datetime.now(timezone.utc).isoformat())
-        store.update_runtime(tid, runtime_json=json.dumps(runtime, ensure_ascii=False), status=status)
-        row["runtime"] = runtime
-        row["status"] = status

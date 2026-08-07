@@ -45,16 +45,18 @@ def next_due_at(entered_at_iso: str, after_s: int, repeat_s: int,
     return entered + timedelta(seconds=offset + (paused_ms or 0) / 1000.0)
 
 
-def _phase_timers(phase: PhaseDef):
-    return [a for a in phase.automations if a.trigger.type == TriggerType.timer]
+def _phase_timers(phase: PhaseDef, extra=()):
+    """Timer-Automations der Phase PLUS prozessweite (definition.automations)."""
+    return [a for a in list(extra) + list(phase.automations)
+            if a.trigger.type == TriggerType.timer]
 
 
 def compute_next_timer_due(phase: PhaseDef, entered_at_iso: str, paused_ms: int,
-                           fired_map: dict) -> Optional[datetime]:
+                           fired_map: dict, extra=()) -> Optional[datetime]:
     """Frühester nächster Timer-Fälligkeitszeitpunkt der Phase → next_timer_due_at.
     fired_map: {automation_id: höchste bereits gefeuerte Occurrence}."""
     best: Optional[datetime] = None
-    for a in _phase_timers(phase):
+    for a in _phase_timers(phase, extra):
         after_s = parse_duration(a.trigger.after)
         repeat_s = parse_duration(a.trigger.repeat) if a.trigger.repeat else 0
         nd = next_due_at(entered_at_iso, after_s, repeat_s, paused_ms, fired_map.get(a.id, 0))
@@ -63,17 +65,24 @@ def compute_next_timer_due(phase: PhaseDef, entered_at_iso: str, paused_ms: int,
     return best
 
 
+#: Obergrenze für nachzuholende Occurrences pro Automation und Sweep. Nur die
+#: LETZTE feuert; die davor werden nur verbucht – ohne Deckel wären das nach einem
+#: langen Ausfall tausende Einzel-Inserts (z.B. repeat PT5M über ein Wochenende).
+MAX_CATCHUP = 50
+
+
 def due_timers(phase: PhaseDef, entered_at_iso: str, now: datetime,
-               paused_ms: int, fired_map: dict) -> list[tuple]:
-    """Liste (automation, [Occurrences fired+1 .. max_due]) der jetzt fälligen Timer.
+               paused_ms: int, fired_map: dict, extra=()) -> list[tuple]:
+    """Liste (automation, [Occurrences … max_due]) der jetzt fälligen Timer.
     Die letzte Occurrence löst die Aktion aus, die davor sind Catch-up (unterdrückt)."""
     out = []
     elapsed = _elapsed_seconds(entered_at_iso, now, paused_ms)
-    for a in _phase_timers(phase):
+    for a in _phase_timers(phase, extra):
         after_s = parse_duration(a.trigger.after)
         repeat_s = parse_duration(a.trigger.repeat) if a.trigger.repeat else 0
         maxd = max_due_occurrence(after_s, repeat_s, elapsed)
         fired = fired_map.get(a.id, 0)
         if maxd > fired:
-            out.append((a, list(range(fired + 1, maxd + 1))))
+            first = max(fired + 1, maxd - MAX_CATCHUP + 1)
+            out.append((a, list(range(first, maxd + 1))))
     return out

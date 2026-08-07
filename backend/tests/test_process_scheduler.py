@@ -123,12 +123,16 @@ def _ticket():
 
 def _wire(monkeypatch, store, fires):
     import backend.database.groups as gmod
+    from backend.services import process_engine as engine
     calls = []
     monkeypatch.setattr(sched, "store", store)
     monkeypatch.setattr(sched, "fires", fires)
     monkeypatch.setattr(sched, "defstore", FakeDefs())
-    monkeypatch.setattr(sched, "record_audit", lambda **k: None)
-    monkeypatch.setattr(sched, "SENDER", lambda r, s, b, kind=None: calls.append(kind))
+    # Ausgeführt wird über die Engine – deren Aliasse ebenfalls ersetzen.
+    monkeypatch.setattr(engine, "store", store)
+    monkeypatch.setattr(engine, "fires", fires)
+    monkeypatch.setattr(engine, "record_audit", lambda **k: None)
+    monkeypatch.setattr(engine, "SENDER", lambda r, s, b, kind=None: calls.append(kind))
     monkeypatch.setattr(gmod, "get_groups", lambda: GROUPS)   # Empfänger-Auflösung ohne DB
     return calls
 

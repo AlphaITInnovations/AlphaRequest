@@ -97,3 +97,11 @@ async def lifespan(app):
         logger.exception("Prozess-Scheduler-Start fehlgeschlagen")
 
     yield
+
+    # Shutdown: Scheduler sauber beenden (sonst sweept nach einem Reload ein
+    # zweiter Loop parallel weiter).
+    try:
+        from backend.services import process_scheduler
+        await process_scheduler.stop(app)
+    except Exception:
+        logger.exception("Prozess-Scheduler-Stop fehlgeschlagen")

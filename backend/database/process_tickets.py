@@ -13,6 +13,7 @@ import json
 from typing import Optional
 
 from backend.database.connection import get_connection, _exec, _fetchone, _fetchall
+from backend.utils.timeutil import to_db_datetime
 
 
 class ProcessTicketConflict(Exception):
@@ -169,7 +170,8 @@ def update_runtime(ticket_id: int, *, runtime_json: str, status: str,
     conn = get_connection()
     try:
         _run_guarded(conn, "runtime_json=%s, status=%s, next_timer_due_at=%s",
-                     [runtime_json, status, next_timer_due_at], ticket_id, expected_rev)
+                     [runtime_json, status, to_db_datetime(next_timer_due_at)],
+                     ticket_id, expected_rev)
         conn.commit()
     finally:
         conn.close()
@@ -181,8 +183,9 @@ def update_runtime(ticket_id: int, *, runtime_json: str, status: str,
 _ACTIVE_CLAUSE = "status NOT IN ('archived', 'rejected')"
 
 
-def list_due(now_iso: str, limit: int = 200) -> list[dict]:
-    """Aktive Tickets mit fälligem Timer (next_timer_due_at <= now)."""
+def list_due(now: str, limit: int = 200) -> list[dict]:
+    """Aktive Tickets mit fälligem Timer (next_timer_due_at <= now).
+    `now` wird wie jeder DATETIME-Wert normalisiert (naive UTC)."""
     conn = get_connection()
     try:
         rows = _fetchall(
@@ -190,36 +193,37 @@ def list_due(now_iso: str, limit: int = 200) -> list[dict]:
             f"SELECT {_COLS} FROM process_tickets WHERE next_timer_due_at IS NOT NULL "
             f"AND next_timer_due_at <= %s AND {_ACTIVE_CLAUSE} "
             "ORDER BY next_timer_due_at LIMIT %s",
-            (now_iso, limit),
+            (to_db_datetime(now), limit),
         )
     finally:
         conn.close()
     return [_row_to_dict(r) for r in rows]
 
 
-def set_next_timer(ticket_id: int, next_timer_due_at: Optional[str]) -> None:
+def set_next_timer(ticket_id: int, next_timer_due_at: Optional[str],
+                   expected_rev: Optional[int] = None) -> None:
     conn = get_connection()
     try:
-        _exec(conn, "UPDATE process_tickets SET next_timer_due_at=%s WHERE id=%s",
-              (next_timer_due_at, ticket_id))
+        _run_guarded(conn, "next_timer_due_at=%s", [to_db_datetime(next_timer_due_at)],
+                     ticket_id, expected_rev)
         conn.commit()
     finally:
         conn.close()
 
 
-def set_priority(ticket_id: int, priority: str) -> None:
+def set_priority(ticket_id: int, priority: str, expected_rev: Optional[int] = None) -> None:
     conn = get_connection()
     try:
-        _exec(conn, "UPDATE process_tickets SET priority=%s WHERE id=%s", (priority, ticket_id))
+        _run_guarded(conn, "priority=%s", [priority], ticket_id, expected_rev)
         conn.commit()
     finally:
         conn.close()
 
 
-def set_status(ticket_id: int, status: str) -> None:
+def set_status(ticket_id: int, status: str, expected_rev: Optional[int] = None) -> None:
     conn = get_connection()
     try:
-        _exec(conn, "UPDATE process_tickets SET status=%s WHERE id=%s", (status, ticket_id))
+        _run_guarded(conn, "status=%s", [status], ticket_id, expected_rev)
         conn.commit()
     finally:
         conn.close()

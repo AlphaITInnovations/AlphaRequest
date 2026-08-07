@@ -77,6 +77,15 @@ class FakeStore:
         r["rev"] += 1
         return dict(r)
 
+    def set_next_timer(self, tid, v, expected_rev=None):
+        self.rows[tid]["next_timer_due_at"] = v
+
+    def set_priority(self, tid, v, expected_rev=None):
+        self.rows[tid]["priority"] = v
+
+    def set_status(self, tid, v, expected_rev=None):
+        self.rows[tid]["status"] = v
+
     def list_tickets(self, **kw):
         rows = [dict(r) for r in self.rows.values()]
         return rows, len(rows)
@@ -90,10 +99,25 @@ class FakeDefs:
         return {"version": ver, "definition": DEFN} if key == "demo" else None
 
 
+class FakeFires:
+    """Leerer Ledger – reicht für die API-Tests (keine Timer in DEFN)."""
+
+    def fired_map(self, tid, pk, ep):
+        return {}
+
+    def claim(self, *a, **k):
+        return True
+
+
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(pt, "store", FakeStore())
+    from backend.services import process_engine as engine
+    fake_store = FakeStore()
+    monkeypatch.setattr(pt, "store", fake_store)
     monkeypatch.setattr(pt, "defstore", FakeDefs())
+    # Die Engine hält eigene Modul-Aliasse (store/fires) – in Tests mitziehen.
+    monkeypatch.setattr(engine, "store", fake_store)
+    monkeypatch.setattr(engine, "fires", FakeFires())
     app = FastAPI()
     _install_error_handlers(app)
     app.include_router(pt.router)

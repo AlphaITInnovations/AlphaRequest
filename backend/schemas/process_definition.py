@@ -109,6 +109,21 @@ ALLOWED_ENTER_STATUS = {
 
 ALLOWED_PRIORITY = {"low", "normal", "high", "urgent"}
 
+# Terminale Status dürfen NICHT über enterStatus/set_status mitten im Prozess
+# gesetzt werden – das Ticket wäre unbearbeitbar und ohne Reopen-Pfad tot.
+TERMINAL_STATUS = {"archived", "rejected"}
+
+# Empfänger-Ziele, die process_actions.resolve_recipients wirklich auflösen kann.
+ALLOWED_RECIPIENTS = {"responsible", "owner", "watchers"}   # + "group:<id>"
+
+# Ehrlichkeits-Regel (§ Review): Was die Laufzeit NICHT umsetzt, wird beim
+# Speichern/Veröffentlichen abgelehnt statt still ignoriert. Beim Nachrüsten der
+# Funktion hier wieder austragen.
+UNIMPLEMENTED_ACTIONS = {"spawn_process", "assign_sequence", "require_attachment"}
+UNIMPLEMENTED_WIDGETS = {"server_generated"}       # braucht assign_sequence
+UNIMPLEMENTED_PHASE_KINDS = {"approval"}           # kein Freigabe-Token-Flow
+UNIMPLEMENTED_PHASE_VIEWS = {"approval", "export"}  # kein Renderer/Runtime
+
 # Boolean-Operatoren der Condition-DSL (§6.1). Die Auswertung kommt in Stufe 4;
 # hier wird nur die STRUKTUR geprüft.
 _DSL_BINARY = {"==", "!=", "in"}
@@ -265,6 +280,9 @@ class FieldDef(_Base):
             raise ValueError(f"Feld „{self.key}“: collection braucht `item` (Sub-Felder)")
         if self.widget != Widget.collection and self.item:
             raise ValueError(f"Feld „{self.key}“: `item` nur bei widget=collection erlaubt")
+        if self.widget.value in UNIMPLEMENTED_WIDGETS:
+            raise ValueError(f"Feld „{self.key}“: widget „{self.widget.value}“ hat noch keine "
+                             f"Laufzeit-Umsetzung (die zugehörige Action fehlt)")
         if self.widget == Widget.server_generated and not self.assign:
             raise ValueError(f"Feld „{self.key}“: server_generated braucht `assign`")
         if self.widget == Widget.server_stamped:
@@ -328,8 +346,22 @@ class Trigger(_Base):
 
     @model_validator(mode="after")
     def _trigger_rules(self) -> "Trigger":
-        if self.type == TriggerType.timer and not self.after:
-            raise ValueError("trigger timer erfordert `after` (ISO-8601-Dauer)")
+        from backend.services.iso_duration import parse_duration
+        if self.type == TriggerType.timer:
+            if not self.after:
+                raise ValueError("trigger timer erfordert `after` (ISO-8601-Dauer)")
+            # Dauern JETZT parsen – eine unparsebare Dauer würde den Timer sonst
+            # zur Laufzeit still lahmlegen.
+            for label, val in (("after", self.after), ("repeat", self.repeat)):
+                if val is not None:
+                    try:
+                        secs = parse_duration(val)
+                    except ValueError as e:
+                        raise ValueError(f"trigger.{label}: {e}")
+                    if secs <= 0:
+                        raise ValueError(f"trigger.{label} muss größer als 0 sein")
+        elif self.after or self.repeat:
+            raise ValueError(f"trigger {self.type.value} kennt kein after/repeat")
         if self.type == TriggerType.on_field_change and not self.field:
             raise ValueError("trigger on_field_change erfordert `field`")
         return self
@@ -347,13 +379,24 @@ class Action(_Base):
     @model_validator(mode="after")
     def _action_rules(self) -> "Action":
         t = self.type
-        if t in (ActionType.notify, ActionType.escalate) and not self.to:
-            raise ValueError(f"action {t.value} erfordert `to`")
+        if t.value in UNIMPLEMENTED_ACTIONS:
+            raise ValueError(f"action „{t.value}“ ist noch nicht implementiert und "
+                             f"kann daher nicht veröffentlicht werden")
+        if t in (ActionType.notify, ActionType.escalate):
+            if not self.to:
+                raise ValueError(f"action {t.value} erfordert `to`")
+            # Nur auflösbare Ziele zulassen – sonst landet die Mail stumm im Fallback.
+            if not (self.to in ALLOWED_RECIPIENTS or self.to.startswith("group:")):
+                raise ValueError(f"action {t.value}: unbekanntes Ziel „{self.to}“ "
+                                 f"(erlaubt: {', '.join(sorted(ALLOWED_RECIPIENTS))}, group:<id>)")
         if t == ActionType.set_field and (not self.field or self.value is None):
             raise ValueError("action set_field erfordert `field` und `value`")
         if t == ActionType.set_status:
             if self.value not in ALLOWED_ENTER_STATUS:
                 raise ValueError(f"action set_status: unbekannter Status „{self.value}“")
+            if self.value in TERMINAL_STATUS:
+                raise ValueError(f"action set_status: „{self.value}“ würde das Ticket "
+                                 f"unbearbeitbar machen (kein Reopen-Pfad)")
         if t == ActionType.set_priority:
             if self.value not in ALLOWED_PRIORITY:
                 raise ValueError(f"action set_priority: unbekannte Priorität „{self.value}“")
@@ -403,7 +446,23 @@ class PhaseDef(_Base):
     def _status_whitelist(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v not in ALLOWED_ENTER_STATUS:
             raise ValueError(f"unbekannter enterStatus „{v}“")
+        if v in TERMINAL_STATUS:
+            raise ValueError(f"enterStatus „{v}“ ist terminal – ein Ticket wäre beim "
+                             f"Betreten der Phase unbearbeitbar (kein Reopen-Pfad)")
         return v
+
+    @model_validator(mode="after")
+    def _runtime_supported(self) -> "PhaseDef":
+        if self.kind.value in UNIMPLEMENTED_PHASE_KINDS:
+            raise ValueError(f"Phase „{self.key}“: kind „{self.kind.value}“ hat noch keine "
+                             f"Laufzeit-Umsetzung")
+        if self.view.value in UNIMPLEMENTED_PHASE_VIEWS:
+            raise ValueError(f"Phase „{self.key}“: view „{self.view.value}“ hat noch keine "
+                             f"Laufzeit-Umsetzung")
+        if self.responsibility.resetOnDescriptionChange:
+            raise ValueError(f"Phase „{self.key}“: resetOnDescriptionChange ist noch nicht "
+                             f"umgesetzt")
+        return self
 
     @model_validator(mode="after")
     def _check_constraints(self) -> "PhaseDef":

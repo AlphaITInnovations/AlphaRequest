@@ -107,16 +107,45 @@ def writable_keys(defn: ProcessDefinition, phase: PhaseDef, ctx: ViewerCtx,
     return editable_field_keys(defn, phase, ctx, eval_values)
 
 
+class AppendOnlyViolation(Exception):
+    """Ein append_only-Feld wurde verändert statt nur erweitert."""
+
+    def __init__(self, field_key: str, message: str):
+        self.field_key = field_key
+        super().__init__(message)
+
+
+def _append_only_merge(key: str, stored_val, submitted_val):
+    """append_only: nur ANHÄNGEN erlaubt. Bestehende Einträge dürfen weder
+    geändert noch gelöscht werden (es gibt keine Historie, aus der man sie
+    zurückholen könnte)."""
+    old = stored_val if isinstance(stored_val, list) else []
+    new = submitted_val if isinstance(submitted_val, list) else None
+    if new is None:
+        raise AppendOnlyViolation(key, f"Feld „{key}“ erwartet eine Liste")
+    if len(new) < len(old) or new[:len(old)] != old:
+        raise AppendOnlyViolation(
+            key, f"Feld „{key}“ ist append-only: bestehende Einträge dürfen nicht "
+                 f"geändert oder gelöscht werden")
+    return new
+
+
 def apply_writes(defn: ProcessDefinition, phase: PhaseDef, stored: dict,
                  submitted: dict, ctx: ViewerCtx) -> dict:
     """Schreibschutz-Merge: Basis = gespeicherte Werte; nur erlaubte (sichtbare +
     in dieser Phase editierbare) Felder werden übernommen, der Rest verworfen.
-    Verborgene Felder behalten immer ihren Bestandswert."""
+    Verborgene Felder behalten immer ihren Bestandswert.
+    append_only-Felder werden nur erweitert (sonst AppendOnlyViolation)."""
     merged = dict(stored)
     allowed = writable_keys(defn, phase, ctx, stored, submitted)
+    modes = {fr.ref: fr.mode for fr in phase.fields}
+    fmap = {f.key: f for f in defn.fields}
     for k, v in submitted.items():
-        if k in allowed:
-            merged[k] = v
+        if k not in allowed:
+            continue
+        is_append = (modes.get(k) == FieldMode.append_only
+                     or (fmap.get(k) is not None and fmap[k].mode == FieldMode.append_only))
+        merged[k] = _append_only_merge(k, stored.get(k), v) if is_append else v
     return merged
 
 

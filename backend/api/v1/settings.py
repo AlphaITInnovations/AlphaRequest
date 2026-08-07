@@ -60,6 +60,29 @@ def _summary(parts: list[str], noun: str) -> str:
     return parts[0] if len(parts) == 1 else f"{len(parts)} Änderungen an {noun}"
 
 
+def _assert_groups_unreferenced(group_ids: set) -> None:
+    """Von einer Prozess-Definition referenzierte Fachabteilungen (Feld-Sichtbarkeit,
+    Zuständigkeit, Automation-Empfänger) dürfen NICHT gelöscht werden – sonst
+    würden vertrauliche Felder gepinnter Tickets dauerhaft unlesbar (§5.4).
+
+    FAIL-CLOSED: Kann die Prüfung nicht durchgeführt werden, wird das Löschen
+    abgelehnt – ein Prüf-Fehler darf nicht wie „nicht referenziert" wirken."""
+    if not group_ids:
+        return
+    from backend.database import process_definitions as _pdefs
+    try:
+        referenced = _pdefs.groups_referenced_in_definitions(set(group_ids))
+    except Exception:
+        logger.exception("Prozess-Referenzprüfung für Gruppen fehlgeschlagen – Löschen abgelehnt")
+        raise HTTPException(
+            503, "Die Prüfung auf Prozess-Verwendung ist fehlgeschlagen. "
+                 "Löschen wurde sicherheitshalber abgelehnt.")
+    if referenced:
+        raise HTTPException(
+            409, "Diese Fachabteilung wird von einem Prozess (Sichtbarkeit, Zuständigkeit "
+                 "oder Benachrichtigung) verwendet und kann nicht gelöscht werden.")
+
+
 def _diff_groups(old_list, new_list, name_of):
     old_by = {g.get("id"): g for g in old_list}
     new_by = {g.get("id"): g for g in new_list}
@@ -581,21 +604,8 @@ def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depend
                 409, f"Die Pflicht-Fachabteilung '{req}' darf nicht gelöscht oder umbenannt werden.",
             )
 
-    # Von einer Prozess-Definition referenzierte Gruppen (Sichtbarkeit/Zuständigkeit)
-    # dürfen nicht gelöscht werden – sonst würden vertrauliche Felder gepinnter
-    # Tickets dauerhaft unlesbar (§5.4).
-    from backend.database import process_definitions as _pdefs
     removed_ids = {g["id"] for g in old_groups} - {c["id"] for c in cleaned}
-    for gid in removed_ids:
-        try:
-            referenced = _pdefs.group_referenced_in_definitions(gid)
-        except Exception:
-            referenced = False
-        if referenced:
-            raise HTTPException(
-                409, "Diese Fachabteilung wird von einem Prozess (Sichtbarkeit/Zuständigkeit) "
-                     "verwendet und kann nicht gelöscht werden.",
-            )
+    _assert_groups_unreferenced(removed_ids)
 
     save_groups(cleaned)
 
@@ -684,6 +694,8 @@ def delete_group(group_id: str, user: dict = Depends(get_current_user)):
             f"Die Fachabteilung '{target['name']}' wird von den Workflows benötigt "
             f"und kann nicht gelöscht werden.",
         )
+    # …ebenso wenig von Prozess-Definitionen referenzierte (gleicher Schutz wie im Bulk-Pfad).
+    _assert_groups_unreferenced({group_id})
     save_groups([g for g in groups if g["id"] != group_id])
     _audit(user, "group_deleted", entity_type="group", entity_id=group_id, summary=target["name"])
 
