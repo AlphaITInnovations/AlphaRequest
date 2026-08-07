@@ -116,6 +116,19 @@ def test_validate_condition_accepts_wellformed():
     validate_condition({"and": [{"truthy": "a"}, {"not": {"==": ["b", 1]}}]})
 
 
+def test_group_reference_detector():
+    from backend.database.process_definitions import _refs_group
+    d = {
+        "fields": [{"key": "x", "visibility": {"visibleToGroups": ["g_sgl"]}}],
+        "phases": [{"responsibility": {"kind": "departments", "rule": [{"group": "g_it"}]}},
+                   {"responsibility": {"kind": "group", "group": "g_lead"}}],
+    }
+    assert _refs_group(d, "g_sgl") is True    # Feld-Sichtbarkeit
+    assert _refs_group(d, "g_it") is True     # Abteilungs-Regel
+    assert _refs_group(d, "g_lead") is True   # Gruppen-Zuständigkeit
+    assert _refs_group(d, "g_unknown") is False
+
+
 @pytest.mark.parametrize("bad", [
     {"==": ["a"]},                 # falsche Arität
     {"in": ["a", "notalist"]},     # in braucht Liste

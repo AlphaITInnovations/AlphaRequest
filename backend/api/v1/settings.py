@@ -581,6 +581,22 @@ def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depend
                 409, f"Die Pflicht-Fachabteilung '{req}' darf nicht gelöscht oder umbenannt werden.",
             )
 
+    # Von einer Prozess-Definition referenzierte Gruppen (Sichtbarkeit/Zuständigkeit)
+    # dürfen nicht gelöscht werden – sonst würden vertrauliche Felder gepinnter
+    # Tickets dauerhaft unlesbar (§5.4).
+    from backend.database import process_definitions as _pdefs
+    removed_ids = {g["id"] for g in old_groups} - {c["id"] for c in cleaned}
+    for gid in removed_ids:
+        try:
+            referenced = _pdefs.group_referenced_in_definitions(gid)
+        except Exception:
+            referenced = False
+        if referenced:
+            raise HTTPException(
+                409, "Diese Fachabteilung wird von einem Prozess (Sichtbarkeit/Zuständigkeit) "
+                     "verwendet und kann nicht gelöscht werden.",
+            )
+
     save_groups(cleaned)
 
     names = _names_from(request)

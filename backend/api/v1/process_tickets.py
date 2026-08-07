@@ -26,6 +26,7 @@ from backend.schemas.responses import (
 )
 from backend.services import process_runtime as pr
 from backend.services import process_validation as pv
+from backend.services import process_visibility as vis
 from backend.utils.timeutil import utcnow_iso
 
 router = APIRouter()
@@ -83,18 +84,16 @@ def _is_terminal(row: dict) -> bool:
     return row["status"] in ("archived", "rejected") or bool((row.get("runtime") or {}).get("rejected"))
 
 
-def _out(row: dict, defn: Optional[ProcessDefinition] = None) -> ProcessTicketOut:
-    if defn is None:
-        try:
-            defn = _load_pinned_defn(row)
-        except Exception:
-            defn = None
+def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx) -> ProcessTicketOut:
     cur = pr.current_phase(defn, row["runtime"]) if defn else None
+    # Zuständigkeit wird server-seitig (ungefiltert) aufgelöst; die Feldwerte im
+    # Output werden nach Sichtbarkeit gefiltert (§5.1: einzige wertetragende Naht).
     resp = pr.resolve_responsibility(cur, row.get("values") or {}) if cur else None
     data = {k: row.get(k) for k in (
         "id", "process_key", "process_version", "title", "status", "priority",
-        "owner_id", "owner_name", "values", "runtime", "next_timer_due_at",
+        "owner_id", "owner_name", "runtime", "next_timer_due_at",
         "created_at", "updated_at")}
+    data["values"] = vis.filter_values(defn, row.get("values") or {}, ctx)
     data["current_phase"] = cur.key if cur else None
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
     data["responsibility"] = resp
@@ -127,7 +126,14 @@ def list_process_tickets(
     _require_admin(user)
     rows, total = store.list_tickets(status=status, process_key=process_key, q=q,
                                      limit=limit, offset=offset)
-    return ListResponse(data=[_out(r) for r in rows], meta=Meta(total=total, limit=limit, offset=offset))
+    out = []
+    for r in rows:
+        try:
+            d = _load_pinned_defn(r)
+        except Exception:
+            d = None
+        out.append(_out(r, d, vis.build_viewer_ctx(user, r, d)))
+    return ListResponse(data=out, meta=Meta(total=total, limit=limit, offset=offset))
 
 
 @router.post("/process-tickets", response_model=DataResponse[ProcessTicketOut])
@@ -138,13 +144,28 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {body.processKey}")
     defn = ProcessDefinition.model_validate(pub["definition"])
 
-    values = body.values or {}
+    submitted = body.values or {}
+    catalog = {f.key for f in defn.fields}
+    unknown = [k for k in submitted if k not in catalog]
+    if unknown:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Unbekannte Felder",
+                        fields=[{"path": k, "code": "UNKNOWN_FIELD", "message": f"Unbekanntes Feld „{k}“"}
+                                for k in unknown])
+
+    now = utcnow_iso()
+    runtime = pr.initial_runtime(defn, now)
+    start_phase = defn.phases[0]
+    # Provisorischer Kontext (Ersteller:in = Owner → Vollsicht); Schreibschutz auf
+    # die editierbaren Felder der Start-Phase anwenden.
+    provisional = {"owner_id": user.get("id"), "status": "in_progress", "runtime": runtime, "values": {}}
+    ctx = vis.build_viewer_ctx(user, provisional, defn)
+    values = vis.apply_writes(defn, start_phase, {}, submitted, ctx)
+
     errs = pv.validate_values(defn, values)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig", fields=errs)
 
-    runtime = pr.initial_runtime(defn, utcnow_iso())
-    status = pr.enter_status_for(defn.phases[0])
+    status = pr.enter_status_for(start_phase)
     row = store.create(
         process_key=defn.key, process_version=pub["version"],
         title=body.title or defn.name, status=status, priority=(body.priority or "normal"),
@@ -153,7 +174,7 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         runtime_json=json.dumps(runtime, ensure_ascii=False),
     )
     _audit(user, "process_ticket_created", row["id"], process_key=defn.key, version=pub["version"])
-    return DataResponse(data=_out(row, defn))
+    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
 
 
 @router.get("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
@@ -162,7 +183,11 @@ def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
-    return DataResponse(data=_out(row))
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
 
 
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
@@ -174,16 +199,32 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist abgeschlossen/abgelehnt")
     defn = _load_pinned_defn(row)
+    ctx = vis.build_viewer_ctx(user, row, defn)
+    phase = pr.current_phase(defn, row["runtime"])
+    if phase is None:
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Keine aktive Phase")
 
     submitted = body.values or {}
-    errs = pv.validate_values(defn, submitted)
+    catalog = {f.key for f in defn.fields}
+    unknown = [k for k in submitted if k not in catalog]
+    if unknown:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Unbekannte Felder",
+                        fields=[{"path": k, "code": "UNKNOWN_FIELD", "message": f"Unbekanntes Feld „{k}“"}
+                                for k in unknown])
+
+    stored = row.get("values") or {}
+    # Schreibschutz: nur sichtbare + in dieser Phase editierbare Felder übernehmen;
+    # der Rest wird verworfen (verborgene Felder behalten ihren Bestandswert).
+    allowed = vis.editable_field_keys(defn, phase, ctx, {**stored, **submitted})
+    to_apply = {k: v for k, v in submitted.items() if k in allowed}
+    errs = pv.validate_values(defn, to_apply)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig", fields=errs)
 
-    merged = {**(row.get("values") or {}), **submitted}
+    merged = {**stored, **to_apply}
     row = store.update_values(ticket_id, json.dumps(merged, ensure_ascii=False), title=body.title)
-    _audit(user, "process_ticket_updated", ticket_id, fields=list(submitted.keys()))
-    return DataResponse(data=_out(row, defn))
+    _audit(user, "process_ticket_updated", ticket_id, fields=list(to_apply.keys()))
+    return DataResponse(data=_out(row, defn, ctx))
 
 
 @router.post("/process-tickets/{ticket_id}:advance", response_model=DataResponse[ProcessTicketOut])
@@ -208,7 +249,7 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
     runtime, status = pr.advance(defn, runtime, utcnow_iso())
     row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False), status=status)
     _audit(user, "process_ticket_advanced", ticket_id, from_phase=phase.key, status=status)
-    return DataResponse(data=_out(row, defn))
+    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
 
 
 @router.post("/process-tickets/{ticket_id}:reject", response_model=DataResponse[ProcessTicketOut])
@@ -222,4 +263,8 @@ def reject_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)
     runtime = pr.reject(row["runtime"])
     row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False), status="rejected")
     _audit(user, "process_ticket_rejected", ticket_id)
-    return DataResponse(data=_out(row))
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))

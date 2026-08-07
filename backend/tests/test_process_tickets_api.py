@@ -23,7 +23,8 @@ DEFN = {
     ],
     "phases": [
         {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
-         "fields": [{"ref": "base.name", "required": True}]},
+         "fields": [{"ref": "base.name", "required": True},
+                    {"ref": "base.age", "mode": "editable"}]},
         {"key": "review", "kind": "review",
          "responsibility": {"kind": "departments", "rule": [{"group": "g_it"}]},
          "fields": [{"ref": "base.name", "mode": "readonly"}]},

@@ -334,6 +334,41 @@ def duplicate(src_key: str, new_key: str, definition_json: str,
     return create_process(new_key, name, definition_json, created_by, created_by_name)
 
 
+def _refs_group(defn: dict, gid: str) -> bool:
+    """Referenziert eine Definition (dict) die Gruppen-ID – in Feld-Sichtbarkeit
+    oder Phasen-Zuständigkeit?"""
+    for f in defn.get("fields", []) or []:
+        vis = f.get("visibility") or {}
+        if gid in (vis.get("visibleToGroups") or []):
+            return True
+    for p in defn.get("phases", []) or []:
+        r = p.get("responsibility") or {}
+        if r.get("group") == gid:
+            return True
+        for dr in (r.get("rule") or []):
+            if dr.get("group") == gid:
+                return True
+    return False
+
+
+def group_referenced_in_definitions(group_id: str) -> bool:
+    """True, wenn IRGENDEINE Definitionsversion die Gruppe referenziert (auch
+    archivierte – gepinnte Tickets können sie nutzen). Basis für den Löschschutz."""
+    conn = get_connection()
+    try:
+        rows = _fetchall(conn, "SELECT definition_json FROM process_definitions")
+    finally:
+        conn.close()
+    for r in rows:
+        try:
+            d = json.loads(r["definition_json"])
+        except Exception:
+            continue
+        if _refs_group(d, group_id):
+            return True
+    return False
+
+
 def delete_version(key: str, version: int) -> None:
     """Löscht eine Version. Nur draft und ohne referenzierende Tickets."""
     conn = get_connection()
