@@ -45,6 +45,12 @@ class Config:
     ATTACHMENTS_DIR: str = os.getenv("ATTACHMENTS_DIR", str(BASE_DIR.parent / "data" / "attachments"))
     MAX_UPLOAD_MB: int = int(os.getenv("MAX_UPLOAD_MB", "25"))
 
+    # Prozess-Automations-Scheduler (Timer/Eskalation). RUN_SCHEDULER sollte NUR auf
+    # EINER Instanz true sein; die Korrektheit gegen Doppel-Feuern garantiert aber der
+    # Idempotenz-Ledger (process_timer_fires), nicht dieses Flag.
+    RUN_SCHEDULER: bool = str_to_bool(os.getenv("RUN_SCHEDULER", "true"))
+    SCHEDULER_INTERVAL: int = int(os.getenv("SCHEDULER_INTERVAL", "900"))
+
     @property
     def COMPANIES(self):
         return db.get_companies()
