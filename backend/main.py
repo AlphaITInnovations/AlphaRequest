@@ -27,6 +27,7 @@ from backend.api.v1 import freigabe as freigabe_v1
 from backend.api.v1 import sessions as sessions_v1
 from backend.api.v1 import health as health_v1
 from backend.api.v1 import attachments as attachments_v1
+from backend.api.v1 import processes as processes_v1
 
 
 def get_ticket_type_dict():
@@ -46,11 +47,47 @@ def _assert_secure_config() -> None:
         )
 
 
+def _install_error_handlers(app: FastAPI) -> None:
+    """Vereinheitlicht alle Fehler-Antworten auf den Envelope
+    { error: { code, message, fields? } } (schemas.responses)."""
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from fastapi.responses import JSONResponse
+
+    _CODE_BY_STATUS = {400: "BAD_REQUEST", 401: "UNAUTHORIZED", 403: "FORBIDDEN",
+                       404: "NOT_FOUND", 409: "CONFLICT", 422: "VALIDATION_FAILED"}
+
+    @app.exception_handler(RequestValidationError)
+    async def _on_validation_error(request, exc: RequestValidationError):
+        fields = []
+        for e in exc.errors():
+            loc = [str(p) for p in e.get("loc", []) if p not in ("body", "query", "path")]
+            fields.append({"path": ".".join(loc) or "body",
+                           "code": str(e.get("type", "invalid")),
+                           "message": e.get("msg", "ungültig")})
+        return JSONResponse(status_code=422, content={"error": {
+            "code": "VALIDATION_FAILED", "message": "Validierung fehlgeschlagen", "fields": fields}})
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _on_http_error(request, exc: StarletteHTTPException):
+        detail = exc.detail
+        if isinstance(detail, dict) and "code" in detail:
+            body = {"code": detail.get("code"), "message": detail.get("message", "")}
+            if detail.get("fields"):
+                body["fields"] = detail["fields"]
+        else:
+            body = {"code": _CODE_BY_STATUS.get(exc.status_code, "HTTP_ERROR"),
+                    "message": detail if isinstance(detail, str) else str(detail)}
+        return JSONResponse(status_code=exc.status_code, content={"error": body},
+                            headers=getattr(exc, "headers", None))
+
+
 def create_app() -> FastAPI:
     _assert_secure_config()
     app = FastAPI(lifespan=lifespan)
     app.state = cast(State, app.state)
     app.state.manager = TicketService()
+    _install_error_handlers(app)
 
     BASE_DIR = Path(__file__).resolve().parent
 
@@ -111,6 +148,7 @@ def create_app() -> FastAPI:
     app.include_router(freigabe_v1.router, prefix="/api/v1")
     app.include_router(sessions_v1.router, prefix="/api/v1")
     app.include_router(attachments_v1.router, prefix="/api/v1")
+    app.include_router(processes_v1.router, prefix="/api/v1")
 
     # Öffentlicher Health-/Uptime-Endpunkt – unter /health UND /api/v1/health
     # erreichbar (Root für interne/Container-Checks, /api/v1 hinter dem Proxy).
