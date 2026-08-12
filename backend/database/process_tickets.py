@@ -432,3 +432,30 @@ def active_runtime_rows() -> list[dict]:
             "departments": depts if isinstance(depts, list) else [],
         })
     return out
+
+
+# ── Admin-Notfalleingriff ─────────────────────────────────────────────────────
+
+def delete(ticket_id: int) -> bool:
+    """Auftrag samt Verlauf, Beobachtern und Timer-Sperren löschen.
+
+    Nur für Admins gedacht (Fehleingaben, Testdaten). Das AUDIT bleibt bestehen –
+    es liegt in einer eigenen, append-only Tabelle und überlebt die Löschung
+    bewusst; sonst wäre nicht mehr nachvollziehbar, dass es den Auftrag gab.
+
+    Die Nummern-Ansprüche (`process_sequence_claims`) bleiben ebenfalls stehen:
+    eine einmal vergebene Personalnummer darf nicht recycelt werden.
+    """
+    conn = get_connection()
+    try:
+        row = _fetchone(conn, "SELECT id FROM process_tickets WHERE id = %s", (ticket_id,))
+        if not row:
+            return False
+        _exec(conn, "DELETE FROM process_ticket_events WHERE ticket_id = %s", (ticket_id,))
+        _exec(conn, "DELETE FROM process_ticket_watchers WHERE ticket_id = %s", (ticket_id,))
+        _exec(conn, "DELETE FROM process_timer_fires WHERE ticket_id = %s", (ticket_id,))
+        _exec(conn, "DELETE FROM process_tickets WHERE id = %s", (ticket_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return True

@@ -77,6 +77,9 @@ class TicketAbilities(BaseModel):
     internal_comment: bool = False
     manage_watchers: bool = False
     reopen: bool = False
+    #: Notfalleingriffe (Admin): hängenden Auftrag zwangsweise abschließen bzw. löschen.
+    archive: bool = False
+    delete: bool = False
 
 
 class ProcessTicketOut(BaseModel):
@@ -142,6 +145,8 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
         manage_watchers=acc.may_edit(defn, row, user, gids),
         # Wiederaufnahme greift in einen FERTIGEN Auftrag ein – nur Admin.
         reopen=acc.is_admin(user) and _is_terminal(row),
+        archive=acc.is_admin(user) and not _is_terminal(row),
+        delete=acc.is_admin(user),
     )
 
 
@@ -772,6 +777,72 @@ def add_ticket_comment(ticket_id: int, body: CommentRequest,
 class ReopenRequest(BaseModel):
     reason: str
     phase: Optional[str] = None
+
+
+@router.post("/process-tickets/{ticket_id}:archive", response_model=DataResponse[ProcessTicketOut])
+def archive_process_ticket(ticket_id: int, body: RejectRequest,
+                           user: dict = Depends(get_current_user)):
+    """Auftrag zwangsweise abschließen (Admin-Notfalleingriff).
+
+    Für Fälle, in denen ein Auftrag hängt, den niemand mehr weiterschalten kann –
+    etwa weil die zuständige Gruppe aufgelöst wurde. Der Grund ist Pflicht, sonst
+    steht im Verlauf ein Abschluss ohne Erklärung. Rückholbar über :reopen.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    if not acc.is_admin(user):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED,
+                        "Nur Admins können einen Auftrag zwangsweise abschließen")
+    if _is_terminal(row):
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag ist bereits abgeschlossen/abgelehnt")
+    grund = _pflicht_begruendung(body.reason)
+    runtime = pr.force_archive(row["runtime"])
+    try:
+        row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                   status="archived", expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+    from backend.metrics.process_metrics import record_process_terminal
+    record_process_terminal("archived")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    events.record(row, events.ADVANCED, actor_id=user.get("id"), actor_name=_actor_name(user),
+                  body=grund, details={"from_phase": None, "to_phase": None,
+                                       "status": "archived", "forced": True})
+    _safe_restamp(row, defn) if defn else store.set_next_timer(ticket_id, None)
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn,
+                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  user, gids))
+
+
+@router.delete("/process-tickets/{ticket_id}")
+def delete_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Auftrag endgültig löschen (Admin).
+
+    Vor der Löschung wird auditiert – der Audit-Eintrag überlebt sie bewusst,
+    sonst wäre nicht mehr nachvollziehbar, dass es den Auftrag je gab. Die
+    vergebenen Nummern-Ansprüche bleiben stehen: eine ausgegebene Personalnummer
+    darf nicht erneut vergeben werden.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    if not acc.is_admin(user):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED, "Nur Admins können Aufträge löschen")
+    record_audit(
+        action="process_ticket_deleted", actor_id=user.get("id"),
+        actor_name=_actor_name(user), entity_type="process_ticket", entity_id=str(ticket_id),
+        summary=f"Prozess-Ticket #{ticket_id} gelöscht: {row.get('title')}",
+        details={"process_key": row.get("process_key"), "status": row.get("status"),
+                 "owner_id": row.get("owner_id")},
+    )
+    store.delete(ticket_id)
+    return DataResponse(data={"deleted": ticket_id})
 
 
 @router.post("/process-tickets/{ticket_id}:reopen", response_model=DataResponse[ProcessTicketOut])

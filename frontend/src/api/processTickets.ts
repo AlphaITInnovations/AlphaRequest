@@ -64,6 +64,17 @@ export async function rejectTicket(id: number, reason: string): Promise<ProcessT
  * auch an unveröffentlichte Entwürfe). Hier entscheidet der Zugriff auf den
  * AUFTRAG – wer ihn sehen darf, darf auch wissen, wie er aufgebaut ist.
  */
+/** Admin-Notfalleingriff: hängenden Auftrag zwangsweise abschließen (Grund Pflicht). */
+export async function archiveTicket(id: number, reason: string): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:archive`, { reason })
+  return data.data
+}
+
+/** Admin: Auftrag endgültig löschen. Der Audit-Eintrag überlebt die Löschung. */
+export async function deleteTicket(id: number): Promise<void> {
+  await client.delete(`/process-tickets/${id}`)
+}
+
 export async function getPinnedDefinition(id: number): Promise<unknown> {
   const { data } = await client.get(`/process-tickets/${id}/definition`)
   return data.data

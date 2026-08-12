@@ -299,6 +299,16 @@ export interface ProcessOut {
   published_at: string | null
   /** String(rev), ohne Anführungszeichen – für If-Match. */
   etag: string | null
+  /** Nur im Katalog (GET /processes): darf DIESE Person hier anlegen? */
+  may_create?: boolean | null
+  /** Nur im Katalog: Symbol aus der Definition (die selbst nicht mitkommt). */
+  icon?: string | null
+}
+
+/** Welche Felder beim ANLEGEN sichtbar/ausfüllbar sind (GET /processes/{key}/field-access). */
+export interface FieldAccess {
+  visible_fields: string[]
+  editable_fields: string[]
 }
 
 export interface ProcessRuntimePhase {
@@ -337,6 +347,9 @@ export interface TicketAbilities {
   internal_comment: boolean
   manage_watchers: boolean
   reopen: boolean
+  /** Notfalleingriffe (Admin): hängenden Auftrag zwangsweise abschließen bzw. löschen. */
+  archive: boolean
+  delete: boolean
 }
 
 export interface ProcessTicketOut {
@@ -358,6 +371,13 @@ export interface ProcessTicketOut {
   created_at: string | null
   updated_at: string | null
   abilities?: TicketAbilities
+  /**
+   * Welche Felder diese Person SEHEN bzw. in der aktuellen Phase BEARBEITEN darf.
+   * Kommt vom Server – das Frontend kennt die Gruppen-Mitgliedschaft nicht und
+   * könnte die Entscheidung nicht nachbauen.
+   */
+  visible_fields?: string[]
+  editable_fields?: string[]
 }
 
 // ── Editor-interne Typen ──────────────────────────────────────────────────────

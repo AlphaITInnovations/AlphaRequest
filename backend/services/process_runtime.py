@@ -210,6 +210,18 @@ def reject(runtime: dict) -> dict:
     return runtime
 
 
+def force_archive(runtime: dict) -> dict:
+    """Auftrag zwangsweise abschließen (Admin-Eingriff).
+
+    Setzt den Zeiger HINTER die letzte Phase – derselbe Endzustand, den `advance`
+    nach der letzten Phase erzeugt. Offene Phasen bleiben als „open" stehen und
+    lügen damit nicht: sie wurden nie erledigt, der Auftrag wurde abgebrochen.
+    Rückholbar bleibt er über `reopen`.
+    """
+    runtime["current_index"] = len(runtime.get("phases") or [])
+    return runtime
+
+
 def phase_index(defn: ProcessDefinition, phase_key: str) -> Optional[int]:
     for i, p in enumerate(defn.phases):
         if p.key == phase_key:

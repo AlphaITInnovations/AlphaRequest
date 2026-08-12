@@ -472,8 +472,8 @@ def test_abilities_fuer_zustaendige_fachabteilung(setup):
     client, state, *_ = setup
     state["user"] = dict(ITLER)
     a = client.get("/process-tickets/7").json()["data"]["abilities"]
-    assert a == {"edit": True, "internal_comment": True,
-                 "manage_watchers": True, "reopen": False}
+    assert a == {"edit": True, "internal_comment": True, "manage_watchers": True,
+                 "reopen": False, "archive": False, "delete": False}
 
 
 def test_abilities_fuer_den_ersteller(setup):
@@ -545,3 +545,55 @@ def test_beobachter_eintragen_landet_im_verlauf(setup):
     # Zweimal eintragen erzeugt keinen zweiten Eintrag (idempotent).
     client.post("/process-tickets/7/watchers", json={})
     assert len([e for e in evstore.rows if e["action"] == "watcher_added"]) == 1
+
+
+# ── Admin-Notfalleingriffe ───────────────────────────────────────────────────
+
+def test_zwangsabschluss_nur_admin_und_mit_grund(setup):
+    client, state, store, evstore, _w = setup
+    state["user"] = dict(ITLER)
+    assert client.post("/process-tickets/7:archive",
+                       json={"reason": "hängt"}).status_code == 403
+    state["user"] = dict(ADMIN)
+    assert client.post("/process-tickets/7:archive", json={"reason": "  "}).status_code == 422
+    r = client.post("/process-tickets/7:archive", json={"reason": "Gruppe aufgelöst"})
+    assert r.status_code == 200 and r.json()["data"]["status"] == "archived"
+    # Der Grund muss im Verlauf stehen, sonst ist der Abschluss unerklärlich.
+    assert any(e.get("body") == "Gruppe aufgelöst" for e in evstore.rows)
+    # Danach ist er terminal → kein zweiter Zwangsabschluss.
+    assert client.post("/process-tickets/7:archive",
+                       json={"reason": "nochmal"}).status_code == 409
+
+
+def test_zwangsabschluss_ist_ueber_reopen_rueckholbar(setup):
+    client, state, store, *_ = setup
+    client.post("/process-tickets/7:archive", json={"reason": "Versehen"})
+    r = client.post("/process-tickets/7:reopen", json={"reason": "doch noch nötig"})
+    assert r.status_code == 200
+    assert r.json()["data"]["status"] == "in_request"
+
+
+def test_loeschen_nur_admin_und_auditiert(setup, monkeypatch):
+    client, state, store, *_ = setup
+    geloescht = []
+    monkeypatch.setattr(store, "delete", lambda tid: geloescht.append(tid) or True,
+                        raising=False)
+    audits = []
+    monkeypatch.setattr(pt, "record_audit", lambda **kw: audits.append(kw))
+    state["user"] = dict(ITLER)
+    assert client.delete("/process-tickets/7").status_code == 403
+    state["user"] = dict(ADMIN)
+    assert client.delete("/process-tickets/7").status_code == 200
+    assert geloescht == [7]
+    # Auditiert VOR der Löschung – sonst wäre der Titel schon weg.
+    assert audits and audits[0]["action"] == "process_ticket_deleted"
+    assert "Testauftrag" in audits[0]["summary"]
+
+
+def test_abilities_nennen_die_notfallaktionen(setup):
+    client, state, store, *_ = setup
+    a = client.get("/process-tickets/7").json()["data"]["abilities"]
+    assert a["archive"] is True and a["delete"] is True
+    state["user"] = dict(ITLER)
+    b = client.get("/process-tickets/7").json()["data"]["abilities"]
+    assert b["archive"] is False and b["delete"] is False

@@ -74,27 +74,30 @@ const router = createRouter({
       component: () => import('@/views/ProcessEditorView.vue'),
       meta: { requiresAuth: true, requiresPermission: 'admin' },
     },
-    // Aufträge aus dynamischen Prozessen. Die API ist aktuell admin-only; sobald
-    // sie für Beteiligte geöffnet wird, kann requiresPermission hier entfallen.
+    // Aufträge aus dynamischen Prozessen: für ALLE Angemeldeten erreichbar.
+    // Kein `requiresPermission` – wer was sehen und tun darf, entscheidet der
+    // Server pro Auftrag (Aufsicht · Ersteller:in · Zuständige · Beobachter:innen)
+    // und liefert es als `abilities`/`visible_fields` mit. Ein Rechte-Gate an der
+    // Route wäre hier falsch: es würde Beteiligte aussperren, die kein Admin sind.
     {
       path: '/prozess-auftraege',
       component: () => import('@/views/processes/ProcessTicketListView.vue'),
-      meta: { requiresAuth: true, requiresPermission: 'admin' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/prozess-auftraege/neu',
       component: () => import('@/views/processes/ProcessTicketCreateView.vue'),
-      meta: { requiresAuth: true, requiresPermission: 'admin' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/prozess-auftraege/neu/:key',
       component: () => import('@/views/processes/ProcessTicketCreateView.vue'),
-      meta: { requiresAuth: true, requiresPermission: 'admin' },
+      meta: { requiresAuth: true },
     },
     {
       path: '/prozess-auftraege/:id',
       component: () => import('@/views/processes/ProcessTicketDetailView.vue'),
-      meta: { requiresAuth: true, requiresPermission: 'admin' },
+      meta: { requiresAuth: true },
     },
 
     // ── Backend Down ───────────────────────────────────────────────────────────

@@ -42,18 +42,24 @@ const sources = ref<OptionSources>(emptySources())
 const loadError = ref<string | null>(null)
 
 /**
- * Sichtbarkeits-Kontext für die ANZEIGE.
+ * Sichtbarkeits-Kontext für die ANZEIGE – er kommt VOM SERVER.
  *
- * Verbindlich filtert der Server: `ticket.values` enthält nur freigegebene
- * Felder, und Schreibzugriffe auf gesperrte Felder verwirft er.
+ * Das Frontend kennt die Gruppen-Mitgliedschaft nicht und könnte die Entscheidung
+ * gar nicht nachbauen. Die Antwort liefert deshalb `visible_fields` und
+ * `editable_fields`; ohne sie zeigte das Formular Eingabefelder für Daten, die
+ * diese Person nicht sehen darf – sie kämen leer an und der Server verwürfe die
+ * Eingabe wieder.
  *
- * OFFEN: Das Frontend kennt die Gruppen-Mitgliedschaft nicht (`/auth/me` liefert
- * sie nicht mit), deshalb steht hier noch `fullView`. Folge: das Formular kann
- * ein Eingabefeld für ein Feld zeigen, das diese Person nicht sehen darf – es
- * käme leer an und der Server verwürfe die Eingabe. Sauber wird das, wenn die
- * Antwort die sichtbaren/editierbaren Feld-Schlüssel mitliefert (wie `abilities`).
+ * Fehlt die Liste ganz (unerwartet alte Antwort), wird NICHT auf Vollsicht
+ * zurückgefallen: lieber ein leeres Formular als eines, das zu viel zeigt.
  */
-const viewer = computed<SimViewer>(() => ({ fullView: true, isAdmin: true, groupIds: [] }))
+const viewer = computed<SimViewer>(() => ({
+  fullView: false,
+  isAdmin: false,
+  groupIds: [],
+  visibleKeys: new Set(ticket.value?.visible_fields ?? []),
+  editableKeys: new Set(ticket.value?.editable_fields ?? []),
+}))
 
 const phase = computed(() => {
   if (!definition.value || !ticket.value) return null
@@ -68,6 +74,7 @@ const phase = computed(() => {
  */
 const abilities = computed(() => ticket.value?.abilities ?? {
   edit: false, internal_comment: false, manage_watchers: false, reopen: false,
+  archive: false, delete: false,
 })
 
 /** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
@@ -188,6 +195,38 @@ async function reject() {
   } finally { busy.value = false }
 }
 
+/** Zwangsabschluss: für Aufträge, die niemand mehr weiterschalten kann (z. B. weil
+ *  die zuständige Gruppe aufgelöst wurde). Rückholbar über die Wiederaufnahme. */
+async function forceArchive() {
+  const grund = prompt('Warum wird der Auftrag zwangsweise abgeschlossen? '
+    + '(steht im Verlauf; rückholbar über „Wieder aufnehmen")')
+  if (grund === null) return
+  if (!grund.trim()) { showToast('Ohne Grund kein Zwangsabschluss', false); return }
+  busy.value = true
+  try {
+    ticket.value = await ticketsApi.archiveTicket(id.value, grund.trim())
+    showToast('Auftrag abgeschlossen')
+    timeline.value?.reload()
+  } catch (e) {
+    showToast(errorMessage(e, 'Abschließen fehlgeschlagen'), false)
+  } finally { busy.value = false }
+}
+
+/** Endgültiges Löschen – der Audit-Eintrag bleibt, der Auftrag ist weg. */
+async function destroy() {
+  if (!confirm(`Auftrag #${id.value} endgültig löschen? Das lässt sich NICHT rückgängig `
+    + 'machen. Verlauf, Beobachter:innen und Anhänge gehen mit verloren; im Audit-Log '
+    + 'bleibt der Vorgang nachvollziehbar.')) return
+  busy.value = true
+  try {
+    await ticketsApi.deleteTicket(id.value)
+    showToast('Auftrag gelöscht')
+    router.push('/prozess-auftraege')
+  } catch (e) {
+    showToast(errorMessage(e, 'Löschen fehlgeschlagen'), false)
+  } finally { busy.value = false }
+}
+
 /** Wiederaufnahme: nur Admin, nur bei fertigem Auftrag, Grund ist Pflicht. */
 async function reopen() {
   const reason = prompt('Warum wird der Auftrag wieder aufgenommen? '
@@ -252,6 +291,20 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
                            dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20
                            disabled:opacity-40 transition">
               Wieder aufnehmen
+            </button>
+            <!-- Notfalleingriffe: nur Admin, bewusst optisch zurückhaltend -->
+            <button v-if="abilities.archive" @click="forceArchive" :disabled="busy"
+                    title="Auftrag zwangsweise abschließen (rückholbar)"
+                    class="px-3 py-2 rounded-xl text-sm border border-gray-300 dark:border-white/20
+                           text-gray-600 dark:text-gray-300 hover:bg-gray-50
+                           dark:hover:bg-white/5 disabled:opacity-40 transition">
+              Zwangsabschluss
+            </button>
+            <button v-if="abilities.delete" @click="destroy" :disabled="busy"
+                    title="Endgültig löschen"
+                    class="px-3 py-2 rounded-xl text-sm text-gray-400 hover:text-red-600
+                           disabled:opacity-40 transition">
+              Löschen
             </button>
           </div>
         </div>

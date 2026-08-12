@@ -9,7 +9,7 @@
  *  - Der Doppelpunkt in `:publish`/`:export` darf NICHT URL-encodiert werden.
  */
 import { client } from '@/api/client'
-import type { ProcessDefinition, ProcessOut } from '@/types/process'
+import type { FieldAccess, ProcessDefinition, ProcessOut } from '@/types/process'
 
 /** Veröffentlichter Katalog (jede:r Angemeldete). Ohne `definition`. */
 export async function listProcesses(): Promise<ProcessOut[]> {
@@ -36,6 +36,16 @@ export async function getPublished(key: string): Promise<ProcessOut> {
 }
 
 /** Rohe Definition einer Version (Export-Datei). */
+/**
+ * Feld-Auskunft für den Anlege-Dialog. Beim Anlegen gibt es noch kein Ticket und
+ * damit keine Antwort mit `visible_fields` – ohne diese Auskunft müsste das
+ * Formular die Sichtbarkeit raten (es kennt die Gruppen-Mitgliedschaft nicht).
+ */
+export async function getFieldAccess(key: string): Promise<FieldAccess> {
+  const { data } = await client.get(`/processes/${key}/field-access`)
+  return data.data
+}
+
 export async function exportVersion(key: string, version: number): Promise<ProcessDefinition> {
   const { data } = await client.get(
     `/processes/${encodeURIComponent(key)}/versions/${version}:export`)

@@ -8,7 +8,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import type { OptionSources, ProcessDefinition, ProcessOut } from '@/types/process'
-import type { SimFieldError } from '@/lib/processSim'
+import type { SimFieldError, SimViewer } from '@/lib/processSim'
 import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
@@ -34,21 +34,46 @@ const priority = ref('normal')
 const errors = ref<SimFieldError[]>([])
 const sources = ref<OptionSources>(emptySources())
 
-/** Aus Sicht der erstellenden Person: Owner ⇒ Vollsicht. */
-const viewer = { fullView: true, isAdmin: false, groupIds: [] }
+/**
+ * Welche Felder die erstellende Person sehen und ausfüllen darf, sagt der Server
+ * (GET /processes/{key}/field-access). Selbst herleiten kann das Frontend es
+ * nicht – es kennt die Gruppen-Mitgliedschaft nicht. Ohne die Auskunft bekäme
+ * z. B. beim Onboarding jemand Eingabefelder für vertrauliche Angaben zu sehen,
+ * die der Server anschließend verwirft.
+ */
+const zugriff = ref<{ visible: Set<string>; editable: Set<string> } | null>(null)
+const viewer = computed<SimViewer>(() => ({
+  fullView: false,
+  isAdmin: false,
+  groupIds: [],
+  visibleKeys: zugriff.value?.visible ?? new Set<string>(),
+  editableKeys: zugriff.value?.editable ?? new Set<string>(),
+}))
+
+/** Nur Prozesse anbieten, die diese Person auch anlegen darf – sonst endet jede
+ *  Auswahl im 403 des Servers. */
+const anlegbar = computed(() => catalog.value.filter((p) => p.may_create !== false))
 
 const startPhase = computed(() => definition.value?.phases?.[0] ?? null)
 
 async function loadProcess(key: string) {
   if (!key) { definition.value = null; return }
   try {
-    const row = await processesApi.getPublished(key)
+    const [row, access] = await Promise.all([
+      processesApi.getPublished(key),
+      processesApi.getFieldAccess(key),
+    ])
     definition.value = normalizeDefinition(row.definition)
+    zugriff.value = {
+      visible: new Set(access.visible_fields),
+      editable: new Set(access.editable_fields),
+    }
     title.value = row.name
     values.value = {}
     errors.value = []
   } catch (e) {
     definition.value = null
+    zugriff.value = null
     showToast(errorMessage(e, 'Prozess konnte nicht geladen werden'), false)
   }
 }
@@ -120,11 +145,15 @@ onMounted(async () => {
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Prozess</label>
           <select v-model="selectedKey" class="afi w-full" @change="loadProcess(selectedKey)">
             <option value="">– bitte wählen –</option>
-            <!-- Kein Symbol: Listen-Routen liefern `definition` grundsätzlich als null. -->
-            <option v-for="p in catalog" :key="p.key" :value="p.key">{{ p.name }}</option>
+            <option v-for="p in anlegbar" :key="p.key" :value="p.key">
+              {{ p.icon ? `${p.icon} ` : '' }}{{ p.name }}
+            </option>
           </select>
           <p v-if="!catalog.length" class="text-xs text-gray-400 mt-2">
             Es ist noch kein Prozess veröffentlicht.
+          </p>
+          <p v-else-if="!anlegbar.length" class="text-xs text-gray-400 mt-2">
+            Sie haben für keinen der veröffentlichten Prozesse das Recht, Aufträge anzulegen.
           </p>
         </section>
 

@@ -177,27 +177,30 @@ defineProps<{ title?: string }>()
           <span v-if="sidebarOpen" class="truncate">Alle Aufträge</span>
         </a>
 
+        <!-- Aufträge aus dynamischen Prozessen. Bewusst NICHT im Admin-Block:
+             die Endpunkte sind für alle Beteiligten offen (Ersteller:in,
+             Zuständige, Beobachter:innen) – im Admin-Block wäre der Menüpunkt für
+             genau die Personen unsichtbar, die dort arbeiten sollen. -->
+        <a @click.prevent="navigate('/prozess-auftraege')"
+           href="/prozess-auftraege"
+           class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
+           :class="[
+             isActive('/prozess-auftraege') ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
+             sidebarOpen ? '' : 'justify-center'
+           ]">
+          <div v-if="isActive('/prozess-auftraege')" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
+          <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12h4l3 8 4-16 3 8h4"/>
+          </svg>
+          <span v-if="sidebarOpen" class="truncate">Prozess-Aufträge</span>
+        </a>
+
         <!-- Admin -->
         <template v-if="auth.isAdmin">
           <p v-if="sidebarOpen" class="px-3 pt-5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/50">
             Administration
           </p>
           <div v-else class="mx-3 my-3 border-t border-white/15" />
-
-          <!-- Aufträge aus dynamischen Prozessen (neues, definitions-getriebenes System) -->
-          <a @click.prevent="navigate('/prozess-auftraege')"
-             href="/prozess-auftraege"
-             class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
-             :class="[
-               isActive('/prozess-auftraege') ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
-               sidebarOpen ? '' : 'justify-center'
-             ]">
-            <div v-if="isActive('/prozess-auftraege')" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
-            <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12h4l3 8 4-16 3 8h4"/>
-            </svg>
-            <span v-if="sidebarOpen" class="truncate">Prozess-Aufträge</span>
-          </a>
 
           <a @click.prevent="navigate('/settings')"
              href="/settings"

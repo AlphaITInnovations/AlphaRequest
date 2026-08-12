@@ -17,6 +17,20 @@ export interface SimViewer {
   fullView: boolean
   isAdmin: boolean
   groupIds: string[]
+  /**
+   * ERLAUBNISLISTE VOM SERVER (echter Auftrag: `visible_fields`/`editable_fields`).
+   *
+   * Wenn gesetzt, GILT SIE – die Gruppen-Regeln darunter sind nur der Nachbau für
+   * die Editor-Vorschau, wo es keinen Server gibt. Das Frontend kennt die
+   * Gruppen-Mitgliedschaft nicht und könnte die Entscheidung gar nicht treffen;
+   * ohne die Liste zeigte das Formular Eingabefelder, deren Inhalt der Server
+   * anschließend verwirft.
+   *
+   * Die Liste überstimmt bewusst AUCH `isAdmin` und `confidential`: der
+   * Admin-Fallback ist serverseitig schon eingerechnet.
+   */
+  visibleKeys?: ReadonlySet<string> | null
+  editableKeys?: ReadonlySet<string> | null
 }
 
 export const ADMIN_VIEWER: SimViewer = { fullView: true, isAdmin: true, groupIds: [] }
@@ -26,6 +40,7 @@ export interface SimFieldError { path: string; code: string; message: string }
 // ── Sichtbarkeit (Spiegel process_visibility) ─────────────────────────────────
 
 export function canSeeField(f: FieldDef, ctx: SimViewer): boolean {
+  if (ctx.visibleKeys) return ctx.visibleKeys.has(f.key)
   const vis = f.visibility
   const confidential = !!vis?.confidential
   const groups = vis?.visibleToGroups ?? []
@@ -93,7 +108,11 @@ export function renderFields(
     const visible = seeable && condOk && ref.mode !== 'hidden'
     const required = visible && (ref.required
       || (!!ref.requiredWhen && evaluate(ref.requiredWhen as Condition, values)))
-    const editable = visible && (ref.mode === 'editable' || ref.mode === 'append_only')
+    const modeOk = ref.mode === 'editable' || ref.mode === 'append_only'
+    // Die Server-Liste kennt zusätzlich die Rolle (zuständig? Aufsicht?) – ohne
+    // sie (Editor-Vorschau) entscheidet allein der Phasen-Modus.
+    const editable = visible && modeOk
+      && (ctx.editableKeys ? ctx.editableKeys.has(ref.ref) : true)
     out.push({ ref, field, visible, required, editable })
   }
   return out
