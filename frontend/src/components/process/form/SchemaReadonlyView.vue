@@ -6,13 +6,23 @@
  * beim Ausliefern anwendet. Werden Felder ausgeblendet, weist ein Hinweis am
  * Fuß darauf hin: sonst wirkt eine vertrauliche Angabe schlicht wie „nicht
  * ausgefüllt".
+ *
+ * Ist eine Phase übergeben, wird deren Layout (Abschnitte, Breiten, Deko)
+ * genauso wie im Formular gerendert – die Lese-Ansicht soll wie das Formular
+ * aussehen, nur ohne Eingabefelder. Alles, was dabei nicht vorkommt, sammelt der
+ * Abschnitt „Weitere Angaben": in der Gesamtansicht darf kein erfasster Wert
+ * verloren gehen (auch nicht bei mode='hidden' oder unerfüllter Bedingung).
  */
 import { computed } from 'vue'
-import type { FieldDef, OptionSources, PhaseDef, ProcessDefinition, SubField } from '@/types/process'
+import type {
+  FieldDef, LayoutItem, LayoutSection as LayoutSectionDef, OptionSources, PhaseDef,
+  ProcessDefinition, SubField,
+} from '@/types/process'
+import { colSpanClass, resolveLayout, REST_SECTION_TITLE } from '@/lib/processLayout'
 import { visibleFieldKeys } from '@/lib/processSim'
 import type { SimViewer } from '@/lib/processSim'
-import TicketSection from '@/components/tickets/TicketSection.vue'
-import TicketFieldGrid from '@/components/tickets/TicketFieldGrid.vue'
+import LayoutSection from './LayoutSection.vue'
+import LayoutDecoration from './LayoutDecoration.vue'
 import TicketField from '@/components/tickets/TicketField.vue'
 
 const props = defineProps<{
@@ -25,51 +35,74 @@ const props = defineProps<{
 
 const catalog = computed<FieldDef[]>(() => props.definition?.fields ?? [])
 const vals = computed<Record<string, unknown>>(() => props.values ?? {})
-const byKey = computed(() => new Map(catalog.value.map((f) => [f.key, f])))
 
 const allowed = computed<Set<string>>(() =>
   props.definition ? visibleFieldKeys(props.definition, props.viewer) : new Set<string>())
 
-/** Felder der übergebenen Phase in Phasen-Reihenfolge (ohne ausgeblendete). */
-const phaseFields = computed<FieldDef[]>(() => {
+// ── Abschnitte aufbauen ──────────────────────────────────────────────────────
+
+interface FieldRow { kind: 'field'; key: string; cols: number; f: FieldDef }
+interface DecoRow { kind: 'deco'; key: string; cols: number; item: LayoutItem }
+type Row = FieldRow | DecoRow
+interface Block { section: LayoutSectionDef; rows: Row[] }
+
+/** Volle Breite für alles, was in einer schmalen Spalte unlesbar würde. */
+function isWide(f: FieldDef): boolean {
+  return f.widget === 'textarea' || f.widget === 'collection' || f.widget === 'attachment'
+}
+
+function fieldRow(f: FieldDef, cols: number): FieldRow {
+  return { kind: 'field', key: `f:${f.key}`, cols: isWide(f) ? 12 : cols, f }
+}
+
+function section(title: string, variant: LayoutSectionDef['variant']): LayoutSectionDef {
+  return { type: 'section', title, variant, badge: null, description: null,
+    collapsed: false, items: [] }
+}
+
+/** Abschnitte aus dem Phasen-Layout (leer, wenn keine Phase übergeben wurde). */
+const phaseBlocks = computed<Block[]>(() => {
   const p = props.phase
-  if (!p) return []
-  const seen = new Set<string>()
-  const out: FieldDef[] = []
-  for (const ref of p.fields ?? []) {
-    if (ref.mode === 'hidden' || seen.has(ref.ref)) continue
-    const f = byKey.value.get(ref.ref)
-    if (!f || !allowed.value.has(f.key)) continue
-    seen.add(ref.ref)
-    out.push(f)
-  }
-  return out
+  if (!p || !props.definition) return []
+  const byKey = new Map(catalog.value.map((f) => [f.key, f]))
+  return resolveLayout(props.definition, p, vals.value, props.viewer)
+    .map(({ section: sec, items }) => ({
+      section: sec,
+      rows: items.flatMap((it, i): Row[] => {
+        if (it.rendered) {
+          const f = byKey.get(it.rendered.field.key)
+          // Zusätzliches Sichtbarkeits-Gate: resolveLayout kennt nur die Phase,
+          // der Katalog-Filter entscheidet über vertrauliche Felder.
+          return f && allowed.value.has(f.key) ? [fieldRow(f, it.cols)] : []
+        }
+        // Deko bleibt auch in der Lese-Ansicht: Hinweisboxen erklären die Werte,
+        // und ohne sie stünde ein reiner Hinweis-Abschnitt plötzlich leer da.
+        return [{ kind: 'deco', key: `d:${i}`, cols: it.cols, item: it.item }]
+      }),
+    }))
+    .filter((b) => b.rows.length > 0)
 })
 
-const restFields = computed<FieldDef[]>(() => {
-  const inPhase = new Set(phaseFields.value.map((f) => f.key))
-  return catalog.value.filter((f) => allowed.value.has(f.key) && !inPhase.has(f.key))
-})
+const blocks = computed<Block[]>(() => {
+  const out = [...phaseBlocks.value]
+  const shown = new Set<string>()
+  for (const b of out) for (const r of b.rows) if (r.kind === 'field') shown.add(r.f.key)
 
-interface Section { title: string; variant: 'base' | 'default'; fields: FieldDef[] }
+  const rest = catalog.value.filter((f) => allowed.value.has(f.key) && !shown.has(f.key))
+  if (!rest.length) return out
 
-const sections = computed<Section[]>(() => {
-  const out: Section[] = []
-  if (phaseFields.value.length) {
-    out.push({
-      title: props.phase?.label || props.phase?.key || 'Angaben',
-      variant: 'base',
-      fields: phaseFields.value,
-    })
+  const restRows = rest.map((f) => fieldRow(f, 6))
+  const last = out[out.length - 1]
+  if (last && last.section.title === REST_SECTION_TITLE) {
+    // resolveLayout hat schon einen Sammel-Abschnitt angelegt – nicht zwei
+    // gleichnamige Karten untereinander stellen.
+    out[out.length - 1] = { section: last.section, rows: [...last.rows, ...restRows] }
+    return out
   }
-  if (restFields.value.length) {
-    out.push({
-      title: out.length ? 'Weitere Angaben' : 'Angaben',
-      variant: out.length ? 'default' : 'base',
-      fields: restFields.value,
-    })
-  }
-  return out
+  return [...out, {
+    section: out.length ? section(REST_SECTION_TITLE, 'default') : section('Angaben', 'base'),
+    rows: restRows,
+  }]
 })
 
 /** Wie viele Katalogfelder die aktuelle Rolle nicht sehen darf. */
@@ -129,46 +162,53 @@ function subText(v: unknown): string {
 
 <template>
   <div class="space-y-6">
-    <TicketSection v-for="s in sections" :key="s.title" :title="s.title" :variant="s.variant">
-      <TicketFieldGrid :cols="2">
-        <template v-for="f in s.fields" :key="f.key">
-          <!-- Wiederholgruppe als kleine Tabelle über die volle Breite -->
-          <TicketField v-if="isCollection(f)" :label="f.label || f.key" wide>
-            <span v-if="!rowsOf(f).length" class="text-gray-400 italic">—</span>
-            <div v-else class="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="text-left text-xs text-gray-400 uppercase tracking-wider
-                             border-b dark:border-white/[0.06]">
-                    <th v-for="sf in f.item" :key="sf.key" class="px-4 py-2 font-semibold">
-                      {{ subLabel(sf) }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-white/[0.04]">
-                  <tr v-for="(row, i) in rowsOf(f)" :key="i" class="align-top">
-                    <td v-for="sf in f.item" :key="sf.key"
-                        class="px-4 py-2 text-gray-900 dark:text-white whitespace-pre-wrap">
-                      {{ subText(row[sf.key]) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </TicketField>
+    <LayoutSection v-for="(b, bi) in blocks" :key="`${bi}:${b.section.title}`" :section="b.section">
+      <!-- 12er-Raster wie im Formular; die Spaltenklassen stammen aus der festen
+           Tabelle in lib/processLayout.ts (Tailwind findet dynamische
+           Klassennamen nicht). -->
+      <div class="grid grid-cols-12 gap-4">
+        <div v-for="row in b.rows" :key="row.key"
+             class="col-span-12" :class="colSpanClass(row.cols)">
+          <template v-if="row.kind === 'field'">
+            <!-- Wiederholgruppe als kleine Tabelle -->
+            <TicketField v-if="isCollection(row.f)" :label="row.f.label || row.f.key">
+              <span v-if="!rowsOf(row.f).length" class="text-gray-400 italic">—</span>
+              <div v-else class="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-xs text-gray-400 uppercase tracking-wider
+                               border-b dark:border-white/[0.06]">
+                      <th v-for="sf in row.f.item" :key="sf.key" class="px-4 py-2 font-semibold">
+                        {{ subLabel(sf) }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 dark:divide-white/[0.04]">
+                    <tr v-for="(entry, i) in rowsOf(row.f)" :key="i" class="align-top">
+                      <td v-for="sf in row.f.item" :key="sf.key"
+                          class="px-4 py-2 text-gray-900 dark:text-white whitespace-pre-wrap">
+                        {{ subText(entry[sf.key]) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </TicketField>
 
-          <TicketField
-            v-else
-            :label="f.label || f.key"
-            :value="display(f, vals[f.key])"
-            :wide="f.widget === 'textarea'"
-            :pre="f.widget === 'textarea'"
-          />
-        </template>
-      </TicketFieldGrid>
-    </TicketSection>
+            <TicketField
+              v-else
+              :label="row.f.label || row.f.key"
+              :value="display(row.f, vals[row.f.key])"
+              :pre="row.f.widget === 'textarea'"
+            />
+          </template>
 
-    <p v-if="!sections.length" class="text-sm text-gray-400 italic px-1">
+          <LayoutDecoration v-else :item="row.item" />
+        </div>
+      </div>
+    </LayoutSection>
+
+    <p v-if="!blocks.length" class="text-sm text-gray-400 italic px-1">
       Keine sichtbaren Angaben.
     </p>
 

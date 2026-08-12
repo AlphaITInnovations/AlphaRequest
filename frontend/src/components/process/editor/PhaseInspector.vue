@@ -13,6 +13,7 @@ import ResponsibilityEditor from './ResponsibilityEditor.vue'
 import ConditionEditor from './ConditionEditor.vue'
 import ConditionSummary from './ConditionSummary.vue'
 import AutomationList from './AutomationList.vue'
+import LayoutEditor from './LayoutEditor.vue'
 
 const props = defineProps<{
   modelValue: PhaseDef
@@ -215,6 +216,19 @@ function labelFor(ref: string) {
           </div>
         </details>
       </div>
+    </section>
+
+    <!-- Darstellung -->
+    <section class="card-section">
+      <h3 class="section-title">Darstellung des Formulars</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+        Abschnitte, Breiten und Design-Elemente. Das steuert nur, <b>wie</b> das
+        Formular aussieht – <b>was</b> ein Feld tut (Pflicht, Bedingungen), steht oben
+        bei den Feldern.
+      </p>
+      <LayoutEditor :model-value="modelValue.layout" :fields="modelValue.fields"
+                    :field-labels="fieldLabels" :readonly="readonly"
+                    @update:model-value="patch({ layout: $event })" />
     </section>
 
     <!-- Regeln -->

@@ -11,7 +11,7 @@
  * ausgegeben wird IMMER `from` (der Wire-Name).
  */
 import type {
-  Action, Automation, Condition, CreatePermissions, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
+  Action, Automation, Condition, CreatePermissions, LayoutItem, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger,
 } from '@/types/process'
@@ -116,6 +116,31 @@ function normCreatePermissions(v: any): CreatePermissions {
   }
 }
 
+function normLayoutItem(v: any): LayoutItem | null {
+  const t = v?.type
+  if (t === 'field') return { type: 'field', ref: String(v.ref ?? ''), width: v.width ?? 'full' }
+  if (t === 'note') {
+    return { type: 'note', text: String(v.text ?? ''), tone: v.tone ?? 'info',
+      width: v.width ?? 'full' }
+  }
+  if (t === 'heading') return { type: 'heading', text: String(v.text ?? '') }
+  if (t === 'divider') return { type: 'divider' }
+  if (t === 'spacer') return { type: 'spacer' }
+  return null   // unbekannter Typ wird verworfen (der Server lehnt ihn ohnehin ab)
+}
+
+function normLayoutSection(v: any): LayoutSection {
+  return {
+    type: 'section',
+    title: String(v?.title ?? ''),
+    variant: v?.variant ?? 'default',
+    badge: str(v?.badge),
+    description: str(v?.description),
+    collapsed: bool(v?.collapsed),
+    items: arr(v?.items).map(normLayoutItem).filter((x): x is LayoutItem => x !== null),
+  }
+}
+
 function normTrigger(v: any): Trigger {
   return { type: v?.type ?? 'on_enter', after: str(v?.after), repeat: str(v?.repeat),
     field: str(v?.field) }
@@ -154,6 +179,7 @@ export function normalizePhase(v: any): PhaseDef {
     grantsFullView: bool(v?.grantsFullView),
     responsibility: normResponsibility(v?.responsibility),
     fields: arr(v?.fields).map(normalizeFieldRef),
+    layout: arr(v?.layout).map(normLayoutSection),
     constraints: arr(v?.constraints).map(normConstraintEntry),
     automations: arr(v?.automations).map(normalizeAutomation),
   }

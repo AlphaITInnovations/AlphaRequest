@@ -277,6 +277,42 @@ export function validateDefinition(
       }
     })
 
+    // Layout: darf nur Felder dieser Phase platzieren, jedes höchstens einmal.
+    // Nicht platzierte Felder sind kein Fehler (sie landen im Sammel-Abschnitt),
+    // aber ein Hinweis – sonst wundert sich später jemand über die Reihenfolge.
+    const phaseRefs = new Set(ph.fields.map((fr) => fr.ref))
+    const placed = new Set<string>()
+    ph.layout.forEach((sec, si) => {
+      const lanchor = `pe-layout-${si}`
+      sec.items.forEach((it, ii) => {
+        const lp = `${p}.layout.${si}.items.${ii}`
+        if (it.type === 'field') {
+          if (!phaseRefs.has(it.ref)) {
+            out.push(err(lp, lanchor, 'UNKNOWN_REF',
+              `„${it.ref}" ist in dieser Phase nicht eingebunden.`))
+          }
+          if (placed.has(it.ref)) {
+            out.push(err(lp, lanchor, 'DUPLICATE_REF',
+              `„${it.ref}" ist mehrfach platziert.`))
+          }
+          placed.add(it.ref)
+        } else if (it.type === 'note' && !it.text.trim()) {
+          out.push(warn(lp, lanchor, 'EMPTY', 'Leere Hinweisbox.'))
+        } else if (it.type === 'heading' && !it.text.trim()) {
+          out.push(warn(lp, lanchor, 'EMPTY', 'Zwischen-Überschrift ohne Text.'))
+        }
+      })
+    })
+    if (ph.layout.length) {
+      const missing = [...phaseRefs].filter((r) => !placed.has(r))
+      if (missing.length) {
+        out.push(warn(`${p}.layout`, `pe-phase-${i}`, 'UNPLACED',
+          `${missing.length} Feld(er) sind nicht im Layout platziert und erscheinen `
+          + `hinten unter „Weitere Angaben": ${missing.slice(0, 5).join(', ')}`
+          + (missing.length > 5 ? ' …' : '')))
+      }
+    }
+
     // Phasen-Constraints
     ph.constraints.forEach((c, j) => {
       const cp = `${p}.constraints.${j}`

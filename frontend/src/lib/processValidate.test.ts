@@ -138,6 +138,55 @@ describe('validateDefinition – Warnungen', () => {
   })
 })
 
+describe('validateDefinition – Layout', () => {
+  const withLayout = (layout: unknown[]) => defn({
+    fields: [{ key: 'a', widget: 'text' }, { key: 'b', widget: 'text' }],
+    phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+      fields: [{ ref: 'a' }, { ref: 'b' }], layout }],
+  })
+
+  it('akzeptiert ein saubere Layout', () => {
+    const d = withLayout([{ type: 'section', title: 'Person', variant: 'hr', items: [
+      { type: 'field', ref: 'a', width: 'half' },
+      { type: 'note', text: 'Hinweis', tone: 'info' },
+      { type: 'field', ref: 'b', width: 'half' },
+    ] }])
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('meldet ein Feld, das nicht zur Phase gehört', () => {
+    const d = withLayout([{ type: 'section', items: [{ type: 'field', ref: 'fremd' }] }])
+    expect(codes(d)).toContain('UNKNOWN_REF')
+  })
+
+  it('meldet doppelt platzierte Felder', () => {
+    const d = withLayout([{ type: 'section', items: [
+      { type: 'field', ref: 'a' }, { type: 'field', ref: 'a' }] }])
+    expect(codes(d)).toContain('DUPLICATE_REF')
+  })
+
+  it('warnt bei nicht platzierten Feldern, blockiert aber nicht', () => {
+    const d = withLayout([{ type: 'section', items: [{ type: 'field', ref: 'a' }] }])
+    const issues = validateDefinition(d)
+    expect(issues.some((x) => x.code === 'UNPLACED' && x.severity === 'warning')).toBe(true)
+    expect(errorCount(issues)).toBe(0)
+  })
+
+  it('warnt bei leeren Design-Elementen', () => {
+    const d = withLayout([{ type: 'section', items: [
+      { type: 'field', ref: 'a' }, { type: 'field', ref: 'b' },
+      { type: 'note', text: '' }, { type: 'heading', text: '  ' }] }])
+    const issues = validateDefinition(d)
+    expect(issues.filter((x) => x.code === 'EMPTY').length).toBe(2)
+    expect(errorCount(issues)).toBe(0)
+  })
+
+  it('ohne Layout gibt es keine Layout-Meldungen', () => {
+    const d = withLayout([])
+    expect(validateDefinition(d).some((x) => x.code === 'UNPLACED')).toBe(false)
+  })
+})
+
 describe('DSL-Helfer', () => {
   it('sammelt Referenzen rekursiv', () => {
     expect(dslRefs({ and: [{ truthy: 'a' }, { '==': ['b', 1] }, { not: { in: ['c', [1]] } }] }).sort())

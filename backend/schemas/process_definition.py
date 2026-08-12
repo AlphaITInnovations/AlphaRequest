@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Any, Optional
+from typing import Annotated, Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -422,6 +422,83 @@ class Automation(_Base):
         return self
 
 
+# ── Layout (nur Darstellung) ──────────────────────────────────────────────────
+#
+# Bewusst GETRENNT vom Verhalten: was ein Feld TUT (bearbeitbar, pflicht,
+# bedingt) steht in `PhaseDef.fields`; WO und WIE BREIT es erscheint, steht hier.
+# Ohne `layout` rendert die Phase wie bisher (alle Felder zweispaltig).
+
+class LayoutWidth(str, Enum):
+    quarter = "quarter"        # 1/4 Breite
+    third = "third"            # 1/3
+    half = "half"              # 1/2
+    twothirds = "twothirds"    # 2/3
+    full = "full"              # ganze Breite
+
+
+class SectionVariant(str, Enum):
+    """Akzentfarbe + Symbol des Abschnitts (wie im bestehenden Design)."""
+    base = "base"
+    hr = "hr"
+    it = "it"
+    fuhrpark = "fuhrpark"
+    marketing = "marketing"
+    travel = "travel"
+    default = "default"
+
+
+class NoteTone(str, Enum):
+    info = "info"
+    warning = "warning"
+    success = "success"
+    neutral = "neutral"
+
+
+class LayoutField(_Base):
+    type: Literal["field"] = "field"
+    ref: str
+    width: LayoutWidth = LayoutWidth.full
+
+
+class LayoutNote(_Base):
+    """Hinweisbox – reine Information, kein Datenfeld."""
+    type: Literal["note"] = "note"
+    text: str
+    tone: NoteTone = NoteTone.info
+    width: LayoutWidth = LayoutWidth.full
+
+
+class LayoutHeading(_Base):
+    """Zwischen-Überschrift innerhalb eines Abschnitts."""
+    type: Literal["heading"] = "heading"
+    text: str
+
+
+class LayoutDivider(_Base):
+    type: Literal["divider"] = "divider"
+
+
+class LayoutSpacer(_Base):
+    type: Literal["spacer"] = "spacer"
+
+
+LayoutItem = Annotated[
+    Union[LayoutField, LayoutNote, LayoutHeading, LayoutDivider, LayoutSpacer],
+    Field(discriminator="type"),
+]
+
+
+class LayoutSection(_Base):
+    type: Literal["section"] = "section"
+    title: str = ""
+    variant: SectionVariant = SectionVariant.default
+    badge: Optional[str] = None
+    description: Optional[str] = None
+    #: Startet der Abschnitt eingeklappt? (Nur Darstellung.)
+    collapsed: bool = False
+    items: list[LayoutItem] = Field(default_factory=list)
+
+
 class PhaseDef(_Base):
     key: str
     label: Optional[str] = None
@@ -431,6 +508,9 @@ class PhaseDef(_Base):
     grantsFullView: bool = False
     responsibility: Responsibility
     fields: list[FieldRef] = Field(default_factory=list)
+    #: Optionale Darstellung. Felder, die hier NICHT vorkommen, werden hinten in
+    #: einem Sammel-Abschnitt gerendert – so wird nie ein Feld unsichtbar.
+    layout: list[LayoutSection] = Field(default_factory=list)
     constraints: list[dict] = Field(default_factory=list)  # [{when, message}]
     automations: list[Automation] = Field(default_factory=list)
 
@@ -547,6 +627,23 @@ class ProcessDefinition(_Base):
             for fr in p.fields:
                 if fr.ref not in catalog:
                     raise ValueError(f"Phase „{p.key}“: fieldRef „{fr.ref}“ ist nicht im Feld-Katalog")
+
+        # Layout: darf nur Felder platzieren, die die Phase auch führt, und jedes
+        # höchstens einmal (sonst stünde ein Feld doppelt im Formular).
+        for p in self.phases:
+            phase_refs = {fr.ref for fr in p.fields}
+            placed: set = set()
+            for si, sec in enumerate(p.layout):
+                for ii, item in enumerate(sec.items):
+                    if getattr(item, "type", None) != "field":
+                        continue
+                    where = f"Phase „{p.key}“.layout[{si}].items[{ii}]"
+                    if item.ref not in phase_refs:
+                        raise ValueError(
+                            f"{where}: „{item.ref}“ ist in dieser Phase nicht eingebunden")
+                    if item.ref in placed:
+                        raise ValueError(f"{where}: „{item.ref}“ ist mehrfach platziert")
+                    placed.add(item.ref)
 
         # Automation-IDs eindeutig (über den ganzen Prozess)
         all_autos = list(self.automations) + [a for p in self.phases for a in p.automations]

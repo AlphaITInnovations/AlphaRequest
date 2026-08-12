@@ -151,6 +151,36 @@ export interface PhaseConstraint {
   [k: string]: unknown
 }
 
+// ── Layout (nur Darstellung) ──────────────────────────────────────────────────
+// Bewusst GETRENNT vom Verhalten: was ein Feld TUT (bearbeitbar/pflicht/bedingt)
+// steht in PhaseDef.fields; WO und WIE BREIT es steht, hier. Ohne `layout`
+// rendert die Phase wie bisher (alle Felder zweispaltig).
+
+export type LayoutWidth = 'quarter' | 'third' | 'half' | 'twothirds' | 'full'
+export type SectionVariant = 'base' | 'hr' | 'it' | 'fuhrpark' | 'marketing' | 'travel' | 'default'
+export type NoteTone = 'info' | 'warning' | 'success' | 'neutral'
+
+export interface LayoutFieldItem { type: 'field'; ref: string; width: LayoutWidth }
+export interface LayoutNoteItem { type: 'note'; text: string; tone: NoteTone; width: LayoutWidth }
+export interface LayoutHeadingItem { type: 'heading'; text: string }
+export interface LayoutDividerItem { type: 'divider' }
+export interface LayoutSpacerItem { type: 'spacer' }
+
+export type LayoutItem =
+  | LayoutFieldItem | LayoutNoteItem | LayoutHeadingItem | LayoutDividerItem | LayoutSpacerItem
+
+export type LayoutItemType = LayoutItem['type']
+
+export interface LayoutSection {
+  type: 'section'
+  title: string
+  variant: SectionVariant
+  badge: string | null
+  description: string | null
+  collapsed: boolean
+  items: LayoutItem[]
+}
+
 export interface PhaseDef {
   key: string
   label: string | null
@@ -160,6 +190,8 @@ export interface PhaseDef {
   grantsFullView: boolean
   responsibility: Responsibility
   fields: FieldRef[]
+  /** Optionale Darstellung; nicht platzierte Felder kommen in einen Sammel-Abschnitt. */
+  layout: LayoutSection[]
   constraints: PhaseConstraint[]
   automations: Automation[]
 }

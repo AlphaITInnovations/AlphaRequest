@@ -8,6 +8,7 @@
  * Wird dort etwas nachgerüstet, gehören die Werte HIER wieder hinein.
  */
 import type {
+  LayoutItem, LayoutItemType, LayoutSection, LayoutWidth, NoteTone, SectionVariant,
   ActionType, Automation, DepartmentRule, FieldDef, FieldMode, FieldRef, OptionsSource,
   CreatePermissions, PhaseDef, PhaseKind, PhaseView, ProcessDefinition, Responsibility, ResponsibilityKind,
   SubField, Widget,
@@ -184,7 +185,7 @@ export function blankPhase(key: string, kind: PhaseKind = 'task'): PhaseDef {
     key, label: null, kind, view: kind === 'review' ? 'review' : 'form',
     enterStatus: null, grantsFullView: false,
     responsibility: blankResponsibility(kind === 'review' ? 'departments' : 'owner'),
-    fields: [], constraints: [], automations: [],
+    fields: [], layout: [], constraints: [], automations: [],
   }
 }
 
@@ -211,4 +212,91 @@ export function blankDefinition(key: string, name: string): ProcessDefinition {
     phases: [blankPhase('erstellung', 'start')],
     automations: [],
   }
+}
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+
+export const LAYOUT_WIDTHS: readonly LayoutWidth[] =
+  ['quarter', 'third', 'half', 'twothirds', 'full']
+
+/** Spalten im 12er-Raster – daraus baut der Renderer die Breite. */
+export const WIDTH_COLS: Record<LayoutWidth, number> = {
+  quarter: 3, third: 4, half: 6, twothirds: 8, full: 12,
+}
+
+export const WIDTH_LABEL: Record<LayoutWidth, string> = {
+  quarter: '¼', third: '⅓', half: '½', twothirds: '⅔', full: 'Ganz',
+}
+
+export const SECTION_VARIANTS: readonly SectionVariant[] =
+  ['default', 'base', 'hr', 'it', 'fuhrpark', 'marketing', 'travel']
+
+/** Symbol + Akzentfarben je Variante – identisch zur bestehenden TicketSection. */
+export const VARIANT_STYLE: Record<SectionVariant, {
+  label: string; icon: string; chip: string; badge: string; bar: string
+}> = {
+  base: { label: 'Basis', icon: '📋',
+    chip: 'bg-[#3EACB6]/15 text-[#0F7683] dark:text-[#5FD3DE]',
+    badge: 'bg-[#3EACB6]/15 text-[#0F7683] dark:text-[#5FD3DE]', bar: 'bg-[#3EACB6]' },
+  hr: { label: 'Personal', icon: '👤',
+    chip: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+    badge: 'bg-blue-500/15 text-blue-700 dark:text-blue-300', bar: 'bg-blue-500' },
+  it: { label: 'IT', icon: '💻',
+    chip: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
+    badge: 'bg-purple-500/15 text-purple-700 dark:text-purple-300', bar: 'bg-purple-500' },
+  fuhrpark: { label: 'Fuhrpark', icon: '🚗',
+    chip: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+    badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', bar: 'bg-amber-500' },
+  marketing: { label: 'Marketing', icon: '📣',
+    chip: 'bg-pink-500/15 text-pink-700 dark:text-pink-300',
+    badge: 'bg-pink-500/15 text-pink-700 dark:text-pink-300', bar: 'bg-pink-500' },
+  travel: { label: 'Reise', icon: '✈️',
+    chip: 'bg-teal-500/15 text-teal-700 dark:text-teal-300',
+    badge: 'bg-teal-500/15 text-teal-700 dark:text-teal-300', bar: 'bg-teal-500' },
+  default: { label: 'Neutral', icon: '🗂',
+    chip: 'bg-slate-500/15 text-slate-600 dark:text-slate-300',
+    badge: 'bg-slate-500/15 text-slate-600 dark:text-slate-300', bar: 'bg-slate-400' },
+}
+
+export const NOTE_TONES: readonly NoteTone[] = ['info', 'warning', 'success', 'neutral']
+
+export const NOTE_STYLE: Record<NoteTone, { label: string; icon: string; box: string }> = {
+  info: { label: 'Hinweis', icon: 'ℹ️',
+    box: 'border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200' },
+  warning: { label: 'Achtung', icon: '⚠️',
+    box: 'border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200' },
+  success: { label: 'Erledigt', icon: '✅',
+    box: 'border-green-200 dark:border-green-500/30 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' },
+  neutral: { label: 'Neutral', icon: '📝',
+    box: 'border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-700 dark:text-gray-300' },
+}
+
+export const LAYOUT_ITEM_LABEL: Record<LayoutItemType, string> = {
+  field: 'Feld', note: 'Hinweisbox', heading: 'Zwischen-Überschrift',
+  divider: 'Trennlinie', spacer: 'Abstand',
+}
+
+export function blankSection(title = 'Neuer Abschnitt',
+                             variant: SectionVariant = 'default'): LayoutSection {
+  return { type: 'section', title, variant, badge: null, description: null,
+    collapsed: false, items: [] }
+}
+
+export function blankLayoutItem(type: LayoutItemType, ref = ''): LayoutItem {
+  switch (type) {
+    case 'field': return { type: 'field', ref, width: 'half' }
+    case 'note': return { type: 'note', text: '', tone: 'info', width: 'full' }
+    case 'heading': return { type: 'heading', text: '' }
+    case 'divider': return { type: 'divider' }
+    default: return { type: 'spacer' }
+  }
+}
+
+/** Alle im Layout platzierten Feld-Refs (über alle Abschnitte). */
+export function placedRefs(layout: LayoutSection[]): Set<string> {
+  const out = new Set<string>()
+  for (const sec of layout || []) {
+    for (const it of sec.items || []) if (it.type === 'field') out.add(it.ref)
+  }
+  return out
 }
