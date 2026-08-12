@@ -46,6 +46,55 @@ describe('normalizeDefinition', () => {
     const f = normalizeField({ key: 'a', widget: 'select', options: ['Ja', { value: 'Nein', label: 'Nein!' }] })
     expect(f.options).toEqual([{ value: 'Ja', label: null }, { value: 'Nein', label: 'Nein!' }])
   })
+
+  it('erfindet keinen Freigabe-Block, wo keiner steht', () => {
+    // Sonst wäre jede Nicht-Freigabe-Phase serverseitig ungültig UND der Entwurf
+    // sofort „geändert".
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      phases: [{ key: 'p', kind: 'task', responsibility: { kind: 'owner' } }] })
+    expect(d.phases[0].approval).toBeNull()
+  })
+
+  it('füllt einen vorhandenen Freigabe-Block mit den Server-Defaults', () => {
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      phases: [{ key: 'f', kind: 'approval', responsibility: { kind: 'owner' },
+        approval: { question: 'Freigeben?' } }] })
+    expect(d.phases[0].approval).toEqual({
+      question: 'Freigeben?', approveLabel: 'Freigeben', rejectLabel: 'Ablehnen',
+      externalLink: true, linkMaxAge: 'P7D', requireReason: true,
+      decisionField: null, reasonField: null, onReject: 'reject',
+    })
+  })
+
+  it('übernimmt abweichende Freigabe-Angaben unverändert', () => {
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      phases: [{ key: 'f', kind: 'approval', responsibility: { kind: 'owner' },
+        approval: { question: 'Ja?', externalLink: false, requireReason: false,
+          linkMaxAge: 'PT12H', onReject: 'back_to:start', reasonField: 'grund' } }] })
+    const a = d.phases[0].approval!
+    expect(a.externalLink).toBe(false)
+    expect(a.requireReason).toBe(false)
+    expect(a.linkMaxAge).toBe('PT12H')
+    expect(a.onReject).toBe('back_to:start')
+    expect(a.reasonField).toBe('grund')
+  })
+
+  it('serialisiert keine gestrichenen Keys (Action.process)', () => {
+    // Der Server verbietet unbekannte Keys (extra="forbid") – ein mitgeschleiftes
+    // `process: null` würde jede Definition unspeicherbar machen.
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      automations: [{ id: 'a', trigger: { type: 'on_enter' },
+        action: { type: 'notify', to: 'owner', process: 'alt' } }] })
+    expect(Object.keys(d.automations[0].action).sort())
+      .toEqual(['counter', 'field', 'template', 'to', 'type', 'value'])
+  })
+
+  it('ergänzt die einzig erlaubte assign.action', () => {
+    const f = normalizeField({ key: 'pnr', widget: 'server_generated',
+      assign: { counter: 'personalnummer' } })
+    expect(f.assign).toEqual({ action: 'assign_sequence', counter: 'personalnummer',
+      companyRef: null })
+  })
 })
 
 describe('canonicalJson', () => {
@@ -65,6 +114,28 @@ describe('isSameDefinition / cloneDefinition', () => {
     expect(isSameDefinition({ key: 'k', name: 'N' },
       { key: 'k', name: 'N', description: null, icon: null, fields: [], phases: [],
         automations: [], schemaVersion: 1 })).toBe(true)
+  })
+
+  it('sieht eine Freigabe-Phase vom Server als unverändert an', () => {
+    // Regression Dirty-Vergleich: Server liefert ALLE Keys, der Editor baut nur
+    // die nötigen. Weichen die Defaults ab, gilt jeder Entwurf sofort als geändert.
+    const knapp = { key: 'k', name: 'N', phases: [{ key: 'f', kind: 'approval',
+      view: 'approval', responsibility: { kind: 'owner' },
+      approval: { question: 'Ja?' } }] }
+    const vollstaendig = {
+      schemaVersion: 1, key: 'k', name: 'N', description: null, icon: null,
+      createPermissions: { everyone: false, groups: [], users: [] },
+      fields: [], automations: [],
+      phases: [{ key: 'f', label: null, kind: 'approval', view: 'approval',
+        enterStatus: null, grantsFullView: false,
+        responsibility: { kind: 'owner', group: null, user: null, fromField: null,
+          rule: [], resetOnDescriptionChange: false, notifyOnEnter: true },
+        approval: { question: 'Ja?', approveLabel: 'Freigeben', rejectLabel: 'Ablehnen',
+          externalLink: true, linkMaxAge: 'P7D', requireReason: true,
+          decisionField: null, reasonField: null, onReject: 'reject' },
+        fields: [], layout: [], constraints: [], automations: [] }],
+    }
+    expect(isSameDefinition(knapp, vollstaendig)).toBe(true)
   })
 
   it('klont ohne geteilte Referenzen', () => {

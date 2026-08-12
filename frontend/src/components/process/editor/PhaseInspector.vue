@@ -3,12 +3,14 @@
  *  Regeln und Automationen. */
 import { computed } from 'vue'
 import type {
-  Condition, FieldDef, FieldMode, PhaseConstraint, PhaseDef, PhaseKind, PhaseView,
+  ApprovalSpec, Condition, FieldDef, FieldMode, PhaseConstraint, PhaseDef, PhaseKind, PhaseView,
 } from '@/types/process'
 import {
   ENTER_STATUS, FIELD_MODES, FIELD_MODE_LABEL, PHASE_KINDS, PHASE_KIND_LABEL,
-  PHASE_VIEWS, PHASE_VIEW_LABEL, STATUS_LABEL, blankFieldRef, isValidPhaseKey,
+  PHASE_VIEWS, PHASE_VIEW_LABEL, STATUS_LABEL, blankApproval, blankFieldRef,
+  isValidPhaseKey, phaseKindPatch,
 } from '@/lib/processSchema'
+import ApprovalEditor from './ApprovalEditor.vue'
 import ResponsibilityEditor from './ResponsibilityEditor.vue'
 import ConditionEditor from './ConditionEditor.vue'
 import ConditionSummary from './ConditionSummary.vue'
@@ -24,6 +26,8 @@ const props = defineProps<{
   fieldKeys: string[]
   fieldLabels?: Record<string, string>
   takenIds?: string[]
+  /** Alle Phasen des Prozesses – für den Rücksprung einer Freigabe nötig. */
+  phases?: { key: string; label: string | null }[]
   readonly?: boolean
 }>()
 
@@ -34,6 +38,15 @@ function patch(part: Partial<PhaseDef>) {
 }
 
 const keyValid = computed(() => !props.modelValue.key || isValidPhaseKey(props.modelValue.key))
+
+/** Phasen-Art umstellen – Freigabe-Block und Ansicht ziehen mit (Server-Regel). */
+function setKind(kind: PhaseKind) {
+  if (kind === props.modelValue.kind) return
+  patch(phaseKindPatch(props.modelValue, kind))
+}
+
+/** Nur Phasen VOR dieser taugen als Rücksprung-Ziel. */
+const earlierPhases = computed(() => (props.phases ?? []).slice(0, props.index))
 
 /** Katalog-Felder, die in dieser Phase noch nicht eingebunden sind. */
 const available = computed(() => {
@@ -99,7 +112,7 @@ function labelFor(ref: string) {
         <div>
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Art</label>
           <select :value="modelValue.kind" :disabled="readonly" class="afi w-full"
-                  @change="patch({ kind: ($event.target as HTMLSelectElement).value as PhaseKind })">
+                  @change="setKind(($event.target as HTMLSelectElement).value as PhaseKind)">
             <option v-for="k in PHASE_KINDS" :key="k" :value="k">{{ PHASE_KIND_LABEL[k] }}</option>
           </select>
         </div>
@@ -107,7 +120,11 @@ function labelFor(ref: string) {
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Ansicht</label>
           <select :value="modelValue.view" :disabled="readonly" class="afi w-full"
                   @change="patch({ view: ($event.target as HTMLSelectElement).value as PhaseView })">
-            <option v-for="v in PHASE_VIEWS" :key="v" :value="v">{{ PHASE_VIEW_LABEL[v] }}</option>
+            <!-- „Freigabe" passt nur zur gleichnamigen Phasen-Art (Server-Regel). -->
+            <option v-for="v in PHASE_VIEWS" :key="v" :value="v"
+                    :disabled="v === 'approval' && modelValue.kind !== 'approval'">
+              {{ PHASE_VIEW_LABEL[v] }}
+            </option>
           </select>
         </div>
         <div>
@@ -136,6 +153,25 @@ function labelFor(ref: string) {
             </span>
           </label>
         </div>
+      </div>
+    </section>
+
+    <!-- Freigabe (nur bei der Phasen-Art „Freigabe") -->
+    <section v-if="modelValue.kind === 'approval'" class="card-section">
+      <h3 class="section-title">Freigabe</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+        Eine Frage, zwei Antworten. Wer entscheidet, steht unten unter „Wer bearbeitet".
+      </p>
+      <ApprovalEditor v-if="modelValue.approval" :model-value="modelValue.approval"
+                      :earlier-phases="earlierPhases" :field-keys="fieldKeys"
+                      :field-labels="fieldLabels" :readonly="readonly"
+                      @update:model-value="patch({ approval: $event as ApprovalSpec })" />
+      <div v-else class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50
+                         dark:bg-red-900/20 px-4 py-3 text-sm text-red-800 dark:text-red-200
+                         flex items-center justify-between gap-3">
+        <span>Diese Freigabe-Phase hat noch keine Frage – so lässt sie sich nicht speichern.</span>
+        <button v-if="!readonly" class="btn-secondary text-xs py-1 shrink-0"
+                @click="patch({ approval: blankApproval() })">Freigabe einrichten</button>
       </div>
     </section>
 

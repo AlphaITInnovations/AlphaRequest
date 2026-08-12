@@ -23,7 +23,11 @@ export function eventTone(ev: ProcessEvent): EventTone {
     case 'rejected':
     case 'department_rejected': return 'danger'
     case 'reopened':
+    case 'approval_sent_back':
     case 'automation_fired': return 'warn'
+    case 'approval_no_recipient': return 'danger'
+    case 'approval_decided':
+      return ev.details?.act === 'reject' ? 'danger' : 'progress'
     default: return 'neutral'
   }
 }
@@ -111,6 +115,17 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
       const id = str(ev.details?.automation)
       return `Automation ausgeführt${id ? `: ${id}` : ''}${art ? ` (${AUTOMATION_LABEL[art] || art})` : ''}`
     }
+    case 'approval_decided': {
+      const act = str(ev.details?.act)
+      const wie = act === 'approve' ? 'freigegeben' : act === 'reject' ? 'abgelehnt' : 'entschieden'
+      const via = str(ev.details?.via) === 'mail_link' ? ' (per Mail-Link)' : ''
+      return `Freigabe: ${wie}${via}`
+    }
+    case 'approval_sent_back':
+      return `Zur Nachbesserung zurückgegeben (Phase „${phase(ev.details?.phase, ctx)}“)`
+    case 'approval_no_recipient':
+      // Das ist ein BETRIEBSPROBLEM, kein Ablaufschritt: der Auftrag liegt still.
+      return 'Freigabe-Mail konnte nicht zugestellt werden – keine Verteiler-Adresse hinterlegt'
     case 'priority_changed':
       return 'Priorität geändert'
     default:

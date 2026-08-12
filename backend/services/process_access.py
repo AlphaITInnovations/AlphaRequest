@@ -35,6 +35,10 @@ def responsible_groups(defn: Optional[ProcessDefinition], row: dict) -> set:
     r = phase.responsibility
     if r.kind == ResponsibilityKind.group and r.group:
         return {r.group}
+    if r.kind == ResponsibilityKind.group_from_field:
+        # Die Gruppe steht im Auftrag, nicht in der Definition.
+        picked = (row.get("values") or {}).get(r.fromField or "")
+        return {picked} if picked else set()
     if r.kind == ResponsibilityKind.departments:
         # Live-Stand bevorzugen (bedingte Abteilungen stehen dort schon fest).
         live = pr.current_departments(runtime)
@@ -71,6 +75,11 @@ def is_process_staff(defn: Optional[ProcessDefinition], user: dict,
     Aufsicht oder Mitglied einer der beteiligten Fachabteilungen. Maßgeblich für
     interne Nachträge: die sieht die Bearbeitungsseite, NICHT die antragstellende
     Person (auch dann nicht, wenn sie den Auftrag angelegt hat oder beobachtet).
+
+    EINSCHRÄNKUNG: Bei `kind=group_from_field` steht die Gruppe im Auftrag, nicht
+    in der Definition – `staff_groups` kann sie also nicht kennen. Für solche
+    Prozesse (Basis-Ticket) gilt die bearbeitende Gruppe hier NICHT als
+    „bearbeitende Seite"; interne Nachträge bleiben dort der Aufsicht vorbehalten.
     """
     if has_oversight(user):
         return True
@@ -96,7 +105,8 @@ def is_responsible(defn: Optional[ProcessDefinition], row: dict, user: dict,
         # Zuständig ist, wer im hinterlegten Personen-Feld steht.
         picked = (row.get("values") or {}).get(r.fromField or "")
         return bool(uid) and picked == uid
-    if r.kind in (ResponsibilityKind.group, ResponsibilityKind.departments):
+    if r.kind in (ResponsibilityKind.group, ResponsibilityKind.departments,
+                  ResponsibilityKind.group_from_field):
         return bool(set(group_ids) & responsible_groups(defn, row))
     return False
 

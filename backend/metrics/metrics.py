@@ -10,8 +10,10 @@ from prometheus_client import (
     REGISTRY
 )
 
+from backend.metrics.collect_guard import run_part
 from backend.metrics.http_metrics import MetricsMiddleware
 from backend.metrics.auth_metrics import collect_session_metrics
+from backend.metrics.process_metrics import collect_process_ticket_metrics
 from backend.metrics.ticket_metrics import collect_ticket_metrics
 from backend.metrics.system_metrics import collect_system_metrics
 
@@ -24,6 +26,8 @@ ENABLE_METRICS = os.getenv("ENABLE_METRICS", "true").lower() == "true"
 
 METRICS_USERNAME = os.getenv("METRICS_USERNAME")
 METRICS_PASSWORD = os.getenv("METRICS_PASSWORD")
+
+COLLECT_INTERVAL_SECONDS = int(os.getenv("METRICS_COLLECT_INTERVAL", "10"))
 
 
 # ---------------------------------------------------------
@@ -90,31 +94,58 @@ async def metrics_endpoint(request: Request):
 # BACKGROUND COLLECTOR
 # ---------------------------------------------------------
 
+def _collect_legacy_tickets() -> None:
+    """Alt-System: läuft nur, wenn ein TicketManager gesetzt wurde.
+
+    Fällt mit dem Alt-System ersatzlos weg – die Prozess-Aufträge hängen NICHT
+    mehr an dieser Bedingung (siehe process_metrics), sonst hätte der Rückbau
+    das neue Monitoring stillschweigend mit abgeschaltet.
+    """
+    if TICKET_MANAGER is not None:
+        collect_ticket_metrics(TICKET_MANAGER)
+
+
+# Reihenfolge = Sammelreihenfolge. Jeder Eintrag läuft einzeln abgesichert:
+# ein Fehler in EINER Quelle darf die übrigen Reihen nicht mitnehmen und schon
+# gar nicht den Thread beenden (dann fröre das ganze Monitoring unbemerkt ein).
+_COLLECTORS = (
+    ("sessions", collect_session_metrics),
+    ("process_tickets", collect_process_ticket_metrics),
+    ("system", collect_system_metrics),
+    ("legacy_tickets", _collect_legacy_tickets),
+)
+
+
+def collect_all() -> None:
+    """Ein vollständiger Sammeldurchlauf. Wirft nicht."""
+    for part, fn in _COLLECTORS:
+        run_part(part, fn)
+
+
 def _collector_thread():
 
     while True:
 
-        time.sleep(10)
+        time.sleep(COLLECT_INTERVAL_SECONDS)
 
         try:
-
-            collect_session_metrics()
-
-            if TICKET_MANAGER:
-                collect_ticket_metrics(TICKET_MANAGER)
-
-            collect_system_metrics()
-
-        except Exception as e:
-            print("Metrics collector error:", e)
+            collect_all()
+        except Exception:
+            # collect_all fängt bereits alles ab; dieser Gürtel sorgt dafür, dass
+            # selbst ein Fehler im Absicherungspfad den Thread nicht beendet.
+            pass
 
 
 # ---------------------------------------------------------
 # INITIALIZATION
 # ---------------------------------------------------------
 
-def init_metrics(app, ticket_manager):
+def init_metrics(app, ticket_manager=None):
+    """Metrik-Endpunkt und Sammel-Thread aufsetzen.
 
+    `ticket_manager` ist optional: er wird NUR noch vom Alt-System gebraucht.
+    Nach dessen Rückbau genügt `init_metrics(app)`.
+    """
     global TICKET_MANAGER
 
     if not ENABLE_METRICS:

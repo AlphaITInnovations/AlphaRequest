@@ -41,6 +41,10 @@ WATCHER_ADDED = "watcher_added"
 WATCHER_REMOVED = "watcher_removed"
 AUTOMATION_FIRED = "automation_fired"
 PRIORITY_CHANGED = "priority_changed"
+# Freigabe per Mail-Link (services/process_approval.py)
+APPROVAL_DECIDED = "approval_decided"
+APPROVAL_SENT_BACK = "approval_sent_back"
+APPROVAL_NO_RECIPIENT = "approval_no_recipient"
 
 
 def _audit(ticket_id: int, action: str, *, actor_id, actor_name, actor_type,

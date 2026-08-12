@@ -37,6 +37,7 @@ from backend.services import process_engine as engine
 from backend.services import process_events as events
 from backend.services import process_permissions as perms
 from backend.services import process_runtime as pr
+from backend.services import process_sequences as seq
 from backend.services import process_validation as pv
 from backend.services import process_visibility as vis
 from backend.schemas.process_definition import TriggerType
@@ -96,6 +97,11 @@ class ProcessTicketOut(BaseModel):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     abilities: TicketAbilities = TicketAbilities()
+    #: Welche Felder diese Person SEHEN bzw. in der aktuellen Phase BEARBEITEN darf.
+    #: Das Formular richtet sich danach, statt die Gruppen-Logik nachzubauen – es
+    #: kennt die Gruppen-Mitgliedschaft gar nicht.
+    visible_fields: list[str] = []
+    editable_fields: list[str] = []
 
 
 # ── Helfer ─────────────────────────────────────────────────────────────────
@@ -139,6 +145,26 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
     )
 
 
+def _field_access(row: dict, defn: Optional[ProcessDefinition], phase, ctx: vis.ViewerCtx
+                  ) -> tuple[list, list]:
+    """Sichtbare und (in dieser Phase) bearbeitbare Feld-Schlüssel.
+
+    `visible_field_keys` verträgt `defn=None` (default-deny), `editable_field_keys`
+    NICHT – und `_out` wird mit None aufgerufen, wenn die gepinnte Definition fehlt.
+    Daher der frühe Ausstieg.
+    """
+    if defn is None:
+        return [], []
+    sichtbar = sorted(vis.visible_field_keys(defn, ctx))
+    if phase is None or _is_terminal(row):
+        return sichtbar, []
+    # ignore_conditions: die bedingte Anzeige (visibleWhen) wertet das Formular
+    # live gegen den Tippstand aus – hier geht es nur um das Rollen-Gate.
+    bearbeitbar = sorted(vis.editable_field_keys(
+        defn, phase, ctx, row.get("values") or {}, ignore_conditions=True))
+    return sichtbar, bearbeitbar
+
+
 def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
          user: Optional[dict] = None, group_ids=()) -> ProcessTicketOut:
     cur = pr.current_phase(defn, row["runtime"]) if defn else None
@@ -160,6 +186,7 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
     data["responsibility"] = resp
     data["abilities"] = _abilities(row, defn, user, group_ids)
+    data["visible_fields"], data["editable_fields"] = _field_access(row, defn, cur, ctx)
     return ProcessTicketOut(**data)
 
 
@@ -182,6 +209,21 @@ def _safe_restamp(row: dict, defn: ProcessDefinition) -> None:
             summary=f"Timer konnte nicht gesetzt werden: {type(exc).__name__}",
             details={"error": str(exc)[:500]},
         )
+
+
+def _sequence_error(exc: "seq.SequenceError"):
+    """Vergabe-Fehler → HTTP. Ein erschöpfter Nummernkreis ist ein fachlicher
+    Konflikt (409), kein Serverfehler; eine Kollision zwischen Anspruchs-Ledger und
+    Zählerstand dagegen schon – die muss jemand ansehen. Die Codes sind bewusst
+    dieselben wie im Alt-System, damit die Meldung im Frontend gleich bleibt."""
+    if isinstance(exc, seq.SequenceExhausted):
+        return api_error(409, "PERSONALNUMMER_FAILED", str(exc))
+    if isinstance(exc, seq.SequenceNotConfigured):
+        return api_error(400, "PERSONALNUMMER_FAILED", str(exc))
+    if isinstance(exc, seq.SequenceWriteConflict):
+        return api_error(409, "TICKET_CONFLICT", str(exc))
+    logger.error("Nummernkreis-Kollision bei der Vergabe: %s", exc)
+    return api_error(500, "PERSONALNUMMER_FAILED", str(exc))
 
 
 def _watcher_ids(ticket_id) -> set:
@@ -267,7 +309,12 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     # immer; für alle anderen greift das erst, wenn die Endpunkte über Admin
     # hinaus geöffnet werden – die Prüfung sitzt schon an der richtigen Stelle.
     try:
-        group_ids = get_group_ids_for_user(user.get("id")) if user.get("id") else []
+        # Fachabteilungen (interne Gruppen) UND AD-Gruppen aus dem Login-Token:
+        # das Alt-System berechtigte über beides, createPermissions.groups mischt
+        # sie ebenfalls. Ohne die AD-Gruppen verlöre jede Person das Anlegerecht,
+        # die es heute nur über eine AD-Gruppe hat.
+        gids = get_group_ids_for_user(user.get("id")) if user.get("id") else []
+        group_ids = list(gids) + [g for g in (user.get("groups") or []) if g]
     except Exception:
         logger.warning("Gruppen für Erstellrechte nicht ladbar – fail-closed")
         group_ids = []
@@ -346,6 +393,30 @@ def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
                                   user, gids))
 
 
+@router.get("/process-tickets/{ticket_id}/definition")
+def get_pinned_definition(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Die GEPINNTE Definition dieses Auftrags – Grundlage für Formular und Anzeige.
+
+    Eigener Endpunkt, weil `GET /processes/{key}/versions/{v}` Verwaltungsrechte
+    verlangt (dort kommt man auch an unveröffentlichte Entwürfe). Hier entscheidet
+    ausschließlich der Zugriff auf den AUFTRAG: wer ihn sehen darf, darf auch
+    wissen, wie er aufgebaut ist. Feldwerte stehen hier keine drin.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    _assert_view(row, defn, user)
+    if defn is None:
+        raise api_error(500, "PROCESS_DEFINITION_MISSING",
+                        f"Gepinnte Definition {row['process_key']} "
+                        f"v{row['process_version']} fehlt")
+    return DataResponse(data=defn.model_dump(mode="json", by_alias=True, exclude_none=True))
+
+
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
 def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = Depends(get_current_user)):
     row = store.get(ticket_id)
@@ -401,7 +472,10 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
         wants_advance = engine.run_inline(row, defn, phase, {TriggerType.on_field_change},
                                           changed_fields=set(to_apply.keys()))
         if wants_advance:
-            engine.transition(row, defn)
+            try:
+                engine.transition(row, defn)
+            except seq.SequenceError as exc:
+                raise _sequence_error(exc)
         else:
             _safe_restamp(row, defn)
     return DataResponse(data=_out(row, defn, ctx, user, gids))
@@ -442,14 +516,53 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
         engine.transition(row, defn, expected_rev=row.get("rev"), actor=user)
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
+    except seq.SequenceError as exc:
+        raise _sequence_error(exc)
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
                                   vis.build_viewer_ctx(user, row, defn, group_ids=gids),
                                   user, gids))
 
 
+class RejectRequest(BaseModel):
+    reason: str
+
+
+def _melde_ablehnung(row: dict, defn, reason: str, by_name: str) -> None:
+    """Ersteller:in über die Ablehnung informieren.
+
+    Die Ablehnung ist zu diesem Zeitpunkt schon gespeichert – ein Mail-Fehler darf
+    sie nicht kippen, muss aber sichtbar im Log landen (das Alt-System hat hier
+    immer gemailt; stillschweigend nichts zu tun wäre die schlechteste Variante).
+    """
+    try:
+        pactions.notify_rejection(row, defn, reason=reason, by_name=by_name)
+    except Exception:
+        logger.exception("Ablehnungs-Mail für #%s fehlgeschlagen", row.get("id"))
+
+
+MAX_REASON_LEN = 2000
+
+
+def _pflicht_begruendung(reason: Optional[str], pfad: str = "reason") -> str:
+    """Begründung prüfen. Eine Ablehnung ohne Grund ist im Verlauf nicht erklärbar
+    und die antragstellende Person erfährt nie, was zu ändern wäre – das Alt-System
+    hat sie deshalb erzwungen."""
+    text = (reason or "").strip()
+    if not text:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Begründung fehlt",
+                        fields=[{"path": pfad, "code": "REQUIRED",
+                                 "message": "Bitte begründen, warum abgelehnt wird"}])
+    if len(text) > MAX_REASON_LEN:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Begründung zu lang",
+                        fields=[{"path": pfad, "code": "TOO_LONG",
+                                 "message": f"Maximal {MAX_REASON_LEN} Zeichen"}])
+    return text
+
+
 @router.post("/process-tickets/{ticket_id}:reject", response_model=DataResponse[ProcessTicketOut])
-def reject_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
+def reject_process_ticket(ticket_id: int, body: RejectRequest,
+                          user: dict = Depends(get_current_user)):
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
@@ -460,18 +573,22 @@ def reject_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)
     _assert_edit(row, defn_for_acc, user)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist bereits abgeschlossen/abgelehnt")
+    grund = _pflicht_begruendung(body.reason)
     runtime = pr.reject(row["runtime"])
     try:
         row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False),
                                    status="rejected", expected_rev=row.get("rev"))
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
+    from backend.metrics.process_metrics import record_process_terminal
+    record_process_terminal("rejected")
     events.record(row, events.REJECTED, actor_id=user.get("id"),
-                  actor_name=_actor_name(user))
+                  actor_name=_actor_name(user), body=grund)
     try:
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
+    _melde_ablehnung(row, defn, grund, _actor_name(user))
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
                                   vis.build_viewer_ctx(user, row, defn, group_ids=gids),
@@ -494,6 +611,8 @@ def _department_action(ticket_id: int, group_id: str, status: str,
     gids = _assert_view(row, defn, user)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist abgeschlossen/abgelehnt")
+    if status == "rejected":
+        note = _pflicht_begruendung(note, "note")
 
     # Nur Mitglieder GENAU DIESER Abteilung (oder Admin) – sonst könnte die IT
     # für den Fuhrpark quittieren.
@@ -508,7 +627,8 @@ def _department_action(ticket_id: int, group_id: str, status: str,
         raise api_error(409, ErrorCode.DEPARTMENT_FORBIDDEN,
                         "Diese Fachabteilung ist an der aktuellen Phase nicht beteiligt")
 
-    # Bei Ablehnung wird der ganze Auftrag abgelehnt (wie im Alt-System).
+    # Bei Ablehnung wird der ganze Auftrag abgelehnt (wie im Alt-System) – deshalb
+    # gilt hier derselbe Begründungszwang wie bei :reject.
     new_status = row["status"]
     if status == "rejected":
         runtime = pr.reject(runtime)
@@ -520,11 +640,16 @@ def _department_action(ticket_id: int, group_id: str, status: str,
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
 
+    if status == "rejected":
+        from backend.metrics.process_metrics import record_process_terminal
+        record_process_terminal("rejected")
     events.record(row, {"done": events.DEPARTMENT_DONE,
                         "skipped": events.DEPARTMENT_SKIPPED,
                         "rejected": events.DEPARTMENT_REJECTED}[status],
                   actor_id=user.get("id"), actor_name=_actor_name(user),
                   body=note, details={"group": group_id})
+    if status == "rejected":
+        _melde_ablehnung(row, defn, note or "", _actor_name(user))
     return _out(row, defn, vis.build_viewer_ctx(user, row, defn, group_ids=gids),
                 user, gids)
 

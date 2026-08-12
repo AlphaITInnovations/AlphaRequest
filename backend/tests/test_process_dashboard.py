@@ -1,16 +1,17 @@
-"""Ebene-1: Prozess-Aufträge im Dashboard und in den Metriken – ohne DB.
+"""Ebene-1: Prozess-Aufträge im Dashboard – ohne DB.
 
 Der Store (`backend.database.process_tickets`) und die Definitions-Persistenz
 werden durch In-Memory-Fakes ersetzt. Geprüft wird das, was schiefgehen KANN:
   * Sichtbarkeit: der Block zeigt ausschließlich, was may_view freigibt,
   * N+1: gepinnte Definitionen werden je (key, version) genau einmal geladen,
   * Datenschutz: es gelangen keine Feldwerte in die Dashboard-Antwort.
+
+Die Prometheus-Kennzahlen der Prozess-Aufträge hängen nicht mehr am Alt-System
+und haben eine eigene Datei: backend/tests/test_process_metrics.py.
 """
 import pytest
-from prometheus_client import REGISTRY
 
 from backend.api.v1 import dashboard as dash
-from backend.metrics import ticket_metrics as tm
 from backend.services import process_visibility as vis
 
 
@@ -237,47 +238,3 @@ def test_antwort_behaelt_die_alten_schluessel():
     assert {"orders", "watched_orders", "department_board", "my_departments",
             "allowed_ticket_types"} <= keys
     assert "process" in keys
-
-
-# ── Metriken ─────────────────────────────────────────────────────────────────
-
-def test_prozess_gauges_werden_gesetzt(monkeypatch):
-    snap = {
-        "total": 7, "active": 5,
-        "by_status": {"in_progress": 3, "in_request": 2, "archived": 2},
-        "by_priority": {"normal": 6, "high": 1},
-        "by_process": {"demo": 7},
-        # Vor „jetzt" → Alter > 0; das Datum ist bewusst weit in der Vergangenheit.
-        "oldest_active_created_at": {"demo": "2020-01-01T00:00:00"},
-        "timers_due": 4,
-    }
-    monkeypatch.setattr(tm.process_store, "metrics_snapshot", lambda now: snap)
-    tm.collect_process_ticket_metrics()
-
-    assert REGISTRY.get_sample_value("process_tickets_total") == 7
-    assert REGISTRY.get_sample_value("process_tickets_open") == 5
-    assert REGISTRY.get_sample_value("process_tickets_timers_due") == 4
-    assert REGISTRY.get_sample_value(
-        "process_tickets_by_status", {"status": "in_progress"}) == 3
-    assert REGISTRY.get_sample_value(
-        "process_tickets_by_priority", {"priority": "high"}) == 1
-    assert REGISTRY.get_sample_value(
-        "process_tickets_by_process", {"process": "demo"}) == 7
-    age = REGISTRY.get_sample_value(
-        "process_tickets_oldest_open_age_seconds", {"process": "demo"})
-    assert age is not None and age > 0
-
-
-def test_altsystem_metriken_laufen_trotz_prozess_fehler(monkeypatch):
-    """Ein DB-Fehler im neuen System darf die alten Gauges nicht verhindern."""
-    def boom(now):
-        raise RuntimeError("Tabelle fehlt")
-
-    monkeypatch.setattr(tm.process_store, "metrics_snapshot", boom)
-
-    class FakeManager:
-        def list_all(self):
-            return []
-
-    tm.collect_ticket_metrics(FakeManager())
-    assert REGISTRY.get_sample_value("tickets_total") == 0

@@ -23,14 +23,16 @@ export type OptionsSource = 'static' | 'groups' | 'companies' | 'users'
 export type PhaseKind = 'start' | 'task' | 'approval' | 'review' | 'end'
 export type PhaseView = 'form' | 'readonly' | 'approval' | 'review' | 'export'
 export type ResponsibilityKind =
-  | 'owner' | 'group' | 'user' | 'departments' | 'originator'
-  /** Zuständige Person steht in einem Personen-Feld des Auftrags. */
+  | 'owner' | 'group' | 'user' | 'departments'
+  /** Zuständige Person steht in einem Personen-Feld des Auftrags (widget='user'). */
   | 'assignable'
+  /** Zuständige Fachabteilung steht in einem Gruppen-Feld des Auftrags (widget='group'). */
+  | 'group_from_field'
 export type FieldMode = 'editable' | 'readonly' | 'hidden' | 'append_only'
 export type TriggerType = 'on_enter' | 'on_exit' | 'on_field_change' | 'timer'
 export type ActionType =
   | 'notify' | 'escalate' | 'set_field' | 'set_priority' | 'set_status'
-  | 'assign_sequence' | 'require_attachment' | 'auto_advance' | 'spawn_process'
+  | 'assign_sequence' | 'auto_advance'
 
 /** Genau EIN Operator-Key pro Objekt – Shapes siehe lib/conditionDsl.ts. */
 export type Condition = Record<string, any>
@@ -56,6 +58,12 @@ export interface FieldVisibility {
 /** Wire-Name ist `from` (Python: from_ mit alias). */
 export interface ComputedSpec { from: string }
 
+/**
+ * Wie ein `server_generated`-Feld gefüllt wird. Serverseitig gilt: `action` muss
+ * 'assign_sequence' sein und `counter` (Name des Nummernkreises) ist Pflicht.
+ * `companyRef` nennt das Feld mit der Firma – die Nummernkreise sind pro Firma
+ * gepflegt (die Laufzeit bricht ohne companyRef beim Phasenabschluss ab).
+ */
 export interface AssignSpec {
   action: ActionType
   counter: string | null
@@ -115,7 +123,11 @@ export interface Responsibility {
   kind: ResponsibilityKind
   group: string | null
   user: string | null
-  /** Bei kind='assignable': Schlüssel des Personen-Feldes (widget='user'). */
+  /**
+   * Quellfeld der Zuständigkeit – bei kind='assignable' ein Personen-Feld
+   * (widget='user'), bei kind='group_from_field' ein Gruppen-Feld
+   * (widget='group'). Serverseitig in beiden Fällen Pflicht.
+   */
   fromField: string | null
   rule: DepartmentRule[]
   /** Serverseitig abgelehnt, wenn true (noch nicht umgesetzt). */
@@ -137,7 +149,7 @@ export interface Action {
   template: string | null
   field: string | null
   value: unknown | null
-  process: string | null
+  /** Bei type='assign_sequence': Name des Nummernkreises (Pflicht, wie `field`). */
   counter: string | null
 }
 
@@ -188,6 +200,37 @@ export interface LayoutSection {
   items: LayoutItem[]
 }
 
+/**
+ * Was bei `onReject` passiert: den Auftrag ablehnen oder auf eine FRÜHERE Phase
+ * zur Nachbesserung zurückgeben. Wire-Form: 'reject' | `back_to:<phasen_key>`.
+ */
+export type ApprovalOnReject = 'reject' | `back_to:${string}`
+
+/**
+ * Eine Freigabe-Phase: eine Frage, zwei Antworten. Pflicht bei kind='approval',
+ * serverseitig verboten bei jeder anderen Phasenart.
+ *
+ * `externalLink` ist der Grund für den Phasentyp: die entscheidende Person
+ * arbeitet nicht zwingend im System. Der Mail-Link führt auf eine
+ * Bestätigungsseite, entschieden wird per POST.
+ */
+export interface ApprovalSpec {
+  question: string
+  approveLabel: string
+  rejectLabel: string
+  /** Mail mit Entscheidungs-Link versenden? Ohne das läuft die Freigabe nur in der App. */
+  externalLink: boolean
+  /** Gültigkeit des Links als ISO-8601-Dauer (Default 'P7D'). */
+  linkMaxAge: string
+  /** Begründung bei Ablehnung verlangen. */
+  requireReason: boolean
+  /** Feld, in das die rohe Entscheidung ('approve'/'reject') geschrieben wird. */
+  decisionField: string | null
+  /** Feld, in das die Begründung geschrieben wird (dann greift die Sichtbarkeit). */
+  reasonField: string | null
+  onReject: ApprovalOnReject
+}
+
 export interface PhaseDef {
   key: string
   label: string | null
@@ -196,6 +239,8 @@ export interface PhaseDef {
   enterStatus: string | null
   grantsFullView: boolean
   responsibility: Responsibility
+  /** Pflicht bei kind='approval', sonst `null` (der Server lehnt ihn sonst ab). */
+  approval: ApprovalSpec | null
   fields: FieldRef[]
   /** Optionale Darstellung; nicht platzierte Felder kommen in einen Sammel-Abschnitt. */
   layout: LayoutSection[]
@@ -270,12 +315,17 @@ export interface ProcessRuntime {
   phases: ProcessRuntimePhase[]
 }
 
+/**
+ * Vom Server AUFGELÖSTE Zuständigkeit. Achtung: 'assignable' und
+ * 'group_from_field' erscheinen hier nicht – sie lösen sich zu 'user' bzw.
+ * 'group' auf (mit `from_field`/`assignable` als Zusatzinfo), damit Mailversand
+ * und Rechte unverändert greifen.
+ */
 export type ResolvedResponsibility =
   | { kind: 'departments'; departments: { group: string; required: boolean; status: string }[] }
-  | { kind: 'group'; group: string }
-  | { kind: 'user'; user: string }
+  | { kind: 'group'; group: string; from_field?: string | null; assignable?: boolean }
+  | { kind: 'user'; user: string; from_field?: string | null; assignable?: boolean }
   | { kind: 'owner' }
-  | { kind: 'originator' }
   | { kind: 'unknown' }
 
 /**

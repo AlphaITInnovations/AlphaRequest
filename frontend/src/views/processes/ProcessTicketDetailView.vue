@@ -15,7 +15,6 @@ import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
-import * as processesApi from '@/api/processes'
 import * as ticketsApi from '@/api/processTickets'
 import { reopenTicket } from '@/api/processEvents'
 import { useAuthStore } from '@/stores/authStore'
@@ -24,6 +23,8 @@ import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue
 import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
 import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
 import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
+import ProcessDepartments from '@/components/process/ProcessDepartments.vue'
+import SchemaExportView from '@/components/process/form/SchemaExportView.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -84,6 +85,24 @@ const phaseLabels = computed<Record<string, string>>(() => {
 /** Verlauf nach jeder Aktion neu laden (Referenz auf die Komponente). */
 const timeline = ref<{ reload: () => void } | null>(null)
 
+/** Terminal = abgelehnt/archiviert (Spiegel von process_tickets._is_terminal):
+ *  dann gibt es nichts mehr zu quittieren. */
+const terminal = computed(() => {
+  const t = ticket.value
+  return !!t && (t.status === 'archived' || t.status === 'rejected' || !!t.runtime?.rejected)
+})
+
+/** Phasen mit view='export' zeigen die Druckansicht statt der Gesamtansicht. */
+const isExportPhase = computed(() => phase.value?.view === 'export')
+
+/** Nach einer Fachabteilungs-Quittierung: Auftrag, Werte und Verlauf nachziehen –
+ *  die Aktion kann den GANZEN Auftrag ablehnen (Status und Zuständigkeit ändern sich). */
+function onDepartmentsUpdated(next: ProcessTicketOut) {
+  ticket.value = next
+  values.value = { ...(next.values || {}) }
+  timeline.value?.reload()
+}
+
 const dirty = computed(() =>
   JSON.stringify(values.value) !== JSON.stringify(ticket.value?.values ?? {}))
 
@@ -105,9 +124,10 @@ async function load() {
     const t = await ticketsApi.getTicket(id.value)
     ticket.value = t
     values.value = { ...(t.values || {}) }
-    // Immer die GEPINNTE Version laden – nicht die aktuell veröffentlichte.
-    const row = await processesApi.getVersion(t.process_key, t.process_version)
-    definition.value = normalizeDefinition(row.definition)
+    // Die GEPINNTE Definition über den Ticket-Endpunkt: der Verwaltungs-Endpunkt
+    // /processes/{key}/versions/{v} verlangt `manage` und würde für normale
+    // Beteiligte mit 403 antworten – das Formular bliebe leer.
+    definition.value = normalizeDefinition(await ticketsApi.getPinnedDefinition(id.value))
   } catch (e) {
     loadError.value = errorMessage(e, 'Auftrag konnte nicht geladen werden')
   } finally {
@@ -152,10 +172,15 @@ async function advance() {
 }
 
 async function reject() {
-  if (!confirm('Auftrag ablehnen? Ein Admin kann ihn danach wieder aufnehmen.')) return
+  // Begründung ist Pflicht: ohne sie ist die Ablehnung im Verlauf nicht erklärbar
+  // und die antragstellende Person erfährt nie, was zu ändern wäre.
+  const grund = prompt('Warum wird der Auftrag abgelehnt? '
+    + '(geht per Mail an die Ersteller:in und steht im Verlauf)')
+  if (grund === null) return
+  if (!grund.trim()) { showToast('Ohne Begründung keine Ablehnung', false); return }
   busy.value = true
   try {
-    ticket.value = await ticketsApi.rejectTicket(id.value)
+    ticket.value = await ticketsApi.rejectTicket(id.value, grund.trim())
     showToast('Auftrag abgelehnt')
     timeline.value?.reload()
   } catch (e) {
@@ -261,8 +286,20 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
           </div>
         </div>
 
+        <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen blockiert
+             `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst AUSSERHALB von
+             abilities.edit: quittieren muss auch, wer den Auftrag nicht bearbeiten darf. -->
+        <ProcessDepartments
+          v-if="ticket.responsibility?.kind === 'departments'"
+          class="mb-4"
+          :ticket-id="ticket.id"
+          :departments="ticket.responsibility.departments"
+          :group-name="groupName"
+          :terminal="terminal"
+          @updated="onDepartmentsUpdated" />
+
         <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
-        <template v-if="abilities.edit && phase">
+        <template v-if="abilities.edit && phase && !isExportPhase">
           <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                       :viewer="viewer" :errors="errors" :sources="sources"
                       @update:model-value="onValues($event)" />
@@ -278,8 +315,18 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
           </div>
         </template>
 
-        <!-- Gesamtansicht -->
-        <div class="card-section mt-4">
+        <!-- Export-Phase: druckbare Zusammenfassung; sonst die Gesamtansicht -->
+        <SchemaExportView
+          v-if="isExportPhase"
+          class="mt-4"
+          :definition="definition"
+          :ticket="ticket"
+          :phase="phase"
+          :viewer="viewer"
+          :sources="sources"
+          @exported="showToast('PDF erzeugt')"
+          @failed="showToast($event, false)" />
+        <div v-else class="card-section mt-4">
           <h3 class="section-title">Alle Angaben</h3>
           <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
                               :sources="sources" />

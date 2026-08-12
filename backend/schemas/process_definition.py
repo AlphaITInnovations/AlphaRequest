@@ -72,7 +72,9 @@ class ResponsibilityKind(str, Enum):
     group = "group"
     user = "user"
     departments = "departments"
-    originator = "originator"   # bei Spawn: Ersteller:in des auslösenden Prozesses
+    #: Zuständige FACHABTEILUNG steht in einem Gruppen-Feld des Auftrags – so wählt
+    #: die erstellende Person selbst, wer bearbeitet (Basis-Ticket).
+    group_from_field = "group_from_field"
     #: Zuständige Person steht in einem Personen-FELD des Auftrags (z. B. „Verantwortlich",
     #: bei der Erstellung ausgewählt). Genau das Muster der Alt-Prozesse, nur
     #: datengetrieben – dadurch gelten Pflicht, Sichtbarkeit und Validierung des
@@ -101,9 +103,7 @@ class ActionType(str, Enum):
     set_priority = "set_priority"
     set_status = "set_status"
     assign_sequence = "assign_sequence"
-    require_attachment = "require_attachment"
     auto_advance = "auto_advance"
-    spawn_process = "spawn_process"
 
 
 # Erlaubte enterStatus-Werte (Whitelist gegen Tippfehler). Bewusst als Menge
@@ -124,10 +124,13 @@ ALLOWED_RECIPIENTS = {"responsible", "owner", "watchers"}   # + "group:<id>"
 # Ehrlichkeits-Regel (§ Review): Was die Laufzeit NICHT umsetzt, wird beim
 # Speichern/Veröffentlichen abgelehnt statt still ignoriert. Beim Nachrüsten der
 # Funktion hier wieder austragen.
-UNIMPLEMENTED_ACTIONS = {"spawn_process", "assign_sequence", "require_attachment"}
-UNIMPLEMENTED_WIDGETS = {"server_generated"}       # braucht assign_sequence
-UNIMPLEMENTED_PHASE_KINDS = {"approval"}           # kein Freigabe-Token-Flow
-UNIMPLEMENTED_PHASE_VIEWS = {"approval", "export"}  # kein Renderer/Runtime
+# Aktuell ist ALLES umgesetzt, was das Schema anbietet. Die Mengen bleiben als
+# Mechanismus bestehen: wer künftig einen Wert ergänzt, dessen Laufzeit noch fehlt,
+# trägt ihn hier ein – dann lehnt der Server ihn ab, statt ihn still zu ignorieren.
+UNIMPLEMENTED_ACTIONS: set[str] = set()
+UNIMPLEMENTED_WIDGETS: set[str] = set()
+UNIMPLEMENTED_PHASE_KINDS: set[str] = set()
+UNIMPLEMENTED_PHASE_VIEWS: set[str] = set()
 
 # Boolean-Operatoren der Condition-DSL (§6.1). Die Auswertung kommt in Stufe 4;
 # hier wird nur die STRUKTUR geprüft.
@@ -235,9 +238,31 @@ class ComputedSpec(_Base):
 
 
 class AssignSpec(_Base):
+    """Wie ein server_generated-Feld gefüllt wird.
+
+    Heute genau ein Fall: eine fortlaufende Nummer aus einem Nummernkreis
+    (`assign_sequence`). `companyRef` nennt das Feld, aus dem die Firma kommt –
+    die Nummernkreise sind pro Firma gepflegt.
+    """
     action: ActionType
     counter: Optional[str] = None
     companyRef: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _assign_rules(self) -> "AssignSpec":
+        if self.action != ActionType.assign_sequence:
+            raise ValueError(f"assign.action „{self.action.value}“ ist keine Vergabe-Aktion "
+                             f"(erlaubt: assign_sequence)")
+        if not self.counter:
+            raise ValueError("assign.counter fehlt (Name des Nummernkreises)")
+        # Bekannter Nummernkreis? Ein Tippfehler („personalnr") oder ein noch nicht
+        # gebauter Kreis darf nicht klaglos durchgehen und erst beim Phasenabschluss
+        # auffallen. Import lokal – sonst Zyklus schemas ↔ services.
+        from backend.services.process_sequences import KNOWN_COUNTERS
+        if self.counter not in KNOWN_COUNTERS:
+            raise ValueError(f"assign.counter „{self.counter}“ ist kein bekannter "
+                             f"Nummernkreis (bekannt: {', '.join(sorted(KNOWN_COUNTERS))})")
+        return self
 
 
 class StaticOption(_Base):
@@ -349,6 +374,9 @@ class Responsibility(_Base):
         if self.kind == ResponsibilityKind.assignable and not self.fromField:
             raise ValueError("responsibility.kind=assignable erfordert `fromField` "
                              "(Schlüssel des Personen-Feldes)")
+        if self.kind == ResponsibilityKind.group_from_field and not self.fromField:
+            raise ValueError("responsibility.kind=group_from_field erfordert `fromField` "
+                             "(Schlüssel des Gruppen-Feldes)")
         return self
 
 
@@ -387,7 +415,6 @@ class Action(_Base):
     template: Optional[str] = None
     field: Optional[str] = None
     value: Optional[Any] = None
-    process: Optional[str] = None    # bei spawn_process
     counter: Optional[str] = None    # bei assign_sequence
 
     @model_validator(mode="after")
@@ -414,12 +441,14 @@ class Action(_Base):
         if t == ActionType.set_priority:
             if self.value not in ALLOWED_PRIORITY:
                 raise ValueError(f"action set_priority: unbekannte Priorität „{self.value}“")
-        if t == ActionType.spawn_process and not self.process:
-            raise ValueError("action spawn_process erfordert `process`")
-        if t == ActionType.assign_sequence and not self.counter:
-            raise ValueError("action assign_sequence erfordert `counter`")
-        if t == ActionType.require_attachment and not self.field:
-            raise ValueError("action require_attachment erfordert `field`")
+        if t == ActionType.assign_sequence:
+            # Nur als FELD-Vergabe (fields[].assign) zulässig, nie als Automation:
+            # process_engine.fire() fängt jede Action-Exception ab und auditiert sie
+            # nur – ein erschöpfter Nummernkreis würde den Auftrag stillschweigend
+            # ohne Nummer weiterschalten. Die Laufzeit hängt die Vergabe deshalb an
+            # den Phasenabschluss (services/process_sequences.assign_due_sequences).
+            raise ValueError("action assign_sequence ist nur als Feld-Vergabe zulässig "
+                             "(widget=server_generated mit `assign`), nicht als Automation")
         return self
 
 
@@ -513,6 +542,52 @@ class LayoutSection(_Base):
     items: list[LayoutItem] = Field(default_factory=list)
 
 
+#: onReject: entweder den ganzen Auftrag ablehnen oder auf eine frühere Phase
+#: zurückgeben (Nachbesserung). Muster: "reject" | "back_to:<phase_key>"
+_BACK_TO_RE = re.compile(r"^back_to:([a-z0-9_]+)$")
+
+
+class ApprovalSpec(_Base):
+    """Eine Freigabe-Phase: eine Frage, zwei Antworten.
+
+    Der Mail-Link (`externalLink`) ist der Grund, warum es diesen Phasentyp
+    überhaupt gibt: die entscheidende Person arbeitet nicht zwingend im System.
+    Der Link führt auf eine BESTÄTIGUNGSSEITE, die Entscheidung selbst läuft über
+    ein Formular (POST) – ein Link, der beim Anklicken sofort entscheidet, würde
+    von Mail-Clients und Sicherheits-Scannern beim Vorab-Laden ausgelöst.
+    """
+    question: str
+    approveLabel: str = "Freigeben"
+    rejectLabel: str = "Ablehnen"
+    #: Mail mit Entscheidungs-Link versenden? Ohne das läuft die Freigabe nur in der App.
+    externalLink: bool = True
+    #: Gültigkeit des Links (ISO-8601-Dauer).
+    linkMaxAge: str = "P7D"
+    #: Begründung bei Ablehnung verlangen.
+    requireReason: bool = True
+    #: Optionale Felder, in die Entscheidung bzw. Begründung geschrieben werden –
+    #: dann greifen Sichtbarkeit und Verlauf automatisch mit.
+    decisionField: Optional[str] = None
+    reasonField: Optional[str] = None
+    onReject: str = "reject"
+
+    @model_validator(mode="after")
+    def _approval_rules(self) -> "ApprovalSpec":
+        if not (self.question or "").strip():
+            raise ValueError("approval.question fehlt – ohne Frage weiß niemand, worüber er entscheidet")
+        if self.onReject != "reject" and not _BACK_TO_RE.match(self.onReject):
+            raise ValueError(f"approval.onReject „{self.onReject}“ ist unbekannt "
+                             f"(erlaubt: reject oder back_to:<phasen_key>)")
+        from backend.services.iso_duration import parse_duration
+        try:
+            sek = parse_duration(self.linkMaxAge)
+        except Exception as exc:
+            raise ValueError(f"approval.linkMaxAge „{self.linkMaxAge}“ ist keine ISO-8601-Dauer: {exc}")
+        if not sek or sek <= 0:
+            raise ValueError("approval.linkMaxAge muss größer als null sein")
+        return self
+
+
 class PhaseDef(_Base):
     key: str
     label: Optional[str] = None
@@ -521,6 +596,8 @@ class PhaseDef(_Base):
     enterStatus: Optional[str] = None
     grantsFullView: bool = False
     responsibility: Responsibility
+    #: Pflicht bei kind=approval, sonst verboten.
+    approval: Optional[ApprovalSpec] = None
     fields: list[FieldRef] = Field(default_factory=list)
     #: Optionale Darstellung. Felder, die hier NICHT vorkommen, werden hinten in
     #: einem Sammel-Abschnitt gerendert – so wird nie ein Feld unsichtbar.
@@ -556,6 +633,16 @@ class PhaseDef(_Base):
         if self.responsibility.resetOnDescriptionChange:
             raise ValueError(f"Phase „{self.key}“: resetOnDescriptionChange ist noch nicht "
                              f"umgesetzt")
+        # Freigabe-Phase und Freigabe-Block gehören zusammen: ohne Block wüsste die
+        # Laufzeit nicht, worüber entschieden wird; mit Block ohne Phasenart würde er
+        # stillschweigend ignoriert.
+        if self.kind == PhaseKind.approval and self.approval is None:
+            raise ValueError(f"Phase „{self.key}“: kind=approval erfordert einen "
+                             f"`approval`-Block (Frage, Beschriftungen, Verhalten bei Nein)")
+        if self.kind != PhaseKind.approval and self.approval is not None:
+            raise ValueError(f"Phase „{self.key}“: `approval` ist nur bei kind=approval erlaubt")
+        if self.view == PhaseView.approval and self.kind != PhaseKind.approval:
+            raise ValueError(f"Phase „{self.key}“: view=approval passt nur zu kind=approval")
         return self
 
     @model_validator(mode="after")
@@ -689,16 +776,20 @@ class ProcessDefinition(_Base):
             resp = p.responsibility
             # kind=assignable: das Quellfeld muss existieren UND ein Personen-Feld
             # sein – sonst stünde dort später irgendein Text statt einer User-ID.
-            if resp.kind == ResponsibilityKind.assignable and resp.fromField:
+            erwartet = {ResponsibilityKind.assignable: (Widget.user, "Personen-Feld"),
+                        ResponsibilityKind.group_from_field: (Widget.group, "Gruppen-Feld")}
+            if resp.kind in erwartet and resp.fromField:
+                widget, bezeichnung = erwartet[resp.kind]
                 src = next((f for f in self.fields if f.key == resp.fromField), None)
                 if src is None:
                     raise ValueError(
                         f"Phase „{p.key}“.responsibility.fromField: „{resp.fromField}“ "
                         f"ist nicht im Feld-Katalog")
-                if src.widget != Widget.user:
+                if src.widget != widget:
                     raise ValueError(
                         f"Phase „{p.key}“.responsibility.fromField: „{resp.fromField}“ muss "
-                        f"ein Personen-Feld sein (widget=user), ist aber „{src.widget.value}“")
+                        f"ein {bezeichnung} sein (widget={widget.value}), ist aber "
+                        f"„{src.widget.value}“")
             for dr in resp.rule:
                 if dr.when:
                     for r in dsl_refs(dr.when):
@@ -712,6 +803,60 @@ class ProcessDefinition(_Base):
                 _need(a.trigger.field, f"automation[{a.id}].trigger.field")
             if a.action.field:
                 _need(a.action.field, f"automation[{a.id}].action.field")
+
+        # Freigabe-Phasen: die Ziel-Felder müssen existieren, und ein Rücksprung
+        # muss auf eine echte, FRÜHERE Phase zeigen (sonst läuft die Ablehnung ins
+        # Leere oder – bei einem Sprung nach vorn – überspringt sie Arbeit).
+        for i, p in enumerate(self.phases):
+            if p.approval is None:
+                continue
+            for feld, lbl in ((p.approval.decisionField, "decisionField"),
+                              (p.approval.reasonField, "reasonField")):
+                if feld:
+                    _need(feld, f"Phase „{p.key}“.approval.{lbl}")
+            m = _BACK_TO_RE.match(p.approval.onReject)
+            if m:
+                ziel = m.group(1)
+                if ziel not in pkeys:
+                    raise ValueError(f"Phase „{p.key}“.approval.onReject: Phase „{ziel}“ "
+                                     f"gibt es nicht")
+                if pkeys.index(ziel) >= i:
+                    raise ValueError(f"Phase „{p.key}“.approval.onReject: „{ziel}“ liegt nicht "
+                                     f"VOR dieser Phase – ein Rücksprung nach vorn würde "
+                                     f"Arbeit überspringen")
+
+        # server_generated-Felder füllt ausschließlich der Server. Wären sie in
+        # einer Phase editierbar, könnte der Client eine vergebene Nummer setzen
+        # oder überschreiben (apply_writes entscheidet allein über den Phasen-mode).
+        vergeben = {f.key for f in self.fields if f.widget == Widget.server_generated}
+        for p in self.phases:
+            for fr in p.fields:
+                if fr.ref in vergeben and fr.mode in (FieldMode.editable, FieldMode.append_only):
+                    raise ValueError(
+                        f"Phase „{p.key}“: „{fr.ref}“ wird vom Server vergeben "
+                        f"(server_generated) und darf nicht editierbar sein")
+
+        # Vergabe-Zeitpunkt und Firma müssen bestimmbar sein, sonst bekommt das Feld
+        # NIE eine Nummer bzw. die Vergabe scheitert erst zur Laufzeit.
+        gefuehrt = {fr.ref for p in self.phases for fr in p.fields}
+        for f in self.fields:
+            if f.widget != Widget.server_generated:
+                continue
+            if f.key not in gefuehrt:
+                raise ValueError(
+                    f"Feld „{f.key}“ wird vom Server vergeben, ist aber in keiner Phase "
+                    f"eingebunden – die Vergabe hängt am Abschluss der ERSTEN Phase, die "
+                    f"das Feld führt; so bekäme es nie eine Nummer")
+            ref = (f.assign.companyRef or "") if f.assign else ""
+            src = next((x for x in self.fields if x.key == ref), None)
+            if src is None:
+                raise ValueError(
+                    f"Feld „{f.key}“.assign.companyRef: „{ref}“ ist nicht im Feld-Katalog "
+                    f"(Nummernkreise werden je Firma geführt)")
+            if src.widget != Widget.company:
+                raise ValueError(
+                    f"Feld „{f.key}“.assign.companyRef: „{ref}“ muss ein Firmen-Feld sein "
+                    f"(widget=company), ist aber „{src.widget.value}“")
 
         # Non-overridable computed-Felder dürfen nicht als editierbar referenziert
         # werden – apply_computed würde die Eingabe bei jedem Speichern überschreiben.

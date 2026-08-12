@@ -372,3 +372,63 @@ def metrics_snapshot(now: str) -> dict:
         "oldest_active_created_at": oldest,
         "timers_due": int(due_row["n"]) if due_row else 0,
     }
+
+
+# ── Laufzeit-Aggregate: aktuelle Phase & Fachabteilungen ─────────────────────
+#
+# Phasen- und Abteilungs-Stand stehen NUR im `runtime_json`. Damit dafür nicht
+# bei jedem Sammellauf (alle 10 s) die ganze Tabelle samt Blobs durch Python
+# muss, übernimmt die DB zwei Schritte:
+#   * Einschränkung auf nicht-terminale Aufträge – archivierte/abgelehnte stehen
+#     in keiner Phase mehr und haben keine offenen Abteilungen.
+#   * Herausschneiden NUR der aktuellen Phase (Index steht im Dokument selbst):
+#     Phasen-Key und deren Abteilungs-Liste. Über die Leitung geht damit je
+#     Auftrag ein kurzer String statt des kompletten Ablaufzustands.
+# Vollständig in SQL zu gruppieren ginge nur mit JSON_TABLE (MariaDB 10.6+) –
+# eine härtere Versions-Anforderung als der Rest des Schemas stellt. Die hier
+# benutzten JSON-Pfad-Funktionen gibt es seit MariaDB 10.2.
+#
+# `values_json` wird bewusst NICHT gelesen: Metrik-Reihen haben keinen
+# Sichtbarkeitsfilter, Feldwerte haben in ihnen nichts verloren.
+
+
+def _current_phase_path(suffix: str) -> str:
+    """SQL-Ausdruck für den JSON-Pfad auf ein Feld der AKTUELLEN Phase."""
+    return ("CONCAT('$.phases[', JSON_EXTRACT(runtime_json, '$.current_index'), "
+            f"'].{suffix}')")
+
+
+ACTIVE_RUNTIME_SQL = (
+    "SELECT process_key, "
+    f"JSON_UNQUOTE(JSON_EXTRACT(runtime_json, {_current_phase_path('key')})) AS phase_key, "
+    f"JSON_EXTRACT(runtime_json, {_current_phase_path('departments')}) AS departments_json "
+    f"FROM process_tickets WHERE {_ACTIVE_CLAUSE}"
+)
+
+
+def active_runtime_rows() -> list[dict]:
+    """Prozess-Key, aktuelle Phase und Abteilungs-Stand JEDES aktiven Auftrags.
+
+    Bewusst OHNE LIMIT: das Ergebnis ist eine Kennzahl – ein abgeschnittenes
+    Ergebnis wäre nicht „ungenau", sondern falsch. Begrenzt wird stattdessen die
+    Menge (nur aktive Aufträge) und die Breite (zwei kurze Spalten je Zeile).
+    """
+    conn = get_connection()
+    try:
+        rows = _fetchall(conn, ACTIVE_RUNTIME_SQL)
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        try:
+            depts = json.loads(r["departments_json"]) if r.get("departments_json") else []
+        except (ValueError, TypeError):
+            # Ein kaputter Ablaufzustand darf die Kennzahlen aller anderen
+            # Aufträge nicht mitnehmen.
+            depts = []
+        out.append({
+            "process_key": r.get("process_key") or "unbekannt",
+            "phase_key": r.get("phase_key") or "unbekannt",
+            "departments": depts if isinstance(depts, list) else [],
+        })
+    return out

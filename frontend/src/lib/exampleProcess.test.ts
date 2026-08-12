@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import example from '../../../docs/examples/prozess-hotelbuchung.json'
+import example from '../../../backend/seeds/processes/prozess-hotelbuchung.json'
 import { normalizeDefinition } from './processNormalize'
 import { errorCount, validateDefinition } from './processValidate'
 import { renderFields, validatePhaseCompletion } from './processSim'
 import type { SimViewer } from './processSim'
 
 /**
- * Das Beispiel in docs/examples/ soll importierbar BLEIBEN. Ändert sich das
+ * Der ausgelieferte Seed in backend/seeds/processes/ soll importierbar BLEIBEN
+ * (er liegt unter backend/, weil nur das im Backend-Image landet). Ändert sich das
  * Format oder eine Whitelist, schlägt dieser Test fehl statt dass jemand beim
  * Import in einen 422 läuft.
  */

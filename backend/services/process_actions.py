@@ -11,16 +11,19 @@ Umgesetzt: notify, escalate, set_status, set_priority, set_field, auto_advance.
 Erkannt-aber-noch-nicht-ausgeführt (und daher beim Veröffentlichen abgelehnt,
 s. UNIMPLEMENTED_ACTIONS): spawn_process, assign_sequence, require_attachment.
 
-Neben den Automations-Actions liegen hier die beiden festen Benachrichtigungen,
-die JEDER Prozess braucht und die niemand pro Prozess konfigurieren soll:
-`notify_phase_entry` (Arbeit liegt an) und `notify_comment` (Nachtrag).
+Neben den Automations-Actions liegen hier die festen Benachrichtigungen, die
+JEDER Prozess braucht und die niemand pro Prozess konfigurieren soll:
+`notify_phase_entry` (Arbeit liegt an – bei einer Freigabe-Phase mit
+Entscheidungs-Links statt „bitte im System bearbeiten“), `notify_comment`
+(Nachtrag), `notify_rejection` (Auftrag abgelehnt) und `notify_sent_back`
+(zur Nachbesserung zurückgegeben).
 """
 import html
 import json
 from typing import Callable, Optional
 
 from backend.schemas.process_definition import (
-    Action, ActionType, PhaseDef, ProcessDefinition, ResponsibilityKind,
+    Action, ActionType, PhaseDef, PhaseKind, ProcessDefinition, ResponsibilityKind,
 )
 from backend.services import process_runtime as pr
 from backend.utils.config import config
@@ -173,6 +176,137 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
     return changes
 
 
+# ── Freigabe per Mail-Link ────────────────────────────────────────────────────
+
+def _ticket_link(row: dict) -> str:
+    return f"{config.FRONTEND_URL}/prozess-auftraege/{row.get('id')}"
+
+
+def _subject(text: str) -> str:
+    """Betreff ohne Zeilenumbrüche (Header-Injection) und in sicherer Länge."""
+    return text.replace("\r", " ").replace("\n", " ")[:200]
+
+
+def _rich_text(text: Optional[str]) -> str:
+    """Freitext einer Person für den HTML-Body: escapen, Umbrüche erhalten."""
+    return html.escape(text or "").replace("\n", "<br>")
+
+
+def _duration_text(seconds: int) -> str:
+    """„7 Tage“ / „12 Stunden“ – aus einer ISO-Dauer wird lesbarer Text."""
+    if seconds % 86400 == 0:
+        tage = seconds // 86400
+        return f"{tage} Tag" if tage == 1 else f"{tage} Tage"
+    if seconds % 3600 == 0:
+        std = seconds // 3600
+        return f"{std} Stunde" if std == 1 else f"{std} Stunden"
+    return f"{max(1, seconds // 60)} Minuten"
+
+
+def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
+    """Die beiden Entscheidungs-Links (JA/NEIN) für die aktuelle Phase.
+
+    Beide tragen den aktuellen Epoch: nach einer Wiederaufnahme oder einem
+    Rücksprung sind die Links der vorigen Runde wirkungslos.
+    """
+    from backend.services import process_approval as approval
+    base = (getattr(config, "FRONTEND_URL", "") or "").rstrip("/")
+    epoch = int((row.get("runtime") or {}).get("epoch", 0))
+    tid = row.get("id")
+
+    def url(act: str) -> str:
+        token = approval.make_token(tid, act, phase.key, epoch)
+        return f"{base}/api/v1/process-freigabe?token={token}"
+
+    return url("approve"), url("reject")
+
+
+def _approval_buttons_html(approve_url: str, reject_url: str,
+                           approve_label: str, reject_label: str) -> str:
+    """Zwei mailsichere Aktions-Knöpfe (Tabelle statt Flexbox – Outlook)."""
+    a_url, r_url = html.escape(approve_url, quote=True), html.escape(reject_url, quote=True)
+    return f"""
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;">
+      <tr>
+        <td style="padding-right:12px;">
+          <a href="{a_url}"
+             style="display:inline-block; background:#16A34A; color:#ffffff;
+                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
+                    text-decoration:none; padding:12px 28px; border-radius:10px;">
+            &#10003;&nbsp; {html.escape(approve_label)}
+          </a>
+        </td>
+        <td>
+          <a href="{r_url}"
+             style="display:inline-block; background:#DC2626; color:#ffffff;
+                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
+                    text-decoration:none; padding:12px 28px; border-radius:10px;">
+            &#10007;&nbsp; {html.escape(reject_label)}
+          </a>
+        </td>
+      </tr>
+    </table>
+    """
+
+
+def _approval_message(row: dict, phase: PhaseDef, title: str) -> tuple[str, str]:
+    from backend.services.iso_duration import parse_duration
+    spec = phase.approval
+    approve_url, reject_url = approval_links(row, phase)
+    try:
+        gueltig = _duration_text(parse_duration(spec.linkMaxAge))
+    except Exception:
+        gueltig = spec.linkMaxAge
+    subject = _subject(f"[AlphaRequest] Freigabe erforderlich: {title}")
+    body = (
+        f"<p>Für den Auftrag „{html.escape(title)}“ (#{row.get('id')}) wird Ihre "
+        f"Entscheidung gebraucht.</p>"
+        f"<p><b>{html.escape(spec.question)}</b></p>"
+        + _approval_buttons_html(approve_url, reject_url,
+                                 spec.approveLabel, spec.rejectLabel)
+        + f"<p style=\"font-size:12px;color:#4B5563;\">Der Link öffnet eine "
+          f"Bestätigungsseite – erst dort wird entschieden. Eine Anmeldung ist "
+          f"nicht nötig. Gültig {html.escape(gueltig)} ab Versand.</p>"
+    )
+    return subject, body
+
+
+def _report_recipient_gap(row: dict, phase: PhaseDef, recips: list[str]) -> None:
+    """Eine Freigabe ohne erreichbare Empfänger:in darf nicht still liegen bleiben.
+
+    Bisher hätte nur ein `logger.warning` davon erzählt – der Auftrag wartet dann
+    auf eine Entscheidung, die niemand angefordert bekommen hat. Deshalb hier
+    zusätzlich ein Audit-Eintrag UND ein Verlaufs-Eintrag am Auftrag (den sieht
+    die zuständige Seite, das Audit nur die Aufsicht).
+
+    Der Ersatz-Fall wird an der Zentraladresse erkannt: liefert
+    `resolve_recipients` genau TICKET_MAIL, ist der Verteiler der Gruppe leer
+    (in dem seltenen Fall, dass eine Gruppe genau diese Adresse als Verteiler
+    führt, ist der Hinweis harmlos falsch-positiv).
+    """
+    fallback = (getattr(config, "TICKET_MAIL", "") or "")
+    ersatz = bool(recips) and bool(fallback) and recips == [fallback]
+    if recips and not ersatz:
+        return
+
+    from backend.database.audit_log import record_audit
+    from backend.services import process_approval as approval
+    from backend.services import process_events as events
+
+    grund = ("kein Verteiler hinterlegt und keine Zentraladresse konfiguriert"
+             if not recips else
+             "kein Verteiler hinterlegt – ersatzweise an die Zentraladresse")
+    logger.error("Freigabe-Mail für #%s (Phase %s): %s", row.get("id"), phase.key, grund)
+    details = {"phase": phase.key, "reason": grund, "recipients": list(recips)}
+    record_audit(
+        action="process_approval_no_recipient", actor_id=None, actor_name="System",
+        actor_type="system", entity_type="process_ticket", entity_id=str(row.get("id")),
+        summary=f"Freigabe-Phase „{phase.label or phase.key}“: {grund}",
+        details=details,
+    )
+    events.system(row, approval.EVENT_NO_RECIPIENT, phase_key=phase.key, details=details)
+
+
 def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
                        *, sender: Callable = _default_sender,
                        groups: Optional[list] = None) -> list[str]:
@@ -183,22 +317,36 @@ def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[Phase
     einzeln zu pflegen wäre eine Fehlerquelle. Abschaltbar je Phase über
     responsibility.notifyOnEnter.
 
+    Bei einer Freigabe-Phase mit `approval.externalLink` geht statt der
+    „bitte im System bearbeiten“-Mail die Entscheidungs-Mail mit JA/NEIN-Links
+    raus – die entscheidende Person hat womöglich gar keinen Zugang.
+    Beobachter:innen bekommen weiterhin NUR die Info-Mail, niemals die Links.
+
     Gibt die tatsächlichen Empfänger zurück (für Audit/Tests). Wirft nicht.
     """
     if phase is None or not phase.responsibility.notifyOnEnter:
         return []
+    freigabe = (phase.kind == PhaseKind.approval and phase.approval is not None
+                and phase.approval.externalLink)
     # Die Start-Phase gehört der Person, die gerade angelegt hat – die muss man
-    # nicht über ihre eigene Eingabe informieren.
-    if phase.responsibility.kind == ResponsibilityKind.owner:
+    # nicht über ihre eigene Eingabe informieren. Bei einer Freigabe schon: dort
+    # wird eine ENTSCHEIDUNG von ihr verlangt, nicht ihre eigene Eingabe gespiegelt.
+    if phase.responsibility.kind == ResponsibilityKind.owner and not freigabe:
         return []
     try:
         recips = resolve_recipients("responsible", row, phase, groups)
         title = str(row.get("title") or f"Auftrag #{row.get('id')}")
         phase_lbl = str(phase.label or phase.key)
-        link = f"{config.FRONTEND_URL}/prozess-auftraege/{row.get('id')}"
-        if recips:
-            subject = (f"[AlphaRequest] Neue Aufgabe: {title}"
-                       .replace("\r", " ").replace("\n", " ")[:200])
+        link = _ticket_link(row)
+        if freigabe:
+            # Ohne erreichbare Empfänger:in bleibt der Auftrag unbemerkt liegen –
+            # das muss sichtbar werden, nicht nur im Log stehen.
+            _report_recipient_gap(row, phase, recips)
+            if recips:
+                subject, body = _approval_message(row, phase, title)
+                sender(recips, subject, body, kind="approval_link")
+        elif recips:
+            subject = _subject(f"[AlphaRequest] Neue Aufgabe: {title}")
             body = (f"<p>Der Auftrag „{html.escape(title)}“ liegt jetzt bei Ihnen "
                     f"(Phase: {html.escape(phase_lbl)}).</p>"
                     f"<p>Zum Bearbeiten: {html.escape(link)}</p>")
@@ -263,6 +411,83 @@ def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
         return []
 
 
+def notify_rejection(row: dict, defn: Optional[ProcessDefinition], *,
+                     reason: Optional[str], by_name: str,
+                     sender: Callable = _default_sender,
+                     groups: Optional[list] = None) -> list[str]:
+    """Die Ersteller:in über die Ablehnung ihres Auftrags informieren. Wirft nicht.
+
+    Vorbild: microsoft_mail.send_rejection_mail. Empfänger ist bewusst nur die
+    Ersteller:in (über `resolve_recipients("owner", …)`, also inklusive
+    Zentraladressen-Ersatz statt stiller Nicht-Zustellung) – die bearbeitende
+    Seite hat gerade selbst abgelehnt und braucht keine Rückmeldung darüber.
+
+    `by_name` beschreibt, WER abgelehnt hat. Bei einer Entscheidung per Mail-Link
+    gibt es keine Identität; dort steht der Kanal statt eines erfundenen Namens.
+    """
+    try:
+        recips = resolve_recipients("owner", row, None, groups)
+        if not recips:
+            return []
+        title = str(row.get("title") or f"Auftrag #{row.get('id')}")
+        subject = _subject(f"[AlphaRequest] Auftrag abgelehnt: {title}")
+        begruendung = (f"<p><b>Begründung</b> ({html.escape(by_name)}):</p>"
+                       f"<blockquote>{_rich_text(reason)}</blockquote>"
+                       if reason else
+                       f"<p>Eine Begründung wurde nicht angegeben "
+                       f"({html.escape(by_name)}).</p>")
+        body = (f"<p>Ihr Auftrag „{html.escape(title)}“ (#{row.get('id')}) wurde "
+                f"abgelehnt.</p>{begruendung}"
+                f"<p>Zum Auftrag: {html.escape(_ticket_link(row))}</p>")
+        sender(recips, subject, body, kind="rejection")
+        return list(recips)
+    except Exception:
+        logger.exception("Ablehnungs-Mail für Ticket #%s fehlgeschlagen", row.get("id"))
+        return []
+
+
+def notify_sent_back(row: dict, defn: Optional[ProcessDefinition],
+                     phase: Optional[PhaseDef], *, reason: Optional[str],
+                     by_name: str, sender: Callable = _default_sender,
+                     groups: Optional[list] = None) -> list[str]:
+    """Auftrag wurde zur Nachbesserung auf eine frühere Phase zurückgegeben.
+
+    Eigene Mail statt `notify_phase_entry`, aus zwei Gründen:
+      * Die Zielphase gehört typischerweise der ERSTELLER:IN – und genau die
+        überspringt `notify_phase_entry` bewusst („nicht über die eigene Eingabe
+        informieren“). Beim Rücksprung wäre das falsch, der Auftrag bliebe
+        unbemerkt liegen.
+      * Ohne die Begründung wäre die Mail wertlos: „liegt wieder bei Ihnen“
+        beantwortet nicht, was nachzubessern ist.
+
+    Wirft nicht; gibt die Empfänger zurück.
+    """
+    try:
+        recips = set(resolve_recipients("responsible", row, phase, groups))
+        owner = _user_email(row.get("owner_id"))
+        if owner:
+            recips.add(owner)
+        recips |= set(watcher_emails(row.get("id")))
+        if not recips:
+            return []
+        title = str(row.get("title") or f"Auftrag #{row.get('id')}")
+        phase_lbl = str((phase.label or phase.key) if phase else "—")
+        subject = _subject(f"[AlphaRequest] Nachbesserung nötig: {title}")
+        begruendung = (f"<blockquote>{_rich_text(reason)}</blockquote>" if reason
+                       else "<p>Eine Begründung wurde nicht angegeben.</p>")
+        out = sorted(recips)
+        body = (f"<p>Der Auftrag „{html.escape(title)}“ (#{row.get('id')}) wurde in "
+                f"der Freigabe zurückgegeben und liegt wieder in der Phase "
+                f"„{html.escape(phase_lbl)}“.</p>"
+                f"<p><b>Rückmeldung</b> ({html.escape(by_name)}):</p>{begruendung}"
+                f"<p>Zum Auftrag: {html.escape(_ticket_link(row))}</p>")
+        sender(out, subject, body, kind="sent_back")
+        return out
+    except Exception:
+        logger.exception("Nachbesserungs-Mail für Ticket #%s fehlgeschlagen", row.get("id"))
+        return []
+
+
 def apply_action_changes(row: dict, defn: ProcessDefinition, changes: dict, store) -> None:
     """Persistiert die von run_action gelieferten Zustandsänderungen und
     aktualisiert das übergebene row-Dict in place. `store` wird injiziert
@@ -279,6 +504,16 @@ def apply_action_changes(row: dict, defn: ProcessDefinition, changes: dict, stor
         store.set_status(tid, changes["status"])
         row["status"] = changes["status"]
     if "values" in changes:
-        merged = {**(row.get("values") or {}), **changes["values"]}
-        store.update_values(tid, json.dumps(merged, ensure_ascii=False))
-        row["values"] = merged
+        # rev-Guard UND frischer Stand: hier wird der KOMPLETTE values-Blob
+        # zurückgeschrieben. Ohne beides könnte eine Automation mit veraltetem
+        # row-Dict eine gerade vergebene Nummer (server_generated) wieder
+        # entfernen. Ein Konflikt landet über fire() als fehlgeschlagene
+        # Automation im Audit – laut statt still.
+        fresh = store.get(tid) or {}
+        merged = {**(fresh.get("values") or row.get("values") or {}), **changes["values"]}
+        updated = store.update_values(tid, json.dumps(merged, ensure_ascii=False),
+                                      expected_rev=fresh.get("rev"))
+        if updated:
+            row.update(updated)
+        else:
+            row["values"] = merged

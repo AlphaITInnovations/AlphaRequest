@@ -25,7 +25,10 @@ from backend.database.users import PERM_ADMIN, PERM_MANAGE
 from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import DataResponse, api_error, ErrorCode
 from backend.services import process_permissions as perms
+from backend.services import process_runtime as pr
+from backend.services import process_visibility as vis
 from backend.utils.logger import logger
+from backend.utils.timeutil import utcnow_iso
 
 router = APIRouter()
 
@@ -119,7 +122,12 @@ def list_processes(user: dict = Depends(get_current_user)):
     """
     rows = db.list_published_catalog(include_definition=True)
     try:
-        group_ids = get_group_ids_for_user(user.get("id")) if user.get("id") else []
+        # Fachabteilungen (interne Gruppen) UND AD-Gruppen aus dem Login-Token:
+        # das Alt-System berechtigte über beides. Katalog und Anlegen müssen
+        # dieselbe Menge sehen, sonst zeigt die Oberfläche einen Prozess an,
+        # dessen Anlegen dann 403 liefert.
+        gids = get_group_ids_for_user(user.get("id")) if user.get("id") else []
+        group_ids = list(gids) + [g for g in (user.get("groups") or []) if g]
     except Exception:
         logger.warning("Gruppen für Erstellrechte nicht ladbar – nur Admin darf anlegen")
         group_ids = []
@@ -178,6 +186,41 @@ def get_published_process(key: str, user: dict = Depends(get_current_user)):
     if not row:
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {key}")
     return DataResponse(data=_out(row))
+
+
+class FieldAccessOut(BaseModel):
+    """Welche Felder diese Person beim ANLEGEN sehen und ausfüllen darf."""
+    visible_fields: list[str] = []
+    editable_fields: list[str] = []
+
+
+@router.get("/processes/{key}/field-access", response_model=DataResponse[FieldAccessOut])
+def get_create_field_access(key: str, user: dict = Depends(get_current_user)):
+    """Feld-Auskunft für den Anlege-Dialog.
+
+    Beim Anlegen gibt es noch kein Ticket, also auch keine Ticket-Antwort mit
+    `visible_fields`/`editable_fields`. Ohne diese Auskunft müsste das Formular die
+    Sichtbarkeit raten – es kennt die Gruppen-Mitgliedschaft aber gar nicht und
+    würde Eingabefelder für Daten anbieten, die der Server anschließend verwirft.
+
+    Gerechnet wird gegen die START-Phase und mit der anfragenden Person als
+    künftiger Ersteller:in – genau die Rolle, die sie beim Anlegen hätte.
+    """
+    row = db.get_published(key)
+    if not row or not row.get("definition"):
+        raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {key}")
+    defn = ProcessDefinition.model_validate(row["definition"])
+    start = defn.phases[0]
+    provisorisch = {"owner_id": user.get("id"), "status": "in_progress",
+                    "runtime": pr.initial_runtime(defn, utcnow_iso()), "values": {}}
+    gids = vis.user_group_ids(user)
+    ctx = vis.build_viewer_ctx(user, provisorisch, defn, group_ids=gids)
+    return DataResponse(data=FieldAccessOut(
+        visible_fields=sorted(vis.visible_field_keys(defn, ctx)),
+        # ignore_conditions: die bedingte Anzeige wertet das Formular live aus.
+        editable_fields=sorted(vis.editable_field_keys(defn, start, ctx, {},
+                                                       ignore_conditions=True)),
+    ))
 
 
 # ── Mutationen (Admin) ────────────────────────────────────────────────────────

@@ -8,9 +8,10 @@
  *     pflicht? Der Server bleibt autoritativ – hier geht es um die Darstellung.
  */
 import type {
-  Condition, FieldDef, FieldRef, PhaseDef, ProcessDefinition, ProcessRuntime,
+  ApprovalSpec, Condition, FieldDef, FieldRef, PhaseDef, ProcessDefinition, ProcessRuntime,
 } from '@/types/process'
 import { evaluate, applyComputed, isEmpty } from '@/lib/conditionDsl'
+import { backToTarget } from '@/lib/processSchema'
 
 export interface SimViewer {
   fullView: boolean
@@ -239,9 +240,67 @@ export function advance(
   return { runtime: next, status: enterStatusFor(defn.phases[next.current_index]) }
 }
 
+/**
+ * Aufgelöste Zuständigkeit – gleiche Form wie die Server-Antwort. Wichtig:
+ * `assignable` und `group_from_field` erscheinen NICHT als eigene Art, sie
+ * lösen sich zu 'user' bzw. 'group' auf (mit leerem Wert, solange das Quellfeld
+ * nicht ausgefüllt ist). Genau so verhält sich auch die Laufzeit.
+ */
+export interface SimResponsibility {
+  kind: string
+  group?: string | null
+  user?: string | null
+  departments?: { group: string; required: boolean }[]
+  /** Quellfeld bei assignable/group_from_field – für einen ehrlichen Hinweis. */
+  fromField?: string | null
+  assignable?: boolean
+}
+
+/** Wert eines Quellfeldes als Kennung – leer/kein String heißt „noch niemand". */
+function pickedRef(values: Record<string, unknown>, key: string | null): string | null {
+  const raw = values[key ?? '']
+  return typeof raw === 'string' && raw.trim() ? raw : null
+}
+
+export function phaseIndex(defn: ProcessDefinition, phaseKey: string): number {
+  return defn.phases.findIndex((p) => p.key === phaseKey)
+}
+
+/**
+ * Einen LAUFENDEN Auftrag auf eine frühere Phase zurückgeben (der
+ * „Nein, aber bitte nachbessern"-Zweig von `approval.onReject`).
+ * Spiegel von process_runtime.send_back: `rejected` bleibt unberührt, das Ziel
+ * muss echt VOR der aktuellen Phase liegen, und der **Epoch wird erhöht** –
+ * sonst wären Fristen und Mail-Links des ersten Durchlaufs weiter „verbraucht"
+ * bzw. weiter gültig.
+ *
+ * Gibt `null` zurück, wenn das Ziel unbekannt ist oder nicht davor liegt.
+ */
+export function sendBack(
+  defn: ProcessDefinition, rt: ProcessRuntime, nowIso: string, phaseKey: string,
+): { runtime: ProcessRuntime; status: string } | null {
+  const idx = phaseIndex(defn, phaseKey)
+  if (idx < 0 || idx >= rt.phases.length || idx >= rt.current_index) return null
+  const next: ProcessRuntime = JSON.parse(JSON.stringify(rt))
+  next.epoch += 1
+  next.current_index = idx
+  next.phases.forEach((entry, i) => {
+    if (i < idx) {
+      entry.status = 'done'          // davor Geleistetes bleibt erledigt
+    } else if (i === idx) {
+      entry.status = 'open'
+      entry.entered_at = nowIso      // Fristen laufen ab der Rückgabe
+    } else {
+      entry.status = 'pending'
+      entry.entered_at = null
+    }
+  })
+  return { runtime: next, status: enterStatusFor(defn.phases[idx]) }
+}
+
 export function resolveResponsibility(
   phase: PhaseDef, values: Record<string, unknown>,
-): { kind: string; group?: string; user?: string; departments?: { group: string; required: boolean }[] } {
+): SimResponsibility {
   const r = phase.responsibility
   if (r.kind === 'departments') {
     return {
@@ -253,7 +312,40 @@ export function resolveResponsibility(
   }
   if (r.kind === 'group') return { kind: 'group', group: r.group ?? '' }
   if (r.kind === 'user') return { kind: 'user', user: r.user ?? '' }
-  return { kind: r.kind }
+  if (r.kind === 'assignable') {
+    return { kind: 'user', user: pickedRef(values, r.fromField),
+      fromField: r.fromField, assignable: true }
+  }
+  if (r.kind === 'group_from_field') {
+    return { kind: 'group', group: pickedRef(values, r.fromField),
+      fromField: r.fromField, assignable: true }
+  }
+  if (r.kind === 'owner') return { kind: 'owner' }
+  return { kind: 'unknown' }
+}
+
+/**
+ * Anzeigetext der Zuständigkeit (Vorschau/Statuszeile). Bewusst hier und nicht
+ * im Template: ein leeres Quellfeld muss als „noch niemand" erkennbar sein,
+ * nicht als leerer Text.
+ */
+export function responsibilityText(
+  res: SimResponsibility | null,
+  groupName: (id: string) => string,
+  userName: (id: string) => string = (id) => id,
+): string {
+  if (!res) return '—'
+  const offen = res.fromField
+    ? `noch niemand (Feld „${res.fromField}" ist leer)`
+    : 'niemand'
+  if (res.kind === 'departments') {
+    const list = (res.departments ?? []).map((d) => groupName(d.group))
+    return list.length ? list.join(', ') : 'niemand'
+  }
+  if (res.kind === 'group') return res.group ? groupName(res.group) : offen
+  if (res.kind === 'user') return res.user ? userName(res.user) : offen
+  if (res.kind === 'owner') return 'Ersteller:in'
+  return 'unbekannt'
 }
 
 // ── Simulator-Sitzung (für die Vorschau) ──────────────────────────────────────
@@ -331,4 +423,77 @@ export function simReject(state: SimState, nowIso = new Date().toISOString()): S
     status: 'rejected',
     events: [...state.events, { at: nowIso, text: 'Auftrag abgelehnt' }],
   }
+}
+
+// ── Freigabe-Phase (Spiegel von process_approval / api/v1/process_approval) ───
+
+export type ApprovalAct = 'approve' | 'reject'
+
+/** Freigabe-Block der aktuellen Phase – null, wenn hier nicht entschieden wird. */
+export function currentApproval(defn: ProcessDefinition, state: SimState): ApprovalSpec | null {
+  const phase = currentPhase(defn, state.runtime)
+  return phase && phase.kind === 'approval' ? phase.approval : null
+}
+
+/**
+ * Eine Freigabe-Entscheidung nachspielen.
+ *
+ * JA verhält sich wie ein normaler Phasenabschluss (der Server nimmt dafür
+ * dieselbe Engine). NEIN schreibt – falls konfiguriert – Entscheidung und
+ * Begründung in die Felder und führt dann entweder zur Ablehnung oder zum
+ * Rücksprung auf eine frühere Phase (`approval.onReject`).
+ */
+export function simDecide(
+  defn: ProcessDefinition, state: SimState, act: ApprovalAct,
+  opts: { reason?: string } = {}, nowIso = new Date().toISOString(),
+): { state: SimState; errors: SimFieldError[] } {
+  const phase = currentPhase(defn, state.runtime)
+  const spec = phase?.kind === 'approval' ? phase.approval : null
+  if (!phase || !spec) {
+    return { state, errors: [{ path: phase?.key ?? '-', code: 'NO_APPROVAL',
+      message: 'In dieser Phase wird nicht entschieden.' }] }
+  }
+
+  const reason = (opts.reason ?? '').trim()
+  if (act === 'reject' && spec.requireReason && !reason) {
+    return { state, errors: [{ path: `${phase.key}.approval.reason`,
+      code: 'REASON_REQUIRED', message: 'Bitte begründen Sie die Ablehnung.' }] }
+  }
+
+  // Geschrieben wird der ROHE Aktionsname, nicht die Beschriftung: Beschriftungen
+  // sind Anzeigetext und dürfen sich mit einer neuen Version ändern.
+  const patch: Record<string, unknown> = {}
+  if (spec.decisionField) patch[spec.decisionField] = act
+  if (spec.reasonField && reason) patch[spec.reasonField] = reason
+  let cur = Object.keys(patch).length ? simSetValues(defn, state, patch) : state
+
+  const label = act === 'approve' ? spec.approveLabel : spec.rejectLabel
+  cur = { ...cur, events: [...cur.events, { at: nowIso,
+    text: `Freigabe „${phase.label || phase.key}": ${label}`
+      + (reason && !spec.reasonField ? ` – ${reason}` : '') }] }
+
+  if (act === 'approve') {
+    const res = simAdvance(defn, cur, nowIso)
+    // Bleibt die Phase wegen fehlender Pflichtangaben stehen, darf auch die
+    // Entscheidung nicht im Verlauf und in den Feldern landen.
+    return res.errors.length ? { state, errors: res.errors } : res
+  }
+
+  const ziel = backToTarget(spec.onReject)
+  if (ziel) {
+    const res = sendBack(defn, cur.runtime, nowIso, ziel)
+    if (!res) {
+      // Kann nur bei einer fehlerhaften Definition passieren (die Prüfung
+      // verlangt eine frühere Phase) – ehrlich anzeigen statt still ablehnen.
+      return { state, errors: [{ path: `${phase.key}.approval.onReject`,
+        code: 'INVALID_TARGET',
+        message: `Rücksprung auf „${ziel}" ist nicht möglich – die Phase liegt nicht davor.` }] }
+    }
+    const to = defn.phases[res.runtime.current_index]
+    return { state: { ...cur, runtime: res.runtime, status: res.status,
+      events: [...cur.events, { at: nowIso,
+        text: `Zur Nachbesserung zurück an „${to.label || to.key}" (${res.status})` }] },
+    errors: [] }
+  }
+  return { state: simReject(cur, nowIso), errors: [] }
 }

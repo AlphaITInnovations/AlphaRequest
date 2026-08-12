@@ -29,6 +29,7 @@ from backend.api.v1 import health as health_v1
 from backend.api.v1 import attachments as attachments_v1
 from backend.api.v1 import processes as processes_v1
 from backend.api.v1 import process_tickets as process_tickets_v1
+from backend.api.v1 import process_approval as process_approval_v1
 
 
 def get_ticket_type_dict():
@@ -155,6 +156,10 @@ def create_app() -> FastAPI:
     app.include_router(attachments_v1.router, prefix="/api/v1")
     app.include_router(processes_v1.router, prefix="/api/v1")
     app.include_router(process_tickets_v1.router, prefix="/api/v1")
+    # Öffentlich (KEIN get_current_user): die entscheidende Person hat keinen
+    # Systemzugang. Das Präfix ist nicht frei wählbar – process_actions.approval_links
+    # baut die Mail-Links genau auf diese URL.
+    app.include_router(process_approval_v1.router, prefix="/api/v1")
 
     # Öffentlicher Health-/Uptime-Endpunkt – unter /health UND /api/v1/health
     # erreichbar (Root für interne/Container-Checks, /api/v1 hinter dem Proxy).

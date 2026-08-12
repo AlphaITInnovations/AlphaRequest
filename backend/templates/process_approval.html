@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>AlphaRequest – Freigabe</title>
+  <style>
+    :root { --teal:#3EACB6; --teal-dark:#084C59; --bg:#ECF7F8; --text:#101924; --muted:#4B5563; --border:#CFE9EC; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); font-family: Arial, Helvetica, sans-serif; color:var(--text);
+           min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .card { background:#fff; width:100%; max-width:560px; border:1px solid var(--border); border-radius:16px;
+            box-shadow:0 10px 26px rgba(16,25,36,.10); overflow:hidden; }
+    .bar { height:6px; background:var(--teal); }
+    .body { padding:28px 28px 32px; text-align:center; }
+    .logo { width:52px; height:52px; border-radius:12px; border:1px solid var(--border); padding:6px; background:#fff; }
+    h1 { font-size:20px; margin:14px 0 6px; }
+    p { color:var(--muted); font-size:14px; line-height:1.6; margin:6px 0; }
+    .frage { margin:16px 0 4px; font-size:17px; font-weight:700; color:var(--text); }
+    .ticket { margin-top:14px; padding:12px 14px; background:var(--bg); border:1px solid var(--border);
+              border-radius:10px; font-size:14px; text-align:left; }
+    .fehler { margin-top:14px; padding:10px 14px; border-radius:10px; text-align:left;
+              background:#FEF2F2; border:1px solid #FECACA; color:#B91C1C; font-size:14px; }
+    label { display:block; text-align:left; margin:18px 0 6px; font-size:13px; font-weight:700; }
+    textarea { width:100%; min-height:90px; padding:10px 12px; font:inherit; color:inherit;
+               border:1px solid var(--border); border-radius:10px; resize:vertical; }
+    .buttons { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:20px; }
+    button { font:inherit; font-weight:700; color:#fff; border:0; border-radius:10px;
+             padding:12px 26px; cursor:pointer; }
+    .ok { background:#16A34A; } .no { background:#DC2626; }
+    .hint { margin-top:18px; font-size:12px; }
+    .foot { margin-top:20px; font-size:12px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="bar"></div>
+    <div class="body">
+      <img class="logo" src="/static/logo.png" alt="Alpha-IT-Innovations">
+      <h1>Freigabe erforderlich</h1>
+
+      {% if titel %}
+        <div class="ticket">
+          <strong>{{ titel }}</strong><br>
+          Auftrag #{{ auftrag_id }} · Phase: {{ phase_label }}
+        </div>
+      {% endif %}
+
+      <div class="frage">{{ frage }}</div>
+
+      {% if fehler %}
+        <div class="fehler">{{ fehler }}</div>
+      {% endif %}
+
+      {# Entschieden wird ausschliesslich per POST: ein GET-Aufruf (Vorschau im
+         Mail-Client, Sicherheits-Scanner) darf nichts ausloesen. #}
+      <form method="post" action="{{ post_url }}">
+        <input type="hidden" name="token" value="{{ token }}">
+
+        <label for="reason">
+          Begründung{% if require_reason %} (bei Ablehnung erforderlich){% else %} (optional){% endif %}
+        </label>
+        <textarea id="reason" name="reason" maxlength="5000"
+                  placeholder="Kurze Begründung …">{{ reason }}</textarea>
+
+        <div class="buttons">
+          <button type="submit" name="act" value="approve" class="ok">&#10003; {{ approve_label }}</button>
+          <button type="submit" name="act" value="reject" class="no">&#10007; {{ reject_label }}</button>
+        </div>
+      </form>
+
+      <p class="hint">
+        {% if vorauswahl == "reject" %}
+          Sie haben in der E-Mail „{{ reject_label }}“ gewählt. Die Entscheidung
+          wird erst mit dem Klick oben wirksam – Sie können hier noch umentscheiden.
+        {% else %}
+          Sie haben in der E-Mail „{{ approve_label }}“ gewählt. Die Entscheidung
+          wird erst mit dem Klick oben wirksam – Sie können hier noch umentscheiden.
+        {% endif %}
+      </p>
+
+      <div class="foot">AlphaRequest · Alpha-IT-Innovations</div>
+    </div>
+  </div>
+</body>
+</html>

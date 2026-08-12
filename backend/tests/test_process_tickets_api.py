@@ -232,8 +232,46 @@ def test_unbeteiligte_abteilung_kann_nicht_abschliessen(client):
 
 def test_reject_then_locked(client):
     tid = client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
-    assert client.post(f"/process-tickets/{tid}:reject").json()["data"]["status"] == "rejected"
+    r = client.post(f"/process-tickets/{tid}:reject", json={"reason": "Budget gestrichen"})
+    assert r.json()["data"]["status"] == "rejected"
     assert client.patch(f"/process-tickets/{tid}", json={"values": {"base.age": 1}}).status_code == 409
+
+
+def test_ablehnung_verlangt_eine_begruendung(client):
+    """Ohne Grund ist eine Ablehnung im Verlauf nicht erklärbar und die
+    antragstellende Person erfährt nie, was zu ändern wäre."""
+    tid = client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}:reject", json={"reason": "   "})
+    assert r.status_code == 422
+    assert r.json()["error"]["fields"][0]["path"] == "reason"
+    # Der Auftrag darf dadurch NICHT angefasst worden sein.
+    assert client.get(f"/process-tickets/{tid}").json()["data"]["status"] == "in_progress"
+
+
+def test_abteilungs_ablehnung_verlangt_eine_begruendung(client):
+    """Sie lehnt den GANZEN Auftrag ab – derselbe Zwang wie bei :reject."""
+    tid = client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    client.post(f"/process-tickets/{tid}:advance")
+    r = client.post(f"/process-tickets/{tid}/departments/g_it:reject", json={})
+    assert r.status_code == 422
+    assert r.json()["error"]["fields"][0]["path"] == "note"
+    ok = client.post(f"/process-tickets/{tid}/departments/g_it:reject",
+                     json={"note": "Gerät nicht lieferbar"})
+    assert ok.status_code == 200 and ok.json()["data"]["status"] == "rejected"
+
+
+def test_feld_zugriff_wird_mitgeliefert(client):
+    """Das Formular kennt die Gruppen nicht – der Server sagt, was sichtbar und
+    was in DIESER Phase bearbeitbar ist."""
+    tid = client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    d = client.get(f"/process-tickets/{tid}").json()["data"]
+    assert d["visible_fields"] == ["base.age", "base.name"]
+    assert d["editable_fields"] == ["base.age", "base.name"]
+    # Zweite Phase: dort ist base.name nur noch readonly, base.age gar nicht dabei.
+    client.post(f"/process-tickets/{tid}:advance")
+    d2 = client.get(f"/process-tickets/{tid}").json()["data"]
+    assert d2["editable_fields"] == []
+    assert "base.name" in d2["visible_fields"]
 
 
 def test_list_returns_meta(client):
@@ -254,3 +292,22 @@ def test_list_does_not_load_definition_per_row(client, defs):
     r = client.get("/process-tickets")
     assert r.status_code == 200 and len(r.json()["data"]) == 4
     assert defs.definition_loads == 1, f"{defs.definition_loads} Definitions-Ladevorgänge für 4 Zeilen"
+
+
+def test_gepinnte_definition_haengt_am_ticket_zugriff(client):
+    """Das Formular braucht die Definition. Sie über den Verwaltungs-Endpunkt zu
+    holen, würde für normale Beteiligte in 403 laufen – deshalb ein eigener
+    Endpunkt, der allein am Zugriff auf den AUFTRAG hängt."""
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.get(f"/process-tickets/{tid}/definition")
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["key"] == "demo"
+    assert [p["key"] for p in d["phases"]] == ["start", "review"]
+    # Keine Feldwerte im Bauplan.
+    assert "values" not in d
+
+
+def test_definition_unbekanntes_ticket(client):
+    assert client.get("/process-tickets/999/definition").status_code == 404

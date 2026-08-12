@@ -10,8 +10,9 @@ import type {
 } from '@/types/process'
 import {
   ACTION_TYPES, ENTER_STATUS, PHASE_KINDS, PHASE_VIEWS, PRIORITIES, RECIPIENTS,
-  SCHEMA_VERSION, WIDGETS_SUB, WIDGETS_TOP, isValidFieldKey, isValidPhaseKey,
-  isValidProcessKey,
+  RESPONSIBILITY_KINDS,
+  SCHEMA_VERSION, SEQUENCE_COUNTERS, WIDGETS_SUB, WIDGETS_TOP, WIDGET_LABEL, backToTarget,
+  isValidFieldKey, isValidOnReject, isValidPhaseKey, isValidProcessKey,
 } from '@/lib/processSchema'
 import { isValidDuration } from '@/lib/isoDuration'
 
@@ -145,6 +146,41 @@ export function validateDefinition(
       out.push(err(`${p}.computed`, anchor, 'UNKNOWN_REF',
         `Abgeleitet aus „${f.computed.from}" – dieses Feld gibt es nicht.`))
     }
+
+    // ── Vom Server vergebene Nummer (widget=server_generated + assign) ──
+    if (f.widget === 'server_generated' && !f.assign) {
+      out.push(err(`${p}.assign`, anchor, 'REQUIRED',
+        'Ein vom System vergebener Wert braucht die Angabe, woher die Nummer kommt.'))
+    }
+    if (f.assign) {
+      if (f.widget !== 'server_generated') {
+        out.push(warn(`${p}.assign`, anchor, 'INVALID',
+          `Die Nummernvergabe wirkt nur beim Feldtyp „${WIDGET_LABEL.server_generated}" – `
+          + 'bei diesem Feldtyp bleibt sie wirkungslos.'))
+      }
+      if (f.assign.action !== 'assign_sequence') {
+        out.push(err(`${p}.assign.action`, anchor, 'UNSUPPORTED',
+          `„${f.assign.action}" ist keine Vergabe-Aktion (erlaubt: Nummer aus Nummernkreis).`))
+      }
+      if (!f.assign.counter) {
+        out.push(err(`${p}.assign.counter`, anchor, 'REQUIRED',
+          'Bitte den Nummernkreis angeben, aus dem die Nummer kommt.'))
+      } else if (!SEQUENCE_COUNTERS.includes(f.assign.counter)) {
+        // Der Server prüft den Namen NICHT – die Vergabe scheitert erst beim
+        // Phasenabschluss. Darum warnen statt blockieren.
+        out.push(warn(`${p}.assign.counter`, anchor, 'UNKNOWN_COUNTER',
+          `Nummernkreis „${f.assign.counter}" ist der Laufzeit unbekannt – die Vergabe `
+          + `bricht später ab. Bekannt: ${SEQUENCE_COUNTERS.join(', ')}.`))
+      }
+      if (!f.assign.companyRef) {
+        out.push(warn(`${p}.assign.companyRef`, anchor, 'REQUIRED',
+          'Ohne Firmen-Feld gibt es keinen Nummernkreis – die Vergabe bricht beim '
+          + 'Abschluss der Phase ab.'))
+      } else if (!catalog.has(f.assign.companyRef)) {
+        out.push(warn(`${p}.assign.companyRef`, anchor, 'UNKNOWN_REF',
+          `Firmen-Feld „${f.assign.companyRef}" ist nicht im Katalog.`))
+      }
+    }
     const c = f.constraints
     if (c?.pattern) {
       try { new RegExp(c.pattern) } catch {
@@ -182,6 +218,21 @@ export function validateDefinition(
   d.automations.forEach((a) => countAuto(a.id))
 
   const roComputed = new Set(d.fields.filter((f) => f.computed && !f.overridable).map((f) => f.key))
+  /** Felder, die ausschließlich der Server füllt – in keiner Phase beschreibbar. */
+  const serverAssigned = new Set(d.fields.filter((f) => f.widget === 'server_generated')
+    .map((f) => f.key))
+  const phaseKeys = d.phases.map((ph) => ph.key)
+
+  // Ein server_generated-Feld wird beim Abschluss der ERSTEN Phase vergeben, die
+  // es führt. Bindet es keine Phase ein, bekommt es nie eine Nummer.
+  serverAssigned.forEach((k) => {
+    if (!d.phases.some((ph) => ph.fields.some((fr) => fr.ref === k))) {
+      const idx = d.fields.findIndex((f) => f.key === k)
+      out.push(warn(`fields.${idx}`, `pe-catalog-${idx}`, 'NEVER_ASSIGNED',
+        `„${k}" wird vom System vergeben, ist aber in keiner Phase eingebunden – `
+        + 'damit bekommt es nie eine Nummer.'))
+    }
+  })
 
   d.phases.forEach((ph, i) => {
     const anchor = `pe-phase-${i}`
@@ -210,26 +261,85 @@ export function validateDefinition(
         'Zurücksetzen bei Änderung ist noch nicht umgesetzt.'))
     }
 
+    // ── Freigabe-Phase: Art, Ansicht und Block gehören zusammen ──
+    const ap = ph.approval
+    if (ph.kind === 'approval' && !ap) {
+      out.push(err(`${p}.approval`, anchor, 'REQUIRED',
+        'Eine Freigabe-Phase braucht eine Frage und das Verhalten bei „Nein".'))
+    }
+    if (ph.kind !== 'approval' && ap) {
+      out.push(err(`${p}.approval`, anchor, 'INVALID',
+        'Freigabe-Angaben sind nur bei der Phasen-Art „Freigabe" erlaubt.'))
+    }
+    if (ph.view === 'approval' && ph.kind !== 'approval') {
+      out.push(err(`${p}.view`, anchor, 'INVALID',
+        'Die Ansicht „Freigabe" passt nur zur Phasen-Art „Freigabe".'))
+    }
+    if (ap) {
+      if (!ap.question?.trim()) {
+        out.push(err(`${p}.approval.question`, anchor, 'REQUIRED',
+          'Ohne Frage weiß niemand, worüber entschieden wird.'))
+      }
+      if (!isValidDuration(ap.linkMaxAge)) {
+        out.push(err(`${p}.approval.linkMaxAge`, anchor, 'INVALID',
+          `Ungültige Gültigkeit „${ap.linkMaxAge}" (z. B. P7D, PT12H; Monate/Jahre `
+          + 'nicht möglich).'))
+      }
+      for (const [feld, lbl] of [[ap.decisionField, 'Entscheidungs-Feld'],
+        [ap.reasonField, 'Begründungs-Feld']] as const) {
+        if (feld && !catalog.has(feld)) {
+          out.push(err(`${p}.approval`, anchor, 'UNKNOWN_REF',
+            `${lbl} „${feld}" ist nicht im Katalog.`))
+        }
+      }
+      if (!isValidOnReject(ap.onReject)) {
+        out.push(err(`${p}.approval.onReject`, anchor, 'INVALID',
+          `Verhalten bei „Nein" ist unbekannt: „${ap.onReject}".`))
+      } else {
+        const ziel = backToTarget(ap.onReject)
+        if (ziel && !phaseKeys.includes(ziel)) {
+          out.push(err(`${p}.approval.onReject`, anchor, 'UNKNOWN_REF',
+            `Rücksprung auf „${ziel}" – diese Phase gibt es nicht.`))
+        } else if (ziel && phaseKeys.indexOf(ziel) >= i) {
+          // Ein Sprung nach vorn (oder auf sich selbst) würde Arbeit überspringen.
+          out.push(err(`${p}.approval.onReject`, anchor, 'INVALID',
+            `Rücksprung auf „${ziel}": das Ziel muss VOR dieser Phase liegen.`))
+        }
+      }
+    }
+
     const r = ph.responsibility
+    if (!RESPONSIBILITY_KINDS.includes(r.kind)) {
+      out.push(err(`${p}.responsibility.kind`, anchor, 'UNSUPPORTED',
+        `Zuständigkeit „${r.kind}" ist nicht verfügbar.`))
+    }
     if (r.kind === 'group' && !r.group) {
       out.push(err(`${p}.responsibility.group`, anchor, 'REQUIRED', 'Bitte eine Fachabteilung wählen.'))
     }
     if (r.kind === 'user' && !r.user) {
       out.push(err(`${p}.responsibility.user`, anchor, 'REQUIRED', 'Bitte eine Person wählen.'))
     }
-    if (r.kind === 'assignable') {
-      // Ohne gültiges Personen-Feld hätte die Phase niemanden – und der Server
-      // lehnt sie ohnehin ab.
+    // Zuständigkeit aus einem FELD: die Quelle muss existieren UND vom richtigen
+    // Typ sein – sonst stünde dort später irgendein Text statt einer Kennung.
+    // Ohne gültige Quelle hätte die Phase niemanden; der Server lehnt sie ab.
+    const AUS_FELD = {
+      assignable: { widget: 'user' as const, was: 'Personen-Feld' },
+      group_from_field: { widget: 'group' as const, was: 'Fachabteilungs-Feld' },
+    }
+    const erwartet = r.kind === 'assignable' || r.kind === 'group_from_field'
+      ? AUS_FELD[r.kind] : null
+    if (erwartet) {
       const src = d.fields.find((f) => f.key === r.fromField)
       if (!r.fromField) {
         out.push(err(`${p}.responsibility.fromField`, anchor, 'REQUIRED',
-          'Bitte das Personen-Feld angeben, aus dem die Zuständigkeit kommt.'))
+          `Bitte das ${erwartet.was} angeben, aus dem die Zuständigkeit kommt.`))
       } else if (!src) {
         out.push(err(`${p}.responsibility.fromField`, anchor, 'UNKNOWN_REF',
           `Feld „${r.fromField}" ist nicht im Katalog.`))
-      } else if (src.widget !== 'user') {
+      } else if (src.widget !== erwartet.widget) {
         out.push(err(`${p}.responsibility.fromField`, anchor, 'INVALID',
-          `„${r.fromField}" muss ein Personen-Feld sein (aktuell „${src.widget}").`))
+          `„${r.fromField}" muss ein ${erwartet.was} sein `
+          + `(aktuell „${WIDGET_LABEL[src.widget] ?? src.widget}").`))
       }
     }
     if (r.kind === 'departments' && r.rule.length === 0) {
@@ -273,9 +383,15 @@ export function validateDefinition(
           `Feld „${fr.ref}" ist in dieser Phase mehrfach eingebunden.`))
       }
       seenRefs.add(fr.ref)
-      if (roComputed.has(fr.ref) && (fr.mode === 'editable' || fr.mode === 'append_only')) {
+      const beschreibbar = fr.mode === 'editable' || fr.mode === 'append_only'
+      if (roComputed.has(fr.ref) && beschreibbar) {
         out.push(err(`${fp}.mode`, fanchor, 'COMPUTED_NOT_EDITABLE',
           `„${fr.ref}" wird berechnet und darf nicht bearbeitbar sein.`))
+      }
+      if (serverAssigned.has(fr.ref) && beschreibbar) {
+        out.push(err(`${fp}.mode`, fanchor, 'SERVER_FIELD_NOT_EDITABLE',
+          `„${fr.ref}" wird vom System vergeben und darf nicht bearbeitbar sein `
+          + '(nur „Nur lesen" oder „Ausgeblendet").'))
       }
       for (const [cond, label] of [[fr.requiredWhen, 'Pflicht-Bedingung'],
         [fr.visibleWhen, 'Anzeige-Bedingung']] as const) {
@@ -422,6 +538,22 @@ export function validateDefinition(
     }
     if (ac.type === 'set_priority' && !PRIORITIES.includes(String(ac.value))) {
       out.push(err(`${path}.action.value`, anchor, 'INVALID', 'Unbekannte Priorität.'))
+    }
+    if (ac.type === 'assign_sequence') {
+      if (!ac.counter) {
+        out.push(err(`${path}.action.counter`, anchor, 'REQUIRED', 'Nummernkreis fehlt.'))
+      } else if (!SEQUENCE_COUNTERS.includes(ac.counter)) {
+        out.push(warn(`${path}.action.counter`, anchor, 'UNKNOWN_COUNTER',
+          `Nummernkreis „${ac.counter}" ist der Laufzeit unbekannt `
+          + `(bekannt: ${SEQUENCE_COUNTERS.join(', ')}).`))
+      }
+      if (!ac.field) {
+        out.push(err(`${path}.action.field`, anchor, 'REQUIRED',
+          'Feld fehlt – ohne Ziel wüsste niemand, wohin die Nummer geschrieben wird.'))
+      } else if (!catalog.has(ac.field)) {
+        out.push(err(`${path}.action.field`, anchor, 'UNKNOWN_REF',
+          `Unbekanntes Feld „${ac.field}".`))
+      }
     }
   })
 

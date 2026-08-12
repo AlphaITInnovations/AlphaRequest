@@ -2,7 +2,7 @@
 /** Zuständigkeit einer Phase: wer bearbeitet sie? */
 import type { Condition, DepartmentRule, Responsibility, ResponsibilityKind } from '@/types/process'
 import {
-  RESPONSIBILITY_KINDS, RESPONSIBILITY_LABEL, blankDepartmentRule,
+  RESPONSIBILITY_KINDS, RESPONSIBILITY_LABEL, blankDepartmentRule, responsibilityKindPatch,
 } from '@/lib/processSchema'
 import { computed } from 'vue'
 import GroupPicker from './GroupPicker.vue'
@@ -14,7 +14,10 @@ const props = defineProps<{
   groups: { id: string; name: string }[]
   users: { id: string; displayName: string }[]
   fieldKeys: string[]
-  /** Feld-Katalog: gebraucht, um Personen-Felder für kind=assignable anzubieten. */
+  /**
+   * Feld-Katalog: gebraucht, um die Quellfelder anzubieten – Personen-Felder für
+   * kind=assignable, Fachabteilungs-Felder für kind=group_from_field.
+   */
   catalog?: { key: string; widget: string }[]
   fieldLabels?: Record<string, string>
   readonly?: boolean
@@ -22,25 +25,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: Responsibility] }>()
 
-/** Nur Personen-Felder taugen als Zuständigkeits-Quelle. */
+/** Nur Personen-Felder taugen als Quelle für „Person aus einem Feld". */
 const userFieldKeys = computed(() =>
   (props.catalog ?? []).filter((f) => f.widget === 'user').map((f) => f.key))
+/** Nur Fachabteilungs-Felder taugen als Quelle für „Fachabteilung aus einem Feld". */
+const groupFieldKeys = computed(() =>
+  (props.catalog ?? []).filter((f) => f.widget === 'group').map((f) => f.key))
 
 function patch(part: Partial<Responsibility>) {
   emit('update:modelValue', { ...props.modelValue, ...part })
 }
 
 function setKind(kind: ResponsibilityKind) {
-  // Nicht mehr passende Felder zurücksetzen – der Server prüft sie streng.
-  patch({
-    kind,
-    group: kind === 'group' ? props.modelValue.group : null,
-    user: kind === 'user' ? props.modelValue.user : null,
-    fromField: kind === 'assignable' ? props.modelValue.fromField : null,
-    rule: kind === 'departments'
-      ? (props.modelValue.rule.length ? props.modelValue.rule : [blankDepartmentRule()])
-      : [],
-  })
+  // Nicht mehr passende Angaben fliegen raus – der Server prüft sie streng.
+  emit('update:modelValue', responsibilityKindPatch(props.modelValue, kind))
 }
 
 function patchRule(i: number, part: Partial<DepartmentRule>) {
@@ -89,6 +87,26 @@ function removeRule(i: number) { patch({ rule: props.modelValue.rule.filter((_, 
       </p>
     </div>
 
+    <div v-else-if="modelValue.kind === 'group_from_field'">
+      <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+        Fachabteilungs-Feld, das die Zuständigkeit trägt
+      </label>
+      <select :value="modelValue.fromField ?? ''" :disabled="readonly" class="afi w-full"
+              @change="patch({ fromField: ($event.target as HTMLSelectElement).value || null })">
+        <option value="">– bitte wählen –</option>
+        <option v-for="k in groupFieldKeys" :key="k" :value="k">
+          {{ fieldLabels?.[k] || k }}
+        </option>
+      </select>
+      <p v-if="!groupFieldKeys.length" class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+        Es gibt noch kein Feld vom Typ „Fachabteilung" – bitte zuerst im Feld-Katalog anlegen.
+      </p>
+      <p v-else class="text-[11px] text-gray-400 mt-1">
+        Zuständig ist die Fachabteilung, die in diesem Feld steht – die erstellende
+        Person wählt sie also selbst aus (Muster des Basis-Tickets).
+      </p>
+    </div>
+
     <div v-else-if="modelValue.kind === 'user'">
       <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Person</label>
       <select :value="modelValue.user ?? ''" :disabled="readonly" class="afi w-full"
@@ -132,9 +150,6 @@ function removeRule(i: number) { patch({ rule: props.modelValue.rule.filter((_, 
 
     <p v-else-if="modelValue.kind === 'owner'" class="text-xs text-gray-400">
       Die Person, die den Auftrag angelegt hat, bearbeitet diese Phase.
-    </p>
-    <p v-else-if="modelValue.kind === 'originator'" class="text-xs text-gray-400">
-      Die auslösende Person eines Folgeprozesses. (Nur sinnvoll bei verknüpften Prozessen.)
     </p>
 
     <!-- Gilt für jede Zuständigkeits-Art, daher NACH der Kette (nicht darin). -->

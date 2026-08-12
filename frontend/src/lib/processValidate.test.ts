@@ -79,15 +79,16 @@ describe('validateDefinition – serverseitig abgelehnte Werte', () => {
     expect(codes(d)).toContain('UNSUPPORTED')
   })
 
-  it('lehnt nicht implementierte Phasen-Arten ab', () => {
-    const d = defn({ phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' } },
-      { key: 'frei', kind: 'approval', responsibility: { kind: 'owner' } }] })
-    expect(codes(d)).toContain('UNSUPPORTED')
+  it('lehnt gestrichene Aktionen ab (spawn_process/require_attachment)', () => {
+    for (const type of ['spawn_process', 'require_attachment']) {
+      const d = defn({ automations: [{ id: 'x', trigger: { type: 'on_enter' }, action: { type } }] })
+      expect(codes(d)).toContain('UNSUPPORTED')
+    }
   })
 
-  it('lehnt nicht implementierte Aktionen ab', () => {
-    const d = defn({ automations: [{ id: 'x', trigger: { type: 'on_enter' },
-      action: { type: 'spawn_process', process: 'y' } }] })
+  it('lehnt die gestrichene Zuständigkeit „originator" ab', () => {
+    const d = defn({ phases: [{ key: 'start', kind: 'start',
+      responsibility: { kind: 'originator' } }] })
     expect(codes(d)).toContain('UNSUPPORTED')
   })
 
@@ -122,6 +123,206 @@ describe('validateDefinition – serverseitig abgelehnte Werte', () => {
         automations: [{ id: 'dup', trigger: { type: 'on_enter' }, action: { type: 'notify', to: 'owner' } }] }],
     })
     expect(codes(d)).toContain('DUPLICATE_KEY')
+  })
+})
+
+// ── Freigeschaltete Werte + ihre neuen Regeln ────────────────────────────────
+
+const START = { key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+  fields: [{ ref: 'base.name', required: true }] }
+
+/** Prozess mit Start-Phase + einer Freigabe-Phase (Abweichungen per `over`). */
+function withApproval(over: Record<string, unknown> = {}, felder?: unknown[]) {
+  return defn({
+    ...(felder ? { fields: felder } : {}),
+    phases: [START, {
+      key: 'freigabe', kind: 'approval', view: 'approval',
+      responsibility: { kind: 'user', user: 'u1' },
+      approval: { question: 'Wirklich freigeben?', ...over },
+    }],
+  })
+}
+
+describe('validateDefinition – freigeschaltete Werte', () => {
+  it('akzeptiert eine vollständige Freigabe-Phase', () => {
+    expect(errorCount(validateDefinition(withApproval()))).toBe(0)
+  })
+
+  it('akzeptiert die Ansicht „Export"', () => {
+    const d = defn({ phases: [START, { key: 'ende', kind: 'end', view: 'export',
+      responsibility: { kind: 'owner' } }] })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('akzeptiert server_generated mit assign', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'firma', widget: 'company' },
+        { key: 'pnr', widget: 'server_generated',
+          assign: { action: 'assign_sequence', counter: 'personalnummer', companyRef: 'firma' } }],
+      phases: [{ ...START, fields: [{ ref: 'base.name' }, { ref: 'pnr', mode: 'readonly' }] }],
+    })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('akzeptiert die Aktion assign_sequence mit Nummernkreis und Feld', () => {
+    const d = defn({ automations: [{ id: 'x', trigger: { type: 'on_enter' },
+      action: { type: 'assign_sequence', counter: 'personalnummer', field: 'base.name' } }] })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('akzeptiert die Zuständigkeit „Fachabteilung aus einem Feld"', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'abteilung', widget: 'group' }],
+      phases: [START, { key: 'bearbeitung', kind: 'task',
+        responsibility: { kind: 'group_from_field', fromField: 'abteilung' } }],
+    })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+})
+
+describe('validateDefinition – Freigabe-Regeln', () => {
+  it('verlangt den Freigabe-Block bei kind=approval', () => {
+    const d = defn({ phases: [START, { key: 'freigabe', kind: 'approval', view: 'approval',
+      responsibility: { kind: 'owner' } }] })
+    expect(codes(d)).toContain('REQUIRED')
+  })
+
+  it('verbietet den Freigabe-Block bei jeder anderen Phasen-Art', () => {
+    const d = defn({ phases: [START, { key: 'arbeit', kind: 'task',
+      responsibility: { kind: 'owner' }, approval: { question: 'Ja?' } }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
+  it('verbietet die Ansicht „Freigabe" ohne die passende Phasen-Art', () => {
+    const d = defn({ phases: [START, { key: 'arbeit', kind: 'task', view: 'approval',
+      responsibility: { kind: 'owner' } }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
+  it('verlangt eine Frage', () => {
+    expect(codes(withApproval({ question: '   ' }))).toContain('REQUIRED')
+  })
+
+  it('prüft die Gültigkeitsdauer des Mail-Links', () => {
+    expect(codes(withApproval({ linkMaxAge: 'P1M' }))).toContain('INVALID')
+    expect(errorCount(validateDefinition(withApproval({ linkMaxAge: 'PT12H' })))).toBe(0)
+  })
+
+  it('meldet ein Rücksprung-Ziel, das es nicht gibt', () => {
+    expect(codes(withApproval({ onReject: 'back_to:gibtsnicht' }))).toContain('UNKNOWN_REF')
+  })
+
+  it('meldet ein Rücksprung-Ziel, das nicht VOR der Freigabe liegt', () => {
+    // Sprung auf sich selbst …
+    expect(codes(withApproval({ onReject: 'back_to:freigabe' }))).toContain('INVALID')
+    // … und ein Sprung nach vorn.
+    const d = defn({ phases: [START,
+      { key: 'freigabe', kind: 'approval', view: 'approval',
+        responsibility: { kind: 'owner' },
+        approval: { question: 'Ja?', onReject: 'back_to:spaeter' } },
+      { key: 'spaeter', kind: 'task', responsibility: { kind: 'owner' } }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
+  it('akzeptiert einen Rücksprung auf eine frühere Phase', () => {
+    expect(errorCount(validateDefinition(withApproval({ onReject: 'back_to:start' })))).toBe(0)
+  })
+
+  it('meldet ein unbekanntes Verhalten bei „Nein"', () => {
+    expect(codes(withApproval({ onReject: 'vielleicht' }))).toContain('INVALID')
+  })
+
+  it('meldet unbekannte Entscheidungs-/Begründungs-Felder', () => {
+    const d = withApproval({ decisionField: 'weg', reasonField: 'auchweg' })
+    expect(validateDefinition(d).filter((i) => i.code === 'UNKNOWN_REF').length).toBe(2)
+  })
+})
+
+describe('validateDefinition – Zuständigkeit aus einem Feld', () => {
+  const mitFeldern = (resp: Record<string, unknown>) => defn({
+    fields: [{ key: 'base.name', widget: 'text' }, { key: 'abteilung', widget: 'group' },
+      { key: 'person', widget: 'user' }],
+    phases: [START, { key: 'arbeit', kind: 'task', responsibility: resp }],
+  })
+
+  it('verlangt das Quellfeld', () => {
+    expect(codes(mitFeldern({ kind: 'group_from_field' }))).toContain('REQUIRED')
+    expect(codes(mitFeldern({ kind: 'assignable' }))).toContain('REQUIRED')
+  })
+
+  it('meldet ein Quellfeld, das es nicht gibt', () => {
+    expect(codes(mitFeldern({ kind: 'group_from_field', fromField: 'weg' })))
+      .toContain('UNKNOWN_REF')
+  })
+
+  it('verlangt den richtigen Feldtyp je Zuständigkeit', () => {
+    // Fachabteilung aus einem PERSONEN-Feld …
+    expect(codes(mitFeldern({ kind: 'group_from_field', fromField: 'person' })))
+      .toContain('INVALID')
+    // … und Person aus einem FACHABTEILUNGS-Feld.
+    expect(codes(mitFeldern({ kind: 'assignable', fromField: 'abteilung' })))
+      .toContain('INVALID')
+  })
+})
+
+describe('validateDefinition – vom Server vergebene Nummern', () => {
+  const mitPnr = (feld: Record<string, unknown>, phase?: Record<string, unknown>) => defn({
+    fields: [{ key: 'base.name', widget: 'text' }, { key: 'firma', widget: 'company' },
+      { key: 'pnr', ...feld }],
+    phases: [{ ...START, fields: [{ ref: 'base.name' }, { ref: 'pnr', mode: 'readonly' },
+      ...(phase ? [phase] : [])] }],
+  })
+
+  it('verlangt die Vergabe-Angaben bei server_generated', () => {
+    expect(codes(mitPnr({ widget: 'server_generated' }))).toContain('REQUIRED')
+  })
+
+  it('verlangt den Nummernkreis', () => {
+    expect(codes(mitPnr({ widget: 'server_generated',
+      assign: { action: 'assign_sequence', companyRef: 'firma' } }))).toContain('REQUIRED')
+  })
+
+  it('lässt nur assign_sequence als Vergabe-Aktion zu', () => {
+    expect(codes(mitPnr({ widget: 'server_generated',
+      assign: { action: 'set_field', counter: 'personalnummer', companyRef: 'firma' } })))
+      .toContain('UNSUPPORTED')
+  })
+
+  it('verbietet ein server_generated-Feld als bearbeitbar', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'firma', widget: 'company' },
+        { key: 'pnr', widget: 'server_generated',
+          assign: { action: 'assign_sequence', counter: 'personalnummer', companyRef: 'firma' } }],
+      phases: [{ ...START, fields: [{ ref: 'pnr', mode: 'editable' }] }],
+    })
+    expect(codes(d)).toContain('SERVER_FIELD_NOT_EDITABLE')
+  })
+
+  it('verlangt Nummernkreis UND Zielfeld bei der Aktion', () => {
+    const ohneBeides = defn({ automations: [{ id: 'x', trigger: { type: 'on_enter' },
+      action: { type: 'assign_sequence' } }] })
+    expect(ohneBeides && validateDefinition(ohneBeides)
+      .filter((i) => i.code === 'REQUIRED').length).toBe(2)
+  })
+
+  it('warnt bei unbekanntem Nummernkreis, blockiert aber nicht', () => {
+    const d = mitPnr({ widget: 'server_generated',
+      assign: { action: 'assign_sequence', counter: 'rechnungsnummer', companyRef: 'firma' } })
+    const issues = validateDefinition(d)
+    expect(issues.some((i) => i.code === 'UNKNOWN_COUNTER' && i.severity === 'warning')).toBe(true)
+    expect(errorCount(issues)).toBe(0)
+  })
+
+  it('warnt, wenn die Nummer nie vergeben werden kann', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'firma', widget: 'company' },
+        { key: 'pnr', widget: 'server_generated',
+          assign: { action: 'assign_sequence', counter: 'personalnummer', companyRef: 'firma' } }],
+      phases: [START],   // keine Phase führt „pnr"
+    })
+    const issues = validateDefinition(d)
+    expect(issues.some((i) => i.code === 'NEVER_ASSIGNED' && i.severity === 'warning')).toBe(true)
+    expect(errorCount(issues)).toBe(0)
   })
 })
 

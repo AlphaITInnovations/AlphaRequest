@@ -8,9 +8,10 @@
  */
 import { computed, ref, watch } from 'vue'
 import type { OptionSources, ProcessDefinition } from '@/types/process'
-import type { SimFieldError, SimState, SimViewer } from '@/lib/processSim'
+import type { ApprovalAct, SimFieldError, SimState, SimViewer } from '@/lib/processSim'
 import {
-  currentPhase, isTerminal, resolveResponsibility, simAdvance, simReject, simSetValues, startSim,
+  currentApproval, currentPhase, isTerminal, resolveResponsibility, responsibilityText,
+  simAdvance, simDecide, simReject, simSetValues, startSim,
 } from '@/lib/processSim'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
@@ -47,6 +48,27 @@ const phase = computed(() => currentPhase(props.definition, state.value.runtime)
 const done = computed(() => isTerminal(props.definition, state.value.runtime))
 const responsibility = computed(() =>
   phase.value ? resolveResponsibility(phase.value, state.value.values) : null)
+const approval = computed(() => currentApproval(props.definition, state.value))
+const reason = ref('')
+
+/** Niemand zuständig – im echten Betrieb bliebe der Auftrag liegen. */
+const offeneZustaendigkeit = computed(() => {
+  const r = responsibility.value
+  if (!r) return false
+  if (r.kind === 'departments') return !r.departments?.length
+  if (r.kind === 'group') return !r.group
+  if (r.kind === 'user') return !r.user
+  return false
+})
+
+function decide(act: ApprovalAct) {
+  const res = simDecide(props.definition, state.value, act, { reason: reason.value })
+  errors.value = res.errors
+  if (!res.errors.length) {
+    state.value = res.state
+    reason.value = ''
+  }
+}
 
 const groupName = (id: string) =>
   props.sources?.groups.find((g) => g.id === id)?.name || id
@@ -57,6 +79,7 @@ watch(() => props.definition, () => reset(), { deep: true })
 function reset() {
   state.value = startSim(props.definition)
   errors.value = []
+  reason.value = ''
 }
 
 function onValues(v: Record<string, unknown>) {
@@ -102,16 +125,9 @@ function reject() { state.value = simReject(state.value) }
           </div>
           <div v-if="responsibility">
             <div class="text-xs text-gray-400">Zuständig</div>
-            <div class="text-sm text-gray-700 dark:text-gray-200">
-              <template v-if="responsibility.kind === 'departments'">
-                <span v-if="!responsibility.departments?.length" class="text-red-500">niemand</span>
-                <span v-else>{{ responsibility.departments.map(d => groupName(d.group)).join(', ') }}</span>
-              </template>
-              <template v-else-if="responsibility.kind === 'group'">
-                {{ groupName(responsibility.group || '') }}
-              </template>
-              <template v-else-if="responsibility.kind === 'owner'">Ersteller:in</template>
-              <template v-else>{{ responsibility.kind }}</template>
+            <div class="text-sm"
+                 :class="offeneZustaendigkeit ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'">
+              {{ responsibilityText(responsibility, groupName) }}
             </div>
           </div>
           <div class="ml-auto">
@@ -139,7 +155,33 @@ function reject() { state.value = simReject(state.value) }
             </ul>
           </div>
 
-          <div class="flex items-center gap-2 mt-3">
+          <!-- Freigabe-Phase: die Frage aus der Definition, zwei Antworten -->
+          <div v-if="approval" class="card-section mt-3 space-y-3">
+            <p class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ approval.question }}</p>
+            <p class="text-xs text-gray-400">
+              Im Betrieb entscheidet die zuständige Stelle
+              {{ approval.externalLink ? 'in der App oder per Mail-Link' : 'nur in der App' }}.
+            </p>
+            <div>
+              <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                Begründung
+                <span v-if="approval.requireReason">(bei „{{ approval.rejectLabel }}" Pflicht)</span>
+              </label>
+              <textarea v-model="reason" rows="2" class="afi w-full resize-none"
+                        placeholder="Nur nötig, wenn abgelehnt wird" />
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="decide('approve')"
+                      class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7] transition">
+                {{ approval.approveLabel }}
+              </button>
+              <button @click="decide('reject')" class="btn-secondary text-sm">
+                {{ approval.rejectLabel }}
+              </button>
+            </div>
+          </div>
+
+          <div v-else class="flex items-center gap-2 mt-3">
             <button @click="advance"
                     class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7] transition">
               Phase abschließen

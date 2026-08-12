@@ -19,6 +19,11 @@ import type {
   ProcessDefinition, SubField,
 } from '@/types/process'
 import { colSpanClass, resolveLayout, REST_SECTION_TITLE } from '@/lib/processLayout'
+// Die Wertdarstellung liegt in einem reinen Modul, damit die Export-/Druckansicht
+// (lib/processPdf.ts) Zeichen für Zeichen dasselbe zeigt wie diese Lese-Ansicht.
+import {
+  collectionEntries, fieldValueText, isWideWidget, subFieldLabel, subValueText,
+} from '@/lib/processFieldFormat'
 import { visibleFieldKeys } from '@/lib/processSim'
 import type { SimViewer } from '@/lib/processSim'
 import LayoutSection from './LayoutSection.vue'
@@ -46,13 +51,8 @@ interface DecoRow { kind: 'deco'; key: string; cols: number; item: LayoutItem }
 type Row = FieldRow | DecoRow
 interface Block { section: LayoutSectionDef; rows: Row[] }
 
-/** Volle Breite für alles, was in einer schmalen Spalte unlesbar würde. */
-function isWide(f: FieldDef): boolean {
-  return f.widget === 'textarea' || f.widget === 'collection' || f.widget === 'attachment'
-}
-
 function fieldRow(f: FieldDef, cols: number): FieldRow {
-  return { kind: 'field', key: `f:${f.key}`, cols: isWide(f) ? 12 : cols, f }
+  return { kind: 'field', key: `f:${f.key}`, cols: isWideWidget(f.widget) ? 12 : cols, f }
 }
 
 function section(title: string, variant: LayoutSectionDef['variant']): LayoutSectionDef {
@@ -108,56 +108,18 @@ const blocks = computed<Block[]>(() => {
 /** Wie viele Katalogfelder die aktuelle Rolle nicht sehen darf. */
 const hiddenCount = computed(() => catalog.value.length - allowed.value.size)
 
-// ── Werte lesbar machen ──────────────────────────────────────────────────────
+// ── Werte lesbar machen (Logik in lib/processFieldFormat.ts) ─────────────────
 
-function userName(id: string): string {
-  return props.sources?.users.find((u) => u.id === id)?.displayName || id
-}
-function groupName(id: string): string {
-  return props.sources?.groups.find((g) => g.id === id)?.name || id
-}
-
-/** Einen einzelnen Wert über Optionen bzw. Stammdaten in einen Namen übersetzen. */
-function labelOfValue(f: FieldDef, raw: unknown): string {
-  const v = String(raw)
-  if (f.widget === 'user' || f.optionsSource === 'users') return userName(v)
-  if (f.widget === 'group' || f.optionsSource === 'groups') return groupName(v)
-  const opt = (f.options ?? []).find((o) => o.value === v)
-  return opt ? (opt.label ?? opt.value) : v
-}
-
-function display(f: FieldDef, raw: unknown): string {
-  if (raw === null || raw === undefined || raw === '') return '—'
-  if (typeof raw === 'boolean') return raw ? 'Ja' : 'Nein'
-  if (Array.isArray(raw)) {
-    return raw.length ? raw.map((x) => labelOfValue(f, x)).join(', ') : '—'
-  }
-  if (typeof raw === 'object') return JSON.stringify(raw)
-  return labelOfValue(f, raw)
-}
+const display = (f: FieldDef, raw: unknown): string => fieldValueText(f, raw, props.sources)
 
 // ── Wiederholgruppen ─────────────────────────────────────────────────────────
 
 const isCollection = (f: FieldDef) => f.widget === 'collection'
 
-function rowsOf(f: FieldDef): Record<string, unknown>[] {
-  const raw = vals.value[f.key]
-  if (!Array.isArray(raw)) return []
-  return raw.map((e) =>
-    e && typeof e === 'object' && !Array.isArray(e) ? (e as Record<string, unknown>) : {})
-}
+const rowsOf = (f: FieldDef): Record<string, unknown>[] => collectionEntries(vals.value[f.key])
 
-function subLabel(sf: SubField): string {
-  return sf.label || sf.key
-}
-
-function subText(v: unknown): string {
-  if (v === null || v === undefined || v === '') return '—'
-  if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
-  if (Array.isArray(v)) return v.length ? v.map((x) => String(x)).join(', ') : '—'
-  if (typeof v === 'object') return JSON.stringify(v)
-  return String(v)
-}
+const subLabel = (sf: SubField): string => subFieldLabel(sf)
+const subText = (v: unknown): string => subValueText(v)
 </script>
 
 <template>

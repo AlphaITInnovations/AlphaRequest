@@ -52,7 +52,64 @@ export async function advanceTicket(id: number): Promise<ProcessTicketOut> {
   return data.data
 }
 
-export async function rejectTicket(id: number): Promise<ProcessTicketOut> {
-  const { data } = await client.post(`/process-tickets/${id}:reject`)
+/** Begründung ist PFLICHT – ohne sie antwortet der Server mit 422. */
+export async function rejectTicket(id: number, reason: string): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:reject`, { reason })
+  return data.data
+}
+
+/**
+ * Die GEPINNTE Definition dieses Auftrags. Bewusst NICHT über
+ * /processes/{key}/versions/{v}: das verlangt Verwaltungsrechte (dort kommt man
+ * auch an unveröffentlichte Entwürfe). Hier entscheidet der Zugriff auf den
+ * AUFTRAG – wer ihn sehen darf, darf auch wissen, wie er aufgebaut ist.
+ */
+export async function getPinnedDefinition(id: number): Promise<unknown> {
+  const { data } = await client.get(`/process-tickets/${id}/definition`)
+  return data.data
+}
+
+// ── Fachabteilungen einzeln quittieren ───────────────────────────────────────
+//
+// Eine Fachabteilungs-Phase ist erst fertig, wenn jede PFLICHT-Abteilung
+// quittiert hat; bis dahin lehnt `:advance` mit 409 DEPARTMENT_FORBIDDEN ab.
+// Wer quittieren darf, entscheidet ausschließlich der Server (Mitgliedschaft in
+// genau dieser Abteilung oder Aufsicht) – sonst 403 DEPARTMENT_FORBIDDEN.
+// Alle drei Endpunkte liefern den AKTUALISIERTEN Auftrag zurück.
+
+/**
+ * Gruppen-IDs kommen aus dem Verzeichnisdienst und dürfen Sonderzeichen
+ * enthalten – nur die ID kodieren, das `:aktion`-Suffix gehört zur Route.
+ */
+function departmentUrl(ticketId: number, groupId: string, aktion: string): string {
+  return `/process-tickets/${ticketId}/departments/${encodeURIComponent(groupId)}:${aktion}`
+}
+
+/** Diese Fachabteilung hat ihren Teil erledigt. */
+export async function completeDepartment(
+  ticketId: number, groupId: string, note?: string | null,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(departmentUrl(ticketId, groupId, 'complete'),
+                                     { note: note || null })
+  return data.data
+}
+
+/** Nicht zuständig / nichts zu tun – gilt als erledigt, ohne Bearbeitung. */
+export async function skipDepartment(
+  ticketId: number, groupId: string, note?: string | null,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(departmentUrl(ticketId, groupId, 'skip'),
+                                     { note: note || null })
+  return data.data
+}
+
+/**
+ * Ablehnung durch eine Fachabteilung – beendet den GESAMTEN Auftrag, nicht nur
+ * den Teil dieser Abteilung. Die Begründung ist Pflicht (ohne: 422).
+ */
+export async function rejectDepartment(
+  ticketId: number, groupId: string, note: string,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(departmentUrl(ticketId, groupId, 'reject'), { note })
   return data.data
 }

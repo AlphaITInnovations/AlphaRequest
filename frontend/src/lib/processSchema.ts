@@ -3,23 +3,27 @@
  * und Leer-Vorlagen.
  *
  * WICHTIG: Der Editor darf ausschließlich anbieten, was das Backend auch
- * annimmt. Das Backend lehnt beim Speichern ab, was die Laufzeit (noch) nicht
- * umsetzt – siehe UNIMPLEMENTED_* in backend/schemas/process_definition.py.
- * Wird dort etwas nachgerüstet, gehören die Werte HIER wieder hinein.
+ * annimmt – nicht mehr und nicht weniger. Das Backend lehnt beim Speichern ab,
+ * was die Laufzeit nicht umsetzt (UNIMPLEMENTED_* in
+ * backend/schemas/process_definition.py; die Mengen sind derzeit LEER, es ist
+ * also alles nutzbar, was das Schema kennt). Wird dort künftig ein Wert
+ * eingetragen, gehört er HIER aus der Whitelist heraus.
  */
 import type {
   LayoutItem, LayoutItemType, LayoutSection, LayoutWidth, NoteTone, SectionVariant,
-  ActionType, Automation, DepartmentRule, FieldDef, FieldMode, FieldRef, OptionsSource,
+  ActionType, ApprovalSpec, AssignSpec, Automation, DepartmentRule, FieldDef, FieldMode,
+  FieldRef, OptionsSource,
   CreatePermissions, PhaseDef, PhaseKind, PhaseView, ProcessDefinition, Responsibility, ResponsibilityKind,
   SubField, Widget,
 } from '@/types/process'
 
 // ── Whitelists (nur serverseitig Erlaubtes) ───────────────────────────────────
 
-/** Widgets im Feld-Katalog: server_generated/server_stamped sind hier verboten. */
+/** Widgets im Feld-Katalog: server_stamped gibt es nur in collection-Unterfeldern. */
 export const WIDGETS_TOP: readonly Widget[] = [
   'text', 'textarea', 'number', 'date', 'select', 'multiselect', 'checkbox',
   'checkbox-group', 'attachment', 'user', 'company', 'group', 'collection',
+  'server_generated',
 ]
 
 /** Widgets in collection-Unterfeldern: kein collection, aber server_stamped erlaubt. */
@@ -30,18 +34,31 @@ export const WIDGETS_SUB: readonly Widget[] = [
   'attachment', 'user', 'company', 'group', 'server_stamped',
 ]
 
-export const PHASE_KINDS: readonly PhaseKind[] = ['start', 'task', 'review', 'end']
-export const PHASE_VIEWS: readonly PhaseView[] = ['form', 'readonly', 'review']
+export const PHASE_KINDS: readonly PhaseKind[] = ['start', 'task', 'approval', 'review', 'end']
+export const PHASE_VIEWS: readonly PhaseView[] =
+  ['form', 'readonly', 'approval', 'review', 'export']
 export const RESPONSIBILITY_KINDS: readonly ResponsibilityKind[] =
-  ['owner', 'assignable', 'group', 'departments', 'user', 'originator']
+  ['owner', 'assignable', 'group', 'group_from_field', 'departments', 'user']
 export const FIELD_MODES: readonly FieldMode[] = ['editable', 'readonly', 'hidden', 'append_only']
 export const OPTIONS_SOURCES: readonly OptionsSource[] = ['static', 'groups', 'companies', 'users']
 export const TRIGGER_TYPES = ['on_enter', 'on_exit', 'on_field_change', 'timer'] as const
 
-/** Actions ohne die serverseitig abgelehnten (spawn_process/assign_sequence/require_attachment). */
 export const ACTION_TYPES: readonly ActionType[] = [
-  'notify', 'escalate', 'set_field', 'set_priority', 'set_status', 'auto_advance',
+  'notify', 'escalate', 'set_field', 'set_priority', 'set_status', 'assign_sequence',
+  'auto_advance',
 ]
+
+/**
+ * Nummernkreise, die die Laufzeit kennt (Spiegel von KNOWN_COUNTERS in
+ * backend/services/process_sequences.py). Das Meta-Schema prüft den Namen NICHT –
+ * ein unbekannter Nummernkreis lässt sich also speichern und scheitert erst beim
+ * Phasenabschluss. Der Editor warnt deshalb, blockiert aber nicht.
+ */
+export const SEQUENCE_COUNTERS: readonly string[] = ['personalnummer']
+
+export const COUNTER_LABEL: Record<string, string> = {
+  personalnummer: 'Personalnummer (Nummernkreis je Firma)',
+}
 
 /** enterStatus/set_status: terminale Status sind verboten. */
 export const ENTER_STATUS: readonly string[] = ['in_progress', 'in_request', 'waiting_contract']
@@ -59,6 +76,18 @@ export const RE_PROCESS_KEY = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const RE_PHASE_KEY = /^[a-z0-9_]+$/
 /** Feld-Key: Punkt-Pfad, Segmente aus A-Z, a-z, 0-9, Unterstrich. */
 export const RE_FIELD_SEGMENT = /^[A-Za-z0-9_]+$/
+
+/** approval.onReject: „reject" oder „back_to:<phasen_key>" (Phasen-Alphabet!). */
+export const RE_BACK_TO = /^back_to:([a-z0-9_]+)$/
+
+/** Phasen-Key aus einem `back_to:…` – null bei „reject" oder kaputter Form. */
+export function backToTarget(onReject: string): string | null {
+  return RE_BACK_TO.exec(onReject || '')?.[1] ?? null
+}
+
+export function isValidOnReject(v: string): boolean {
+  return v === 'reject' || RE_BACK_TO.test(v || '')
+}
 
 export function isValidProcessKey(v: string): boolean {
   return RE_PROCESS_KEY.test(v || '')
@@ -99,25 +128,27 @@ export const WIDGET_LABEL: Record<Widget, string> = {
   select: 'Auswahl', multiselect: 'Mehrfachauswahl', checkbox: 'Ja/Nein',
   'checkbox-group': 'Ankreuzliste', attachment: 'Datei-Anhang',
   user: 'Person', company: 'Firma', group: 'Fachabteilung',
-  collection: 'Wiederholgruppe', server_generated: 'Systemwert (nicht verfügbar)',
+  collection: 'Wiederholgruppe', server_generated: 'Vom System vergebene Nummer',
   server_stamped: 'Systemstempel',
 }
 
 export const PHASE_KIND_LABEL: Record<PhaseKind, string> = {
-  start: 'Start', task: 'Bearbeitung', approval: 'Freigabe (nicht verfügbar)',
+  start: 'Start', task: 'Bearbeitung', approval: 'Freigabe',
   review: 'Fachabteilungen', end: 'Abschluss',
 }
 
 export const PHASE_VIEW_LABEL: Record<PhaseView, string> = {
-  form: 'Formular', readonly: 'Nur lesen', approval: 'Freigabe (nicht verfügbar)',
-  review: 'Prüfung', export: 'Export (nicht verfügbar)',
+  form: 'Formular', readonly: 'Nur lesen', approval: 'Freigabe',
+  review: 'Prüfung', export: 'Export',
 }
 
 export const RESPONSIBILITY_LABEL: Record<ResponsibilityKind, string> = {
   owner: 'Ersteller:in',
   assignable: 'Person aus einem Feld (bei Erstellung gewählt)',
-  group: 'Feste Fachabteilung', user: 'Feste Person',
-  departments: 'Mehrere Fachabteilungen', originator: 'Auslösende Person',
+  group: 'Feste Fachabteilung',
+  group_from_field: 'Fachabteilung aus einem Feld (bei Erstellung gewählt)',
+  user: 'Feste Person',
+  departments: 'Mehrere Fachabteilungen',
 }
 
 export const FIELD_MODE_LABEL: Record<FieldMode, string> = {
@@ -134,9 +165,7 @@ export const ACTION_LABEL: Record<string, string> = {
   notify: 'Benachrichtigen', escalate: 'Eskalieren', set_field: 'Feld setzen',
   set_priority: 'Priorität setzen', set_status: 'Status setzen',
   auto_advance: 'Automatisch weiterschalten',
-  assign_sequence: 'Nummer vergeben (nicht verfügbar)',
-  require_attachment: 'Anhang verlangen (nicht verfügbar)',
-  spawn_process: 'Folgeprozess starten (nicht verfügbar)',
+  assign_sequence: 'Nummer aus Nummernkreis vergeben',
 }
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -168,6 +197,14 @@ export function blankSubField(key = '', widget: Widget = 'text'): SubField {
   return { key, label: null, widget, value: null }
 }
 
+/**
+ * Vergabe-Angaben eines server_generated-Feldes. `action` ist fix: der Server
+ * lässt ausschließlich assign_sequence zu.
+ */
+export function blankAssign(): AssignSpec {
+  return { action: 'assign_sequence', counter: SEQUENCE_COUNTERS[0], companyRef: null }
+}
+
 /** ACHTUNG: required=false – anders als bei DepartmentRule. */
 export function blankFieldRef(ref: string): FieldRef {
   return { ref, mode: 'editable', required: false, requiredWhen: null, visibleWhen: null }
@@ -183,12 +220,78 @@ export function blankResponsibility(kind: ResponsibilityKind = 'owner'): Respons
     resetOnDescriptionChange: false, notifyOnEnter: true }
 }
 
+/**
+ * Freigabe-Block mit den SERVER-Defaults. Die Werte müssen mit ApprovalSpec in
+ * backend/schemas/process_definition.py übereinstimmen – sonst gilt eine frisch
+ * geladene Definition sofort als geändert (canonicalJson-Vergleich).
+ */
+export function blankApproval(question = ''): ApprovalSpec {
+  return {
+    question,
+    approveLabel: 'Freigeben',
+    rejectLabel: 'Ablehnen',
+    externalLink: true,
+    linkMaxAge: 'P7D',
+    requireReason: true,
+    decisionField: null,
+    reasonField: null,
+    onReject: 'reject',
+  }
+}
+
+/** Passende Standard-Ansicht zur Phasenart (view=approval nur bei kind=approval). */
+export function defaultViewFor(kind: PhaseKind): PhaseView {
+  if (kind === 'approval') return 'approval'
+  if (kind === 'review') return 'review'
+  return 'form'
+}
+
 export function blankPhase(key: string, kind: PhaseKind = 'task'): PhaseDef {
   return {
-    key, label: null, kind, view: kind === 'review' ? 'review' : 'form',
+    key, label: null, kind, view: defaultViewFor(kind),
     enterStatus: null, grantsFullView: false,
     responsibility: blankResponsibility(kind === 'review' ? 'departments' : 'owner'),
+    approval: kind === 'approval' ? blankApproval() : null,
     fields: [], layout: [], constraints: [], automations: [],
+  }
+}
+
+/**
+ * Was sich beim Umstellen der PHASEN-ART zwingend mit ändert.
+ *
+ * Der Server koppelt drei Dinge fest aneinander: bei `kind=approval` ist der
+ * Freigabe-Block Pflicht, bei jeder anderen Art ist er verboten, und
+ * `view=approval` gibt es nur dort. Ohne diese Nachführung baut der Editor eine
+ * Definition, die er selbst gerade erst abgelehnt bekommt.
+ */
+export function phaseKindPatch(phase: PhaseDef, kind: PhaseKind): Partial<PhaseDef> {
+  const wirdFreigabe = kind === 'approval'
+  const viewPasstNichtMehr = phase.view === 'approval' && !wirdFreigabe
+  return {
+    kind,
+    approval: wirdFreigabe ? (phase.approval ?? blankApproval()) : null,
+    view: wirdFreigabe || viewPasstNichtMehr ? defaultViewFor(kind) : phase.view,
+  }
+}
+
+/**
+ * Was sich beim Umstellen der ZUSTÄNDIGKEIT mit ändert: nicht mehr passende
+ * Angaben fliegen raus, weil der Server sie streng prüft. `fromField` fällt
+ * auch beim Wechsel zwischen den beiden „aus einem Feld"-Arten weg – ein
+ * Personen-Feld taugt nicht als Fachabteilung und umgekehrt.
+ */
+export function responsibilityKindPatch(
+  cur: Responsibility, kind: ResponsibilityKind,
+): Responsibility {
+  return {
+    ...cur,
+    kind,
+    group: kind === 'group' ? cur.group : null,
+    user: kind === 'user' ? cur.user : null,
+    fromField: kind === cur.kind ? cur.fromField : null,
+    rule: kind === 'departments'
+      ? (cur.rule.length ? cur.rule : [blankDepartmentRule()])
+      : [],
   }
 }
 
@@ -198,7 +301,7 @@ export function blankAutomation(id: string): Automation {
     trigger: { type: 'on_enter', after: null, repeat: null, field: null },
     guard: null,
     action: { type: 'notify', to: 'responsible', template: null, field: null,
-      value: null, process: null, counter: null },
+      value: null, counter: null },
   }
 }
 

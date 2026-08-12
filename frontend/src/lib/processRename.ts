@@ -54,6 +54,8 @@ export function renameRefsInDefinition(
       ...f,
       key: f.key === from ? to : f.key,
       computed: f.computed ? { from: ref(f.computed.from, from, to) as string } : null,
+      // Nummernvergabe: das Firmen-Feld ist eine echte Referenzposition.
+      assign: f.assign ? { ...f.assign, companyRef: ref(f.assign.companyRef, from, to) } : null,
     })),
     automations: defn.automations.map((a) => ({
       ...a,
@@ -75,11 +77,19 @@ export function renameRefsInDefinition(
       })),
       responsibility: {
         ...p.responsibility,
+        // Quellfeld bei kind='assignable' bzw. 'group_from_field'.
+        fromField: ref(p.responsibility.fromField, from, to),
         rule: p.responsibility.rule.map((r) => ({
           ...r,
           when: renameRefsInCondition(r.when, from, to),
         })),
       },
+      // Freigabe: Entscheidung und Begründung zeigen auf Katalog-Felder.
+      approval: p.approval ? {
+        ...p.approval,
+        decisionField: ref(p.approval.decisionField, from, to),
+        reasonField: ref(p.approval.reasonField, from, to),
+      } : null,
       automations: p.automations.map((a) => ({
         ...a,
         trigger: { ...a.trigger, field: ref(a.trigger.field, from, to) },

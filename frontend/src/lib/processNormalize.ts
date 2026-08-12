@@ -11,11 +11,12 @@
  * ausgegeben wird IMMER `from` (der Wire-Name).
  */
 import type {
-  Action, Automation, Condition, CreatePermissions, LayoutItem, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
+  Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions, LayoutItem,
+  LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger,
 } from '@/types/process'
-import { SCHEMA_VERSION } from '@/lib/processSchema'
+import { SCHEMA_VERSION, blankApproval } from '@/lib/processSchema'
 
 const str = (v: unknown): string | null =>
   v === undefined || v === null || v === '' ? null : String(v)
@@ -71,8 +72,10 @@ export function normalizeField(v: any): FieldDef {
     visibility: normVisibility(v?.visibility),
     computed: from ? { from: String(from) } : null,
     overridable: bool(v?.overridable),
+    // `action` ist serverseitig Pflicht und darf nur assign_sequence sein –
+    // fehlt sie, wäre das Feld ohne Ersatz unspeicherbar (422 statt Meldung).
     assign: v?.assign
-      ? { action: v.assign.action, counter: str(v.assign.counter),
+      ? { action: v.assign.action ?? 'assign_sequence', counter: str(v.assign.counter),
         companyRef: str(v.assign.companyRef) }
       : null,
     mode: v?.mode ?? null,
@@ -155,8 +158,30 @@ function normAction(v: any): Action {
     template: str(v?.template),
     field: str(v?.field),
     value: v?.value === undefined ? null : v.value,
-    process: str(v?.process),
     counter: str(v?.counter),
+  }
+}
+
+/**
+ * Freigabe-Block. FEHLT er, bleibt es bei `null` – hier darf nichts erfunden
+ * werden: der Server verbietet `approval` bei jeder Phasenart außer approval,
+ * und ein hinzugedichteter Block würde jede Definition als geändert zeigen.
+ * Ist er DA, werden alle Keys mit den Server-Defaults aufgefüllt (der Server
+ * liefert sie ebenfalls vollständig zurück → stabiler Dirty-Vergleich).
+ */
+function normApproval(v: any): ApprovalSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const d = blankApproval()
+  return {
+    question: String(v.question ?? ''),
+    approveLabel: str(v.approveLabel) ?? d.approveLabel,
+    rejectLabel: str(v.rejectLabel) ?? d.rejectLabel,
+    externalLink: bool(v.externalLink, d.externalLink),
+    linkMaxAge: str(v.linkMaxAge) ?? d.linkMaxAge,
+    requireReason: bool(v.requireReason, d.requireReason),
+    decisionField: str(v.decisionField),
+    reasonField: str(v.reasonField),
+    onReject: (str(v.onReject) ?? d.onReject) as ApprovalOnReject,
   }
 }
 
@@ -180,6 +205,7 @@ export function normalizePhase(v: any): PhaseDef {
     enterStatus: str(v?.enterStatus),
     grantsFullView: bool(v?.grantsFullView),
     responsibility: normResponsibility(v?.responsibility),
+    approval: normApproval(v?.approval),
     fields: arr(v?.fields).map(normalizeFieldRef),
     layout: arr(v?.layout).map(normLayoutSection),
     constraints: arr(v?.constraints).map(normConstraintEntry),

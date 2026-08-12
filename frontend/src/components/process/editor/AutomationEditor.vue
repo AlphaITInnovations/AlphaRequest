@@ -15,8 +15,8 @@
 import { computed } from 'vue'
 import type { Action, ActionType, Automation, Trigger, TriggerType } from '@/types/process'
 import {
-  ACTION_LABEL, ACTION_TYPES, ENTER_STATUS, PRIORITIES, RECIPIENTS, RECIPIENT_LABEL,
-  STATUS_LABEL, TRIGGER_LABEL, TRIGGER_TYPES,
+  ACTION_LABEL, ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
+  RECIPIENT_LABEL, SEQUENCE_COUNTERS, STATUS_LABEL, TRIGGER_LABEL, TRIGGER_TYPES,
 } from '@/lib/processSchema'
 import ConditionEditor from './ConditionEditor.vue'
 import DurationInput from './DurationInput.vue'
@@ -42,7 +42,7 @@ const PRIORITY_LABEL: Record<string, string> = {
 const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null })
 const blankAction = (): Action => ({
   type: 'notify', to: 'responsible', template: null, field: null,
-  value: null, process: null, counter: null,
+  value: null, counter: null,
 })
 
 const a = computed<Automation>(() => {
@@ -96,7 +96,7 @@ function onTriggerType(t: TriggerType) {
 function onActionType(t: ActionType) {
   const cur = a.value.action
   const next: Action = {
-    type: t, to: null, template: null, field: null, value: null, process: null, counter: null,
+    type: t, to: null, template: null, field: null, value: null, counter: null,
   }
   if (t === 'notify' || t === 'escalate') {
     next.to = cur.to ?? 'responsible'
@@ -108,9 +108,18 @@ function onActionType(t: ActionType) {
     next.value = PRIORITIES.includes(String(cur.value)) ? cur.value : 'normal'
   } else if (t === 'set_status') {
     next.value = ENTER_STATUS.includes(String(cur.value)) ? cur.value : ENTER_STATUS[0]
+  } else if (t === 'assign_sequence') {
+    // Beides ist serverseitig Pflicht: woher die Nummer kommt und wohin sie geht.
+    next.counter = cur.counter ?? SEQUENCE_COUNTERS[0]
+    next.field = cur.field
   }
   patch({ action: next })
 }
+
+const counterUnknown = computed(() => {
+  const c = a.value.action.counter
+  return !!c && !SEQUENCE_COUNTERS.includes(c)
+})
 
 const actionValueText = computed(() => {
   const v = a.value.action.value
@@ -267,6 +276,40 @@ const actionValueText = computed(() => {
           <option v-for="s in ENTER_STATUS" :key="s" :value="s">{{ STATUS_LABEL[s] ?? s }}</option>
         </select>
       </div>
+
+      <!-- Nummer aus einem Nummernkreis vergeben -->
+      <template v-else-if="a.action.type === 'assign_sequence'">
+        <div>
+          <label class="lbl">Nummernkreis</label>
+          <select class="afi w-full" :value="a.action.counter ?? ''"
+                  @change="patchAction({ counter: val($event) || null })">
+            <option value="">Nummernkreis wählen…</option>
+            <option v-for="c in SEQUENCE_COUNTERS" :key="c" :value="c">
+              {{ COUNTER_LABEL[c] ?? c }}
+            </option>
+            <option v-if="counterUnknown" :value="a.action.counter">
+              {{ a.action.counter }} (unbekannt)
+            </option>
+          </select>
+          <p v-if="counterUnknown" class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            Diesen Nummernkreis kennt die Laufzeit nicht – die Vergabe bricht später ab.
+          </p>
+        </div>
+        <div>
+          <label class="lbl">Nummer schreiben nach</label>
+          <select
+            class="afi w-full"
+            :value="a.action.field ?? ''"
+            @change="patchAction({ field: val($event) || null })"
+          >
+            <option value="">Feld wählen…</option>
+            <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+            <option v-if="a.action.field && !keys.includes(a.action.field)" :value="a.action.field">
+              {{ a.action.field }} (unbekannt)
+            </option>
+          </select>
+        </div>
+      </template>
 
       <!-- Automatisch weiterschalten -->
       <p

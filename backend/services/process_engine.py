@@ -26,6 +26,7 @@ from backend.services import process_actions as actions
 from backend.services import process_automations as pa
 from backend.services import process_events as events
 from backend.services import process_runtime as pr
+from backend.services import process_sequences as sequences
 from backend.services.condition_dsl import evaluate
 from backend.utils.logger import logger
 from backend.utils.timeutil import utcnow_iso
@@ -165,6 +166,17 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
     now_iso = now_iso or utcnow_iso()
     old_phase = pr.current_phase(defn, row.get("runtime") or {})
     if old_phase is not None:
+        # Fortlaufende Nummern, die mit dem Abschluss DIESER Phase fällig werden,
+        # vor dem Übergang vergeben – bewusst NICHT über fire(): dort wird jede
+        # Action-Exception weggefangen, ein erschöpfter Nummernkreis würde den
+        # Auftrag stillschweigend ohne Nummer weiterschalten. Hier bricht der
+        # Fehler den Übergang ab (API → 4xx, Scheduler → Backoff).
+        vergeben = sequences.assign_due_sequences(defn, row, old_phase, actor=actor,
+                                                  store=store)
+        if vergeben and expected_rev is not None:
+            # Die Vergabe hat selbst (rev-geschützt) geschrieben – sonst kollidierte
+            # der Übergang gleich mit der eigenen Nummern-Schreibung.
+            expected_rev = row.get("rev")
         run_inline(row, defn, old_phase, {TriggerType.on_exit})
 
     # Werte mitgeben: die neue Phase entscheidet damit, WELCHE Fachabteilungen
@@ -177,6 +189,12 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
         row.update(fresh)
     else:
         row["runtime"], row["status"] = runtime, status
+
+    # Endzustand erreicht → Durchsatz-Zähler. pr.advance ist der EINZIGE Weg nach
+    # „archived", deshalb genügt diese eine Stelle.
+    if status == "archived":
+        from backend.metrics.process_metrics import record_process_terminal
+        record_process_terminal("archived")
 
     new_phase = pr.current_phase(defn, row.get("runtime") or {})
     # Verlauf: Phasenwechsel ist das wichtigste Ereignis am Auftrag. Details

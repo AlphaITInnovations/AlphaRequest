@@ -81,11 +81,20 @@ def test_bad_key_slug():
     _invalid(lambda d: d.__setitem__("key", "Nicht Erlaubt!"))
 
 
-def test_server_generated_rejected_until_implemented():
-    # Ehrlichkeits-Regel: was die Laufzeit nicht umsetzt, wird beim Speichern abgelehnt
+def test_server_generated_braucht_bekannten_nummernkreis():
+    """Die Laufzeit setzt server_generated jetzt um. Abgelehnt wird nur noch, was
+    sie NICHT ausführen kann – hier ein erfundener Nummernkreis."""
     _invalid(lambda d: d["fields"].append(
         {"key": "x", "widget": "server_generated",
-         "assign": {"action": "assign_sequence", "counter": "c"}}))
+         "assign": {"action": "assign_sequence", "counter": "gibtsnicht"}}))
+
+
+def test_server_generated_braucht_phase_und_firmenfeld():
+    """Ohne Phase bekäme das Feld nie eine Nummer (die Vergabe hängt am Abschluss
+    der ersten Phase, die es führt); ohne Firmen-Bezug scheitert sie zur Laufzeit."""
+    _invalid(lambda d: d["fields"].append(
+        {"key": "x", "widget": "server_generated",
+         "assign": {"action": "assign_sequence", "counter": "personalnummer"}}))
 
 
 def test_collection_needs_item():

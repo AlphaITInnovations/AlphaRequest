@@ -2,8 +2,12 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      # Kontext ist der Unterordner, nicht das Repo-Root: das Dockerfile macht
+      # `COPY requirements.txt .`, und im Root gibt es keine. Folge fürs Packaging:
+      # was das Backend zur Laufzeit braucht (z. B. die Prozess-Seeds), muss unter
+      # backend/ liegen – docs/ landet NICHT im Image.
+      context: ./backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env
     networks:
@@ -12,8 +16,11 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      # Gleiches Muster: `COPY package*.json ./` funktioniert nur mit frontend/
+      # als Kontext. Deshalb darf auch kein Frontend-TESTFILE etwas von außerhalb
+      # importieren (siehe frontend/tsconfig.app.json).
+      context: ./frontend
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       - backend

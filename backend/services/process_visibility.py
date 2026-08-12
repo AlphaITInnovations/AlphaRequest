@@ -76,10 +76,22 @@ def filter_values(defn: Optional[ProcessDefinition], values: dict, ctx: ViewerCt
 
 
 def editable_field_keys(defn: ProcessDefinition, phase: PhaseDef, ctx: ViewerCtx,
-                        values: dict) -> set:
+                        values: dict, *, ignore_conditions: bool = False) -> set:
     """Felder, die dieser Betrachter in DIESER Phase schreiben darf:
     editable/append_only-Modus UND sichtbar (inkl. Quelle) UND (kein visibleWhen
-    oder erfüllt gegen `values`)."""
+    oder erfüllt gegen `values`).
+
+    `ignore_conditions=True` lässt `visibleWhen` aus – gedacht für die AUSKUNFT an
+    das Formular („welche Felder darf diese Rolle grundsätzlich bearbeiten?").
+    Ohne das Flag wertet der Server `visibleWhen` gegen die GESPEICHERTEN Werte
+    aus; ein Feld, das die tippende Person gerade erst freischaltet, käme dann
+    gesperrt zurück, obwohl der nachfolgende PATCH es akzeptieren würde
+    (`writable_keys` mischt gespeicherte und gesendete Werte). Die bedingte
+    Anzeige wertet das Formular live selbst aus.
+
+    Für den SCHREIBSCHUTZ niemals mit dem Flag aufrufen – dort ist die Bedingung
+    Teil der Prüfung.
+    """
     fmap = {f.key: f for f in defn.fields}
     out = set()
     for fr in phase.fields:
@@ -88,7 +100,8 @@ def editable_field_keys(defn: ProcessDefinition, phase: PhaseDef, ctx: ViewerCtx
         f = fmap.get(fr.ref)
         if f is None or not _effective_can_see(f, ctx, fmap):
             continue
-        if fr.visibleWhen is not None and not evaluate(fr.visibleWhen, values):
+        if (not ignore_conditions and fr.visibleWhen is not None
+                and not evaluate(fr.visibleWhen, values)):
             continue
         out.add(fr.ref)
     return out

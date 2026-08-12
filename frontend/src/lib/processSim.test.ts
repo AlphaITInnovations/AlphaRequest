@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { normalizeDefinition } from './processNormalize'
 import {
-  advance, canSeeField, currentPhase, enterStatusFor, filterValues, initialRuntime, isTerminal,
-  renderFields, resolveResponsibility, simAdvance, simSetValues, startSim, validatePhaseCompletion,
+  advance, canSeeField, currentApproval, currentPhase, enterStatusFor, filterValues,
+  initialRuntime, isTerminal,
+  renderFields, resolveResponsibility, responsibilityText, sendBack, simAdvance, simDecide,
+  simSetValues, startSim, validatePhaseCompletion,
   validateValues, visibleFieldKeys,
 } from './processSim'
 import type { SimViewer } from './processSim'
@@ -173,5 +175,158 @@ describe('Simulation', () => {
     let s = startSim(DEFN, 't0')
     s = simSetValues(DEFN, s, { 'personal.salary': '50k' })
     expect(s.values['salary_copy']).toBe('50k')
+  })
+})
+
+// ── Zuständigkeit aus einem Feld ─────────────────────────────────────────────
+
+const AUS_FELD = normalizeDefinition({
+  key: 'demo2', name: 'Demo 2',
+  fields: [
+    { key: 'abteilung', widget: 'group' },
+    { key: 'verantwortlich', widget: 'user' },
+  ],
+  phases: [
+    { key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+      fields: [{ ref: 'abteilung' }, { ref: 'verantwortlich' }] },
+    { key: 'fach', kind: 'task',
+      responsibility: { kind: 'group_from_field', fromField: 'abteilung' } },
+    { key: 'person', kind: 'task',
+      responsibility: { kind: 'assignable', fromField: 'verantwortlich' } },
+  ],
+})
+
+describe('Zuständigkeit aus einem Feld', () => {
+  it('löst group_from_field zu einer Gruppen-Zuständigkeit auf', () => {
+    const res = resolveResponsibility(AUS_FELD.phases[1], { abteilung: 'g_it' })
+    expect(res).toMatchObject({ kind: 'group', group: 'g_it', fromField: 'abteilung' })
+  })
+
+  it('löst assignable zu einer Personen-Zuständigkeit auf', () => {
+    const res = resolveResponsibility(AUS_FELD.phases[2], { verantwortlich: 'u1' })
+    expect(res).toMatchObject({ kind: 'user', user: 'u1' })
+  })
+
+  it('nennt ein leeres Quellfeld ehrlich „noch niemand"', () => {
+    const leer = resolveResponsibility(AUS_FELD.phases[1], {})
+    expect(leer.group).toBeNull()
+    expect(responsibilityText(leer, (id) => id)).toContain('noch niemand')
+    const gefuellt = resolveResponsibility(AUS_FELD.phases[1], { abteilung: 'g_it' })
+    expect(responsibilityText(gefuellt, (id) => (id === 'g_it' ? 'IT' : id))).toBe('IT')
+  })
+
+  it('beschriftet die übrigen Arten unverändert', () => {
+    expect(responsibilityText(resolveResponsibility(AUS_FELD.phases[0], {}), (id) => id))
+      .toBe('Ersteller:in')
+    expect(responsibilityText(resolveResponsibility(DEFN.phases[1], { 'fuhrpark.car': 'Nein' }),
+      (id) => id)).toBe('g_it')
+  })
+})
+
+// ── Freigabe-Phase ───────────────────────────────────────────────────────────
+
+/** Start → Freigabe. `over` verändert nur den Freigabe-Block. */
+function freigabeDefn(over: Record<string, unknown> = {}) {
+  return normalizeDefinition({
+    key: 'demo3', name: 'Demo 3',
+    fields: [{ key: 'antrag', widget: 'text' }, { key: 'entscheidung', widget: 'text' },
+      { key: 'grund', widget: 'textarea' }],
+    phases: [
+      { key: 'erstellung', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'antrag', required: true }] },
+      { key: 'freigabe', kind: 'approval', view: 'approval',
+        responsibility: { kind: 'user', user: 'chef' },
+        approval: { question: 'Freigeben?', ...over } },
+    ],
+  })
+}
+
+function beiDerFreigabe(defn: ReturnType<typeof freigabeDefn>) {
+  let s = startSim(defn, 't0')
+  s = simSetValues(defn, s, { antrag: 'Bitte freigeben' })
+  const res = simAdvance(defn, s, 't1')
+  expect(res.errors).toEqual([])
+  return res.state
+}
+
+describe('Freigabe-Phase', () => {
+  it('erkennt, dass in dieser Phase entschieden wird', () => {
+    const defn = freigabeDefn()
+    const s = beiDerFreigabe(defn)
+    expect(currentApproval(defn, s)?.question).toBe('Freigeben?')
+    expect(currentApproval(defn, startSim(defn, 't0'))).toBeNull()
+  })
+
+  it('schaltet bei „Ja" weiter und archiviert', () => {
+    const defn = freigabeDefn()
+    const res = simDecide(defn, beiDerFreigabe(defn), 'approve', {}, 't2')
+    expect(res.errors).toEqual([])
+    expect(res.state.status).toBe('archived')
+  })
+
+  it('verlangt bei „Nein" eine Begründung, wenn eingestellt', () => {
+    const defn = freigabeDefn()
+    const ohne = simDecide(defn, beiDerFreigabe(defn), 'reject', {}, 't2')
+    expect(ohne.errors[0].code).toBe('REASON_REQUIRED')
+    expect(ohne.state.status).not.toBe('rejected')
+    const mit = simDecide(defn, beiDerFreigabe(defn), 'reject', { reason: 'Zu teuer' }, 't2')
+    expect(mit.errors).toEqual([])
+    expect(mit.state.status).toBe('rejected')
+  })
+
+  it('schreibt Entscheidung und Begründung in die konfigurierten Felder', () => {
+    const defn = freigabeDefn({ decisionField: 'entscheidung', reasonField: 'grund' })
+    const res = simDecide(defn, beiDerFreigabe(defn), 'reject', { reason: 'Zu teuer' }, 't2')
+    // Gespeichert wird der ROHE Aktionsname, nicht die Beschriftung.
+    expect(res.state.values.entscheidung).toBe('reject')
+    expect(res.state.values.grund).toBe('Zu teuer')
+  })
+
+  it('gibt bei „Nein" mit back_to zur Nachbesserung zurück statt abzulehnen', () => {
+    const defn = freigabeDefn({ onReject: 'back_to:erstellung', requireReason: false })
+    const res = simDecide(defn, beiDerFreigabe(defn), 'reject', {}, 't2')
+    expect(res.errors).toEqual([])
+    expect(res.state.runtime.rejected).toBe(false)
+    expect(currentPhase(defn, res.state.runtime)!.key).toBe('erstellung')
+    // Der Epoch trägt den Durchlauf: ohne Bump blieben Fristen stumm und alte
+    // Mail-Links gültig.
+    expect(res.state.runtime.epoch).toBe(1)
+    expect(res.state.runtime.phases[1].status).toBe('pending')
+  })
+
+  it('lehnt eine Entscheidung in einer Nicht-Freigabe-Phase ab', () => {
+    const defn = freigabeDefn()
+    const res = simDecide(defn, startSim(defn, 't0'), 'approve', {}, 't1')
+    expect(res.errors[0].code).toBe('NO_APPROVAL')
+  })
+
+  it('schreibt bei einem gescheiterten „Ja" nichts fest', () => {
+    // Freigabe-Phase mit eigener Pflichtangabe: bleibt die Phase stehen, darf
+    // weder die Entscheidung im Feld noch der Verlaufseintrag zurückbleiben.
+    const defn = normalizeDefinition({
+      key: 'demo4', name: 'Demo 4',
+      fields: [{ key: 'pflicht', widget: 'text' }, { key: 'entscheidung', widget: 'text' }],
+      phases: [
+        { key: 'erstellung', kind: 'start', responsibility: { kind: 'owner' } },
+        { key: 'freigabe', kind: 'approval', view: 'approval',
+          responsibility: { kind: 'owner' },
+          fields: [{ ref: 'pflicht', required: true }],
+          approval: { question: 'Ja?', decisionField: 'entscheidung' } },
+      ],
+    })
+    const vorher = simAdvance(defn, startSim(defn, 't0'), 't1').state
+    const res = simDecide(defn, vorher, 'approve', {}, 't2')
+    expect(res.errors.map((e) => e.code)).toContain('REQUIRED')
+    expect(res.state.values.entscheidung).toBeUndefined()
+    expect(res.state.events).toEqual(vorher.events)
+  })
+})
+
+describe('sendBack', () => {
+  it('verweigert einen Sprung nach vorn oder auf sich selbst', () => {
+    const defn = freigabeDefn()
+    const s = beiDerFreigabe(defn)
+    expect(sendBack(defn, s.runtime, 't2', 'freigabe')).toBeNull()
+    expect(sendBack(defn, s.runtime, 't2', 'gibtsnicht')).toBeNull()
   })
 })

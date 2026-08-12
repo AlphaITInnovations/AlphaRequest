@@ -15,7 +15,10 @@ er enthält NIE Feldwerte (§5.6), nur Phasen-Status, Zeitstempel und Zähler:
           # Erst wenn alle PFLICHT-Abteilungen done/skipped sind, darf die Phase
           # abgeschlossen werden – sonst könnte IT für den Fuhrpark quittieren.
           "departments": [ {"group", "required", "status": open|done|skipped,
-                            "by", "by_name", "at", "note"} ]
+                            "by", "by_name", "at", "note"} ],
+          # Nur bei kind='approval': die gefallene Entscheidung (siehe
+          # set_phase_decision). Fehlt, solange nicht entschieden wurde.
+          "decision": {"act", "by", "by_name", "at", "reason", "reason_in_field"}
       } ]
     }
 
@@ -149,6 +152,59 @@ def departments_complete(runtime: dict) -> bool:
     return not open_required_departments(runtime)
 
 
+# ── Entscheidung einer Freigabe-Phase ─────────────────────────────────────────
+#
+# Strukturell analog zum Abteilungs-Stand: ein Eintrag AM PHASEN-OBJEKT, keine
+# Feldwerte (§5.6). Der Eintrag ist zugleich die Einmaligkeits-Sperre für die
+# Entscheidung per Mail-Link: liegt eine Entscheidung vor, wird ein zweiter Klick
+# abgewiesen statt erneut ausgeführt.
+
+def phase_decision(runtime: dict, index: int) -> Optional[dict]:
+    """Entscheidung dieser Phase – None, solange keine gefallen ist."""
+    phases = runtime.get("phases") or []
+    if 0 <= index < len(phases):
+        return phases[index].get("decision")
+    return None
+
+
+def set_phase_decision(runtime: dict, index: int, *, act: str,
+                       by: Optional[str], by_name: Optional[str], at: str,
+                       reason: Optional[str] = None,
+                       reason_in_field: bool = False) -> dict:
+    """Entscheidung festschreiben.
+
+    Wirft ValueError bei unbekanntem Index ODER wenn bereits entschieden wurde –
+    die Einmaligkeit ist der eigentliche Zweck des Eintrags, sie darf nicht
+    stillschweigend überschrieben werden.
+
+    `reason_in_field=True` heißt: die Begründung steht in einem Feldwert und
+    bewusst NICHT hier. Der Runtime geht ungefiltert an jede Person mit
+    Leserecht; ein Text, der laut Definition in ein (womöglich vertrauliches)
+    Feld gehört, darf hier kein Zweitkanal an der Sichtbarkeit vorbei sein (§5.1).
+    """
+    phases = runtime.get("phases") or []
+    if not (0 <= index < len(phases)):
+        raise ValueError(f"Phase {index} gibt es in diesem Auftrag nicht")
+    if phases[index].get("decision"):
+        raise ValueError("Für diese Phase wurde bereits entschieden")
+    phases[index]["decision"] = {
+        "act": act, "by": by, "by_name": by_name, "at": at,
+        "reason": reason, "reason_in_field": bool(reason_in_field),
+    }
+    return runtime
+
+
+def _clear_decisions_from(phases: list, index: int) -> None:
+    """Entscheidungen ab `index` verwerfen – diese Phasen werden erneut durchlaufen.
+
+    Ohne das bliebe eine Freigabe-Phase nach Rücksprung/Wiederaufnahme für immer
+    „bereits bearbeitet“, und der zweite Durchlauf hätte keinen Entscheidungsweg
+    mehr.
+    """
+    for entry in phases[index:]:
+        entry.pop("decision", None)
+
+
 def reject(runtime: dict) -> dict:
     runtime["rejected"] = True
     return runtime
@@ -204,6 +260,65 @@ def reopen(defn: ProcessDefinition, runtime: dict, now_iso: str, *,
             entry["status"] = "pending"
             entry["entered_at"] = None
             entry["departments"] = []
+    _clear_decisions_from(phases, idx)
+    return runtime, enter_status_for(defn.phases[idx])
+
+
+def send_back(defn: ProcessDefinition, runtime: dict, now_iso: str,
+              phase_key: str, values: Optional[dict] = None) -> tuple[dict, str]:
+    """Einen LAUFENDEN Auftrag auf eine frühere Phase zurückgeben (Nachbesserung).
+
+    Der „Nein, aber bitte nachbessern“-Zweig einer Freigabe
+    (`approval.onReject = "back_to:<phase>"`). Anders als `reopen`: der Auftrag
+    ist nicht fertig, `rejected` bleibt unberührt, und das Ziel muss echt VOR
+    der aktuellen Phase liegen (ein Sprung nach vorn würde Arbeit überspringen).
+
+    **Der Epoch wird trotzdem erhöht.** Der Auftrag „war nie fertig“ ist als
+    Begründung dagegen zu schwach, denn der Epoch ist im Datenmodell kein
+    Abschluss-Merkmal, sondern der Schlüssel für DURCHLÄUFE. Ohne Bump bricht
+    zweierlei:
+
+      1. **Fristen.** Die Fire-once-Sperre (`process_timer_fires`) schlüsselt
+         über (ticket, phase, epoch, automation, occurrence). Die Zielphase hat
+         ihre Timer in diesem Epoch bereits abgearbeitet – im zweiten Durchlauf
+         bliebe jede Eskalation stumm. Genau der Fehler, den der Docstring von
+         `reopen` beschreibt; er hängt am zweiten Durchlauf, nicht daran, ob
+         der Auftrag zwischendurch archiviert war.
+      2. **Mail-Links.** Das Freigabe-Token trägt (tid, act, phase, epoch). Die
+         Entscheidung der Freigabe-Phase wird beim Rücksprung verworfen (sonst
+         gäbe es in Runde 2 keinen Entscheidungsweg) – ohne Epoch-Bump wäre
+         damit der Link aus Runde 1 wieder gültig und könnte Runde 2 entscheiden.
+
+    `entered_at` der Zielphase wird neu gesetzt: die Fristen laufen ab der
+    Rückgabe, nicht ab dem ersten Betreten.
+
+    Gibt (runtime, status) zurück. Wirft ValueError bei unbekanntem oder nicht
+    vorher liegendem Phasen-Key.
+    """
+    phases = runtime.get("phases") or []
+    idx = phase_index(defn, phase_key)
+    if idx is None or idx >= len(phases):
+        raise ValueError(f"Unbekannte Phase: {phase_key}")
+    aktuell = int(runtime.get("current_index", 0))
+    if idx >= aktuell:
+        raise ValueError(f"„{phase_key}“ liegt nicht vor der aktuellen Phase – "
+                         f"ein Rücksprung nach vorn würde Arbeit überspringen")
+
+    runtime["epoch"] = int(runtime.get("epoch", 0)) + 1
+    runtime["current_index"] = idx
+    for i, entry in enumerate(phases):
+        if i < idx:
+            # Davor liegende Phasen bleiben erledigt (ihre Arbeit ist getan).
+            entry["status"] = "done"
+        elif i == idx:
+            entry["status"] = "open"
+            entry["entered_at"] = now_iso
+            entry["departments"] = seed_departments(defn.phases[i], values or {})
+        else:
+            entry["status"] = "pending"
+            entry["entered_at"] = None
+            entry["departments"] = []
+    _clear_decisions_from(phases, idx)
     return runtime, enter_status_for(defn.phases[idx])
 
 
@@ -226,8 +341,13 @@ def resolve_responsibility(phase: PhaseDef, values: dict) -> dict:
         picked = values.get(r.fromField or "") or None
         return {"kind": "user", "user": picked,
                 "from_field": r.fromField, "assignable": True}
+    if r.kind == ResponsibilityKind.group_from_field:
+        # Zuständige Fachabteilung steht in einem Gruppen-Feld – die erstellende
+        # Person hat sie gewählt. Nach außen ist das eine normale Gruppen-
+        # Zuständigkeit, damit Mailversand und Rechte unverändert greifen.
+        picked = values.get(r.fromField or "") or None
+        return {"kind": "group", "group": picked,
+                "from_field": r.fromField, "assignable": True}
     if r.kind == ResponsibilityKind.owner:
         return {"kind": "owner"}
-    if r.kind == ResponsibilityKind.originator:
-        return {"kind": "originator"}
     return {"kind": "unknown"}
