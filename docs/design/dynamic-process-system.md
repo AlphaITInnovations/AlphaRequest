@@ -406,3 +406,87 @@ Sweeper-Default 15 min.
 **Später (Modell trägt es bereits):** Eskalation an **Vorgesetzte:r** — Quelle des Vorgesetzten-Bezugs
 (AD-`manager`-Feld vs. Prozessfeld vs. Gruppe) offen; bei AD-`manager` die Relationen im Lifespan-Cache
 mitführen (kein Blocking-Graph-Call im Sweep) und stets Pflicht-Fallback-Empfänger.
+
+---
+
+## 14. Cutover (Rev. 3, 2026-08-12)
+
+Das Alt-System (hartcodierte `TicketType`-Enums, `TICKET_PHASES`,
+`ticket_visibility`-Dicts, 10 handgeschriebene Vue-Formulare) wird ENTFERNT. Alle
+Prozesse laufen datengetrieben. Es gibt **keine Rückwärtskompatibilität** und
+**keine Migration alter Ticket-Daten** – bewusster Neustart.
+
+### 14.1 Der Nachfolge-Prozess ist gestrichen
+`spawn_process`, `ResponsibilityKind.originator`, `require_attachment` und
+`Action.process` sind **ersatzlos entfernt**. Das zweigeteilte Onboarding
+(Einstellung → Onboarding nach Vertragsrücklauf) wird nicht gebraucht.
+Damit ist §12 („~1 echte Verzweigung: Onboarding-Spawn") überholt: das Modell ist
+jetzt rein linear mit Rücksprung (`approval.onReject = back_to:<phase>`).
+
+`originator` war die gefährlichste dieser Altlasten: der Wert stand in KEINER
+`UNIMPLEMENTED_*`-Menge, war im Editor auswählbar und hätte zur Laufzeit eine Phase
+ohne jede zuständige Stelle erzeugt.
+
+### 14.2 Was für den Ersatz nachgebaut werden musste
+Die 10 Definitionen waren zunächst **um drei Lücken herumgebaut**. Ohne sie wäre
+der Cutover ein fachlicher Rückschritt gewesen:
+
+| Fähigkeit | Alt-System | Umsetzung im neuen Format |
+|---|---|---|
+| Freigabe ohne Login | Mail-Link mit Ja/Nein | `kind=approval` + `ApprovalSpec` |
+| Personalnummer | Vergabe je Firma | `widget=server_generated` + `assign` |
+| Export (Hotelbuchung) | eigenes PDF-Panel | `view=export`, generisch aus `layout` |
+| Fachabteilung frei wählbar (Basis-Ticket) | Auswahl beim Anlegen | `kind=group_from_field` |
+
+**Alle vier `UNIMPLEMENTED_*`-Mengen sind jetzt leer.** Die Ehrlichkeits-Regel
+(§ Review) bleibt als *Mechanismus* bestehen: wer künftig einen Schema-Wert ergänzt,
+dessen Laufzeit noch fehlt, trägt ihn dort ein – dann lehnt der Server ihn beim
+Veröffentlichen ab, statt ihn still zu ignorieren.
+
+### 14.3 Freigabe-Phase: zwei bewusste Abweichungen vom Alt-System
+1. **GET hat keinen Seiteneffekt.** Der Mail-Link öffnet eine Bestätigungsseite,
+   entschieden wird per POST. Im Alt-System entschied der Klick sofort – Mail-Clients
+   und Sicherheits-Scanner laden Links vorab und hätten Aufträge ungewollt freigegeben.
+2. **Der Epoch steckt im Token** (`{tid, act, phase, epoch}`). Ohne ihn wäre ein
+   alter, noch nicht abgelaufener Link nach einer Wiederaufnahme wieder wirksam.
+Einmaligkeit über einen Entscheidungs-Eintrag im Runtime der Phase. Fehlt der
+zuständigen Gruppe die Verteiler-Adresse, wird das laut gemeldet (Audit + Verlauf) –
+im Alt-System verpuffte es in einem `logger.warning`, und der Auftrag lag unbemerkt.
+
+### 14.4 Nummern-Vergabe hängt am Phasenabschluss, nicht an einer Automation
+`assign_sequence` ist als Automation **verboten**: `process_engine.fire()` fängt jede
+Action-Exception ab und auditiert sie nur – ein erschöpfter Nummernkreis hätte den
+Auftrag stillschweigend ohne Nummer weitergeschaltet. Die Vergabe läuft daher in
+`engine.transition` VOR dem Übergang und bricht ihn bei Fehlern ab.
+Idempotenz über einen Anspruchs-Ledger: `UNIQUE(ticket, field)` gegen doppelte
+Vergabe beim Retry, `UNIQUE(counter, scope, nummer)` macht eine echte Doppelvergabe
+zum lauten Fehler statt zu stiller Datenkorruption. Ein Anspruch wird NIE
+freigegeben – auch nicht bei Ablehnung oder Wiederaufnahme.
+
+### 14.5 Sichtbarkeit: der Server sagt, was das Formular zeigt
+Die Antwort trägt `visible_fields` und `editable_fields` (und `abilities` für die
+erlaubten Aktionen). Das Frontend kennt die Gruppen-Mitgliedschaft **nicht** und darf
+die Entscheidung nicht nachbauen. Für den Anlege-Dialog, wo noch kein Ticket
+existiert, liefert `GET /processes/{key}/field-access` dasselbe für die Start-Phase.
+Die Erlaubnisliste überstimmt bewusst auch `isAdmin` und `confidential` – der
+Admin-Fallback ist serverseitig schon eingerechnet. Ohne Liste (nur in der
+Editor-Vorschau) entscheiden weiter die Gruppen-Regeln des Client-Spiegels.
+
+### 14.6 Einspielen der Definitionen
+Die 10 Definitionen liegen **paketiert unter `backend/seeds/processes/`**, nicht in
+`docs/` – der Build-Kontext beider Images ist der jeweilige Unterordner, `docs/`
+landet in KEINEM Image. Sie referenzieren Gruppen-**Namen**, die der Seeder
+case-insensitiv auflöst; er ist **fail-closed** (ein unaufgelöster Platzhalter
+validiert zwar, erzeugt aber einen dauerhaft kaputten Prozess: niemand zuständig,
+Fachabteilungs-Phase nie abschließbar) und **überschreibt nie** einen vorhandenen
+Key – eine vom Admin geänderte Definition setzt ein Seeder nicht zurück.
+Die heutigen `create_<typ>`-Rechte werden einmalig in `createPermissions`
+übernommen. `may_create` sieht dabei Fachabteilungs- UND AD-Gruppen; ohne letztere
+verlöre jede Person das Anlegerecht, die es nur über eine AD-Gruppe hat.
+
+### 14.7 Was ohne Ersatz wegfällt
+Ehrlich festgehalten, damit es niemand später als Bug entdeckt:
+- **Alte Ticket-Daten sind ohne Oberfläche.** Die Tabellen werden NICHT gedroppt
+  (die DB gehört dem Kunden), aber es gibt keinen Lesepfad mehr.
+- **`waiting_contract`** bleibt als erlaubter `enterStatus` bestehen, hat ohne den
+  zweigeteilten Onboarding-Prozess aber keinen Nutzer mehr.
