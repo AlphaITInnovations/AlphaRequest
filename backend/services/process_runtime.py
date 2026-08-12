@@ -167,6 +167,12 @@ def resolve_responsibility(phase: PhaseDef, values: dict) -> dict:
         return {"kind": "group", "group": r.group}
     if r.kind == ResponsibilityKind.user:
         return {"kind": "user", "user": r.user}
+    if r.kind == ResponsibilityKind.assignable:
+        # Zuständige Person steht in einem Personen-Feld des Auftrags. Ist es
+        # (noch) leer, gibt es niemanden – das muss der Aufrufer sehen können.
+        picked = values.get(r.fromField or "") or None
+        return {"kind": "user", "user": picked,
+                "from_field": r.fromField, "assignable": True}
     if r.kind == ResponsibilityKind.owner:
         return {"kind": "owner"}
     if r.kind == ResponsibilityKind.originator:

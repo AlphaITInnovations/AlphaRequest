@@ -4,6 +4,7 @@ import type { Condition, DepartmentRule, Responsibility, ResponsibilityKind } fr
 import {
   RESPONSIBILITY_KINDS, RESPONSIBILITY_LABEL, blankDepartmentRule,
 } from '@/lib/processSchema'
+import { computed } from 'vue'
 import GroupPicker from './GroupPicker.vue'
 import ConditionEditor from './ConditionEditor.vue'
 import ConditionSummary from './ConditionSummary.vue'
@@ -13,11 +14,17 @@ const props = defineProps<{
   groups: { id: string; name: string }[]
   users: { id: string; displayName: string }[]
   fieldKeys: string[]
+  /** Feld-Katalog: gebraucht, um Personen-Felder für kind=assignable anzubieten. */
+  catalog?: { key: string; widget: string }[]
   fieldLabels?: Record<string, string>
   readonly?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: Responsibility] }>()
+
+/** Nur Personen-Felder taugen als Zuständigkeits-Quelle. */
+const userFieldKeys = computed(() =>
+  (props.catalog ?? []).filter((f) => f.widget === 'user').map((f) => f.key))
 
 function patch(part: Partial<Responsibility>) {
   emit('update:modelValue', { ...props.modelValue, ...part })
@@ -29,6 +36,7 @@ function setKind(kind: ResponsibilityKind) {
     kind,
     group: kind === 'group' ? props.modelValue.group : null,
     user: kind === 'user' ? props.modelValue.user : null,
+    fromField: kind === 'assignable' ? props.modelValue.fromField : null,
     rule: kind === 'departments'
       ? (props.modelValue.rule.length ? props.modelValue.rule : [blankDepartmentRule()])
       : [],
@@ -59,6 +67,26 @@ function removeRule(i: number) { patch({ rule: props.modelValue.rule.filter((_, 
       <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Fachabteilung</label>
       <GroupPicker :model-value="modelValue.group" :groups="groups"
                    @update:model-value="patch({ group: $event })" />
+    </div>
+
+    <div v-else-if="modelValue.kind === 'assignable'">
+      <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+        Personen-Feld, das die Zuständigkeit trägt
+      </label>
+      <select :value="modelValue.fromField ?? ''" :disabled="readonly" class="afi w-full"
+              @change="patch({ fromField: ($event.target as HTMLSelectElement).value || null })">
+        <option value="">– bitte wählen –</option>
+        <option v-for="k in userFieldKeys" :key="k" :value="k">
+          {{ fieldLabels?.[k] || k }}
+        </option>
+      </select>
+      <p v-if="!userFieldKeys.length" class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+        Es gibt noch kein Feld vom Typ „Person" – bitte zuerst im Feld-Katalog anlegen.
+      </p>
+      <p v-else class="text-[11px] text-gray-400 mt-1">
+        Zuständig ist, wer in diesem Feld eingetragen ist – so wie im Alt-System die
+        bei der Erstellung ausgewählte Person.
+      </p>
     </div>
 
     <div v-else-if="modelValue.kind === 'user'">
@@ -108,5 +136,21 @@ function removeRule(i: number) { patch({ rule: props.modelValue.rule.filter((_, 
     <p v-else-if="modelValue.kind === 'originator'" class="text-xs text-gray-400">
       Die auslösende Person eines Folgeprozesses. (Nur sinnvoll bei verknüpften Prozessen.)
     </p>
+
+    <!-- Gilt für jede Zuständigkeits-Art, daher NACH der Kette (nicht darin). -->
+    <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 pt-3
+                  border-t border-gray-100 dark:border-white/[0.06]">
+      <input type="checkbox" :checked="modelValue.notifyOnEnter" :disabled="readonly"
+             class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]"
+             @change="patch({ notifyOnEnter: ($event.target as HTMLInputElement).checked })" />
+      <span>
+        Beim Betreten benachrichtigen
+        <span class="block text-[11px] text-gray-400">
+          Die zuständige Stelle bekommt automatisch eine Mail. Ohne das erfährt
+          niemand, dass Arbeit ansteht. (Bei „Ersteller:in" entfällt die Mail –
+          die Person hat gerade selbst gehandelt.)
+        </span>
+      </span>
+    </label>
   </div>
 </template>

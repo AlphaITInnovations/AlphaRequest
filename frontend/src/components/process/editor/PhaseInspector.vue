@@ -143,6 +143,7 @@ function labelFor(ref: string) {
     <section class="card-section">
       <h3 class="section-title">Wer bearbeitet</h3>
       <ResponsibilityEditor :model-value="modelValue.responsibility" :groups="groups" :users="users"
+                            :catalog="catalog"
                             :field-keys="fieldKeys" :field-labels="fieldLabels" :readonly="readonly"
                             @update:model-value="patch({ responsibility: $event })" />
     </section>

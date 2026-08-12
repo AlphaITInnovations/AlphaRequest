@@ -170,6 +170,23 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
         row["runtime"], row["status"] = runtime, status
 
     new_phase = pr.current_phase(defn, row.get("runtime") or {})
+    # Zuständige Stelle automatisch informieren – ohne das erfährt niemand, dass
+    # Arbeit ansteht (das Alt-System hat an sechs Stellen gemailt). Abschaltbar
+    # je Phase über responsibility.notifyOnEnter.
+    if new_phase is not None:
+        try:
+            recips = actions.notify_phase_entry(row, defn, new_phase, sender=SENDER)
+            if recips:
+                record_audit(
+                    action="process_phase_notified", actor_id=None, actor_name="System",
+                    actor_type="system", entity_type="process_ticket", entity_id=str(row["id"]),
+                    summary=f"Phase „{new_phase.label or new_phase.key}“ – "
+                            f"{len(recips)} Empfänger benachrichtigt",
+                    details={"phase": new_phase.key, "recipients": recips},
+                )
+        except Exception:
+            logger.exception("Phasen-Benachrichtigung für #%s fehlgeschlagen", row.get("id"))
+
     wants_advance = run_inline(row, defn, new_phase, {TriggerType.on_enter})
     restamp(row, defn)
 

@@ -103,8 +103,10 @@ function normResponsibility(v: any): Responsibility {
     kind: v?.kind ?? 'owner',
     group: str(v?.group),
     user: str(v?.user),
+    fromField: str(v?.fromField),
     rule: arr(v?.rule).map(normDepartmentRule),
     resetOnDescriptionChange: bool(v?.resetOnDescriptionChange),
+    notifyOnEnter: bool(v?.notifyOnEnter, true),
   }
 }
 

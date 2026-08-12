@@ -15,10 +15,26 @@ import html
 import json
 from typing import Callable, Optional
 
-from backend.schemas.process_definition import ProcessDefinition, PhaseDef, Action, ActionType
+from backend.schemas.process_definition import (
+    Action, ActionType, PhaseDef, ProcessDefinition, ResponsibilityKind,
+)
 from backend.services import process_runtime as pr
 from backend.utils.config import config
 from backend.utils.logger import logger
+
+
+def _user_email(user_id: Optional[str]) -> Optional[str]:
+    """Mail-Adresse einer Person aus dem AD-Cache. None, wenn nicht auflösbar."""
+    if not user_id:
+        return None
+    try:
+        from backend.database.users import get_user
+        row = get_user(user_id)
+        mail = (row or {}).get("mail") or (row or {}).get("email")
+        return mail or None
+    except Exception:
+        logger.warning("Mail-Adresse für %s nicht auflösbar", user_id)
+        return None
 
 
 def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
@@ -39,14 +55,33 @@ def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
     emails: set[str] = set()
     if to == "responsible" and phase is not None:
         resp = pr.resolve_responsibility(phase, row.get("values") or {})
-        if resp.get("kind") == "group":
+        kind = resp.get("kind")
+        if kind == "group":
             emails |= set(dist(resp.get("group")))
-        elif resp.get("kind") == "departments":
-            for d in resp.get("departments", []):
-                emails |= set(dist(d["group"]))
+        elif kind == "departments":
+            # Nur noch offene Abteilungen anschreiben – wer fertig ist, braucht
+            # keine Erinnerung mehr.
+            live = pr.current_departments(row.get("runtime") or {})
+            targets = ([d["group"] for d in live if d.get("status") not in ("done", "skipped")]
+                       if live else [d["group"] for d in resp.get("departments", [])])
+            for gid in targets:
+                emails |= set(dist(gid))
+        elif kind == "user":
+            # deckt kind=user UND kind=assignable ab (dort steht die Person im Feld)
+            mail = _user_email(resp.get("user"))
+            if mail:
+                emails.add(mail)
+        elif kind == "owner":
+            mail = _user_email(row.get("owner_id"))
+            if mail:
+                emails.add(mail)
+    elif to == "owner":
+        mail = _user_email(row.get("owner_id"))
+        if mail:
+            emails.add(mail)
     elif to and to.startswith("group:"):
         emails |= set(dist(to.split(":", 1)[1]))
-    # owner / user / watchers / supervisor: (noch) keine Adressquelle → Fallback.
+    # watchers: kommt mit der Beobachter-Funktion; bis dahin greift der Fallback.
 
     emails = {e for e in emails if e}
     if not emails:
@@ -105,6 +140,43 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
         logger.info("Automation-Action „%s“ ist in Stufe 5 noch nicht umgesetzt (Ticket #%s)",
                     t.value, row.get("id"))
     return changes
+
+
+def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
+                       *, sender: Callable = _default_sender,
+                       groups: Optional[list] = None) -> list[str]:
+    """Beim Betreten einer Phase automatisch die zuständige Stelle informieren.
+
+    Das Alt-System hat das an sechs Stellen gemacht; ohne dieses Verhalten würde
+    niemand erfahren, dass Arbeit ansteht – Automationen dafür in JEDEM Prozess
+    einzeln zu pflegen wäre eine Fehlerquelle. Abschaltbar je Phase über
+    responsibility.notifyOnEnter.
+
+    Gibt die tatsächlichen Empfänger zurück (für Audit/Tests). Wirft nicht.
+    """
+    if phase is None or not phase.responsibility.notifyOnEnter:
+        return []
+    # Die Start-Phase gehört der Person, die gerade angelegt hat – die muss man
+    # nicht über ihre eigene Eingabe informieren.
+    if phase.responsibility.kind == ResponsibilityKind.owner:
+        return []
+    try:
+        recips = resolve_recipients("responsible", row, phase, groups)
+        if not recips:
+            return []
+        title = str(row.get("title") or f"Auftrag #{row.get('id')}")
+        phase_lbl = str(phase.label or phase.key)
+        subject = (f"[AlphaRequest] Neue Aufgabe: {title}"
+                   .replace("\r", " ").replace("\n", " ")[:200])
+        body = (f"<p>Der Auftrag „{html.escape(title)}“ liegt jetzt bei Ihnen "
+                f"(Phase: {html.escape(phase_lbl)}).</p>"
+                f"<p>Zum Bearbeiten: {html.escape(config.FRONTEND_URL)}"
+                f"/prozess-auftraege/{row.get('id')}</p>")
+        sender(recips, subject, body, kind="phase_entry")
+        return recips
+    except Exception:
+        logger.exception("Phasen-Benachrichtigung für Ticket #%s fehlgeschlagen", row.get("id"))
+        return []
 
 
 def apply_action_changes(row: dict, defn: ProcessDefinition, changes: dict, store) -> None:

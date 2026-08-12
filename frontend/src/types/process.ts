@@ -22,7 +22,10 @@ export type Widget =
 export type OptionsSource = 'static' | 'groups' | 'companies' | 'users'
 export type PhaseKind = 'start' | 'task' | 'approval' | 'review' | 'end'
 export type PhaseView = 'form' | 'readonly' | 'approval' | 'review' | 'export'
-export type ResponsibilityKind = 'owner' | 'group' | 'user' | 'departments' | 'originator'
+export type ResponsibilityKind =
+  | 'owner' | 'group' | 'user' | 'departments' | 'originator'
+  /** Zuständige Person steht in einem Personen-Feld des Auftrags. */
+  | 'assignable'
 export type FieldMode = 'editable' | 'readonly' | 'hidden' | 'append_only'
 export type TriggerType = 'on_enter' | 'on_exit' | 'on_field_change' | 'timer'
 export type ActionType =
@@ -112,9 +115,13 @@ export interface Responsibility {
   kind: ResponsibilityKind
   group: string | null
   user: string | null
+  /** Bei kind='assignable': Schlüssel des Personen-Feldes (widget='user'). */
+  fromField: string | null
   rule: DepartmentRule[]
   /** Serverseitig abgelehnt, wenn true (noch nicht umgesetzt). */
   resetOnDescriptionChange: boolean
+  /** Beim Betreten der Phase automatisch benachrichtigen (Standard: ja). */
+  notifyOnEnter: boolean
 }
 
 export interface Trigger {

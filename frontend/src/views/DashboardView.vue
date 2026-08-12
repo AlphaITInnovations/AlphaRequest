@@ -25,17 +25,33 @@ interface DeptBoardGroup { group_id: string; group_name: string; tickets: DeptBo
 interface DepartmentRef { id: string; name: string }
 // Involviertes Ticket: wie DashboardTicket + Rollen des Nutzers
 interface InvolvedTicket extends DashboardTicket { roles: string[] }
+// Auftrag aus dem neuen, definitions-getriebenen Prozess-System. Bewusst OHNE
+// Feldwerte – die gibt es nur in der Detailansicht (dort serverseitig gefiltert).
+interface ProcessOrder {
+  id: number; process_key: string; process_version: number
+  title: string; status: string; priority: string
+  phase: string | null; phase_label: string | null
+  is_owner: boolean; created_at: string; updated_at: string
+}
+interface ProcessBlock {
+  my: ProcessOrder[]
+  involved: ProcessOrder[]
+  counts: Record<string, number>
+}
 interface DashboardData {
   orders: DashboardTicket[]
   watched_orders: DashboardTicket[]
   department_board: DeptBoardGroup[]
   my_departments: DepartmentRef[]
   allowed_ticket_types: string[]
+  // Additiv vom Backend ergänzt; ältere Antworten haben den Block nicht.
+  process?: ProcessBlock
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading   = ref(true)
 const data      = ref<DashboardData>({ orders: [], watched_orders: [], department_board: [], my_departments: [], allowed_ticket_types: [] })
+const processBlock = ref<ProcessBlock>({ my: [], involved: [], counts: {} })
 
 // Involvierte Tickets (Archiv) – serverseitig gefiltert & paginiert
 const involved         = ref<InvolvedTicket[]>([])   // aktuelle Seite
@@ -85,15 +101,59 @@ const STATUS_CLASS: Record<string, string> = {
   archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 }
+// `normal`/`urgent` kommen aus dem neuen Prozess-System (eigene Whitelist),
+// `medium`/`critical` aus dem Alt-System – beide Welten stehen im Dashboard
+// nebeneinander, deshalb sind alle vier hier eingetragen.
 const PRIORITY_LABEL: Record<string, string> = {
-  low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch',
+  low: 'Niedrig', medium: 'Mittel', normal: 'Normal',
+  high: 'Hoch', critical: 'Kritisch', urgent: 'Dringend',
 }
 const PRIORITY_CLASS: Record<string, string> = {
-  low: 'text-gray-400', medium: 'text-blue-400', high: 'text-amber-500', critical: 'text-red-500',
+  low: 'text-gray-400', medium: 'text-blue-400', normal: 'text-blue-400',
+  high: 'text-amber-500', critical: 'text-red-500', urgent: 'text-red-500',
 }
 
 function dotClass(s: string) {
   return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', waiting_contract: 'bg-violet-400', archived: 'bg-gray-400', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
+}
+
+// ── Prozess-Aufträge (definitions-getriebenes System) ─────────────────────────
+// Die Status-Whitelist ist dieselbe wie im Alt-System, daher werden die
+// bestehenden Maps weiterverwendet – mit Fallback auf den Rohwert, falls ein
+// Prozess künftig einen zusätzlichen Status mitbringt.
+function statusLabel(s: string) { return STATUS_LABEL[s] ?? s }
+function statusClass(s: string) {
+  return STATUS_CLASS[s] ?? 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400'
+}
+
+// Eigene Aufträge zuerst, danach die, an denen der Nutzer beteiligt ist.
+const processOrders = computed<ProcessOrder[]>(() =>
+  [...processBlock.value.my, ...processBlock.value.involved],
+)
+
+// Dieselbe Filterleiste wie oben – aber ohne type_key (den Prozess-Schlüssel
+// nutzen wir stattdessen als Suchfeld).
+const filteredProcessOrders = computed<ProcessOrder[]>(() => {
+  const q = filter.value.search.toLowerCase()
+  return processOrders.value.filter(o =>
+    (!q || o.title.toLowerCase().includes(q) || o.process_key.toLowerCase().includes(q)) &&
+    (filter.value.status === 'all' || o.status === filter.value.status) &&
+    (filter.value.priority === 'all' || o.priority === filter.value.priority),
+  )
+})
+
+// Status-Zähler (nur Sichtbares, vom Backend gezählt) für die Chips im Kopf.
+const processCounts = computed(() =>
+  Object.entries(processBlock.value.counts).filter(([, n]) => n > 0),
+)
+
+function openProcessOrder(o: ProcessOrder) { router.push(`/prozess-auftraege/${o.id}`) }
+
+// ISO-Datum (JJJJ-MM-TT) deutsch anzeigen – ohne Zeitzonen-Umrechnung, der Wert
+// ist bereits ein Kalendertag.
+function fmtDay(iso: string) {
+  const p = (iso || '').split('-')
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : (iso || '—')
 }
 
 // ── Rollen (Involviert-Tab) ─────────────────────────────────────────────────────
@@ -250,6 +310,12 @@ onMounted(async () => {
       department_board:     d.department_board ?? [],
       my_departments:       d.my_departments ?? [],
       allowed_ticket_types: d.allowed_ticket_types ?? [],
+    }
+    // Prozess-Block ist additiv – fehlt er (älteres Backend), bleibt er leer.
+    processBlock.value = {
+      my:       d.process?.my ?? [],
+      involved: d.process?.involved ?? [],
+      counts:   d.process?.counts ?? {},
     }
     // Auto-open department accordions
     for (const g of data.value.department_board) openGroupDepts.value[g.group_id] = true
@@ -573,6 +639,68 @@ onMounted(async () => {
           </div>
 
         </div>
+      </div>
+
+      <!-- ── Prozess-Aufträge (neues, definitions-getriebenes System) ──
+           Eigener Abschnitt statt eines weiteren Tabs: die Aufträge liegen in
+           einem anderen System und werden anders geöffnet (/prozess-auftraege).
+           Wird nur gezeigt, wenn es überhaupt welche gibt. -->
+      <div v-if="processOrders.length"
+           class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+                  rounded-2xl overflow-hidden">
+
+        <div class="px-5 py-3.5 flex items-center justify-between gap-3 flex-wrap
+                    border-b border-gray-100 dark:border-white/[0.06]">
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded bg-[#3EAAB8]/10 text-[#3EAAB8]
+                         flex items-center justify-center flex-shrink-0">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+              </svg>
+            </span>
+            <div>
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">Prozess-Aufträge</p>
+              <p class="text-xs text-gray-400">Aufträge aus den dynamischen Prozessen</p>
+            </div>
+          </div>
+          <!-- Status-Zähler über alle für dich sichtbaren Prozess-Aufträge -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span v-for="[st, n] in processCounts" :key="st"
+                  class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(st)">
+              {{ statusLabel(st) }} · {{ n }}
+            </span>
+          </div>
+        </div>
+
+        <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[360px] overflow-auto">
+          <li v-for="o in filteredProcessOrders" :key="o.id" @click="openProcessOrder(o)" class="row group">
+            <div class="flex items-center gap-3.5 min-w-0">
+              <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">
+                  {{ o.process_key }} · {{ fmtDay(o.created_at) }}
+                  <template v-if="o.phase_label"> · {{ o.phase_label }}</template>
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
+              <!-- Woher kommt der Auftrag in meine Liste? -->
+              <span class="hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                    :class="o.is_owner
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                      : 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20'">
+                {{ o.is_owner ? 'Ersteller' : 'Beteiligt' }}
+              </span>
+              <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(o.status)">{{ statusLabel(o.status) }}</span>
+              <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </li>
+          <li v-if="filteredProcessOrders.length === 0" class="empty">
+            Keine Prozess-Aufträge zum aktuellen Filter.
+          </li>
+        </ul>
       </div>
     </div>
   </AppLayout>

@@ -73,6 +73,11 @@ class ResponsibilityKind(str, Enum):
     user = "user"
     departments = "departments"
     originator = "originator"   # bei Spawn: Ersteller:in des auslösenden Prozesses
+    #: Zuständige Person steht in einem Personen-FELD des Auftrags (z. B. „Verantwortlich",
+    #: bei der Erstellung ausgewählt). Genau das Muster der Alt-Prozesse, nur
+    #: datengetrieben – dadurch gelten Pflicht, Sichtbarkeit und Validierung des
+    #: Feldes automatisch mit.
+    assignable = "assignable"
 
 
 class FieldMode(str, Enum):
@@ -324,8 +329,14 @@ class Responsibility(_Base):
     kind: ResponsibilityKind
     group: Optional[str] = None     # bei kind=group
     user: Optional[str] = None      # bei kind=user
+    #: bei kind=assignable: Schlüssel des Personen-Feldes, das die zuständige
+    #: Person enthält (muss widget='user' sein).
+    fromField: Optional[str] = None
     rule: list[DepartmentRule] = Field(default_factory=list)  # bei kind=departments
     resetOnDescriptionChange: bool = False
+    #: Beim Betreten der Phase automatisch benachrichtigen? Standard ja – sonst
+    #: erfährt niemand, dass Arbeit ansteht. Nur abschaltbar, wenn es stört.
+    notifyOnEnter: bool = True
 
     @model_validator(mode="after")
     def _kind_rules(self) -> "Responsibility":
@@ -335,6 +346,9 @@ class Responsibility(_Base):
             raise ValueError("responsibility.kind=user erfordert `user`")
         if self.kind == ResponsibilityKind.departments and not self.rule:
             raise ValueError("responsibility.kind=departments erfordert `rule`")
+        if self.kind == ResponsibilityKind.assignable and not self.fromField:
+            raise ValueError("responsibility.kind=assignable erfordert `fromField` "
+                             "(Schlüssel des Personen-Feldes)")
         return self
 
 
@@ -673,6 +687,18 @@ class ProcessDefinition(_Base):
                 for r in dsl_refs(c.get("when", {})):
                     _need(r, f"{p.key}.constraints[{i}].when")
             resp = p.responsibility
+            # kind=assignable: das Quellfeld muss existieren UND ein Personen-Feld
+            # sein – sonst stünde dort später irgendein Text statt einer User-ID.
+            if resp.kind == ResponsibilityKind.assignable and resp.fromField:
+                src = next((f for f in self.fields if f.key == resp.fromField), None)
+                if src is None:
+                    raise ValueError(
+                        f"Phase „{p.key}“.responsibility.fromField: „{resp.fromField}“ "
+                        f"ist nicht im Feld-Katalog")
+                if src.widget != Widget.user:
+                    raise ValueError(
+                        f"Phase „{p.key}“.responsibility.fromField: „{resp.fromField}“ muss "
+                        f"ein Personen-Feld sein (widget=user), ist aber „{src.widget.value}“")
             for dr in resp.rule:
                 if dr.when:
                     for r in dsl_refs(dr.when):

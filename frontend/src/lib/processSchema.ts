@@ -33,7 +33,7 @@ export const WIDGETS_SUB: readonly Widget[] = [
 export const PHASE_KINDS: readonly PhaseKind[] = ['start', 'task', 'review', 'end']
 export const PHASE_VIEWS: readonly PhaseView[] = ['form', 'readonly', 'review']
 export const RESPONSIBILITY_KINDS: readonly ResponsibilityKind[] =
-  ['owner', 'group', 'user', 'departments', 'originator']
+  ['owner', 'assignable', 'group', 'departments', 'user', 'originator']
 export const FIELD_MODES: readonly FieldMode[] = ['editable', 'readonly', 'hidden', 'append_only']
 export const OPTIONS_SOURCES: readonly OptionsSource[] = ['static', 'groups', 'companies', 'users']
 export const TRIGGER_TYPES = ['on_enter', 'on_exit', 'on_field_change', 'timer'] as const
@@ -114,7 +114,9 @@ export const PHASE_VIEW_LABEL: Record<PhaseView, string> = {
 }
 
 export const RESPONSIBILITY_LABEL: Record<ResponsibilityKind, string> = {
-  owner: 'Ersteller:in', group: 'Feste Fachabteilung', user: 'Feste Person',
+  owner: 'Ersteller:in',
+  assignable: 'Person aus einem Feld (bei Erstellung gewählt)',
+  group: 'Feste Fachabteilung', user: 'Feste Person',
   departments: 'Mehrere Fachabteilungen', originator: 'Auslösende Person',
 }
 
@@ -177,7 +179,8 @@ export function blankDepartmentRule(group = ''): DepartmentRule {
 }
 
 export function blankResponsibility(kind: ResponsibilityKind = 'owner'): Responsibility {
-  return { kind, group: null, user: null, rule: [], resetOnDescriptionChange: false }
+  return { kind, group: null, user: null, fromField: null, rule: [],
+    resetOnDescriptionChange: false, notifyOnEnter: true }
 }
 
 export function blankPhase(key: string, kind: PhaseKind = 'task'): PhaseDef {

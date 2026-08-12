@@ -59,6 +59,10 @@ def is_responsible(defn: Optional[ProcessDefinition], row: dict, user: dict,
         return bool(uid) and row.get("owner_id") == uid
     if r.kind == ResponsibilityKind.user:
         return bool(uid) and r.user == uid
+    if r.kind == ResponsibilityKind.assignable:
+        # Zuständig ist, wer im hinterlegten Personen-Feld steht.
+        picked = (row.get("values") or {}).get(r.fromField or "")
+        return bool(uid) and picked == uid
     if r.kind in (ResponsibilityKind.group, ResponsibilityKind.departments):
         return bool(set(group_ids) & responsible_groups(defn, row))
     return False

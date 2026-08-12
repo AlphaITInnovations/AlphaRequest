@@ -4,7 +4,7 @@ from backend.database.settings import DDL_SETTINGS
 from backend.database.users import USERS_DDL, USERS_MIGRATIONS
 from backend.database.ticket_watchers import TICKET_WATCHERS_DDL, backfill_owner_watchers
 from backend.database.audit_log import AUDIT_LOG_DDL
-from backend.database.attachments import ATTACHMENTS_DDL
+from backend.database.attachments import ATTACHMENTS_DDL, ATTACHMENTS_MIGRATIONS
 from backend.database.process_definitions import (
     PROCESS_DEFINITIONS_DDL, PROCESS_DEFINITIONS_MIGRATIONS,
 )
@@ -42,6 +42,7 @@ def init_db():
         conn = get_connection()
         try:
             for migration in (list(TICKETS_MIGRATIONS)
+                              + list(ATTACHMENTS_MIGRATIONS)
                               + list(PROCESS_DEFINITIONS_MIGRATIONS)
                               + list(PROCESS_TICKETS_MIGRATIONS)
                               + list(PROCESS_TIMER_FIRES_MIGRATIONS)):

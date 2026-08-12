@@ -237,3 +237,138 @@ def set_status(ticket_id: int, status: str, expected_rev: Optional[int] = None) 
         conn.commit()
     finally:
         conn.close()
+
+
+# ── Listen/Kennzahlen für Dashboard & Metriken ────────────────────────────────
+#
+# Eigene, schmale Projektion: die JSON-Blobs müssen nicht durch jede Liste.
+# `values_json` trägt die Feldwerte (LONGTEXT, und jede Ausgabe müsste erst durch
+# den Sichtbarkeitsfilter §5.1) – in Übersichten wird davon nichts gebraucht.
+_LIST_COLS = ("id, process_key, process_version, title, status, priority, "
+              "owner_id, owner_name, rev, next_timer_due_at, created_at, updated_at")
+
+# Zusätzlich `runtime_json`: der Ablaufzustand (Phase/Abteilungen, laut §5.6 NIE
+# Feldwerte) ist nötig, um Zuständigkeit und aktuelle Phase zu bestimmen –
+# `values_json` bleibt auch hier draußen.
+_LIST_COLS_RUNTIME = _LIST_COLS + ", runtime_json"
+
+
+def _row_to_list_dict(row: dict) -> dict:
+    """Listen-Zeile aufbereiten: Datumsfelder als ISO, `runtime` geparst falls
+    mitgelesen. Setzt bewusst KEIN `values` – die Feldwerte sind nicht geladen,
+    und ein leeres Dict würde „keine Werte" statt „nicht geladen" suggerieren."""
+    out = dict(row)
+    for k in ("created_at", "updated_at", "next_timer_due_at"):
+        v = out.get(k)
+        out[k] = v.isoformat() if hasattr(v, "isoformat") else v
+    if "runtime_json" in out:
+        try:
+            out["runtime"] = json.loads(out["runtime_json"]) if out["runtime_json"] else {}
+        except Exception:
+            out["runtime"] = {}
+    return out
+
+
+def list_for_owner(owner_id: str, limit: int = 25, *, active_only: bool = True,
+                   include_runtime: bool = False) -> list[dict]:
+    """Aufträge, die diese Person angelegt hat (owner_id) – neueste zuerst."""
+    if not owner_id:
+        return []
+    cols = _LIST_COLS_RUNTIME if include_runtime else _LIST_COLS
+    clause = f" AND {_ACTIVE_CLAUSE}" if active_only else ""
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            f"SELECT {cols} FROM process_tickets WHERE owner_id=%s{clause} "
+            "ORDER BY updated_at DESC LIMIT %s",
+            (owner_id, limit),
+        )
+    finally:
+        conn.close()
+    return [_row_to_list_dict(r) for r in rows]
+
+
+def list_active(limit: int = 200, *, include_runtime: bool = True) -> list[dict]:
+    """Nicht-terminale Aufträge (weder archiviert noch abgelehnt), neueste zuerst.
+
+    Bewusst mit `limit`: die Zugriffsprüfung (may_view) läuft je Zeile in Python,
+    deshalb wird der Scan begrenzt statt die ganze Tabelle zu laden."""
+    cols = _LIST_COLS_RUNTIME if include_runtime else _LIST_COLS
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            f"SELECT {cols} FROM process_tickets WHERE {_ACTIVE_CLAUSE} "
+            "ORDER BY updated_at DESC LIMIT %s",
+            (limit,),
+        )
+    finally:
+        conn.close()
+    return [_row_to_list_dict(r) for r in rows]
+
+
+def _group_count(conn, column: str, *, active_only: bool = False) -> dict[str, int]:
+    """COUNT/GROUP BY in der DB – es werden nur Schlüssel und Anzahl übertragen,
+    keine Zeilen. `column` ist immer ein Literal aus diesem Modul (kein
+    Nutzer-Input), daher keine Injektionsfläche."""
+    clause = f" WHERE {_ACTIVE_CLAUSE}" if active_only else ""
+    rows = _fetchall(
+        conn,
+        f"SELECT {column} AS k, COUNT(*) AS n FROM process_tickets{clause} GROUP BY {column}",
+    )
+    return {(r["k"] or "unbekannt"): int(r["n"]) for r in rows}
+
+
+def count_by_status(active_only: bool = False) -> dict[str, int]:
+    """Anzahl der Aufträge je Status (SQL-seitig gruppiert)."""
+    conn = get_connection()
+    try:
+        return _group_count(conn, "status", active_only=active_only)
+    finally:
+        conn.close()
+
+
+def metrics_snapshot(now: str) -> dict:
+    """Alle Kennzahlen für die Prometheus-Gauges in EINER Verbindung.
+
+    Getrennte Aufrufe würden den Pool je Sammellauf mehrfach belegen; alle
+    Abfragen sind Aggregate (COUNT/MIN/GROUP BY), es werden also keine Zeilen –
+    und erst gar keine JSON-Blobs – übertragen.
+    """
+    conn = get_connection()
+    try:
+        by_status = _group_count(conn, "status")
+        by_priority = _group_count(conn, "priority")
+        by_process = _group_count(conn, "process_key")
+        active_row = _fetchone(
+            conn, f"SELECT COUNT(*) AS n FROM process_tickets WHERE {_ACTIVE_CLAUSE}")
+        oldest_rows = _fetchall(
+            conn,
+            "SELECT process_key, MIN(created_at) AS oldest FROM process_tickets "
+            f"WHERE {_ACTIVE_CLAUSE} GROUP BY process_key",
+        )
+        due_row = _fetchone(
+            conn,
+            "SELECT COUNT(*) AS n FROM process_tickets WHERE next_timer_due_at IS NOT NULL "
+            f"AND next_timer_due_at <= %s AND {_ACTIVE_CLAUSE}",
+            (to_db_datetime(now),),
+        )
+    finally:
+        conn.close()
+    oldest = {}
+    for r in oldest_rows:
+        v = r.get("oldest")
+        key = r.get("process_key") or "unbekannt"
+        oldest[key] = v.isoformat() if hasattr(v, "isoformat") else v
+    return {
+        "total": sum(by_status.values()),
+        "active": int(active_row["n"]) if active_row else 0,
+        "by_status": by_status,
+        "by_priority": by_priority,
+        "by_process": by_process,
+        # ISO-Zeitstempel des ältesten offenen Auftrags je Prozess (Staus sichtbar
+        # machen); die Alters-Rechnung passiert im Metrik-Modul.
+        "oldest_active_created_at": oldest,
+        "timers_due": int(due_row["n"]) if due_row else 0,
+    }

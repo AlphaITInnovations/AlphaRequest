@@ -217,6 +217,21 @@ export function validateDefinition(
     if (r.kind === 'user' && !r.user) {
       out.push(err(`${p}.responsibility.user`, anchor, 'REQUIRED', 'Bitte eine Person wählen.'))
     }
+    if (r.kind === 'assignable') {
+      // Ohne gültiges Personen-Feld hätte die Phase niemanden – und der Server
+      // lehnt sie ohnehin ab.
+      const src = d.fields.find((f) => f.key === r.fromField)
+      if (!r.fromField) {
+        out.push(err(`${p}.responsibility.fromField`, anchor, 'REQUIRED',
+          'Bitte das Personen-Feld angeben, aus dem die Zuständigkeit kommt.'))
+      } else if (!src) {
+        out.push(err(`${p}.responsibility.fromField`, anchor, 'UNKNOWN_REF',
+          `Feld „${r.fromField}" ist nicht im Katalog.`))
+      } else if (src.widget !== 'user') {
+        out.push(err(`${p}.responsibility.fromField`, anchor, 'INVALID',
+          `„${r.fromField}" muss ein Personen-Feld sein (aktuell „${src.widget}").`))
+      }
+    }
     if (r.kind === 'departments' && r.rule.length === 0) {
       out.push(err(`${p}.responsibility.rule`, anchor, 'REQUIRED',
         'Mindestens eine Fachabteilung angeben.'))
