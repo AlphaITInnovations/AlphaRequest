@@ -1,0 +1,978 @@
+{
+  "schemaVersion": 1,
+  "key": "marketing-stellenanzeige",
+  "name": "Stellenanzeige",
+  "description": "Marketing-Stellenanzeige: Erfassung durch die anfordernde Niederlassung, anschließend Durchführung durch die Fachabteilung Marketing (Talention-Kampagne und Funnel).\n\nAbweichungen gegenüber dem Alt-System: (1) Die Abschnitts-Überschriften des Alt-Formulars („Freigabe“, „Niederlassung & Gesellschaft“, „Zur beworbenen Stelle“, „Stellendetails & Benefits“, „Erstellung der Anzeige“, „Erstellung des Funnels“) kennt das neue Format nicht – die Feldreihenfolge bleibt aber identisch. (2) Die ID/Name-Paare (freigabe_id/_name, talention_verantwortlicher_id/_name) sind zu je einem user-Feld zusammengefasst. (3) „stelle.vorqualifizierung_custom“ war eine Liste von Zeichenketten und ist jetzt eine collection mit dem Unterfeld „frage“. (4) Die Mindestwert-Prüfung auf „stelle.radius“ (min. 20) entfällt, weil das Feld ein Freitext ist. (5) Priorität und Kommentar sind ticket-eigene Angaben und daher keine Prozessfelder mehr. (6) Wer diesen Typ anlegen durfte, stand im Alt-System in der Datenbank (Gruppen-Rechte je Tickettyp) und ist hier nicht rekonstruierbar – „createPermissions“ steht daher auf dem restriktiven Standard (nur Admin) und muss nach dem Import gesetzt werden.",
+  "icon": "📣",
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "stelle.antragsteller_name",
+      "label": "Name, Vorname (Antragsteller:in)",
+      "widget": "text",
+      "help": "Wurde im Alt-System beim Anlegen automatisch aus dem angemeldeten Konto vorbelegt und nicht im Formular angezeigt – hier bitte eintragen.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.antragsteller_email",
+      "label": "E-Mail (Antragsteller:in)",
+      "widget": "text",
+      "help": "Wurde im Alt-System automatisch aus dem angemeldeten Konto vorbelegt.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "[^@\\s]+@[^@\\s]+\\.[^@\\s]+",
+        "minLength": null,
+        "maxLength": null,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.freigabe_erteilt",
+      "label": "Ja, die Budget-Freigabe wurde erteilt",
+      "widget": "checkbox",
+      "help": "Ohne bestätigte Budget-Freigabe kann die Kampagne nicht verbindlich eingeplant werden. Bitte bestätige, dass der/die Budget-Verantwortliche die Freigabe erteilt hat.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.freigabe_id",
+      "label": "Freigabe erteilt durch",
+      "widget": "user",
+      "help": "Im Alt-System drei Felder (freigabe_id, freigabe_name, freigabe_email); Name und E-Mail werden jetzt aus der ausgewählten Person aufgelöst.",
+      "placeholder": "Person auswählen…",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": "id",
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.freigabe_email",
+      "label": "E-Mail (Freigabe)",
+      "widget": "text",
+      "help": "Wurde im Alt-System automatisch aus der ausgewählten Person abgeleitet und nur lesend angezeigt.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "[^@\\s]+@[^@\\s]+\\.[^@\\s]+",
+        "minLength": null,
+        "maxLength": null,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.niederlassung",
+      "label": "Welche Niederlassung?",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. ACP Neumünster",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.gesellschaft",
+      "label": "Für welche Gesellschaft ist die Anzeige vorgesehen?",
+      "widget": "company",
+      "help": "Auswahl aus den in den Einstellungen gepflegten Gesellschaften.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": "name",
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.berufsbezeichnung",
+      "label": "Gesuchte Berufsbezeichnung",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Projektmanager:in Marketing (m/w/d)",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.beschaeftigungsart",
+      "label": "Beschäftigungsart",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Vollzeit",
+          "label": "Vollzeit"
+        },
+        {
+          "value": "Teilzeit",
+          "label": "Teilzeit"
+        },
+        {
+          "value": "Minijob",
+          "label": "Minijob"
+        },
+        {
+          "value": "Befristet",
+          "label": "Befristet"
+        },
+        {
+          "value": "Praktikum",
+          "label": "Praktikum"
+        },
+        {
+          "value": "Werkstudent",
+          "label": "Werkstudent"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.kostenstelle",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. 4711",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.talention_verantwortlicher_id",
+      "label": "Wer bearbeitet die Talention-Kampagne / Wer ist verantwortlich?",
+      "widget": "user",
+      "help": "Im Alt-System zwei Felder (ID + Name); der Name wird jetzt aufgelöst.",
+      "placeholder": "Mitarbeiter:in auswählen…",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": "id",
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.benefits",
+      "label": "Mindestens 3 Benefits",
+      "widget": "textarea",
+      "help": "Bitte Benefits/Anreize durch Kommas trennen, z. B. XX € pro Stunde, Weihnachtsgeld, Zuschläge, unbefristeter Vertrag, 30 Tage Urlaub.",
+      "placeholder": "z. B. Weihnachtsgeld, 30 Tage Urlaub, unbefristeter Vertrag",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.gehaltsangabe",
+      "label": "Ist eine Gehaltsangabe in der Anzeige gewünscht?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": "Ja"
+        },
+        {
+          "value": "Nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.gehalt",
+      "label": "Beworbenes Gehalt",
+      "widget": "text",
+      "help": "Bitte gib das Gehalt entweder konkret oder im „bis zu“-Format an, z. B. 3.000 € oder bis zu 3.000 €. Alternativ geht auch eine Spanne wie 2.800–3.200 € oder „ab 2.800 €“.",
+      "placeholder": "z. B. 2.800 – 3.200 € oder ab 2.800 €",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.bedingungen_notwendig",
+      "label": "Notwendige Bedingungen für Bewerber",
+      "widget": "textarea",
+      "help": "Bitte trage hier nur die Bedingungen ein, die zwingend nötig sind, z. B. Urkunden/Zeugnisse, Führerschein, Deutschkenntnisse, Ausbildung, Schichtbereitschaft.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.qualifikationen_nice",
+      "label": "Wünschenswerte Qualifikationen (optional)",
+      "widget": "textarea",
+      "help": "Hier kannst du alles eintragen, was wünschenswert ist, aber nicht zwingend nötig – also Dinge, die ein Bonus wären, z. B. erste Erfahrung, Zusatzqualifikationen oder bestimmte Tools.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.online_datum",
+      "label": "Wann soll die Anzeige online gehen?",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.open_end",
+      "label": "Soll die Anzeige open end laufen?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": "Ja"
+        },
+        {
+          "value": "Nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.end_datum",
+      "label": "Enddatum (mind. 3 Monate)",
+      "widget": "date",
+      "help": "Damit Meta die Kampagne wirklich kennenlernt, muss sie mindestens 3 Monate laufen. Bitte als Enddatum frühestens in 3 Monaten eintragen.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.staedte",
+      "label": "In welchen Städten ausspielen?",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. München, Augsburg, Ingolstadt",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.radius",
+      "label": "Radius pro Stadt (km)",
+      "widget": "text",
+      "help": "Mindestens 20 km. Das Alt-System hat den Mindestwert 20 aus dem Freitext herausgeparst; da das Feld ein Freitext bleibt (z. B. „25–30 km“), kann diese Prüfung hier nicht als Zahlen-Minimum abgebildet werden.",
+      "placeholder": "z. B. 25–30 km",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.budget",
+      "label": "Max. Budget pro Monat (€)",
+      "widget": "text",
+      "help": "Empfehlung: mind. 500 € / Anzeige / Monat / Niederlassung. Bleibt ein Textfeld, weil das Alt-System den Wert als Zeichenkette gespeichert hat.",
+      "placeholder": "z. B. 500",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.vorqualifizierung_fragen",
+      "label": "Fragen zur Vorqualifizierung im Funnel",
+      "widget": "checkbox-group",
+      "help": "Mehrfachauswahl möglich. Hinweis: Die Talention-Kampagne bitte nicht löschen, wenn im Titel „Funnel / nicht löschen“ steht – sonst sind die Bewerber weg.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ab wann könntest du starten? (Sofort / Datum / in X Wochen)",
+          "label": "Ab wann könntest du starten? (Sofort / Datum / in X Wochen)"
+        },
+        {
+          "value": "Welche Deutschkenntnisse hast du? (Fließend / gut / basics / keine)",
+          "label": "Welche Deutschkenntnisse hast du? (Fließend / gut / basics / keine)"
+        },
+        {
+          "value": "Hast du bereits Berufserfahrung? (Keine / 0–1 / 1–3 / 3+ Jahre)",
+          "label": "Hast du bereits Berufserfahrung? (Keine / 0–1 / 1–3 / 3+ Jahre)"
+        },
+        {
+          "value": "Welche Arbeitszeiten passen dir am besten? (tagsüber / früh / spät / nacht / flexibel)",
+          "label": "Welche Arbeitszeiten passen dir am besten? (tagsüber / früh / spät / nacht / flexibel)"
+        },
+        {
+          "value": "Schichtarbeit möglich? (Ja / Nein / nur bestimmte Schicht)",
+          "label": "Schichtarbeit möglich? (Ja / Nein / nur bestimmte Schicht)"
+        },
+        {
+          "value": "Zu welchen Uhrzeiten bist du gut erreichbar?",
+          "label": "Zu welchen Uhrzeiten bist du gut erreichbar?"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "stelle.vorqualifizierung_custom",
+      "label": "Eigene Vorqualifizierungsfragen (optional)",
+      "widget": "collection",
+      "help": "Im Alt-System eine reine Liste von Zeichenketten; jetzt eine Wiederholgruppe mit dem Unterfeld „frage“.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [
+        {
+          "key": "frage",
+          "label": "Frage",
+          "widget": "text",
+          "value": null
+        }
+      ]
+    },
+    {
+      "key": "stelle.faq",
+      "label": "Häufige Bewerberfragen & Antworten (FAQ) (optional)",
+      "widget": "textarea",
+      "help": "Welche Fragen kommen bei Bewerbern häufig, und wie sollen wir sie beantworten? Bitte im Format „Frage: … / Antwort: …“ und jeweils eine Zeile pro FAQ.",
+      "placeholder": "z. B. Gehalt (20–20,30 € i.d.R.), Schicht (2-Schicht), Sprache (Deutsch)",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "stelle.antragsteller_name",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.antragsteller_email",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.freigabe_erteilt",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.freigabe_id",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "truthy": "stelle.freigabe_erteilt"
+          },
+          "visibleWhen": {
+            "truthy": "stelle.freigabe_erteilt"
+          }
+        },
+        {
+          "ref": "stelle.freigabe_email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "stelle.freigabe_erteilt"
+          }
+        },
+        {
+          "ref": "stelle.niederlassung",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.gesellschaft",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.berufsbezeichnung",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.beschaeftigungsart",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.kostenstelle",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.talention_verantwortlicher_id",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.benefits",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.gehaltsangabe",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.gehalt",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "stelle.gehaltsangabe",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "stelle.gehaltsangabe",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "stelle.bedingungen_notwendig",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.qualifikationen_nice",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.online_datum",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.open_end",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.end_datum",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "stelle.open_end",
+              "Nein"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "stelle.open_end",
+              "Nein"
+            ]
+          }
+        },
+        {
+          "ref": "stelle.staedte",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.radius",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.budget",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.vorqualifizierung_fragen",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.vorqualifizierung_custom",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.faq",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_MARKETING_EINSETZEN",
+            "required": true,
+            "when": null
+          }
+        ],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "stelle.antragsteller_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.antragsteller_email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.freigabe_erteilt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.freigabe_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.freigabe_email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.niederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.gesellschaft",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.berufsbezeichnung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.beschaeftigungsart",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.kostenstelle",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.talention_verantwortlicher_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.benefits",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.gehaltsangabe",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.gehalt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.bedingungen_notwendig",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.qualifikationen_nice",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.online_datum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.open_end",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.end_datum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.staedte",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.radius",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.budget",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.vorqualifizierung_fragen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.vorqualifizierung_custom",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "stelle.faq",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

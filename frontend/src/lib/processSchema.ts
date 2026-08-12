@@ -9,7 +9,7 @@
  */
 import type {
   ActionType, Automation, DepartmentRule, FieldDef, FieldMode, FieldRef, OptionsSource,
-  PhaseDef, PhaseKind, PhaseView, ProcessDefinition, Responsibility, ResponsibilityKind,
+  CreatePermissions, PhaseDef, PhaseKind, PhaseView, ProcessDefinition, Responsibility, ResponsibilityKind,
   SubField, Widget,
 } from '@/types/process'
 
@@ -198,9 +198,15 @@ export function blankAutomation(id: string): Automation {
   }
 }
 
+export function blankCreatePermissions(): CreatePermissions {
+  // Restriktiver Default: ein neuer Prozess ist zunächst nur für Admins anlegbar.
+  return { everyone: false, groups: [], users: [] }
+}
+
 export function blankDefinition(key: string, name: string): ProcessDefinition {
   return {
     schemaVersion: SCHEMA_VERSION, key, name, description: null, icon: null,
+    createPermissions: blankCreatePermissions(),
     fields: [],
     phases: [blankPhase('erstellung', 'start')],
     automations: [],

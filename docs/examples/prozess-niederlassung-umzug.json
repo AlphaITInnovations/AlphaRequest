@@ -1,0 +1,1268 @@
+{
+  "schemaVersion": 1,
+  "key": "niederlassung-umzug",
+  "name": "Niederlassung – Umzug",
+  "description": "Umzug einer Niederlassung: Erfassung der alten (Mietvertrag) und der neuen Niederlassung, anschließend Bearbeitung (IT alt/neu, Marketing, Fuhrpark) und Durchführung durch Verwaltung, IT, Marketing und – bei Poolfahrzeugen – Fuhrpark.\n\nAbweichungen zum Alt-System: (1) Die Bearbeitungsphase war der bei der Erstellung ausgewählten verantwortlichen Person zugewiesen; die Laufzeit kann eine Zuständigkeit nicht aus einem Feld ableiten, daher kind=owner. (2) Priorität und Kommentar bleiben Ticket-Eigenschaften. (3) Aus den Paaren …_id/…_name wurde je ein Benutzer-Feld. (4) it_alt.network_hw_action / it_alt.network_hw_other waren im Alt-Formular tote Felder (nie gerendert) und sind hier nur versteckt geführt. (5) Die Pflicht-Häkchen werden zusätzlich über Phasen-Constraints erzwungen, weil die Laufzeit ein nicht gesetztes Häkchen (false) nicht als „leer“ wertet.\n\nHinweis zu createPermissions: bleibt auf dem restriktiven Default (nur Admin). Im Alt-System standen die Anlage-Berechtigungen je Tickettyp in der Tabelle ticket_group_permissions (Daten, nicht Code) – sie sind nach dem Import je Installation nachzutragen.",
+  "icon": "🚚",
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "miete_alt.location",
+      "label": "Ort (alt)",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Nürnberg Nord",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_alt.company",
+      "label": "Firma (alt)",
+      "widget": "company",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_alt.lease_action",
+      "label": "Mietvertrag (alt)",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "cancel",
+          "label": "Wird gekündigt"
+        },
+        {
+          "value": "keep",
+          "label": "Bleibt bestehen"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_alt.lease_cancel_date",
+      "label": "Kündigungsdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_alt.lease_keep_reason",
+      "label": "Begründung",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "z. B. andere Firma übernimmt die Fläche",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.location",
+      "label": "Ort der neuen Niederlassung",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Nürnberg Süd",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.company",
+      "label": "Firma der Niederlassung",
+      "widget": "company",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.sign_visible",
+      "label": "Firma an Klingel / Eingang sichtbar?",
+      "widget": "select",
+      "help": "Bei „Nein“: bitte Zettel an Klingel / Eingang anbringen.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.reopening",
+      "label": "Wiedereröffnung?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.location_supervisor_id",
+      "label": "Vorgesetzter der Niederlassung",
+      "widget": "user",
+      "help": "Im Alt-System zwei Felder (…_id + …_name); hier ein Benutzer-Feld – der Name wird zur Anzeige aufgelöst.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.contact_person_id",
+      "label": "Ansprechpartner für Rückfragen",
+      "widget": "user",
+      "help": "Im Alt-System zwei Felder (…_id + …_name); hier ein Benutzer-Feld – der Name wird zur Anzeige aufgelöst.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.cost_center",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": "Nur Ziffern (das Alt-Formular entfernte alle anderen Zeichen bei der Eingabe).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "[0-9]*",
+        "minLength": null,
+        "maxLength": null,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.start_date",
+      "label": "Startdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete_neu.address",
+      "label": "Adresse",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_alt.confirm_dsl_cancel",
+      "label": "Die DSL/Internetleitung wird gekündigt.",
+      "widget": "checkbox",
+      "help": "Wichtiger Hinweis – muss bei Kündigung des alten Mietvertrags bestätigt werden.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_alt.confirm_landline_cancel",
+      "label": "Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!",
+      "widget": "checkbox",
+      "help": "Wichtiger Hinweis – muss bei Kündigung des alten Mietvertrags bestätigt werden.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_alt.network_hw_action",
+      "label": "Netzwerk-Hardware (alt)",
+      "widget": "text",
+      "help": "Im Alt-System nur in der Formular-Datenstruktur vorhanden, aber nie angezeigt oder validiert – hier ausschließlich zur Datenkompatibilität aufgeführt (mode=hidden).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_alt.network_hw_other",
+      "label": "Netzwerk-Hardware (alt) – Sonstiges",
+      "widget": "text",
+      "help": "Im Alt-System nur in der Formular-Datenstruktur vorhanden, aber nie angezeigt oder validiert – hier ausschließlich zur Datenkompatibilität aufgeführt (mode=hidden).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_neu.server_rack",
+      "label": "Serverschrank vorhanden?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_neu.network_cabling",
+      "label": "Netzwerkverkabelung",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Cat6, Cat7",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_neu.line_installed",
+      "label": "DSL / Glasfaser-Dose vorhanden?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_neu.line_type",
+      "label": "Art / Anschluss",
+      "widget": "select",
+      "help": "Im Alt-Formular als Pflichtfeld beschriftet, aber nicht validiert – daher hier optional.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "DSL",
+          "label": null
+        },
+        {
+          "value": "Glasfaser",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_neu.line_location",
+      "label": "Wo befindet sie sich?",
+      "widget": "textarea",
+      "help": "Im Alt-Formular als Pflichtfeld beschriftet, aber nicht validiert – daher hier optional.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_neu.landlord_name",
+      "label": "Vermieter – Name",
+      "widget": "text",
+      "help": "Ohne vorhandene Dose wird der Vermieter mit der Installation beauftragt. Im Alt-Formular als Pflichtfeld beschriftet, aber nicht validiert.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it_neu.landlord_contact",
+      "label": "Vermieter – Kontakt",
+      "widget": "text",
+      "help": "Im Alt-Formular als Pflichtfeld beschriftet, aber nicht validiert – daher hier optional.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "marketing.opening_hours",
+      "label": "Öffnungszeiten der Niederlassung",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "z. B. Mo–Fr 08:00–17:00",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.pool_cars",
+      "label": "Poolfahrzeuge benötigt?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.pool_cars_from",
+      "label": "Benötigt ab",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "miete_alt.location",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.company",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_action",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_cancel_date",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "cancel"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "cancel"
+            ]
+          }
+        },
+        {
+          "ref": "miete_alt.lease_keep_reason",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "keep"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "keep"
+            ]
+          }
+        },
+        {
+          "ref": "miete_neu.location",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.company",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.sign_visible",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.reopening",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.location_supervisor_id",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.contact_person_id",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.cost_center",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.start_date",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.address",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "bearbeitung",
+      "label": "Bearbeitung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "miete_alt.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_action",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_cancel_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_keep_reason",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.sign_visible",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.reopening",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.location_supervisor_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.contact_person_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_alt.confirm_dsl_cancel",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "cancel"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "cancel"
+            ]
+          }
+        },
+        {
+          "ref": "it_alt.confirm_landline_cancel",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "cancel"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "miete_alt.lease_action",
+              "cancel"
+            ]
+          }
+        },
+        {
+          "ref": "it_alt.network_hw_action",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_alt.network_hw_other",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.server_rack",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.network_cabling",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.line_installed",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.line_type",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it_neu.line_installed",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it_neu.line_location",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it_neu.line_installed",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it_neu.landlord_name",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it_neu.line_installed",
+              "Nein"
+            ]
+          }
+        },
+        {
+          "ref": "it_neu.landlord_contact",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it_neu.line_installed",
+              "Nein"
+            ]
+          }
+        },
+        {
+          "ref": "marketing.opening_hours",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars_from",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "fuhrpark.pool_cars",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.pool_cars",
+              "Ja"
+            ]
+          }
+        }
+      ],
+      "constraints": [
+        {
+          "when": {
+            "or": [
+              {
+                "!=": [
+                  "miete_alt.lease_action",
+                  "cancel"
+                ]
+              },
+              {
+                "truthy": "it_alt.confirm_dsl_cancel"
+              }
+            ]
+          },
+          "message": "Bitte die Kündigung der DSL/Internetleitung bestätigen."
+        },
+        {
+          "when": {
+            "or": [
+              {
+                "!=": [
+                  "miete_alt.lease_action",
+                  "cancel"
+                ]
+              },
+              {
+                "truthy": "it_alt.confirm_landline_cancel"
+              }
+            ]
+          },
+          "message": "Bitte die Kündigung der Festnetzrufnummer bestätigen."
+        }
+      ],
+      "automations": []
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_MARKETING_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+            "required": true,
+            "when": {
+              "==": [
+                "fuhrpark.pool_cars",
+                "Ja"
+              ]
+            }
+          }
+        ],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "miete_alt.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_action",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_cancel_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_alt.lease_keep_reason",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.sign_visible",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.reopening",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.location_supervisor_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.contact_person_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete_neu.address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_alt.confirm_dsl_cancel",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_alt.confirm_landline_cancel",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_alt.network_hw_action",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_alt.network_hw_other",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.server_rack",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.network_cabling",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.line_installed",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.line_type",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.line_location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.landlord_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it_neu.landlord_contact",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "marketing.opening_hours",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars_from",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

@@ -20,9 +20,12 @@ from pydantic import BaseModel
 from backend.core.dependencies import get_current_user
 from backend.database import process_definitions as db
 from backend.database.audit_log import record_audit
+from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN, PERM_MANAGE
 from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import DataResponse, api_error, ErrorCode
+from backend.services import process_permissions as perms
+from backend.utils.logger import logger
 
 router = APIRouter()
 
@@ -61,6 +64,12 @@ class ProcessOut(BaseModel):
     status: str
     name: str
     definition: Optional[dict] = None
+    #: Darf der/die Aufrufende einen Auftrag dieses Prozesses anlegen?
+    #: Nur auf dem Katalog (GET /processes) gefüllt, damit die Anlage-Seite
+    #: filtern kann, ohne jede Definition einzeln zu laden.
+    may_create: Optional[bool] = None
+    #: Symbol aus der Definition – Listen-Routen liefern `definition` nicht mit.
+    icon: Optional[str] = None
     base_version: Optional[int] = None
     created_by: Optional[str] = None
     created_by_name: Optional[str] = None
@@ -103,9 +112,33 @@ def _map_db_error(exc: Exception):
 
 @router.get("/processes", response_model=DataResponse[list[ProcessOut]])
 def list_processes(user: dict = Depends(get_current_user)):
-    """Veröffentlichter Prozess-Katalog (für alle Authentifizierten)."""
-    rows = db.list_published_catalog()
-    return DataResponse(data=[_out(r) for r in rows])
+    """Veröffentlichter Prozess-Katalog (für alle Authentifizierten).
+
+    Liefert je Prozess `may_create` und `icon`. Die vollständige Definition wird
+    dafür gelesen, aber NICHT mitgesendet – sie gehört nicht in eine Liste.
+    """
+    rows = db.list_published_catalog(include_definition=True)
+    try:
+        group_ids = get_group_ids_for_user(user.get("id")) if user.get("id") else []
+    except Exception:
+        logger.warning("Gruppen für Erstellrechte nicht ladbar – nur Admin darf anlegen")
+        group_ids = []
+
+    out: list[ProcessOut] = []
+    for r in rows:
+        item = _out(r)
+        item.definition = None          # Blob nicht in der Liste ausliefern
+        raw = r.get("definition") or {}
+        item.icon = raw.get("icon")
+        try:
+            defn = ProcessDefinition.model_validate(raw)
+            item.may_create = perms.may_create(defn, user, group_ids)
+        except Exception:
+            # Kaputte Definition darf den Katalog nicht sprengen – fail-closed.
+            logger.exception("Definition %s v%s nicht lesbar", r.get("key"), r.get("version"))
+            item.may_create = False
+        out.append(item)
+    return DataResponse(data=out)
 
 
 @router.get("/processes/{key}/versions", response_model=DataResponse[list[ProcessOut]])

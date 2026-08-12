@@ -164,12 +164,23 @@ export interface PhaseDef {
   automations: Automation[]
 }
 
+/** Wer darf Aufträge dieses Prozesses ANLEGEN? Teil der Definition, wandert
+ *  daher bei Export/Import/Kopie mit. Default = nur Admin. */
+export interface CreatePermissions {
+  everyone: boolean
+  /** Gruppen-IDs (Fachabteilungen ODER AD-Gruppen). */
+  groups: string[]
+  /** Einzelne Personen (User-IDs). */
+  users: string[]
+}
+
 export interface ProcessDefinition {
   schemaVersion: number
   key: string
   name: string
   description: string | null
   icon: string | null
+  createPermissions: CreatePermissions
   fields: FieldDef[]
   phases: PhaseDef[]
   automations: Automation[]

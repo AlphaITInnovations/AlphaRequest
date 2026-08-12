@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "key": "basis-ticket",
+  "name": "Basis-Ticket",
+  "description": "Allgemeines Ticket ohne festes Fachformular: Titel plus ein fortlaufender, append-only Verlauf. Erstellung durch den/die Anfordernde:n, danach Bearbeitung durch die zuständige Gruppe, die weitere Einträge anhängt.\n\nAbweichungen gegenüber dem Alt-System: (1) Die Bearbeitungsphase wurde im Alt-System der Gruppe zugewiesen, die der/die Ersteller:in beim Anlegen auswählte (Feld „Verantwortlich“, nur Gruppen). Eine solche zur Laufzeit gewählte Zuständigkeit kennt das neue Format nicht – hier ist stattdessen eine feste Gruppe zu hinterlegen (Platzhalter in der Phase „bearbeitung“). (2) Der Verlaufs-Eintrag hatte zusätzlich eine „author_id“; die Laufzeit stempelt nur einen Akteur-Namen, deshalb entfällt die ID. (3) Priorität und Kommentar sind ticket-eigene Angaben und daher keine Prozessfelder mehr. (4) Angelegt wurde dieser Typ über den separaten Endpunkt /tickets/basis; im neuen System läuft das Anlegen über die reguläre Prozess-Runtime; der Endpunkt kannte bewusst keine Rechteprüfung (jede:r eingeloggte Nutzer:in durfte anlegen), daher „createPermissions.everyone = true“.",
+  "icon": "🎫",
+  "createPermissions": {
+    "everyone": true,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "ticket.titel",
+      "label": "Titel",
+      "widget": "text",
+      "help": "Freier Betreff des Tickets. Im Alt-System wurde dieser Wert beim Anlegen über den separaten Endpunkt /tickets/basis zugleich als Ticket-Titel übernommen.",
+      "placeholder": "Kurze Beschreibung des Anliegens…",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "ticket.eintraege",
+      "label": "Verlauf",
+      "widget": "collection",
+      "help": "Append-only Verlauf: Bestehende Einträge können weder geändert noch gelöscht werden, es lassen sich nur neue anhängen. Autor und Zeitstempel setzt der Server beim Speichern. Beim Anlegen ist der erste Eintrag (die ausführliche Beschreibung des Anliegens) verpflichtend.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": "append_only",
+      "item": [
+        {
+          "key": "text",
+          "label": "Eintrag",
+          "widget": "textarea",
+          "value": null
+        },
+        {
+          "key": "author_name",
+          "label": "Autor:in",
+          "widget": "server_stamped",
+          "value": "actor"
+        },
+        {
+          "key": "timestamp",
+          "label": "Zeitpunkt",
+          "widget": "server_stamped",
+          "value": "now"
+        }
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "ticket.titel",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "ticket.eintraege",
+          "mode": "append_only",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "bearbeitung",
+      "label": "Bearbeitung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_ZUSTAENDIGE_GRUPPE_EINSETZEN",
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "ticket.titel",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "ticket.eintraege",
+          "mode": "append_only",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

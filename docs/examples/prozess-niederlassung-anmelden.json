@@ -1,0 +1,883 @@
+{
+  "schemaVersion": 1,
+  "key": "niederlassung-anmelden",
+  "name": "Niederlassung anmelden",
+  "description": "Neue Niederlassung anmelden: Erstellung der Miet-/Standortdaten, anschließend Bearbeitung (IT, Marketing, Fuhrpark) und Durchführung durch die Fachabteilungen Verwaltung, IT, Marketing und – bei Poolfahrzeugen – Fuhrpark.\n\nAbweichungen zum Alt-System: (1) Die Bearbeitungsphase war im Alt-System der bei der Erstellung ausgewählten verantwortlichen Person zugewiesen; die Laufzeit kann eine Zuständigkeit nicht aus einem Feld ableiten, daher ist die Phase dem/der Ersteller:in zugewiesen (kind=owner). (2) Priorität und Kommentar bleiben Ticket-Eigenschaften und sind keine Felder. (3) Aus den Paaren …_id/…_name wurde je ein Benutzer-Feld.\n\nHinweis zu createPermissions: bleibt auf dem restriktiven Default (nur Admin). Im Alt-System standen die Anlage-Berechtigungen je Tickettyp in der Tabelle ticket_group_permissions (Daten, nicht Code) – sie sind nach dem Import je Installation nachzutragen.",
+  "icon": "🏢",
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "miete.location",
+      "label": "Ort der Niederlassung",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.company",
+      "label": "Firma der Niederlassung",
+      "widget": "company",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.reopening",
+      "label": "Wiedereröffnung?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.sign_visible",
+      "label": "Firma an Klingel / Eingang sichtbar?",
+      "widget": "select",
+      "help": "Bei „Nein“: bitte Zettel oder Ähnliches an Klingel / Eingang anbringen.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.location_supervisor_id",
+      "label": "Vorgesetzter der Niederlassung",
+      "widget": "user",
+      "help": "Im Alt-System zwei Felder (…_id + …_name); hier ein Benutzer-Feld – der Name wird zur Anzeige aufgelöst.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.contact_person_id",
+      "label": "Ansprechpartner für Rückfragen",
+      "widget": "user",
+      "help": "Im Alt-System zwei Felder (…_id + …_name); hier ein Benutzer-Feld – der Name wird zur Anzeige aufgelöst.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.cost_center",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": "Nur Ziffern (das Alt-Formular entfernte alle anderen Zeichen bei der Eingabe).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "[0-9]*",
+        "minLength": null,
+        "maxLength": null,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.start_date",
+      "label": "Startdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "miete.address",
+      "label": "Adresse",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.server_rack",
+      "label": "Serverschrank vorhanden?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.network_cabling",
+      "label": "Netzwerkverkabelung",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Cat 6, Cat 7",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.line_installed",
+      "label": "DSL- oder Glasfaser-Dose installiert?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.line_type",
+      "label": "Welche Art / Anschluss?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "DSL",
+          "label": null
+        },
+        {
+          "value": "Glasfaser",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.line_location",
+      "label": "Wo befindet sie sich?",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.landlord_name",
+      "label": "Vermieter – Name",
+      "widget": "text",
+      "help": "Ohne vorhandene Dose wird der Vermieter mit der Installation beauftragt.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.landlord_contact",
+      "label": "Vermieter – Kontaktdaten",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "marketing.opening_hours",
+      "label": "Öffnungszeiten der Niederlassung",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.pool_cars",
+      "label": "Poolfahrzeuge benötigt?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.pool_cars_from",
+      "label": "Benötigt ab",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "miete.location",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.company",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.reopening",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.sign_visible",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.location_supervisor_id",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.contact_person_id",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.cost_center",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.start_date",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.address",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "bearbeitung",
+      "label": "Bearbeitung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "miete.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.reopening",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.sign_visible",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.location_supervisor_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.contact_person_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.server_rack",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.network_cabling",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.line_installed",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.line_type",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.line_installed",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.line_installed",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it.line_location",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.line_installed",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.line_installed",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it.landlord_name",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.line_installed",
+              "Nein"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.line_installed",
+              "Nein"
+            ]
+          }
+        },
+        {
+          "ref": "it.landlord_contact",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.line_installed",
+              "Nein"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.line_installed",
+              "Nein"
+            ]
+          }
+        },
+        {
+          "ref": "marketing.opening_hours",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars_from",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "fuhrpark.pool_cars",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.pool_cars",
+              "Ja"
+            ]
+          }
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_MARKETING_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+            "required": true,
+            "when": {
+              "==": [
+                "fuhrpark.pool_cars",
+                "Ja"
+              ]
+            }
+          }
+        ],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "miete.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.reopening",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.sign_visible",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.location_supervisor_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.contact_person_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "miete.address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.server_rack",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.network_cabling",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.line_installed",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.line_type",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.line_location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.landlord_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.landlord_contact",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "marketing.opening_hours",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars_from",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

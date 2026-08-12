@@ -11,7 +11,7 @@
  * ausgegeben wird IMMER `from` (der Wire-Name).
  */
 import type {
-  Action, Automation, Condition, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
+  Action, Automation, Condition, CreatePermissions, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger,
 } from '@/types/process'
@@ -108,6 +108,14 @@ function normResponsibility(v: any): Responsibility {
   }
 }
 
+function normCreatePermissions(v: any): CreatePermissions {
+  return {
+    everyone: bool(v?.everyone),
+    groups: arr(v?.groups).map((g) => String(g)).filter(Boolean),
+    users: arr(v?.users).map((u) => String(u)).filter(Boolean),
+  }
+}
+
 function normTrigger(v: any): Trigger {
   return { type: v?.type ?? 'on_enter', after: str(v?.after), repeat: str(v?.repeat),
     field: str(v?.field) }
@@ -158,6 +166,7 @@ export function normalizeDefinition(v: any): ProcessDefinition {
     name: String(v?.name ?? ''),
     description: str(v?.description),
     icon: str(v?.icon),
+    createPermissions: normCreatePermissions(v?.createPermissions),
     fields: arr(v?.fields).map(normalizeField),
     phases: arr(v?.phases).map(normalizePhase),
     automations: arr(v?.automations).map(normalizeAutomation),

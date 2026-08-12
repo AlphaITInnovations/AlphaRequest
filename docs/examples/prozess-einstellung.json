@@ -1,0 +1,584 @@
+{
+  "schemaVersion": 1,
+  "key": "einstellung",
+  "name": "Einstellung Mitarbeiter:in",
+  "description": "Onboarding-Prozess 1: Die/der Vorgesetzte erfasst die Einstellungsdaten (Basisdaten sowie vertraulich Gehalt/Konditionen). Ablauf: Erstellung → Freigabe durch Udo Lutz → Arbeitsvertrag erstellen & versenden (Sekretariat GL) → Warten auf Vertragsrücklauf (Sekretariat GL). Mit dem Vertragsrücklauf ist dieser Prozess abgeschlossen.\n\nAbweichungen zum Alt-System:\n• Beim Vertragsrücklauf startete das Backend automatisch den Folgeprozess „zugang-beantragen“ (Prozess 2) und übernahm die Basisdaten. Die dafür nötige Action spawn_process gibt es in der Laufzeit noch nicht – die Übergabe P1 → P2 muss MANUELL erfolgen: nach dem Vertragsrücklauf den Prozess „Zugang beantragen“ neu anlegen und die Basisdaten übertragen.\n• Die Freigabe durch Herrn Lutz erfolgte über einen signierten Mail-Link (Freigabe-/Ablehnen-Ansicht ohne Anmeldung). PhaseKind „approval“ und PhaseView „approval“ sind noch nicht umgesetzt – die Phase ist deshalb eine normale Aufgaben-Phase (kind=task, view=form) für die Gruppe FreigabeHerrLutz; die Freigabe geschieht durch Abschließen der Phase in der Anwendung, es wird KEINE Freigabe-Mail mit Link versendet.\n• Gehalt und Konditionen sind vertrauliche Felder (hartes Gate, nur Sekretariat GL). Anders als früher kann die/der Vorgesetzte sie deshalb nicht mehr selbst erfassen – sie sind zusätzlich in der Vertrags-Phase durch das Sekretariat GL editierbar.\n• Die Phase „Warten auf Vertragsrücklauf“ setzt weiterhin den Ticket-Status „waiting_contract“.",
+  "icon": "📝",
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "base.salutation",
+      "label": "Anrede",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Herr",
+          "label": "Herr"
+        },
+        {
+          "value": "Frau",
+          "label": "Frau"
+        },
+        {
+          "value": "Divers",
+          "label": "Divers"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.first_name",
+      "label": "Vorname",
+      "widget": "text",
+      "help": null,
+      "placeholder": "Max",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.last_name",
+      "label": "Nachname",
+      "widget": "text",
+      "help": null,
+      "placeholder": "Mustermann",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.title",
+      "label": "Titel",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Niederlassungsleiter",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.contract_company",
+      "label": "Firma lt. Arbeitsvertrag",
+      "widget": "company",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.location",
+      "label": "Niederlassung",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.cost_center",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": "Nur Ziffern (im Alt-Formular wurden Nicht-Ziffern beim Tippen entfernt).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "^[0-9]+$",
+        "minLength": null,
+        "maxLength": null,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.start_date",
+      "label": "Arbeitsbeginn (laut Vertrag)",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.salary",
+      "label": "Gehalt",
+      "widget": "text",
+      "help": "Vertraulich – hartes Gate: sichtbar und beschreibbar NUR für die Gruppe Sekretariat GL (plus Admin). Im Alt-System konnte die/der Vorgesetzte den Wert bei der Erstellung eintragen (aber nicht mehr lesen); im neuen Format sperrt das Gate auch das Schreiben. Deshalb ist das Feld zusätzlich in der Phase „Arbeitsvertrag erstellen & versenden“ editierbar, damit das Sekretariat GL es nachtragen kann.",
+      "placeholder": "z. B. 3.500 € / Monat",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": true,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.conditions",
+      "label": "Konditionen",
+      "widget": "textarea",
+      "help": "Vertraulich – hartes Gate: sichtbar und beschreibbar NUR für die Gruppe Sekretariat GL (plus Admin); siehe Hinweis bei „Gehalt“.",
+      "placeholder": "z. B. 13. Gehalt, 30 Tage Urlaub, Probezeit …",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": true,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Einstellungsdaten erfassen",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "base.salutation",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.first_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.last_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.title",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.contract_company",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.location",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.cost_center",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.start_date",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.salary",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.conditions",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "freigabe",
+      "label": "Freigabe durch Udo Lutz",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "base.salutation",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.contract_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.salary",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.conditions",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "vertrag",
+      "label": "Arbeitsvertrag erstellen & versenden",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "base.salutation",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.contract_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.salary",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.conditions",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "vertragsruecklauf",
+      "label": "Warten auf Vertragsrücklauf",
+      "kind": "task",
+      "view": "readonly",
+      "enterStatus": "waiting_contract",
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "base.salutation",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.contract_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.salary",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.conditions",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

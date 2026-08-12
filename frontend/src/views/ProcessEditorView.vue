@@ -19,6 +19,7 @@ import PhaseInspector from '@/components/process/editor/PhaseInspector.vue'
 import FieldCatalogPanel from '@/components/process/editor/FieldCatalogPanel.vue'
 import AutomationList from '@/components/process/editor/AutomationList.vue'
 import IssueList from '@/components/process/editor/IssueList.vue'
+import CreatePermissionsEditor from '@/components/process/editor/CreatePermissionsEditor.vue'
 import ProcessSimulator from '@/components/process/ProcessSimulator.vue'
 
 const route = useRoute()
@@ -26,7 +27,7 @@ const router = useRouter()
 const { showToast } = useToast()
 const ed = useProcessEditor()
 
-const tab = ref<'flow' | 'fields' | 'automations' | 'preview' | 'json'>('flow')
+const tab = ref<'flow' | 'fields' | 'rechte' | 'automations' | 'preview' | 'json'>('flow')
 const selectedPhase = ref(0)
 const jsonText = ref('')
 const jsonError = ref<string | null>(null)
@@ -199,7 +200,7 @@ onUnmounted(() => {
         <!-- Tabs -->
         <div class="flex gap-1 border-b border-gray-200 dark:border-white/10 mb-4 overflow-x-auto">
           <button v-for="t in ([
-                    ['flow', 'Ablauf'], ['fields', 'Felder'], ['automations', 'Automationen'],
+                    ['flow', 'Ablauf'], ['fields', 'Felder'], ['rechte', 'Rechte'], ['automations', 'Automationen'],
                     ['preview', 'Vorschau'], ['json', 'JSON'],
                   ] as const)" :key="t[0]"
                   @click="tab = t[0]"
@@ -262,6 +263,15 @@ onUnmounted(() => {
           <fieldset :disabled="ed.readonly.value" class="contents">
             <FieldCatalogPanel :model-value="ed.draft.value.fields" :groups="ed.sources.groups"
                                @update:model-value="onFieldsChanged" @renamed="onFieldRenamed" />
+          </fieldset>
+        </div>
+
+        <!-- Erstellrechte -->
+        <div v-else-if="tab === 'rechte'">
+          <fieldset :disabled="ed.readonly.value" class="contents">
+            <CreatePermissionsEditor :model-value="ed.draft.value.createPermissions"
+                                     :groups="ed.sources.groups" :users="ed.sources.users"
+                                     @update:model-value="setDefinition({ createPermissions: $event })" />
           </fieldset>
         </div>
 

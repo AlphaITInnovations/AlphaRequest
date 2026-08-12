@@ -189,13 +189,20 @@ def list_versions(key: str) -> list[dict]:
     return [_row_to_dict(r) for r in rows]
 
 
-def list_published_catalog() -> list[dict]:
-    """Veröffentlichter Katalog OHNE definition_json."""
+def list_published_catalog(include_definition: bool = False) -> list[dict]:
+    """Veröffentlichter Katalog.
+
+    Standardmäßig OHNE definition_json (die Blobs müssen nicht durch jede Liste).
+    `include_definition=True` wird für den Katalog-Endpunkt gebraucht, der aus der
+    Definition die Erstellrechte und das Symbol ableitet – das sind höchstens so
+    viele Zeilen, wie es veröffentlichte Prozesse gibt (eine je Schlüssel).
+    """
+    cols = _COLS if include_definition else _LIST_COLS
     conn = get_connection()
     try:
         rows = _fetchall(
             conn,
-            f"SELECT {_LIST_COLS} FROM process_definitions WHERE status='published' "
+            f"SELECT {cols} FROM process_definitions WHERE status='published' "
             "ORDER BY name, `key`",
         )
     finally:

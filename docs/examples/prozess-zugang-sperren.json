@@ -1,0 +1,698 @@
+{
+  "schemaVersion": 1,
+  "key": "zugang-sperren",
+  "name": "Zugang sperren (Offboarding)",
+  "description": "Offboarding: Erstellung der Basisdaten, Bearbeitung der IT- und Fuhrpark-Angaben, anschließend Durchführung durch IT, Personalabteilung und – bei Dienstwagen – Fuhrpark.\nAbweichungen zum Alt-System: (1) Die Bearbeitungsphase war früher der bei der Erstellung ausgewählten Person („Verantwortliche:r“) zugewiesen; eine dynamische Personen-Zuständigkeit kennt die Laufzeit nicht – die Phase liegt daher beim Ersteller (kind=owner) und muss ggf. auf eine Gruppe umgestellt werden. (2) Priorität und Kommentar sind Ticket-Eigenschaften und keine Felder. (3) Der IT- und der Fuhrpark-Abschnitt waren im Alt-Formular in der Erstellung komplett ausgeblendet – sie erscheinen hier erst in der Bearbeitungsphase. (4) Die Basisdaten bleiben – wie im Alt-Formular – auch in der Bearbeitung editierbar und Pflicht. (5) Eine feld-genaue Sichtbarkeit je Fachabteilung war für diesen Typ im Alt-System NICHT konfiguriert (nur zugang-beantragen hatte eine); deshalb ist hier bewusst keine gesetzt.",
+  "icon": "🔒",
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "personal.first_name",
+      "label": "Vorname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.last_name",
+      "label": "Nachname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.cost_center",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": "Nur Ziffern (im Alt-Formular wurden Nicht-Ziffern bei der Eingabe entfernt).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "^[0-9]+$",
+        "minLength": null,
+        "maxLength": null,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.contract_company",
+      "label": "Firma lt. Arbeitsvertrag",
+      "widget": "select",
+      "help": null,
+      "placeholder": "Bitte wählen",
+      "options": [],
+      "optionsSource": "companies",
+      "allowOther": false,
+      "valueShape": "name",
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.exit_date",
+      "label": "Austrittsdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.severance_agreement",
+      "label": "Abfindungsvereinbarung",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.mail_forwarding",
+      "label": "Mailweiterleitung?",
+      "widget": "select",
+      "help": "⏱ Maximal 30 Tage. Nur an EINE Person.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.mail_forward_to",
+      "label": "Weiterleiten an",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. vorname.nachname@firma.de",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.mailbox_access",
+      "label": "Postfachzugriff gewähren?",
+      "widget": "select",
+      "help": "⏱ Maximal 30 Tage. Mehrere Personen möglich. Wichtig: Postfächer werden weiterhin gesichert, neue E-Mails werden jedoch nicht mehr zugestellt.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.mailbox_access_for",
+      "label": "Zugriff für (mehrere Personen möglich)",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "Eine Person pro Zeile oder komma-getrennt",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.auto_reply",
+      "label": "Abwesenheitsnotiz aktivieren?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.auto_reply_text",
+      "label": "Text der Abwesenheitsnotiz",
+      "widget": "textarea",
+      "help": "Platzhalter prüfen: <Name>, <Ersatzmailadresse>",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.car",
+      "label": "Dienstwagen vorhanden?",
+      "widget": "select",
+      "help": "„Ja“ zieht in der Durchführung zusätzlich die Fachabteilung Fuhrpark hinzu.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.car_return_date",
+      "label": "Rückgabedatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "personal.first_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.last_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.cost_center",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.contract_company",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.exit_date",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.severance_agreement",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "bearbeitung",
+      "label": "Bearbeitung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "personal.first_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.last_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.cost_center",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.contract_company",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.exit_date",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.severance_agreement",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.mail_forwarding",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.mail_forward_to",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.mail_forwarding",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.mail_forwarding",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it.mailbox_access",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.mailbox_access_for",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.mailbox_access",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.mailbox_access",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it.auto_reply",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.auto_reply_text",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.auto_reply",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.auto_reply",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "fuhrpark.car",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.car_return_date",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          }
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+            "required": true,
+            "when": {
+              "==": [
+                "fuhrpark.car",
+                "Ja"
+              ]
+            }
+          }
+        ],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "personal.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.contract_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.exit_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.severance_agreement",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.mail_forwarding",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.mail_forward_to",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.mail_forwarding",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it.mailbox_access",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.mailbox_access_for",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.mailbox_access",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "it.auto_reply",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.auto_reply_text",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.auto_reply",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "fuhrpark.car",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.car_return_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          }
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

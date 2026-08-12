@@ -1,0 +1,1414 @@
+{
+  "schemaVersion": 1,
+  "key": "hardware",
+  "name": "Hardware-Bestellung",
+  "description": "Hardware-Bestellung für Bestands- oder neue Mitarbeitende: Erstellung, Bearbeitung, anschließend Durchführung durch die IT.\nAbweichungen zum Alt-System: (1) Die Bearbeitungsphase war früher der bei der Erstellung ausgewählten Person („Verantwortliche:r“) zugewiesen; eine solche dynamische Personen-Zuständigkeit kennt die Laufzeit nicht – die Phase liegt daher beim Ersteller (kind=owner) und muss ggf. auf eine Gruppe umgestellt werden. (2) Priorität und Kommentar sind Ticket-Eigenschaften und keine Felder. (3) Der Reset der Hardware-Auswahl beim Wechsel des Mitarbeitertyps entfällt. (4) Das Alt-Formular zeigte in der Bearbeitungsphase dasselbe Formular wie bei der Erstellung – alle Felder bleiben dort editierbar.",
+  "icon": "💻",
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "hardware.mitarbeiterTyp",
+      "label": "Mitarbeitertyp",
+      "widget": "select",
+      "help": "Steuert, welche Hardware-Auswahl angezeigt wird. Im Alt-Formular ein Radio-Button-Paar; ein Wechsel hat dort die getroffene Hardware-Auswahl zurückgesetzt – das kann die neue Laufzeit nicht abbilden.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Bestandsmitarbeiter",
+          "label": null
+        },
+        {
+          "value": "Neuer Mitarbeiter",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.vorname",
+      "label": "Vorname",
+      "widget": "text",
+      "help": null,
+      "placeholder": "Max",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.nachname",
+      "label": "Nachname",
+      "widget": "text",
+      "help": null,
+      "placeholder": "Mustermann",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.kostenstelle",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": "Nur Ziffern (im Alt-Formular wurden Nicht-Ziffern bei der Eingabe entfernt).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "^[0-9]+$",
+        "minLength": null,
+        "maxLength": null,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.firma",
+      "label": "Firma",
+      "widget": "select",
+      "help": null,
+      "placeholder": "Bitte wählen",
+      "options": [],
+      "optionsSource": "companies",
+      "allowOther": false,
+      "valueShape": "name",
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.addr_strasse",
+      "label": "Straße",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.addr_nr",
+      "label": "Nr.",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.addr_plz",
+      "label": "PLZ",
+      "widget": "text",
+      "help": "Fünfstellige Postleitzahl, nur Ziffern.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": "^[0-9]{5}$",
+        "minLength": null,
+        "maxLength": 5,
+        "min": null,
+        "max": null,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.addr_stadt",
+      "label": "Stadt",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.addr_tuerschild",
+      "label": "Name am Türschild (optional)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.lieferungBis",
+      "label": "Lieferung bis",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.monitor.benoetigt",
+      "label": "Monitor benötigt",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.monitor.anzahl",
+      "label": "Anzahl Monitore",
+      "widget": "number",
+      "help": "Im Alt-Formular eine Auswahl 1 oder 2; bleibt eine Zahl, damit die Datenform gleich bleibt.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": {
+        "pattern": null,
+        "minLength": null,
+        "maxLength": null,
+        "min": 1.0,
+        "max": 2.0,
+        "minDate": null,
+        "maxDate": null
+      },
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.geraet",
+      "label": "Gerätetyp",
+      "widget": "select",
+      "help": "Im Alt-Formular als Pflichtfeld markiert (*), in den Validierungsregeln aber NIE geprüft – bleibt daher auch hier optional.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Laptop",
+          "label": "Laptop"
+        },
+        {
+          "value": "MiniPC",
+          "label": "Desktop (Mini-PC)"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.Notebook",
+      "label": "💻 Notebook",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.MiniPC",
+      "label": "🖥️ Mini-PC",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.Dockingstation",
+      "label": "🔌 Dockingstation",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.MausUndTastatur",
+      "label": "🖱️ Maus & Tastatur",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.Headset",
+      "label": "🎧 Headset",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.Webcam",
+      "label": "📷 Webcam",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.Handy",
+      "label": "📱 Handy",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.artikel.SIM",
+      "label": "📶 SIM-Karte",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.dockingVorhanden",
+      "label": "Dockingstation vorhanden",
+      "widget": "checkbox",
+      "help": "Alternative zu „Dockingstation bestellen“ (Feld hardware.artikel.Dockingstation). Im Alt-Formular ein Radio-Paar, das das jeweils andere Feld zurücksetzte; hier zwei unabhängige Häkchen.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.bemerkung",
+      "label": "Optionale Bemerkung",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "z. B. Standort, Sonderwünsche, Hinweise …",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "hardware.grundBestellung",
+      "label": "Grund der Neubestellung",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "hardware.mitarbeiterTyp",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.vorname",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.nachname",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.kostenstelle",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.firma",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_strasse",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_nr",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_plz",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_stadt",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_tuerschild",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.lieferungBis",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.monitor.benoetigt",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.monitor.anzahl",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.monitor.benoetigt"
+          }
+        },
+        {
+          "ref": "hardware.geraet",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Neuer Mitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.Notebook",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.MiniPC",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.Dockingstation",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "or": [
+              {
+                "==": [
+                  "hardware.mitarbeiterTyp",
+                  "Bestandsmitarbeiter"
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      "hardware.mitarbeiterTyp",
+                      "Neuer Mitarbeiter"
+                    ]
+                  },
+                  {
+                    "==": [
+                      "hardware.geraet",
+                      "Laptop"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.MausUndTastatur",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Headset",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Webcam",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Handy",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.SIM",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.dockingVorhanden",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "hardware.mitarbeiterTyp",
+                  "Neuer Mitarbeiter"
+                ]
+              },
+              {
+                "==": [
+                  "hardware.geraet",
+                  "Laptop"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "hardware.bemerkung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Neuer Mitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.grundBestellung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        }
+      ],
+      "constraints": [
+        {
+          "when": {
+            "or": [
+              {
+                "truthy": "hardware.artikel.Notebook"
+              },
+              {
+                "truthy": "hardware.artikel.MiniPC"
+              },
+              {
+                "truthy": "hardware.artikel.Dockingstation"
+              },
+              {
+                "truthy": "hardware.artikel.MausUndTastatur"
+              },
+              {
+                "truthy": "hardware.artikel.Headset"
+              },
+              {
+                "truthy": "hardware.artikel.Webcam"
+              },
+              {
+                "truthy": "hardware.artikel.Handy"
+              },
+              {
+                "truthy": "hardware.artikel.SIM"
+              },
+              {
+                "truthy": "hardware.monitor.benoetigt"
+              }
+            ]
+          },
+          "message": "Bitte mindestens ein Hardware-Element auswählen (Artikel oder Monitor)."
+        }
+      ],
+      "automations": []
+    },
+    {
+      "key": "bearbeitung",
+      "label": "Bearbeitung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "hardware.mitarbeiterTyp",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.vorname",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.nachname",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.kostenstelle",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.firma",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_strasse",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_nr",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_plz",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_stadt",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_tuerschild",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.lieferungBis",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.monitor.benoetigt",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.monitor.anzahl",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.monitor.benoetigt"
+          }
+        },
+        {
+          "ref": "hardware.geraet",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Neuer Mitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.Notebook",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.MiniPC",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.Dockingstation",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "or": [
+              {
+                "==": [
+                  "hardware.mitarbeiterTyp",
+                  "Bestandsmitarbeiter"
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      "hardware.mitarbeiterTyp",
+                      "Neuer Mitarbeiter"
+                    ]
+                  },
+                  {
+                    "==": [
+                      "hardware.geraet",
+                      "Laptop"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.MausUndTastatur",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Headset",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Webcam",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Handy",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.SIM",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.dockingVorhanden",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "hardware.mitarbeiterTyp",
+                  "Neuer Mitarbeiter"
+                ]
+              },
+              {
+                "==": [
+                  "hardware.geraet",
+                  "Laptop"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "hardware.bemerkung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Neuer Mitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.grundBestellung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        }
+      ],
+      "constraints": [
+        {
+          "when": {
+            "or": [
+              {
+                "truthy": "hardware.artikel.Notebook"
+              },
+              {
+                "truthy": "hardware.artikel.MiniPC"
+              },
+              {
+                "truthy": "hardware.artikel.Dockingstation"
+              },
+              {
+                "truthy": "hardware.artikel.MausUndTastatur"
+              },
+              {
+                "truthy": "hardware.artikel.Headset"
+              },
+              {
+                "truthy": "hardware.artikel.Webcam"
+              },
+              {
+                "truthy": "hardware.artikel.Handy"
+              },
+              {
+                "truthy": "hardware.artikel.SIM"
+              },
+              {
+                "truthy": "hardware.monitor.benoetigt"
+              }
+            ]
+          },
+          "message": "Bitte mindestens ein Hardware-Element auswählen (Artikel oder Monitor)."
+        }
+      ],
+      "automations": []
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "required": true,
+            "when": null
+          }
+        ],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "hardware.mitarbeiterTyp",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.vorname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.nachname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.kostenstelle",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.firma",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_strasse",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_nr",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_plz",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_stadt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.addr_tuerschild",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.lieferungBis",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "hardware.monitor.benoetigt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.monitor.anzahl",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.monitor.benoetigt"
+          }
+        },
+        {
+          "ref": "hardware.geraet",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Neuer Mitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.Notebook",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.MiniPC",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.Dockingstation",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "or": [
+              {
+                "==": [
+                  "hardware.mitarbeiterTyp",
+                  "Bestandsmitarbeiter"
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      "hardware.mitarbeiterTyp",
+                      "Neuer Mitarbeiter"
+                    ]
+                  },
+                  {
+                    "==": [
+                      "hardware.geraet",
+                      "Laptop"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "hardware.artikel.MausUndTastatur",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Headset",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Webcam",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.Handy",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.artikel.SIM",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "hardware.mitarbeiterTyp"
+          }
+        },
+        {
+          "ref": "hardware.dockingVorhanden",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "hardware.mitarbeiterTyp",
+                  "Neuer Mitarbeiter"
+                ]
+              },
+              {
+                "==": [
+                  "hardware.geraet",
+                  "Laptop"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "hardware.bemerkung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Neuer Mitarbeiter"
+            ]
+          }
+        },
+        {
+          "ref": "hardware.grundBestellung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "hardware.mitarbeiterTyp",
+              "Bestandsmitarbeiter"
+            ]
+          }
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

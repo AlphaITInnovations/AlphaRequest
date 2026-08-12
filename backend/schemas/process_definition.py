@@ -475,12 +475,30 @@ class PhaseDef(_Base):
 
 # ── Prozess ──────────────────────────────────────────────────────────────────
 
+class CreatePermissions(_Base):
+    """Wer darf Aufträge dieses Prozesses ANLEGEN?
+
+    Bewusst Teil der Definition (statt einer separaten Tabelle wie im
+    Alt-System): So steht alles zu einem Prozess an einer Stelle und wandert
+    beim Export/Import/Kopieren mit.
+
+    Default = niemand außer Admin. Bewusst restriktiv: ein neuer Prozess soll
+    nicht versehentlich für alle offen sein.
+    """
+    everyone: bool = False
+    #: Gruppen-IDs – Fachabteilungen ODER AD-Gruppen (das Alt-System mischte beides).
+    groups: list[str] = Field(default_factory=list)
+    #: Einzelne Personen (User-IDs), für Ausnahmen.
+    users: list[str] = Field(default_factory=list)
+
+
 class ProcessDefinition(_Base):
     schemaVersion: int = CURRENT_SCHEMA_VERSION
     key: str
     name: str
     description: Optional[str] = None
     icon: Optional[str] = None
+    createPermissions: CreatePermissions = Field(default_factory=CreatePermissions)
     fields: list[FieldDef] = Field(default_factory=list)
     phases: list[PhaseDef] = Field(default_factory=list)
     automations: list[Automation] = Field(default_factory=list)

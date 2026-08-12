@@ -1,0 +1,455 @@
+{
+  "schemaVersion": 1,
+  "key": "niederlassung-schliessen",
+  "name": "Niederlassung schließen",
+  "description": "Schließung einer Niederlassung: Erfassung von Standort und Schließungsdatum, anschließend Bearbeitung (IT-Hardware, Kündigungs-Bestätigungen, Fuhrpark) und Durchführung durch IT, Personalabteilung und – bei Poolfahrzeugen vor Ort – Fuhrpark.\n\nAbweichungen zum Alt-System: (1) Die Bearbeitungsphase war der bei der Erstellung ausgewählten verantwortlichen Person zugewiesen; die Laufzeit kann eine Zuständigkeit nicht aus einem Feld ableiten, daher kind=owner. (2) Priorität und Kommentar bleiben Ticket-Eigenschaften. (3) Die beiden Pflicht-Häkchen werden zusätzlich über Phasen-Constraints erzwungen, weil die Laufzeit ein nicht gesetztes Häkchen (false) nicht als „leer“ wertet.\n\nHinweis zu createPermissions: bleibt auf dem restriktiven Default (nur Admin). Im Alt-System standen die Anlage-Berechtigungen je Tickettyp in der Tabelle ticket_group_permissions (Daten, nicht Code) – sie sind nach dem Import je Installation nachzutragen.",
+  "icon": "🏚️",
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "personal.location",
+      "label": "Welche Niederlassung betrifft es?",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Nürnberg Nord",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.closing_date",
+      "label": "Schließungsdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.address",
+      "label": "Adresse der Niederlassung",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "Straße, PLZ Ort",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.confirm_dsl_cancel",
+      "label": "Die DSL/Internetleitung wird gekündigt.",
+      "widget": "checkbox",
+      "help": "Wichtiger Hinweis – muss bestätigt werden.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.confirm_landline_cancel",
+      "label": "Die Festnetzrufnummer wird gekündigt und ist danach nicht mehr erreichbar!",
+      "widget": "checkbox",
+      "help": "Wichtiger Hinweis – muss bestätigt werden.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.hardware_action",
+      "label": "Was geschieht mit der Hardware vor Ort?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "return_it",
+          "label": "Wird an die IT gesendet"
+        },
+        {
+          "value": "transfer_branch",
+          "label": "Wird in eine andere Niederlassung transferiert"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.transfer_target",
+      "label": "Welche Niederlassung?",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "Adresse der Ziel-Niederlassung",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.pool_cars",
+      "label": "Poolfahrzeuge vor Ort?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": null
+        },
+        {
+          "value": "Nein",
+          "label": null
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "fuhrpark.return_date",
+      "label": "Rückgabedatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "personal.location",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.closing_date",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.address",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "bearbeitung",
+      "label": "Bearbeitung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "personal.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.closing_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.confirm_dsl_cancel",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.confirm_landline_cancel",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.hardware_action",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.transfer_target",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "it.hardware_action",
+              "transfer_branch"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "it.hardware_action",
+              "transfer_branch"
+            ]
+          }
+        },
+        {
+          "ref": "fuhrpark.pool_cars",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.return_date",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "fuhrpark.pool_cars",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.pool_cars",
+              "Ja"
+            ]
+          }
+        }
+      ],
+      "constraints": [
+        {
+          "when": {
+            "truthy": "it.confirm_dsl_cancel"
+          },
+          "message": "Bitte die Kündigung der DSL/Internetleitung bestätigen."
+        },
+        {
+          "when": {
+            "truthy": "it.confirm_landline_cancel"
+          },
+          "message": "Bitte die Kündigung der Festnetzrufnummer bestätigen."
+        }
+      ],
+      "automations": []
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+            "required": true,
+            "when": {
+              "==": [
+                "fuhrpark.pool_cars",
+                "Ja"
+              ]
+            }
+          }
+        ],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "personal.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.closing_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.confirm_dsl_cancel",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.confirm_landline_cancel",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.hardware_action",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.transfer_target",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.pool_cars",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.return_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}

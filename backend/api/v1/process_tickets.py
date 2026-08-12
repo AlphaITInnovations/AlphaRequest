@@ -19,6 +19,7 @@ from backend.core.dependencies import get_current_user
 from backend.database import process_tickets as store
 from backend.database import process_definitions as defstore
 from backend.database.audit_log import record_audit
+from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN
 from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import (
@@ -26,6 +27,7 @@ from backend.schemas.responses import (
 )
 from backend.services import process_compute as compute
 from backend.services import process_engine as engine
+from backend.services import process_permissions as perms
 from backend.services import process_runtime as pr
 from backend.services import process_validation as pv
 from backend.services import process_visibility as vis
@@ -184,6 +186,18 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     if not pub or not pub.get("definition"):
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {body.processKey}")
     defn = ProcessDefinition.model_validate(pub["definition"])
+
+    # Erstellrechte kommen aus der Definition (createPermissions). Admins dürfen
+    # immer; für alle anderen greift das erst, wenn die Endpunkte über Admin
+    # hinaus geöffnet werden – die Prüfung sitzt schon an der richtigen Stelle.
+    try:
+        group_ids = get_group_ids_for_user(user.get("id")) if user.get("id") else []
+    except Exception:
+        logger.warning("Gruppen für Erstellrechte nicht ladbar – fail-closed")
+        group_ids = []
+    if not perms.may_create(defn, user, group_ids):
+        raise api_error(403, ErrorCode.PERMISSION_DENIED,
+                        f"Keine Berechtigung, Aufträge des Prozesses „{defn.name}“ anzulegen")
 
     submitted = body.values or {}
     catalog = {f.key for f in defn.fields}
