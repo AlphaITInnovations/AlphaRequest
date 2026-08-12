@@ -263,11 +263,9 @@ def test_fehler_in_einer_teilmetrik_killt_den_lauf_nicht(monkeypatch, runtime_ro
         "metrics_collect_failures_total", {"part": "process_snapshot"}) == vorher + 1
 
 
-def test_sammellauf_ohne_ticket_manager_setzt_prozess_metriken(
-        monkeypatch, snapshot, runtime_rows):
-    """Kern der Entkopplung: ohne Alt-System (TICKET_MANAGER=None) müssen die
-    Prozess-Reihen weiterhin entstehen."""
-    monkeypatch.setattr(met, "TICKET_MANAGER", None)
+def test_sammellauf_setzt_prozess_metriken(monkeypatch, snapshot, runtime_rows):
+    """Kern der Entkopplung: der Sammellauf kennt das Alt-System nicht mehr –
+    die Prozess-Reihen entstehen trotzdem (vorher hingen sie an TICKET_MANAGER)."""
     runtime_rows([_rt("demo", "ohne_alt", [_dept("g_it")])])
 
     met.collect_all()   # der echte Durchlauf, inkl. Session-/System-Teil
@@ -280,12 +278,13 @@ def test_sammellauf_ohne_ticket_manager_setzt_prozess_metriken(
         {"department": "g_it", "required": "true"}) == 1
 
 
-def test_prozess_metriken_stehen_vor_dem_alt_system_im_sammellauf():
-    """Reihenfolge festgehalten: das Alt-System darf nicht davorstehen und mit
-    seinem Ausfall alles Übrige verzögern/blockieren."""
+def test_prozess_metriken_haengen_an_keiner_alt_bedingung():
+    """Der Sammellauf enthält den Prozess-Teil unbedingt und kein Alt-System mehr:
+    ein Teil, der nur „manchmal" läuft, wäre ein stilles Monitoring-Loch."""
     parts = [p for p, _ in met._COLLECTORS]
     assert "process_tickets" in parts
-    assert parts.index("process_tickets") < parts.index("legacy_tickets")
+    assert "legacy_tickets" not in parts
+    assert not hasattr(met, "TICKET_MANAGER")
 
 
 def test_ein_kaputter_collector_stoppt_die_uebrigen_nicht(monkeypatch):

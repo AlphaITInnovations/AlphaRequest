@@ -1,59 +1,33 @@
+"""Dashboard: die Arbeit des angemeldeten Nutzers in den Prozess-Aufträgen.
+
+Seit dem Rückbau des Alt-Systems ist der Prozess-Block der EINZIGE Inhalt. Die
+Alt-Schlüssel (`orders`, `watched_orders`, `department_board`,
+`allowed_ticket_types`) und der Endpunkt `/dashboard/involved` sind entfallen;
+der Katalog der anlegbaren Prozesse steht in `GET /processes` (`may_create`), das
+Archiv in `GET /process-tickets`.
+
+Der Schlüssel `process` bleibt als Klammer bestehen (kein Flatten): so ändert
+sich für die bestehenden Leser `data.process.*` im Frontend nichts.
+"""
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from backend.core.dependencies import get_current_user
 from backend.database import process_definitions as defstore
 from backend.database import process_tickets as pstore
-from backend.database import tickets as database
-from backend.models.models import TicketType
 from backend.schemas.process_definition import ProcessDefinition
 from backend.services import process_access as acc
 from backend.services import process_runtime as pr
 from backend.services import process_visibility as vis
-from backend.services.ticket_permissions import can_user_create_ticket
-from backend.services.workflow_state import get_dashboard_work, get_involved_tickets
-from backend.schemas.dashboard import (
-    DashboardResponse, DashboardTicket, DepartmentGroup, DepartmentTicket,
-    DepartmentRef, InvolvedTicket, InvolvedResponse,
-)
 from backend.schemas.responses import DataResponse
 from backend.utils.logger import logger
 
 router = APIRouter()
 
-
-def _to_dashboard_ticket(t) -> DashboardTicket:
-    return DashboardTicket(
-        id=t.id,
-        title=t.title,
-        type_key=t.ticket_type if isinstance(t.ticket_type, str) else t.ticket_type.value,
-        status=t.status if isinstance(t.status, str) else t.status.value,
-        priority=t.priority if isinstance(t.priority, str) else t.priority.value,
-        created_at=t.created_at.strftime("%d.%m.%Y") if hasattr(t.created_at, "strftime") else str(t.created_at)[:10],
-    )
-
-
-def _board_item_to_dashboard_ticket(it: dict) -> DashboardTicket:
-    return DashboardTicket(
-        id=it["id"],
-        title=it["title"],
-        type_key=it["type_key"],
-        status=it["status"],
-        priority=it["priority"],
-        created_at=(it["created_at"] or "")[:10],
-    )
-
-
-# ── Prozess-Aufträge (neues, definitions-getriebenes System) ──────────────────
-#
-# Das neue System läuft parallel zum Alt-System (eigene Tabelle `process_tickets`).
-# Ohne diesen Block wäre die Arbeit dort im Dashboard unsichtbar. Der Block ist
-# ADDITIV: alle bestehenden Schlüssel der Antwort bleiben unverändert.
-
 # Eigene Aufträge: mehr als das braucht die Übersicht nicht (Vollliste unter
-# /prozess-auftraege). Der Scan-Wert begrenzt die Zeilen, die für die
+# /process-tickets). Der Scan-Wert begrenzt die Zeilen, die für die
 # Beteiligungs-Prüfung (may_view, läuft in Python) geladen werden.
 _PROCESS_MY_LIMIT = 25
 _PROCESS_SCAN_LIMIT = 200
@@ -87,12 +61,20 @@ class ProcessDashboardBlock(BaseModel):
     counts: dict[str, int] = {}
 
 
-class DashboardResponseWithProcess(DashboardResponse):
-    """Antwort des Dashboards + Prozess-Block.
+class DepartmentRef(BaseModel):
+    id: str
+    name: str
 
-    Als Unterklasse, damit die bestehenden Schlüssel (orders, watched_orders,
-    department_board, …) unangetastet bleiben und das Frontend nichts verliert.
+
+class DashboardResponse(BaseModel):
+    """Antwort des Dashboards (nur noch Prozess-Inhalte).
+
+    `my_departments` bleibt erhalten, obwohl es aus dem Alt-Dashboard stammt: es
+    kommt ausschließlich aus den Gruppen (geteilter Baustein) und beantwortet die
+    Frage „in welchen Fachabteilungen bin ich?" – auch ohne offene Aufträge.
     """
+    # Alle (sichtbaren) Fachabteilungen, in denen der Nutzer Mitglied ist.
+    my_departments: list[DepartmentRef] = []
     process: ProcessDashboardBlock = ProcessDashboardBlock()
 
 
@@ -185,132 +167,27 @@ def _process_block_safe(user: dict) -> ProcessDashboardBlock:
         return ProcessDashboardBlock()
 
 
-@router.get("/dashboard", response_model=DataResponse[DashboardResponseWithProcess])
+def _my_departments(user_id: str) -> list[DepartmentRef]:
+    """Fachabteilungen, in denen der Nutzer Mitglied ist (ohne versteckte).
+
+    Darf das Dashboard nicht kippen – im Fehlerfall bleibt die Liste leer.
+    """
+    try:
+        from backend.database.groups import get_groups, get_group_ids_for_user
+        member_ids = set(get_group_ids_for_user(user_id))
+        return [
+            DepartmentRef(id=g["id"], name=g.get("name") or g["id"])
+            for g in get_groups()
+            if g.get("id") in member_ids and not g.get("hidden")
+        ]
+    except Exception as exc:
+        logger.warning("Fachabteilungen fürs Dashboard nicht ladbar: %s", exc, exc_info=True)
+        return []
+
+
+@router.get("/dashboard", response_model=DataResponse[DashboardResponse])
 def get_dashboard(user: dict = Depends(get_current_user)):
-    user_id = user["id"]
-
-    # ── Arbeitslisten aus der aktuellen Zuständigkeit (ein Durchlauf) ──────────
-    work = get_dashboard_work(user_id)
-
-    # 1. Mir persönlich zugewiesen (aktuelle Phase: kind=user)
-    my_orders = [_board_item_to_dashboard_ticket(it) for it in work["assigned"]]
-
-    # 2. Meine Abteilung (Bearbeitung + Durchführung, jedes Ticket einmal)
-    department_board = [
-        DepartmentGroup(
-            group_id=d["group_id"],
-            group_name=d["group_name"] or d["group_id"],
-            tickets=[
-                DepartmentTicket(
-                    id=t["id"],
-                    title=t["title"],
-                    type_key=t["type_key"],
-                    created_at=(t["created_at"] or "")[:10],
-                    status=t["status"],
-                    priority=t["priority"],
-                    phase_type=t["phase_type"],
-                    phase_label=t["phase_label"],
-                    department_id=t["department_id"],
-                )
-                for t in d["tickets"]
-            ],
-        )
-        for d in work["departments"]
-    ]
-
-    # 3. Beobachtete Tickets (Ersteller ist automatisch Beobachter)
-    from backend.database.ticket_watchers import list_ticket_ids_for_watcher
-    watched_tickets = [database.get_ticket(tid) for tid in list_ticket_ids_for_watcher(user_id)]
-    watched_orders = [_to_dashboard_ticket(t) for t in watched_tickets if t]
-
-    # ── Erlaubte Ticket-Typen ──────────────────────────────────────────────────
-    user_groups = user.get("groups", []) or []
-    allowed = [
-        t.value for t in TicketType
-        if can_user_create_ticket(t.value, user_id, user_groups)
-    ]
-
-    # ── Alle (sichtbaren) Fachabteilungen des Nutzers (auch ohne Aufträge) ──────
-    from backend.database.groups import get_groups, get_group_ids_for_user
-    member_ids = set(get_group_ids_for_user(user_id))
-    my_departments = [
-        DepartmentRef(id=g["id"], name=g.get("name") or g["id"])
-        for g in get_groups()
-        if g.get("id") in member_ids and not g.get("hidden")
-    ]
-
-    return DataResponse(data=DashboardResponseWithProcess(
-        orders=my_orders,
-        watched_orders=watched_orders,
-        department_board=department_board,
-        my_departments=my_departments,
-        allowed_ticket_types=allowed,
-        # Additiv: Aufträge aus dem neuen, definitions-getriebenen System.
+    return DataResponse(data=DashboardResponse(
+        my_departments=_my_departments(user["id"]),
         process=_process_block_safe(user),
     ))
-
-
-# Lesbare Typ-Bezeichnungen (für die serverseitige Suche, analog Frontend).
-_TYPE_LABELS = {
-    "hardware": "Hardwarebestellung",
-    "zugang-beantragen": "Onboarding Mitarbeiter:innen",
-    "zugang-sperren": "Offboarding Mitarbeiter:innen",
-    "niederlassung-anmelden": "Niederlassung anmelden",
-    "niederlassung-umzug": "Niederlassung umziehen",
-    "niederlassung-schliessen": "Niederlassung schließen",
-    "marketing-stellenanzeige": "Marketing - Stellenanzeige",
-    "hotelbuchung": "Hotelbuchung",
-    "basis-ticket": "Ticket",
-}
-
-
-@router.get("/dashboard/involved", response_model=DataResponse[InvolvedResponse])
-def get_involved(
-    user: dict = Depends(get_current_user),
-    limit: int = Query(15, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    search: str | None = None,
-    status: str | None = None,
-    priority: str | None = None,
-    since_days: int = Query(14, ge=0, le=3650),   # 0 = alle (kein Zeitfenster)
-):
-    """
-    Tickets (inkl. archiviert), bei denen der Nutzer beteiligt war – Archiv zum
-    Zurückverfolgen. Standardmäßig auf Tickets der letzten `since_days` Tage
-    begrenzt (0 = alle), serverseitig gefiltert (Suche/Status/Priorität) und
-    paginiert (limit/offset); liefert die Gesamtzahl der Treffer mit.
-    """
-    items = get_involved_tickets(user["id"], since_days=since_days or None)
-
-    q = (search or "").strip().lower()
-    if q:
-        def matches(it: dict) -> bool:
-            label = _TYPE_LABELS.get(it["type_key"], it["type_key"])
-            return (
-                q in (it["title"] or "").lower()
-                or q in label.lower()
-                or q in (it["type_key"] or "").lower()
-            )
-        items = [it for it in items if matches(it)]
-
-    if status and status != "all":
-        items = [it for it in items if it["status"] == status]
-    if priority and priority != "all":
-        items = [it for it in items if it["priority"] == priority]
-
-    total = len(items)
-    page = items[offset:offset + limit]
-
-    involved = [
-        InvolvedTicket(
-            id=it["id"],
-            title=it["title"],
-            type_key=it["type_key"],
-            status=it["status"],
-            priority=it["priority"],
-            created_at=(it["created_at"] or "")[:10],
-            roles=it["roles"],
-        )
-        for it in page
-    ]
-    return DataResponse(data=InvolvedResponse(involved=involved, total=total))

@@ -16,7 +16,7 @@ from backend.metrics.auth_metrics import (
     record_login_attempt, record_login_success, record_login_failed,
 )
 from backend.schemas.responses import DataResponse
-from backend.schemas.ticket import UserOut
+from backend.schemas.user import UserOut
 from backend.services.microsoft_auth import (
     initiate_auth_flow, acquire_token_by_auth_code,
 )
@@ -50,18 +50,7 @@ def refresh_session(
     if not db_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    from backend.services.ticket_permissions import get_allowed_ticket_types_for_user
-
     permissions = list(db_user.permissions)
-    user_groups = user.get("groups", []) or []
-
-    if user_groups:
-        group_types = get_allowed_ticket_types_for_user(user["id"], user_groups)
-        for tt in group_types:
-            perm = f"create_{tt}"
-            if perm not in permissions:
-                permissions.append(perm)
-
     request.session["user"]["permissions"] = permissions
     request.session["last_activity"] = int(time.time())
 
@@ -77,18 +66,11 @@ def refresh_session(
 
 @router.get("/auth/me", response_model=DataResponse[UserOut])
 def me(request: Request, user: dict = Depends(get_current_user)):
-    from backend.services.ticket_permissions import get_allowed_ticket_types_for_user
-
+    # `permissions` trägt nur noch die Rollen-/Extra-Rechte (view/manage/admin).
+    # Die frühere Anreicherung um `create_<tickettyp>` ist mit dem Alt-System
+    # entfallen: welcher Prozess anlegbar ist, entscheidet die DEFINITION
+    # (createPermissions) und steht je Prozess in GET /processes als `may_create`.
     permissions = get_user_permissions(user["id"])
-    user_groups = user.get("groups", []) or []
-
-    # Gruppen-basierte create_* Permissions hinzufügen
-    if user_groups:
-        group_types = get_allowed_ticket_types_for_user(user["id"], user_groups)
-        for tt in group_types:
-            perm = f"create_{tt}"
-            if perm not in permissions:
-                permissions.append(perm)
 
     return DataResponse(data=UserOut(
         id=user["id"],

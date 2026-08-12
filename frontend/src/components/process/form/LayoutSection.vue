@@ -2,10 +2,11 @@
 /**
  * Abschnitts-Hülle für schema-getriebene Formulare.
  *
- * Bewusst dieselbe Optik wie components/tickets/TicketSection.vue (Akzentleiste,
- * Icon-Chip, optionales Badge) – die alten handgebauten Formulare und die
- * generierten sollen nicht unterscheidbar sein. Der Unterschied: Titel, Variante
- * und Badge kommen hier aus der Prozess-Definition statt aus dem Quelltext.
+ * Akzentleiste, Icon-Chip, optionales Badge – die Optik stammt aus den früher
+ * handgebauten Formularen und wurde bewusst übernommen, damit die generierten
+ * Formulare für die Nutzenden nach demselben Programm aussehen. Der Unterschied:
+ * Titel, Variante und Badge kommen aus der Prozess-Definition, nicht aus dem
+ * Quelltext.
  */
 import { computed, ref, useId, watch } from 'vue'
 import type { LayoutSection } from '@/types/process'

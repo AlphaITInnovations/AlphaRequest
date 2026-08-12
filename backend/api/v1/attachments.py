@@ -1,16 +1,16 @@
 """
-Datei-Anhänge für Aufträge (Grundlage – noch nicht an konkrete Phasen gebunden).
+Datei-Anhänge der definitions-getriebenen Aufträge.
 
 Blobs liegen auf dem Dateisystem (attachment_storage), Metadaten in der DB
-(database.attachments). Upload/Download sind an den Ticket-Zugriff gekoppelt;
-die Admin-Übersicht (Speicherplatz/Suche) liegt unter /settings/attachments.
-Jeder Upload/jede Löschung wird im Audit-Log festgehalten; Versionen bleiben
-über die `family_id` nachvollziehbar.
+(database.attachments). Upload/Download sind an den Auftrags-Zugriff gekoppelt
+(services.process_access); die Admin-Übersicht (Speicherplatz/Suche) liegt unter
+/settings/attachments. Jeder Upload/jede Löschung wird im Audit-Log
+festgehalten; Versionen bleiben über die `family_id` nachvollziehbar.
 
-Zwei Welten: /tickets/… bedient das Alt-System, /process-tickets/… die
-definitions-getriebenen Aufträge (Zugriff über services.process_access). Die
-Endpunkte für Download/Löschen sind GEMEINSAM – sie finden den Anhang über seine
-ID und wählen die Zugriffsprüfung anhand von `entity_type`.
+Alt-Anhänge (`entity_type='ticket'`) liegen weiter in der Tabelle: sie belegen
+Speicher und müssen aufräumbar bleiben. Ihr Zugriff ist auf Admins beschränkt –
+ohne das Alt-Ticket lässt sich die damalige Sichtbarkeit nicht mehr prüfen, und
+Raten ist an dieser Stelle keine Option (fail-closed).
 """
 from typing import Literal, Optional
 
@@ -18,7 +18,6 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
 
 from backend.core.dependencies import get_current_user
-from backend.database import tickets as database
 from backend.database import attachments as att_db
 from backend.database import process_definitions as defstore
 from backend.database import process_tickets as pstore
@@ -35,14 +34,12 @@ from backend.schemas.responses import DataResponse, api_error, ErrorCode
 from backend.utils.config import config
 from backend.utils.files import safe_filename, human_size
 from backend.utils.logger import logger
-# Zugriffs-Helfer wiederverwenden (kein Zyklus: tickets importiert attachments nicht).
-from backend.api.v1.tickets import _get_ticket_or_404, _assert_ticket_access
 
 router = APIRouter()
 
 
 class ProcessAttachmentOut(AttachmentOut):
-    """Anhang eines Prozess-Auftrags. Erweitert die Alt-Ausgabe um die zwei neuen
+    """Anhang eines Prozess-Auftrags. Ergänzt die beiden prozess-eigenen
     Merkmale; `ticket_id` ist hier die ID des Prozess-Tickets."""
     entity_type: str = att_db.ENTITY_PROCESS_TICKET
     field_key: Optional[str] = None
@@ -77,77 +74,14 @@ def _to_process_out(row: dict) -> ProcessAttachmentOut:
 
 
 def _to_admin_out(row: dict) -> AttachmentAdminOut:
-    """Zeile der Admin-Übersicht (beide Welten gemischt). Fallback auf das
-    Alt-System entspricht dem Spalten-Default `entity_type='ticket'`."""
+    """Zeile der Admin-Übersicht (auch die Alt-Zeilen). Der Fallback entspricht
+    dem Spalten-Default `entity_type='ticket'` gewachsener Installationen."""
     return AttachmentAdminOut(
         **_to_out(row).model_dump(),
         entity_type=row.get("entity_type") or att_db.ENTITY_TICKET,
         field_key=row.get("field_key"),
         ticket_title=row.get("ticket_title"),
     )
-
-
-# ── Ticket-Anhänge ───────────────────────────────────────────────────────────
-
-@router.post("/tickets/{ticket_id}/attachments", response_model=DataResponse[AttachmentOut])
-async def upload_attachment(
-    ticket_id: int,
-    file: UploadFile = File(...),
-    phase_key: Optional[str] = Form(None),
-    family_id: Optional[str] = Form(None),   # gesetzt = neue Version einer bestehenden Datei
-    user: dict = Depends(get_current_user),
-):
-    ticket = _get_ticket_or_404(ticket_id)
-    _assert_ticket_access(ticket, user)
-
-    max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
-    try:
-        stored_path, size, sha = storage.save_stream(file.file, max_bytes=max_bytes)
-    except storage.FileTooLarge:
-        raise api_error(413, "FILE_TOO_LARGE", f"Datei zu groß (max. {config.MAX_UPLOAD_MB} MB)")
-    except Exception:
-        logger.exception("Attachment-Upload fehlgeschlagen (Ticket %s)", ticket_id)
-        raise api_error(500, "UPLOAD_FAILED", "Datei konnte nicht gespeichert werden")
-
-    att = att_db.insert_attachment(
-        ticket_id=ticket_id,
-        phase_key=(phase_key or None),
-        family_id=(family_id or None),
-        original_filename=safe_filename(file.filename),
-        stored_path=stored_path,
-        content_type=file.content_type,
-        size_bytes=size,
-        sha256=sha,
-        uploaded_by_id=user["id"],
-        uploaded_by_name=user.get("displayName") or "",
-    )
-
-    record_audit(
-        action="file_uploaded",
-        actor_id=user["id"],
-        actor_name=user.get("displayName") or "",
-        entity_type="attachment",
-        entity_id=str(att["id"]),
-        summary=f"Datei '{att['original_filename']}' ({human_size(size)}) zu Ticket #{ticket_id} hochgeladen (v{att['version']})",
-        details={
-            "ticket_id": ticket_id, "phase_key": att.get("phase_key"),
-            "filename": att["original_filename"], "size_bytes": size, "sha256": sha,
-            "family_id": att["family_id"], "version": att["version"],
-        },
-    )
-    return DataResponse(data=_to_out(att))
-
-
-@router.get("/tickets/{ticket_id}/attachments", response_model=DataResponse[list[AttachmentOut]])
-def list_ticket_attachments(
-    ticket_id: int,
-    include_versions: bool = Query(False),
-    user: dict = Depends(get_current_user),
-):
-    ticket = _get_ticket_or_404(ticket_id)
-    _assert_ticket_access(ticket, user)
-    rows = att_db.list_for_ticket(ticket_id, include_versions=include_versions)
-    return DataResponse(data=[_to_out(r) for r in rows])
 
 
 # ── Prozess-Anhänge (definitions-getriebene Aufträge) ────────────────────────
@@ -286,17 +220,28 @@ def list_process_attachments(
     return DataResponse(data=[_to_process_out(r) for r in rows])
 
 
-# ── Gemeinsam: Download / Löschen (beide Welten, Auswahl über entity_type) ────
+# ── Download / Löschen (auch für die verbliebenen Alt-Anhänge) ────────────────
+
+def _require_admin(user: dict) -> None:
+    if PERM_ADMIN not in (user.get("permissions", []) or []):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED, "Admin-Rechte erforderlich")
+
 
 def _entity_label(att: dict) -> str:
-    """Für Audit-Texte: aus welcher Welt stammt der Anhang?"""
+    """Für Audit-Texte: Prozess-Auftrag oder Rest aus dem Alt-System?"""
     return ("Prozess-Ticket" if att.get("entity_type") == att_db.ENTITY_PROCESS_TICKET
-            else "Ticket")
+            else "Alt-Ticket")
 
 
 def _assert_attachment_access(att: dict, user: dict, *, write: bool) -> None:
-    """Zugriff auf einen Anhang – je nach Welt über den Alt-Ticket-Zugriff oder
-    über services.process_access (may_view zum Lesen, may_edit zum Ändern)."""
+    """Zugriff auf einen Anhang über services.process_access (may_view zum Lesen,
+    may_edit zum Ändern).
+
+    Alt-Anhänge: nur Admins. Das Alt-Ticket, an dem die Sichtbarkeit hing
+    (vertrauliche Beschreibungsteile je Fachabteilung), gibt es nicht mehr – es
+    ist also nicht mehr entscheidbar, wer die Datei damals sehen durfte. Statt zu
+    raten wird zugemacht; die Datei bleibt für die Aufsicht erreichbar, damit sie
+    aufgeräumt werden kann."""
     if att.get("entity_type") == att_db.ENTITY_PROCESS_TICKET:
         row, defn = _process_ticket_or_404(att["ticket_id"])
         if write:
@@ -304,11 +249,7 @@ def _assert_attachment_access(att: dict, user: dict, *, write: bool) -> None:
         else:
             _assert_process_view(row, defn, user)
         return
-    # Alt-System: an den Ticket-Zugriff koppeln (Admins über den globalen Zugriff).
-    if att.get("ticket_id"):
-        ticket = database.get_ticket(att["ticket_id"])
-        if ticket:
-            _assert_ticket_access(ticket, user)
+    _require_admin(user)
 
 
 @router.get("/attachments/{attachment_id}/download")
@@ -335,15 +276,11 @@ def delete_attachment(attachment_id: int, user: dict = Depends(get_current_user)
     att = att_db.get_attachment(attachment_id)
     if not att or att.get("deleted_at"):
         raise api_error(404, "NOT_FOUND", "Anhang nicht gefunden")
-    if att.get("entity_type") == att_db.ENTITY_PROCESS_TICKET:
-        # Prozess-Welt: Löschen ist ein Eingriff in den Auftrag → may_edit.
-        # Bewusst NICHT „nur wer hochgeladen hat": Anhänge gehören zum Auftrag,
-        # und die zuständige Stelle muss eine Fehl-Datei ersetzen können.
-        _assert_attachment_access(att, user, write=True)
-    else:
-        is_admin = PERM_ADMIN in (user.get("permissions", []) or [])
-        if not is_admin and att.get("uploaded_by_id") != user["id"]:
-            raise api_error(403, ErrorCode.PERMISSION_DENIED, "Kein Recht, diesen Anhang zu löschen")
+    # Prozess-Welt: Löschen ist ein Eingriff in den Auftrag → may_edit. Bewusst
+    # NICHT „nur wer hochgeladen hat": Anhänge gehören zum Auftrag, und die
+    # zuständige Stelle muss eine Fehl-Datei ersetzen können.
+    # Alt-Anhänge: nur Admins (siehe _assert_attachment_access).
+    _assert_attachment_access(att, user, write=True)
 
     att_db.soft_delete(attachment_id)
     storage.delete(att["stored_path"])
@@ -365,11 +302,6 @@ def delete_attachment(attachment_id: int, user: dict = Depends(get_current_user)
 
 # ── Admin-Übersicht (Speicherplatz + Suche) ──────────────────────────────────
 
-def _require_admin(user: dict) -> None:
-    if PERM_ADMIN not in (user.get("permissions", []) or []):
-        raise api_error(403, ErrorCode.ADMIN_REQUIRED, "Admin-Rechte erforderlich")
-
-
 @router.get("/settings/attachments/stats", response_model=DataResponse[AttachmentStats])
 def attachments_stats(user: dict = Depends(get_current_user)):
     _require_admin(user)
@@ -383,9 +315,9 @@ def attachments_stats(user: dict = Depends(get_current_user)):
 def attachments_list(
     user: dict = Depends(get_current_user),
     q: Optional[str] = None,
-    # Welt-Filter; die Werte MÜSSEN att_db.ENTITY_TICKET / ENTITY_PROCESS_TICKET
+    # Marker-Filter; die Werte MÜSSEN att_db.ENTITY_TICKET / ENTITY_PROCESS_TICKET
     # entsprechen (Literal braucht echte Literale – ein Test hält beides synchron).
-    # Alles andere → 422, damit ein Tippfehler nicht still „beide Welten" bedeutet.
+    # Alles andere → 422, damit ein Tippfehler nicht still „kein Filter" bedeutet.
     entity_type: Optional[Literal["ticket", "process_ticket"]] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),

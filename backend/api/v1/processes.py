@@ -73,6 +73,10 @@ class ProcessOut(BaseModel):
     may_create: Optional[bool] = None
     #: Symbol aus der Definition – Listen-Routen liefern `definition` nicht mit.
     icon: Optional[str] = None
+    #: Kurzbeschreibung aus der Definition. Wie `icon` nur im Katalog gefüllt: die
+    #: Kacheln der Anlage-Seite brauchen sie, damit erkennbar bleibt, wofür ein
+    #: Prozess da ist (die Alt-Seite hatte diesen Satz je Kachel hartcodiert).
+    description: Optional[str] = None
     base_version: Optional[int] = None
     created_by: Optional[str] = None
     created_by_name: Optional[str] = None
@@ -138,6 +142,7 @@ def list_processes(user: dict = Depends(get_current_user)):
         item.definition = None          # Blob nicht in der Liste ausliefern
         raw = r.get("definition") or {}
         item.icon = raw.get("icon")
+        item.description = raw.get("description")
         try:
             defn = ProcessDefinition.model_validate(raw)
             item.may_create = perms.may_create(defn, user, group_ids)

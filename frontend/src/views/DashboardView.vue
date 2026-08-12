@@ -1,98 +1,105 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+/**
+ * Übersicht: die Arbeitslisten der angemeldeten Person über alle Prozess-Aufträge.
+ *
+ * ZWEI Quellen, absichtlich:
+ *
+ *  1. `GET /dashboard` → Block `process` (backend/api/v1/dashboard.py). Gelesen
+ *     werden `process.my`, `process.involved` und `process.counts`; dazu
+ *     `my_departments` für die Namen und IDs der eigenen Fachabteilungen. Der
+ *     Block ist bewusst WERTEFREI (keine Feldwerte, §5.1) und trägt deshalb auch
+ *     keine Zuständigkeit mit.
+ *
+ *  2. `GET /process-tickets` → vollständige `ProcessTicketOut`-Zeilen. Nur die
+ *     tragen `responsibility` (mit dem LIVE-Stand der Fachabteilungen) – ohne sie
+ *     lässt sich „wartet auf MEINE Abteilung" nicht beantworten, und genau das
+ *     ist die Frage, für die es lib/processDepartments.ts gibt.
+ *
+ * Beide Aufrufe sind voneinander unabhängig abgesichert: fällt einer aus, bleiben
+ * die Listen des anderen sichtbar. Der Server filtert in beiden Fällen selbst,
+ * wer was sehen darf – hier wird nichts nachgebaut.
+ */
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { client } from '@/api/client'
 import AppLayout from '@/components/AppLayout.vue'
+import { listTickets } from '@/api/processTickets'
+import { errorMessage } from '@/lib/processErrors'
+import { PRIORITIES, STATUS_LABEL } from '@/lib/processSchema'
+import {
+  blockingDepartments, departmentProgress, isTicketTerminal,
+  ticketsAwaitingAnyDepartment,
+} from '@/lib/processDepartments'
+import type { ProcessTicketOut } from '@/types/process'
 
 const router = useRouter()
 const auth   = useAuthStore()
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface DashboardTicket {
-  id: number; title: string; type_key: string
-  status: string; priority: string; created_at: string
-}
-// Einheitlicher „Meine Abteilung"-Eintrag (vom Backend fertig gruppiert)
-interface DeptBoardTicket {
-  id: number; title: string; type_key: string; created_at: string
-  status: string; priority: string
-  phase_type: 'assignment' | 'department_review' | string
-  phase_label: string
-  department_id: string | null
-}
-interface DeptBoardGroup { group_id: string; group_name: string; tickets: DeptBoardTicket[] }
-interface DepartmentRef { id: string; name: string }
-// Involviertes Ticket: wie DashboardTicket + Rollen des Nutzers
-interface InvolvedTicket extends DashboardTicket { roles: string[] }
-// Auftrag aus dem neuen, definitions-getriebenen Prozess-System. Bewusst OHNE
-// Feldwerte – die gibt es nur in der Detailansicht (dort serverseitig gefiltert).
+// ── Antwort-Formen (nur das, was hier gelesen wird) ───────────────────────────
+
+/** Zeile des Prozess-Blocks (`ProcessDashboardTicket` im Backend). */
 interface ProcessOrder {
-  id: number; process_key: string; process_version: number
-  title: string; status: string; priority: string
-  phase: string | null; phase_label: string | null
-  is_owner: boolean; created_at: string; updated_at: string
+  id: number
+  process_key: string
+  process_version: number
+  title: string
+  status: string
+  priority: string
+  phase: string | null
+  phase_label: string | null
+  /** true = von mir angelegt (sonst: ich bin beteiligt/zuständig). */
+  is_owner: boolean
+  created_at: string
+  updated_at: string
 }
 interface ProcessBlock {
   my: ProcessOrder[]
   involved: ProcessOrder[]
+  /** Anzahl je Status – nur über die für mich sichtbaren Aufträge. */
   counts: Record<string, number>
 }
-interface DashboardData {
-  orders: DashboardTicket[]
-  watched_orders: DashboardTicket[]
-  department_board: DeptBoardGroup[]
-  my_departments: DepartmentRef[]
-  allowed_ticket_types: string[]
-  // Additiv vom Backend ergänzt; ältere Antworten haben den Block nicht.
-  process?: ProcessBlock
-}
+interface DepartmentRef { id: string; name: string }
 
-// ── State ─────────────────────────────────────────────────────────────────────
-const loading   = ref(true)
-const data      = ref<DashboardData>({ orders: [], watched_orders: [], department_board: [], my_departments: [], allowed_ticket_types: [] })
-const processBlock = ref<ProcessBlock>({ my: [], involved: [], counts: {} })
+// ── Zustand ───────────────────────────────────────────────────────────────────
 
-// Involvierte Tickets (Archiv) – serverseitig gefiltert & paginiert
-const involved         = ref<InvolvedTicket[]>([])   // aktuelle Seite
-const involvedLoading  = ref(false)
-const involvedLoaded   = ref(false)
-const involvedTotal    = ref(0)   // Treffer nach aktuellem Filter (fürs Paging)
-const involvedTotalAll = ref(0)   // Gesamtzahl ungefiltert (für die Stat-Card)
+const loading = ref(true)
+const block = ref<ProcessBlock>({ my: [], involved: [], counts: {} })
+const myDepartments = ref<DepartmentRef[]>([])
+const blockError = ref<string | null>(null)
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
-type Tab = 'mine' | 'group' | 'watched' | 'involved'
-const activeTab = ref<Tab>('mine')
+const rows = ref<ProcessTicketOut[]>([])
+const rowsLoading = ref(true)
+const rowsError = ref<string | null>(null)
+/** Obergrenze des Endpunkts – mehr gibt es nicht in einem Rutsch. */
+const ROWS_LIMIT = 200
+const rowsTotal = ref(0)
+
+// ── Reiter ────────────────────────────────────────────────────────────────────
+
+type Tab = 'assigned' | 'departments' | 'created' | 'involved'
+const activeTab = ref<Tab>('assigned')
 
 // ── Filter ────────────────────────────────────────────────────────────────────
+
 const filter = ref({ search: '', status: 'all', priority: 'all' })
 
-// Beim Tab-Wechsel die Filter zurücksetzen
-watch(activeTab, () => {
-  filter.value = { search: '', status: 'all', priority: 'all' }
-})
+function resetFilter() { filter.value = { search: '', status: 'all', priority: 'all' } }
+function selectTab(tab: Tab) {
+  if (tab !== activeTab.value) resetFilter()
+  activeTab.value = tab
+}
 
-// ── Labels ────────────────────────────────────────────────────────────────────
-const ticketTypes = [
-  { key: 'hardware',                 label: 'Hardwarebestellung' },
-  { key: 'einstellung',              label: 'Einstellung Mitarbeiter:in' },
-  { key: 'zugang-beantragen',        label: 'Onboarding nach Vertragsrücklauf' },
-  { key: 'zugang-sperren',           label: 'Offboarding Mitarbeiter:innen' },
-  { key: 'niederlassung-anmelden',   label: 'Niederlassung anmelden' },
-  { key: 'niederlassung-umzug',      label: 'Niederlassung umziehen' },
-  { key: 'niederlassung-schliessen', label: 'Niederlassung schließen' },
-  { key: 'marketing-stellenanzeige', label: 'Marketing - Stellenanzeige' },
-  { key: 'hotelbuchung',             label: 'Hotelbuchung' },
-  { key: 'basis-ticket',             label: 'Ticket' },
-]
-const TYPE_LABEL: Record<string, string> = Object.fromEntries(ticketTypes.map(t => [t.key, t.label]))
+// ── Beschriftungen ────────────────────────────────────────────────────────────
+// Status- und Prioritäts-Whitelist kommen aus lib/processSchema.ts (Spiegel des
+// Backends). Unbekannte Werte werden ROH gezeigt – eine erfundene Beschriftung
+// wäre eine Falschaussage über den echten Stand.
 
-// Phasen-orientierte Bezeichnung (Status korreliert 1:1 mit der Phase):
-// in_progress = Bearbeitung, in_request = Durchführung.
-const STATUS_LABEL: Record<string, string> = {
-  in_progress: 'Bearbeitung', in_request: 'Durchführung',
-  waiting_contract: 'Wartet auf Vertrag',
-  archived: 'Archiviert', rejected: 'Abgelehnt',
+const PRIORITY_LABEL: Record<string, string> = {
+  low: 'Niedrig', normal: 'Normal', high: 'Hoch', urgent: 'Dringend',
+}
+const PRIORITY_CLASS: Record<string, string> = {
+  low: 'text-gray-400', normal: 'text-blue-400', high: 'text-amber-500', urgent: 'text-red-500',
 }
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -101,337 +108,348 @@ const STATUS_CLASS: Record<string, string> = {
   archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
   rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 }
-// `normal`/`urgent` kommen aus dem neuen Prozess-System (eigene Whitelist),
-// `medium`/`critical` aus dem Alt-System – beide Welten stehen im Dashboard
-// nebeneinander, deshalb sind alle vier hier eingetragen.
-const PRIORITY_LABEL: Record<string, string> = {
-  low: 'Niedrig', medium: 'Mittel', normal: 'Normal',
-  high: 'Hoch', critical: 'Kritisch', urgent: 'Dringend',
-}
-const PRIORITY_CLASS: Record<string, string> = {
-  low: 'text-gray-400', medium: 'text-blue-400', normal: 'text-blue-400',
-  high: 'text-amber-500', critical: 'text-red-500', urgent: 'text-red-500',
+const DOT_CLASS: Record<string, string> = {
+  in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]',
+  waiting_contract: 'bg-violet-400', archived: 'bg-gray-400', rejected: 'bg-red-500',
 }
 
-function dotClass(s: string) {
-  return { in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]', waiting_contract: 'bg-violet-400', archived: 'bg-gray-400', rejected: 'bg-red-500' }[s] ?? 'bg-gray-300'
-}
-
-// ── Prozess-Aufträge (definitions-getriebenes System) ─────────────────────────
-// Die Status-Whitelist ist dieselbe wie im Alt-System, daher werden die
-// bestehenden Maps weiterverwendet – mit Fallback auf den Rohwert, falls ein
-// Prozess künftig einen zusätzlichen Status mitbringt.
 function statusLabel(s: string) { return STATUS_LABEL[s] ?? s }
 function statusClass(s: string) {
   return STATUS_CLASS[s] ?? 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400'
 }
+function priorityLabel(p: string) { return PRIORITY_LABEL[p] ?? p }
+function priorityClass(p: string) { return PRIORITY_CLASS[p] ?? 'text-gray-400' }
+function dotClass(s: string) { return DOT_CLASS[s] ?? 'bg-gray-300' }
 
-// Eigene Aufträge zuerst, danach die, an denen der Nutzer beteiligt ist.
-const processOrders = computed<ProcessOrder[]>(() =>
-  [...processBlock.value.my, ...processBlock.value.involved],
-)
-
-// Dieselbe Filterleiste wie oben – aber ohne type_key (den Prozess-Schlüssel
-// nutzen wir stattdessen als Suchfeld).
-const filteredProcessOrders = computed<ProcessOrder[]>(() => {
-  const q = filter.value.search.toLowerCase()
-  return processOrders.value.filter(o =>
-    (!q || o.title.toLowerCase().includes(q) || o.process_key.toLowerCase().includes(q)) &&
-    (filter.value.status === 'all' || o.status === filter.value.status) &&
-    (filter.value.priority === 'all' || o.priority === filter.value.priority),
-  )
-})
-
-// Status-Zähler (nur Sichtbares, vom Backend gezählt) für die Chips im Kopf.
-const processCounts = computed(() =>
-  Object.entries(processBlock.value.counts).filter(([, n]) => n > 0),
-)
-
-function openProcessOrder(o: ProcessOrder) { router.push(`/prozess-auftraege/${o.id}`) }
-
-// ISO-Datum (JJJJ-MM-TT) deutsch anzeigen – ohne Zeitzonen-Umrechnung, der Wert
-// ist bereits ein Kalendertag.
-function fmtDay(iso: string) {
-  const p = (iso || '').split('-')
+/** ISO-Datum (JJJJ-MM-TT) deutsch – ohne Zeitzonen-Umrechnung, der Wert ist ein
+ *  Kalendertag. Ein längerer Zeitstempel wird vorne abgeschnitten. */
+function fmtDay(iso: string | null) {
+  const p = (iso || '').slice(0, 10).split('-')
   return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : (iso || '—')
 }
 
-// ── Rollen (Involviert-Tab) ─────────────────────────────────────────────────────
-const ROLE_META: Record<string, { label: string; class: string }> = {
-  ersteller:     { label: 'Ersteller',     class: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
-  zustaendig:    { label: 'Zuständig',      class: 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20' },
-  bearbeiter:    { label: 'Bearbeiter',     class: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
-  fachabteilung: { label: 'Fachabteilung',  class: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
-  beobachter:    { label: 'Beobachter',     class: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+// ── Gemeinsame Zeilen-Form für die Darstellung ────────────────────────────────
+// Die zwei Quellen haben verschiedene Formen; die Liste zeigt beide gleich.
+
+interface Zeile {
+  id: number
+  title: string
+  process_key: string
+  status: string
+  priority: string
+  phase_label: string | null
+  created_at: string | null
+  /** Zusatz-Plakette rechts (z. B. „Ersteller"), optional. */
+  badge?: { text: string; class: string }
+  /** Fachabteilungs-Fortschritt, nur im Abteilungs-Reiter gefüllt. */
+  depts?: { text: string; mine: string[] }
 }
-// stabile Reihenfolge der Chips
-const ROLE_ORDER = ['zustaendig', 'bearbeiter', 'ersteller', 'fachabteilung', 'beobachter']
-function sortedRoles(roles: string[]): string[] {
-  return [...roles].sort((a, b) => ROLE_ORDER.indexOf(a) - ROLE_ORDER.indexOf(b))
-}
 
-const INVOLVED_PAGE_SIZE = 15
-const involvedPage = ref(1)
-const involvedSinceDays = ref(14)   // Zeitfenster (Tage) für „Involviert"; 0 = alle
-const involvedTotalPages = computed(() => Math.max(1, Math.ceil(involvedTotal.value / INVOLVED_PAGE_SIZE)))
-
-let involvedReq = 0
-async function loadInvolved() {
-  const reqId = ++involvedReq
-  involvedLoading.value = true
-  try {
-    const params: Record<string, any> = {
-      limit: INVOLVED_PAGE_SIZE,
-      offset: (involvedPage.value - 1) * INVOLVED_PAGE_SIZE,
-    }
-    if (filter.value.search)            params.search   = filter.value.search
-    if (filter.value.status !== 'all')  params.status   = filter.value.status
-    if (filter.value.priority !== 'all') params.priority = filter.value.priority
-    // Immer mitsenden (0 = alle) – überschreibt den Server-Default von 14 Tagen.
-    params.since_days = involvedSinceDays.value
-
-    const res = await client.get<{ data: { involved: InvolvedTicket[]; total: number } }>(
-      '/dashboard/involved', { params },
-    )
-    if (reqId !== involvedReq) return   // veraltete Antwort verwerfen
-    involved.value = res.data.data.involved ?? []
-    involvedTotal.value = res.data.data.total ?? 0
-    // Ungefilterte Gesamtzahl für die Stat-Card merken
-    if (!params.search && !params.status && !params.priority) {
-      involvedTotalAll.value = involvedTotal.value
-    }
-    involvedLoaded.value = true
-  } finally {
-    if (reqId === involvedReq) involvedLoading.value = false
+function zeileAusBlock(o: ProcessOrder): Zeile {
+  return {
+    id: o.id, title: o.title, process_key: o.process_key,
+    status: o.status, priority: o.priority,
+    phase_label: o.phase_label, created_at: o.created_at,
   }
 }
 
-let involvedDebounce: ReturnType<typeof setTimeout> | undefined
-function debouncedLoadInvolved() {
-  clearTimeout(involvedDebounce)
-  involvedDebounce = setTimeout(loadInvolved, 250)
+function zeileAusRow(t: ProcessTicketOut): Zeile {
+  return {
+    id: t.id, title: t.title, process_key: t.process_key,
+    status: t.status, priority: t.priority,
+    phase_label: t.current_phase_label, created_at: t.created_at,
+  }
 }
 
-function goToInvolvedPage(p: number) {
-  if (p < 1 || p > involvedTotalPages.value) return
-  involvedPage.value = p
-  loadInvolved()
-}
+// ── Arbeitslisten ─────────────────────────────────────────────────────────────
 
-function selectInvolvedTab() {
-  activeTab.value = 'involved'
-}
+const meineId = computed(() => auth.user?.id ?? null)
+const meineGruppen = computed(() => myDepartments.value.map((d) => d.id))
 
-// Filter-Schlüssel als stabiler String → feuert nur bei echter Wertänderung
-const involvedFilterKey = computed(() =>
-  `${filter.value.search}|${filter.value.status}|${filter.value.priority}|${involvedSinceDays.value}`)
+/** Aktive Aufträge – terminale (abgelehnt/archiviert) gehören in keine Arbeitsliste. */
+const aktiveRows = computed(() => rows.value.filter((t) => !isTicketTerminal(t)))
 
-watch(activeTab, (tab) => {
-  // Daten sind durch den Prefetch meist schon da; Debounce dedupliziert mit dem
-  // Filter-Reset (watch(activeTab) weiter oben) zu genau einem Request.
-  if (tab === 'involved') { involvedPage.value = 1; debouncedLoadInvolved() }
-})
-watch(involvedFilterKey, () => {
-  if (activeTab.value !== 'involved') return
-  involvedPage.value = 1
-  debouncedLoadInvolved()
-})
-
-// ── Counts ────────────────────────────────────────────────────────────────────
-const mineCount    = computed(() => (data.value.orders ?? []).filter(o => o.status !== 'archived' && o.status !== 'rejected').length)
-const groupCount   = computed(() => (data.value.department_board ?? []).reduce((s, g) => s + g.tickets.length, 0))
-const watchedCount = computed(() => (data.value.watched_orders ?? []).filter(o => o.status !== 'archived').length)
-const totalOpen    = computed(() => mineCount.value + groupCount.value)
-
-// ── Filtering ─────────────────────────────────────────────────────────────────
-function applyFilter<T extends { title: string; type_key: string; status: string; priority: string }>(list: T[]): T[] {
-  return list.filter(o => {
-    const q = filter.value.search.toLowerCase()
-    return (
-      (!q || o.title.toLowerCase().includes(q) || (TYPE_LABEL[o.type_key] ?? '').toLowerCase().includes(q)) &&
-      (filter.value.status === 'all' || o.status === filter.value.status) &&
-      (filter.value.priority === 'all' || o.priority === filter.value.priority)
-    )
+/**
+ * Mir PERSÖNLICH zugewiesen: die aufgelöste Zuständigkeit nennt genau mich.
+ * `assignable` löst der Server zu kind='user' auf, deshalb genügt dieser Fall.
+ * Aufträge, in denen ich als Ersteller:in am Zug bin (kind='owner'), zählen mit –
+ * auch das ist Arbeit, die auf mich wartet.
+ */
+const mirZugewiesen = computed<ProcessTicketOut[]>(() => {
+  const uid = meineId.value
+  if (!uid) return []
+  return aktiveRows.value.filter((t) => {
+    const r = t.responsibility
+    if (!r) return false
+    if (r.kind === 'user') return r.user === uid
+    if (r.kind === 'owner') return t.owner_id === uid
+    return false
   })
-}
-
-const filteredMine    = computed(() => applyFilter(data.value.orders))
-const openGroupDepts = ref<Record<string, boolean>>({})
-const filteredWatched = computed(() => applyFilter(data.value.watched_orders))
-// Beobachter-Tab zeigt nur aktive Tickets – archivierte stehen jetzt unter „Involviert".
-const filteredWatchedActive   = computed(() => filteredWatched.value.filter(o => o.status !== 'archived'))
-
-// ── „Meine Abteilung" ──────────────────────────────────────────────────────────
-// Vollständig vom Backend gruppiert: jede Abteilung genau einmal, jedes Ticket
-// genau einmal in seiner aktuellen Phase. Frontend filtert nur noch.
-const myDepartmentGroups = computed<DeptBoardGroup[]>(() =>
-  (data.value.department_board ?? [])
-    .map(g => ({ ...g, tickets: applyFilter(g.tickets) }))
-    .filter(g => g.tickets.length > 0)
-)
-
-// Abteilungen, in denen der Nutzer Mitglied ist, für die aktuell aber KEIN Auftrag
-// vorliegt – dezent im Abteilungs-Tab anzeigen (unabhängig von Suche/Filter).
-const emptyDepartments = computed<DepartmentRef[]>(() => {
-  const withOrders = new Set((data.value.department_board ?? []).map(g => g.group_id))
-  return (data.value.my_departments ?? []).filter(d => !withOrders.has(d.id))
 })
 
-const currentCount = computed(() => {
-  if (activeTab.value === 'mine') return filteredMine.value.length
-  if (activeTab.value === 'group') return myDepartmentGroups.value.reduce((s, g) => s + g.tickets.length, 0)
-  if (activeTab.value === 'involved') return involvedTotal.value
-  return filteredWatchedActive.value.length
+/** Wartet auf eine Fachabteilung, in der ich Mitglied bin (Logik: processDepartments). */
+const meineAbteilungen = computed(() =>
+  ticketsAwaitingAnyDepartment(aktiveRows.value, meineGruppen.value))
+
+/** Abteilungs-Namen für die Anzeige (IDs sind für Menschen nicht lesbar). */
+const gruppenName = computed(() => {
+  const map = new Map(myDepartments.value.map((d) => [d.id, d.name]))
+  return (id: string) => map.get(id) || id
 })
 
-// ── Actions ───────────────────────────────────────────────────────────────────
-function openTicket(o: DashboardTicket) { router.push(`/tickets/view/${o.type_key}/${o.id}`) }
-// Beobachter öffnen die read-only Gesamtansicht
-function openWatchedTicket(o: DashboardTicket) { router.push(`/tickets/overview/${o.id}`) }
-// Involviert-Tab: Overview OHNE Verlauf (nur die erlaubten Abschnitte).
-function openInvolved(o: { id: number }) { router.push(`/tickets/overview/${o.id}?involved=1`) }
-// Durchführung (department_id gesetzt) → ?department=<id> für die Aktionsleiste,
-// Bearbeitung → Formular ohne department.
-function openDeptItem(t: DeptBoardTicket) {
-  const dep = t.department_id ? `?department=${t.department_id}` : ''
-  router.push(`/tickets/view/${t.type_key}/${t.id}${dep}`)
+/** Nur MEINE noch offenen Abteilungen eines Auftrags – nicht die aller anderen. */
+function meineOffenenAbteilungen(t: ProcessTicketOut): string[] {
+  const meine = new Set(meineGruppen.value)
+  const r = t.responsibility
+  if (!r || r.kind !== 'departments') return []
+  return (r.departments ?? [])
+    .filter((d) => d && meine.has(d.group) && d.status !== 'done'
+      && d.status !== 'skipped' && d.status !== 'rejected')
+    .map((d) => gruppenName.value(d.group))
 }
-function toggleGroupDept(id: string) { openGroupDepts.value[id] = !openGroupDepts.value[id] }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-onMounted(async () => {
-  try {
-    const res = await client.get<{ data: DashboardData }>('/dashboard')
-    const d = res.data.data
-    // Defensiv gegen fehlende Felder (z. B. veraltete Backend-Antwort)
-    data.value = {
-      orders:               d.orders ?? [],
-      watched_orders:       d.watched_orders ?? [],
-      department_board:     d.department_board ?? [],
-      my_departments:       d.my_departments ?? [],
-      allowed_ticket_types: d.allowed_ticket_types ?? [],
+// ── Filterung ─────────────────────────────────────────────────────────────────
+
+function passtZuFilter(z: Zeile): boolean {
+  const q = filter.value.search.toLowerCase().trim()
+  return (
+    (!q || z.title.toLowerCase().includes(q) || z.process_key.toLowerCase().includes(q)) &&
+    (filter.value.status === 'all' || z.status === filter.value.status) &&
+    (filter.value.priority === 'all' || z.priority === filter.value.priority)
+  )
+}
+
+const zeilenAssigned = computed(() =>
+  mirZugewiesen.value.map(zeileAusRow).filter(passtZuFilter))
+
+const zeilenDepartments = computed(() =>
+  meineAbteilungen.value.map((t) => {
+    const r = t.responsibility
+    const depts = r && r.kind === 'departments' ? r.departments ?? [] : []
+    return {
+      ...zeileAusRow(t),
+      depts: {
+        text: departmentProgress(depts).text,
+        mine: meineOffenenAbteilungen(t),
+      },
     }
-    // Prozess-Block ist additiv – fehlt er (älteres Backend), bleibt er leer.
-    processBlock.value = {
+  }).filter(passtZuFilter))
+
+const zeilenCreated = computed(() =>
+  block.value.my.map(zeileAusBlock).filter(passtZuFilter))
+
+const zeilenInvolved = computed(() =>
+  block.value.involved.map((o) => ({
+    ...zeileAusBlock(o),
+    badge: { text: 'Beteiligt', class: 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20' },
+  })).filter(passtZuFilter))
+
+const zeilen = computed<Zeile[]>(() => {
+  switch (activeTab.value) {
+    case 'assigned':    return zeilenAssigned.value
+    case 'departments': return zeilenDepartments.value
+    case 'created':     return zeilenCreated.value
+    default:            return zeilenInvolved.value
+  }
+})
+
+// ── Zähler für die Kacheln (ungefiltert) ──────────────────────────────────────
+
+const countAssigned    = computed(() => mirZugewiesen.value.length)
+const countDepartments = computed(() => meineAbteilungen.value.length)
+const countCreated     = computed(() => block.value.my.length)
+const countInvolved    = computed(() => block.value.involved.length)
+const offeneAufgaben   = computed(() => countAssigned.value + countDepartments.value)
+
+/** Status-Plaketten im Kopf – vom Server gezählt, nur über Sichtbares. */
+const statusCounts = computed(() =>
+  Object.entries(block.value.counts).filter(([, n]) => n > 0))
+
+/**
+ * Abteilungen, in denen ich Mitglied bin, für die aber gerade nichts vorliegt.
+ * Dezent anzeigen: „nichts zu tun" ist eine andere Aussage als „ich bin nicht
+ * zuständig", und nur die erste ist beruhigend.
+ */
+const leereAbteilungen = computed(() => {
+  const mitArbeit = new Set(
+    meineAbteilungen.value.flatMap((t) => {
+      const r = t.responsibility
+      if (!r || r.kind !== 'departments') return []
+      return blockingDepartments(r.departments).map((d) => d.group)
+    }),
+  )
+  return myDepartments.value.filter((d) => !mitArbeit.has(d.id))
+})
+
+/** Die Zeilen-Obergrenze ist erreicht – dann ist die Arbeitsliste unvollständig. */
+const listeAbgeschnitten = computed(() => rowsTotal.value > rows.value.length)
+
+// ── Aktionen ──────────────────────────────────────────────────────────────────
+
+function open(z: Zeile) { router.push(`/prozess-auftraege/${z.id}`) }
+
+// ── Laden ─────────────────────────────────────────────────────────────────────
+
+async function ladeDashboard() {
+  try {
+    const res = await client.get<{
+      data: { process?: ProcessBlock; my_departments?: DepartmentRef[] }
+    }>('/dashboard')
+    const d = res.data.data
+    block.value = {
       my:       d.process?.my ?? [],
       involved: d.process?.involved ?? [],
       counts:   d.process?.counts ?? {},
     }
-    // Auto-open department accordions
-    for (const g of data.value.department_board) openGroupDepts.value[g.group_id] = true
-    // Auto-select tab with most relevant content
-    if (mineCount.value > 0) activeTab.value = 'mine'
-    else if (groupCount.value > 0) activeTab.value = 'group'
-    else if (watchedCount.value > 0) activeTab.value = 'watched'
+    myDepartments.value = d.my_departments ?? []
+  } catch (e) {
+    blockError.value = errorMessage(e, 'Übersicht konnte nicht geladen werden')
   } finally {
     loading.value = false
   }
-  // Involvierte Tickets im Hintergrund vorladen (für den Zähler), ohne den Render zu blockieren.
-  loadInvolved()
+}
+
+async function ladeAuftraege() {
+  try {
+    const res = await listTickets({ limit: ROWS_LIMIT })
+    rows.value = res.items
+    rowsTotal.value = res.total
+  } catch (e) {
+    rowsError.value = errorMessage(e, 'Arbeitslisten konnten nicht geladen werden')
+  } finally {
+    rowsLoading.value = false
+  }
+}
+
+onMounted(async () => {
+  // Parallel: die beiden Quellen hängen nicht voneinander ab.
+  await Promise.all([ladeDashboard(), ladeAuftraege()])
+  // Auf den Reiter springen, in dem tatsächlich Arbeit liegt.
+  if (countAssigned.value > 0) activeTab.value = 'assigned'
+  else if (countDepartments.value > 0) activeTab.value = 'departments'
+  else if (countCreated.value > 0) activeTab.value = 'created'
+  else if (countInvolved.value > 0) activeTab.value = 'involved'
 })
 </script>
 
 <template>
   <AppLayout title="Übersicht">
 
-    <div v-if="loading" class="flex items-center justify-center py-24">
+    <div v-if="loading && rowsLoading" class="flex items-center justify-center py-24">
       <div class="w-8 h-8 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin"/>
     </div>
 
     <div v-else class="space-y-6">
 
-      <!-- ── Header ── -->
-      <div>
-        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
-          Willkommen zurück,
-          <span class="text-[#3EAAB8]">{{ auth.user?.displayName }}</span> 👋
-        </h1>
-        <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">
-          <template v-if="totalOpen > 0">Du hast <strong class="text-gray-700 dark:text-gray-200">{{ totalOpen }}</strong> offene Aufgaben.</template>
-          <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
+      <!-- ── Kopf ── -->
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
+            Willkommen zurück,
+            <span class="text-[#3EAAB8]">{{ auth.user?.displayName }}</span> 👋
+          </h1>
+          <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">
+            <template v-if="offeneAufgaben > 0">
+              Du hast <strong class="text-gray-700 dark:text-gray-200">{{ offeneAufgaben }}</strong>
+              offene Aufgaben.
+            </template>
+            <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
+          </p>
+        </div>
+        <button @click="router.push('/prozess-auftraege/neu')"
+                class="px-4 py-2 rounded-xl text-sm font-medium text-white
+                       bg-[#3EAAB8] hover:bg-[#2B7D89] transition">
+          + Neuer Auftrag
+        </button>
+      </div>
+
+      <!-- Ladefehler getrennt melden: fällt eine Quelle aus, bleibt die andere nutzbar -->
+      <div v-if="blockError || rowsError" class="space-y-2">
+        <p v-if="rowsError"
+           class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50
+                  dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          {{ rowsError }} – „Mir zugewiesen“ und „Meine Abteilungen“ sind unvollständig.
+        </p>
+        <p v-if="blockError"
+           class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50
+                  dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          {{ blockError }} – „Von mir angelegt“ und „Beteiligt“ sind unvollständig.
         </p>
       </div>
 
-      <!-- ── Stat Cards ── -->
+      <!-- ── Kacheln ── -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <button @click="activeTab = 'mine'" class="stat" :class="activeTab === 'mine' ? 'stat-on' : ''">
+        <button @click="selectTab('assigned')" class="stat" :class="activeTab === 'assigned' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
             </span>
-            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ mineCount }}</span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countAssigned }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
-            Meine Tickets
+            Mir zugewiesen
             <span class="hint" @click.stop>
               <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
-              <span class="bubble">Aufträge, die aktuell dir persönlich zur Bearbeitung zugewiesen sind.</span>
+              <span class="bubble">Aufträge, deren aktuelle Phase dich persönlich als zuständig nennt.</span>
             </span>
           </p>
         </button>
 
-        <button @click="activeTab = 'group'" class="stat" :class="activeTab === 'group' ? 'stat-on' : ''">
+        <button @click="selectTab('departments')" class="stat" :class="activeTab === 'departments' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </span>
-            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ groupCount }}</span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countDepartments }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
             Meine Abteilungen
             <span class="hint" @click.stop>
               <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
-              <span class="bubble">Aufträge, die aktuell einer deiner Fachabteilungen vorliegen – zur Bearbeitung oder Durchführung.</span>
+              <span class="bubble">Aufträge, die auf eine Quittierung durch eine deiner Fachabteilungen warten.</span>
             </span>
           </p>
         </button>
 
-        <button @click="activeTab = 'watched'" class="stat" :class="activeTab === 'watched' ? 'stat-on' : ''">
+        <button @click="selectTab('created')" class="stat" :class="activeTab === 'created' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-3-3v6m-7 5h14a2 2 0 002-2V7a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             </span>
-            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ watchedCount }}</span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countCreated }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
-            Beobachtet
+            Von mir angelegt
             <span class="hint" @click.stop>
               <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
-              <span class="bubble">Aktive Aufträge, die du beobachtest. Als Ersteller bist du automatisch Beobachter.</span>
+              <span class="bubble">Aufträge, die du selbst gestartet hast – auch wenn gerade jemand anders am Zug ist.</span>
             </span>
           </p>
         </button>
 
-        <button @click="selectInvolvedTab" class="stat" :class="activeTab === 'involved' ? 'stat-on' : ''">
+        <button @click="selectTab('involved')" class="stat" :class="activeTab === 'involved' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             </span>
-            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-              <span v-if="involvedLoaded">{{ involvedTotalAll }}</span>
-              <span v-else class="inline-block w-4 h-4 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin align-middle" />
-            </span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countInvolved }}</span>
           </div>
           <p class="stat-label inline-flex items-center gap-1">
-            Involviert
+            Beteiligt
             <span class="hint" @click.stop>
               <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
-              <span class="bubble">Alle Aufträge – auch archivierte – an denen du je beteiligt warst (Ersteller, Zuständig, Bearbeiter, Fachabteilung, Beobachter). Zum Zurückverfolgen.</span>
+              <span class="bubble">Aufträge anderer, die du sehen darfst – als Zuständige:r, Beobachter:in oder mit Aufsichtsrecht.</span>
             </span>
           </p>
         </button>
       </div>
 
-      <!-- ── Main Content ── -->
-      <div class="space-y-0">
-
-        <!-- Filter Bar -->
+      <!-- ── Liste ── -->
+      <div>
+        <!-- Filterleiste -->
         <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
                     rounded-t-2xl overflow-hidden">
-
-          <!-- Filter -->
-          <div class="px-5 py-3.5 grid grid-cols-1 gap-3 items-center"
-               :class="activeTab === 'involved' ? 'sm:grid-cols-[1fr_auto_auto_auto]' : 'sm:grid-cols-[1fr_auto_auto]'">
+          <div class="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
             <div class="relative">
               <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
@@ -439,268 +457,101 @@ onMounted(async () => {
               <input v-model="filter.search" placeholder="Aufträge durchsuchen…" class="fi !pl-10" />
             </div>
             <select v-model="filter.status" class="fi">
-              <option value="all">Alle Phasen</option>
-              <option value="in_progress">Bearbeitung</option>
-              <option value="in_request">Durchführung</option>
-              <option value="waiting_contract">Wartet auf Vertrag</option>
-              <option value="archived">Archiviert</option>
-              <option value="rejected">Abgelehnt</option>
+              <option value="all">Alle Status</option>
+              <option v-for="(lbl, key) in STATUS_LABEL" :key="key" :value="key">{{ lbl }}</option>
             </select>
             <select v-model="filter.priority" class="fi">
               <option value="all">Alle Prioritäten</option>
-              <option value="low">Niedrig</option>
-              <option value="medium">Mittel</option>
-              <option value="high">Hoch</option>
-              <option value="critical">Kritisch</option>
-            </select>
-            <!-- Zeitraum: nur im Involviert-Tab (begrenzt den Scan; Default 14 Tage) -->
-            <select v-if="activeTab === 'involved'" v-model.number="involvedSinceDays" class="fi"
-                    title="Zeitraum nach Erstelldatum">
-              <option :value="14">Letzte 14 Tage</option>
-              <option :value="30">Letzte 30 Tage</option>
-              <option :value="90">Letzte 90 Tage</option>
-              <option :value="365">Letztes Jahr</option>
-              <option :value="0">Alle</option>
+              <option v-for="p in PRIORITIES" :key="p" :value="p">{{ priorityLabel(p) }}</option>
             </select>
           </div>
         </div>
 
-        <!-- List Container -->
+        <!-- Ergebnisse -->
         <div class="bg-gray-50 dark:bg-[#1A2130] border border-t-0 border-gray-200/80 dark:border-white/[0.09]
                     rounded-b-2xl overflow-hidden">
 
-          <!-- Result count -->
-          <div class="px-5 py-2 text-xs text-gray-400 border-b border-gray-100 dark:border-white/[0.04]">
-            {{ currentCount }} {{ currentCount === 1 ? 'Ergebnis' : 'Ergebnisse' }}
+          <div class="px-5 py-2 flex items-center justify-between gap-3 flex-wrap
+                      text-xs text-gray-400 border-b border-gray-100 dark:border-white/[0.04]">
+            <span>{{ zeilen.length }} {{ zeilen.length === 1 ? 'Ergebnis' : 'Ergebnisse' }}</span>
+            <!-- Status-Verteilung über ALLE für mich sichtbaren Aufträge -->
+            <div v-if="statusCounts.length" class="flex flex-wrap items-center gap-1.5">
+              <span v-for="[st, n] in statusCounts" :key="st"
+                    class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(st)">
+                {{ statusLabel(st) }} · {{ n }}
+              </span>
+            </div>
           </div>
 
-          <!-- ═══ TAB: Mir zugewiesen ═══ -->
-          <ul v-if="activeTab === 'mine'" class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[560px] overflow-auto">
-            <li v-for="o in filteredMine" :key="o.id" @click="openTicket(o)" class="row group">
-              <div class="flex items-center gap-3.5 min-w-0">
-                <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
+          <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[560px] overflow-auto">
+            <li v-for="z in zeilen" :key="`${activeTab}-${z.id}`" @click="open(z)" class="row group">
+              <div class="flex items-start gap-3.5 min-w-0">
+                <div class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" :class="dotClass(z.status)" />
                 <div class="min-w-0">
-                  <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                  <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">
+                    {{ z.title }} <span class="text-gray-400 font-normal text-xs">#{{ z.id }}</span>
+                  </p>
+                  <p class="text-xs text-gray-400 mt-0.5">
+                    {{ z.process_key }} · {{ fmtDay(z.created_at) }}
+                    <template v-if="z.phase_label"> · {{ z.phase_label }}</template>
+                  </p>
+                  <!-- Abteilungs-Reiter: was warte MEINE Abteilung noch ab? -->
+                  <p v-if="z.depts" class="text-xs mt-1">
+                    <span class="text-purple-600 dark:text-purple-300 font-medium">
+                      {{ z.depts.mine.length ? z.depts.mine.join(', ') : 'Meine Abteilung' }}
+                    </span>
+                    <span class="text-gray-400"> · {{ z.depts.text }}</span>
+                  </p>
                 </div>
               </div>
               <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
-                <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
+                <span v-if="z.badge"
+                      class="hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                      :class="z.badge.class">{{ z.badge.text }}</span>
+                <span class="hidden sm:inline text-xs font-medium" :class="priorityClass(z.priority)">
+                  {{ priorityLabel(z.priority) }}
+                </span>
+                <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(z.status)">
+                  {{ statusLabel(z.status) }}
+                </span>
                 <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
               </div>
             </li>
-            <li v-if="filteredMine.length === 0" class="empty">Keine dir zugewiesenen Aufträge.</li>
+
+            <li v-if="zeilen.length === 0" class="empty">
+              <template v-if="activeTab === 'assigned'">Keine dir persönlich zugewiesenen Aufträge.</template>
+              <template v-else-if="activeTab === 'departments'">Keine Aufträge für deine Fachabteilungen.</template>
+              <template v-else-if="activeTab === 'created'">Du hast noch keinen Auftrag angelegt.</template>
+              <template v-else>Keine Aufträge, an denen du beteiligt bist.</template>
+            </li>
           </ul>
 
-          <!-- ═══ TAB: Meine Abteilung ═══ -->
-          <div v-if="activeTab === 'group'" class="max-h-[560px] overflow-auto">
-            <div class="divide-y divide-gray-100 dark:divide-white/[0.04]">
-              <div v-for="g in myDepartmentGroups" :key="g.group_id">
-                <button @click="toggleGroupDept(g.group_id)"
-                        class="w-full flex items-center justify-between px-5 py-4
-                               hover:bg-white/60 dark:hover:bg-[#263040] transition text-left">
-                  <div class="flex items-center gap-2.5">
-                    <span class="w-6 h-6 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400
-                                 flex items-center justify-center flex-shrink-0">
-                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                      </svg>
-                    </span>
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ g.group_name }}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">{{ g.tickets.length }}</span>
-                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
-                         :class="openGroupDepts[g.group_id] ? 'rotate-180' : ''"
-                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                  </div>
-                </button>
-                <div v-show="openGroupDepts[g.group_id]" class="px-5 pb-4 space-y-2">
-                  <div v-for="t in g.tickets" :key="t.id" @click="openDeptItem(t)"
-                       class="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
-                              bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                              hover:border-[#3EAAB8]/40 hover:shadow-sm transition group">
-                    <div class="flex items-center gap-3 min-w-0">
-                      <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(t.status)" />
-                      <div class="min-w-0">
-                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ t.title }}</p>
-                        <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[t.type_key] ?? t.type_key }} · {{ t.created_at }}</p>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                      <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[t.priority]">{{ PRIORITY_LABEL[t.priority] }}</span>
-                      <!-- Phasen-Badge ersetzt den (redundanten) Status-Badge -->
-                      <span class="text-xs font-medium px-2.5 py-1 rounded-full"
-                            :class="t.phase_type === 'department_review'
-                              ? 'bg-[#3EAAB8]/10 text-[#3EAAB8] dark:bg-[#3EAAB8]/20'
-                              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'">
-                        {{ t.phase_label }}
-                      </span>
-                      <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Dezente Mitgliedschafts-Info: Abteilungen ohne aktuelle Aufträge -->
-            <div v-if="emptyDepartments.length"
-                 class="px-5 py-3.5 border-t border-gray-100 dark:border-white/[0.04]">
-              <p class="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
-                Mitglied · derzeit keine Aufträge
-              </p>
-              <div class="flex flex-wrap gap-1.5">
-                <span v-for="d in emptyDepartments" :key="d.id"
-                      class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full
-                             bg-gray-100/70 dark:bg-white/[0.05] text-gray-500 dark:text-gray-400">
-                  <span class="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-white/20" />
-                  {{ d.name }}
-                </span>
-              </div>
-            </div>
-
-            <p v-if="myDepartmentGroups.length === 0 && emptyDepartments.length === 0" class="empty">
-              Keine Aufträge für deine Abteilung.
+          <!-- Mitgliedschafts-Info: Abteilungen ohne aktuelle Aufgabe -->
+          <div v-if="activeTab === 'departments' && leereAbteilungen.length"
+               class="px-5 py-3.5 border-t border-gray-100 dark:border-white/[0.04]">
+            <p class="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
+              Mitglied · derzeit nichts zu quittieren
             </p>
-          </div>
-
-          <!-- ═══ TAB: Beobachter (nur aktive – Archiv unter „Involviert") ═══ -->
-          <div v-if="activeTab === 'watched'" class="max-h-[560px] overflow-auto">
-            <ul class="divide-y divide-gray-100 dark:divide-white/[0.06]">
-              <li v-for="o in filteredWatchedActive" :key="o.id" @click="openWatchedTicket(o)" class="row group">
-                <div class="flex items-center gap-3.5 min-w-0">
-                  <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                    <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                  <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
-                  <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
-                  <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                </div>
-              </li>
-              <li v-if="filteredWatchedActive.length === 0" class="empty">Du beobachtest keine offenen Tickets.</li>
-            </ul>
-          </div>
-
-          <!-- ═══ TAB: Involviert (Archiv zum Zurückverfolgen) ═══ -->
-          <div v-if="activeTab === 'involved'">
-
-            <div class="max-h-[560px] overflow-auto">
-              <!-- Ladezustand (Erstaufruf) -->
-              <div v-if="involvedLoading && !involvedLoaded" class="flex items-center justify-center py-14">
-                <div class="w-6 h-6 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
-              </div>
-
-              <ul v-else class="divide-y divide-gray-100 dark:divide-white/[0.06] transition-opacity"
-                  :class="involvedLoading ? 'opacity-50' : ''">
-                <li v-for="o in involved" :key="o.id" @click="openInvolved(o)" class="row group">
-                  <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 self-start" :class="dotClass(o.status)" />
-                    <div class="min-w-0">
-                      <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                      <p class="text-xs text-gray-400 mt-0.5">{{ TYPE_LABEL[o.type_key] ?? o.type_key }} · {{ o.created_at }}</p>
-                      <!-- Rollen-Chips: wie war ich beteiligt? -->
-                      <div v-if="o.roles?.length" class="flex flex-wrap gap-1 mt-1.5">
-                        <span v-for="r in sortedRoles(o.roles)" :key="r"
-                              class="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                              :class="ROLE_META[r]?.class ?? 'bg-gray-100 text-gray-500'">
-                          {{ ROLE_META[r]?.label ?? r }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                    <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
-                    <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="STATUS_CLASS[o.status]">{{ STATUS_LABEL[o.status] }}</span>
-                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                  </div>
-                </li>
-                <li v-if="involved.length === 0 && !involvedLoading" class="empty">
-                  Keine Tickets gefunden, an denen du beteiligt warst.
-                </li>
-              </ul>
-            </div>
-
-            <!-- Pagination -->
-            <div v-if="involvedLoaded && involvedTotalPages > 1"
-                 class="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-200/80 dark:border-white/[0.09]">
-              <button @click="goToInvolvedPage(involvedPage - 1)" :disabled="involvedPage <= 1 || involvedLoading" class="page-btn">‹ Zurück</button>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                Seite {{ involvedPage }} / {{ involvedTotalPages }}
-                <span class="text-gray-300 dark:text-gray-600">·</span>
-                {{ involvedTotal }} gesamt
+            <div class="flex flex-wrap gap-1.5">
+              <span v-for="d in leereAbteilungen" :key="d.id"
+                    class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full
+                           bg-gray-100/70 dark:bg-white/[0.05] text-gray-500 dark:text-gray-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-white/20" />
+                {{ d.name }}
               </span>
-              <button @click="goToInvolvedPage(involvedPage + 1)" :disabled="involvedPage >= involvedTotalPages || involvedLoading" class="page-btn">Weiter ›</button>
             </div>
           </div>
 
-        </div>
-      </div>
-
-      <!-- ── Prozess-Aufträge (neues, definitions-getriebenes System) ──
-           Eigener Abschnitt statt eines weiteren Tabs: die Aufträge liegen in
-           einem anderen System und werden anders geöffnet (/prozess-auftraege).
-           Wird nur gezeigt, wenn es überhaupt welche gibt. -->
-      <div v-if="processOrders.length"
-           class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                  rounded-2xl overflow-hidden">
-
-        <div class="px-5 py-3.5 flex items-center justify-between gap-3 flex-wrap
-                    border-b border-gray-100 dark:border-white/[0.06]">
-          <div class="flex items-center gap-2.5">
-            <span class="w-6 h-6 rounded bg-[#3EAAB8]/10 text-[#3EAAB8]
-                         flex items-center justify-center flex-shrink-0">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-              </svg>
-            </span>
-            <div>
-              <p class="text-sm font-semibold text-gray-900 dark:text-white">Prozess-Aufträge</p>
-              <p class="text-xs text-gray-400">Aufträge aus den dynamischen Prozessen</p>
-            </div>
-          </div>
-          <!-- Status-Zähler über alle für dich sichtbaren Prozess-Aufträge -->
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span v-for="[st, n] in processCounts" :key="st"
-                  class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(st)">
-              {{ statusLabel(st) }} · {{ n }}
-            </span>
+          <!-- Ehrlichkeits-Hinweis: die Arbeitslisten lesen nur die erste Seite -->
+          <div v-if="listeAbgeschnitten && (activeTab === 'assigned' || activeTab === 'departments')"
+               class="px-5 py-3 border-t border-gray-100 dark:border-white/[0.04]
+                      text-xs text-gray-500 dark:text-gray-400">
+            Es gibt mehr als {{ rows.length }} sichtbare Aufträge ({{ rowsTotal }}).
+            Diese Liste zeigt nur die neuesten – die vollständige Suche steht unter
+            <button @click="router.push('/prozess-auftraege')" class="text-[#3EAAB8] hover:underline">
+              Prozess-Aufträge</button>.
           </div>
         </div>
-
-        <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[360px] overflow-auto">
-          <li v-for="o in filteredProcessOrders" :key="o.id" @click="openProcessOrder(o)" class="row group">
-            <div class="flex items-center gap-3.5 min-w-0">
-              <div class="w-2 h-2 rounded-full flex-shrink-0" :class="dotClass(o.status)" />
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">{{ o.title }}</p>
-                <p class="text-xs text-gray-400 mt-0.5">
-                  {{ o.process_key }} · {{ fmtDay(o.created_at) }}
-                  <template v-if="o.phase_label"> · {{ o.phase_label }}</template>
-                </p>
-              </div>
-            </div>
-            <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-              <!-- Woher kommt der Auftrag in meine Liste? -->
-              <span class="hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                    :class="o.is_owner
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                      : 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20'">
-                {{ o.is_owner ? 'Ersteller' : 'Beteiligt' }}
-              </span>
-              <span class="hidden sm:inline text-xs font-medium" :class="PRIORITY_CLASS[o.priority]">{{ PRIORITY_LABEL[o.priority] }}</span>
-              <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(o.status)">{{ statusLabel(o.status) }}</span>
-              <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-            </div>
-          </li>
-          <li v-if="filteredProcessOrders.length === 0" class="empty">
-            Keine Prozess-Aufträge zum aktuellen Filter.
-          </li>
-        </ul>
       </div>
     </div>
   </AppLayout>
@@ -731,21 +582,15 @@ onMounted(async () => {
 }
 
 .row {
-  @apply flex items-center justify-between px-5 py-4 cursor-pointer
+  @apply flex items-start justify-between px-5 py-4 cursor-pointer
          hover:bg-white/60 dark:hover:bg-[#263040] transition;
 }
 
 .empty { @apply px-5 py-14 text-center text-sm text-gray-400 italic; }
 
-.page-btn {
-  @apply px-3.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-white/10
-         text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#263040]
-         disabled:opacity-40 disabled:cursor-not-allowed transition;
-}
-
-/* Info-Icon mit Hover-Tooltip auf den Stat-Cards.
-   Die Bubble wird relativ zur Card (.stat = relative) zentriert und unter die Card
-   gelegt – so läuft sie auch bei der rechten Card nicht über den Rand. */
+/* Info-Icon mit Hover-Tooltip auf den Kacheln.
+   Die Bubble wird relativ zur Karte (.stat = relative) zentriert und darunter
+   gelegt – so läuft sie auch bei der rechten Karte nicht über den Rand. */
 .hint { @apply inline-flex items-center cursor-help; }
 .hint-icon { @apply w-[18px] h-[18px] text-gray-300 dark:text-gray-600 transition-colors; }
 .hint:hover .hint-icon { @apply text-gray-500 dark:text-gray-300; }

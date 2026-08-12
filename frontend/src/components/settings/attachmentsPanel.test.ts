@@ -3,8 +3,10 @@
  *
  * Kein Mounting (das Projekt hat kein @vue/test-utils/jsdom) – geprüft werden die
  * reinen Helfer, die entscheiden, WOHIN eine Zeile führt. Genau hier lag der Bug:
- * Prozess-Anhänge zeigten auf /admin/tickets/:id und damit auf ein fremdes
- * Alt-Ticket mit derselben ID.
+ * Prozess-Anhänge zeigten auf die Admin-Detailansicht des Alt-Systems und damit
+ * auf ein fremdes Ticket mit derselben ID. Seit das Alt-System entfernt ist, ist
+ * die Gegenprobe wichtiger geworden: eine Alt-Zeile darf NICHT ersatzweise auf
+ * /prozess-auftraege/:id zeigen.
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -12,33 +14,33 @@ import {
 } from './AttachmentsPanel.vue'
 
 describe('entityPath', () => {
-  it('verlinkt Alt-Tickets auf die Admin-Detailansicht', () => {
-    expect(entityPath(ENTITY_TICKET, 7)).toBe('/admin/tickets/7')
-  })
-
-  it('verlinkt Prozess-Anhänge auf den Prozess-Auftrag – NICHT auf das Alt-Ticket', () => {
+  it('verlinkt Prozess-Anhänge auf den Prozess-Auftrag', () => {
     expect(entityPath(ENTITY_PROCESS_TICKET, 7)).toBe('/prozess-auftraege/7')
-    // Gleiche ID, zwei verschiedene Ziele – der Kern des Problems.
-    expect(entityPath(ENTITY_PROCESS_TICKET, 7)).not.toBe(entityPath(ENTITY_TICKET, 7))
   })
 
-  it('behandelt unbekannten/fehlenden entity_type wie das Alt-System (Spalten-Default)', () => {
-    expect(entityPath(null, 7)).toBe('/admin/tickets/7')
-    expect(entityPath(undefined, 7)).toBe('/admin/tickets/7')
+  it('verlinkt Alt-Anhänge NICHT – die Zielseite gibt es nicht mehr', () => {
+    // Gleiche ID, zwei Welten: /prozess-auftraege/7 wäre ein fremder Auftrag.
+    expect(entityPath(ENTITY_TICKET, 7)).toBeNull()
+  })
+
+  it('rät bei unbekanntem/fehlendem entity_type kein Ziel', () => {
+    expect(entityPath(null, 7)).toBeNull()
+    expect(entityPath(undefined, 7)).toBeNull()
+    expect(entityPath('etwas-neues', 7)).toBeNull()
   })
 
   it('ohne ID kein Ziel (Anhang ohne Entität)', () => {
     expect(entityPath(ENTITY_TICKET, null)).toBeNull()
     expect(entityPath(ENTITY_PROCESS_TICKET, undefined)).toBeNull()
-    expect(entityPath(ENTITY_TICKET, 0)).toBeNull()
+    expect(entityPath(ENTITY_PROCESS_TICKET, 0)).toBeNull()
   })
 })
 
 describe('entityLabel', () => {
   it('kennzeichnet beide Welten unterscheidbar', () => {
     expect(entityLabel(ENTITY_PROCESS_TICKET)).toBe('Prozess')
-    expect(entityLabel(ENTITY_TICKET)).toBe('Ticket')
-    expect(entityLabel(null)).toBe('Ticket')
+    expect(entityLabel(ENTITY_TICKET)).toBe('Alt-System')
+    expect(entityLabel(null)).toBe('Alt-System')
   })
 })
 

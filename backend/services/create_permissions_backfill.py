@@ -2,12 +2,15 @@
 
 Im Alt-System lag „wer darf Typ X anlegen?" an zwei Stellen:
 
-* je Nutzer als `extra_permission` `create_<typ>` (siehe
-  `ticket_permissions.load_ticket_permissions`), und
-* je Tickettyp als Gruppenliste in der Tabelle `ticket_group_permissions`
-  (siehe `ticket_permissions.load_group_ticket_permissions`). Diese Liste
-  mischt drei Dinge: den Sentinel `__everyone__`, Azure-AD-Gruppen-IDs und
-  IDs interner Fachabteilungen.
+* je Nutzer als `extra_permission` `create_<typ>` in der Tabelle `users`, und
+* je Tickettyp als Gruppenliste in der Tabelle `ticket_group_permissions`.
+  Diese Liste mischt drei Dinge: den Sentinel `__everyone__`,
+  Azure-AD-Gruppen-IDs und IDs interner Fachabteilungen.
+
+Beide Quellen werden hier SELBST gelesen (siehe `load_legacy_permissions`) – das
+Alt-Zugriffsmodul `services/ticket_permissions.py` gibt es nicht mehr. Die
+TABELLEN bleiben bestehen; erst wenn niemand mehr auf diesen Weg angewiesen ist,
+kann `ticket_group_permissions` gedroppt werden.
 
 Im neuen System steht das Recht in der Definition (`CreatePermissions`).
 
@@ -30,9 +33,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
-#: Sentinel aus `ticket_permissions.EVERYONE`. Hier bewusst als eigene Konstante:
-#: dieses Modul soll den Cutover überleben, an dem das Alt-Modul verschwindet.
-#: Der Test `test_create_permissions_backfill` hält beide Werte deckungsgleich.
+from backend.utils.logger import logger
+
+#: Sentinel „jeder darf anlegen", wie er in `ticket_group_permissions.group_id`
+#: steht. Eigene Konstante, damit dieses Modul den Cutover überlebt; der Wert ist
+#: Datenformat der Alt-Zeilen und darf sich nicht ändern.
 EVERYONE_SENTINEL = "__everyone__"
 
 #: Alt-TicketType → Prozess-Schlüssel. EXPLIZIT, nicht aus Namen abgeleitet:
@@ -121,14 +126,61 @@ def merge_into_definition(defn: dict, perms: Optional[dict]) -> dict:
     return {**defn, "createPermissions": zusammen}
 
 
-def load_legacy_permissions() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    """Altdaten laden (DB). Getrennt von der Abbildung, damit die testbar bleibt.
+def _load_legacy_user_permissions() -> dict[str, list[str]]:
+    """Alt-Tickettyp → User-IDs, aus den `create_<typ>`-Extra-Rechten der Nutzer.
 
-    Import bewusst erst hier: nach dem Cutover verschwindet das Alt-Modul, dieses
-    Modul soll dann trotzdem noch importierbar sein.
+    Liest die Tabelle `users` (die bleibt) selbst aus, statt über das Alt-Modul
+    `ticket_permissions` zu gehen: dessen Gültigkeitsprüfung hing am Enum
+    `TicketType`, das mit dem Alt-System verschwindet. Maßstab ist hier
+    LEGACY_TYPE_TO_PROCESS_KEY – nur Typen, für die es überhaupt einen
+    Ziel-Prozess gibt, können ein Recht übernehmen.
     """
-    from backend.services.ticket_permissions import (
-        load_group_ticket_permissions,
-        load_ticket_permissions,
-    )
-    return load_ticket_permissions(), load_group_ticket_permissions()
+    from backend.database.users import list_users
+
+    result: dict[str, list[str]] = {typ: [] for typ in LEGACY_TYPE_TO_PROCESS_KEY}
+    for user in list_users():
+        for perm in user.extra_permissions or []:
+            if not perm.startswith("create_"):
+                continue
+            typ = perm[len("create_"):]
+            if typ in result:
+                result[typ].append(user.microsoft_id)
+    return result
+
+
+def _load_legacy_group_permissions() -> dict[str, list[str]]:
+    """Alt-Tickettyp → Gruppen-IDs (inkl. `__everyone__`) aus `ticket_group_permissions`.
+
+    Direkt per SQL, weil das Alt-Zugriffsmodul mit dem Cutover entfällt – die
+    TABELLE bleibt aber bestehen (sie wird bewusst nicht gedroppt) und ist die
+    einzige Quelle dieser Rechte. Fehlt sie doch, ist das kein Fehler, sondern
+    „keine Alt-Rechte": ein Seeder-Lauf darf daran nicht scheitern.
+    """
+    from backend.database.connection import _fetchall, get_connection
+
+    try:
+        conn = get_connection()
+    except Exception:
+        logger.warning("Alt-Erstellrechte (Gruppen) nicht ladbar – DB nicht erreichbar")
+        return {}
+    try:
+        rows = _fetchall(
+            conn, "SELECT ticket_type, group_id FROM ticket_group_permissions", ())
+    except Exception:
+        logger.warning("Tabelle ticket_group_permissions nicht lesbar – "
+                       "keine Alt-Gruppenrechte übernommen")
+        return {}
+    finally:
+        conn.close()
+
+    result: dict[str, list[str]] = {}
+    for row in rows or []:
+        typ, gid = row.get("ticket_type"), row.get("group_id")
+        if typ and gid:
+            result.setdefault(typ, []).append(gid)
+    return result
+
+
+def load_legacy_permissions() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Altdaten laden (DB). Getrennt von der Abbildung, damit die testbar bleibt."""
+    return _load_legacy_user_permissions(), _load_legacy_group_permissions()

@@ -1,8 +1,8 @@
 """
 Ebene-1-Tests: reine Logik, KEIN DB-Zugriff.
 
-Die getesteten Funktionen (workflow_state, settings) lesen nur aus im Speicher
-übergebenen Objekten/Dicts. Gemeinsame Bau-Helfer liegen in factories.py.
+Die getesteten Funktionen lesen nur aus im Speicher übergebenen Objekten/Dicts;
+wer eine DB braucht, ersetzt den Store durch eine Attrappe.
 """
 
 import os

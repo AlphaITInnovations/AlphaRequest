@@ -28,7 +28,7 @@ import { visibleFieldKeys } from '@/lib/processSim'
 import type { SimViewer } from '@/lib/processSim'
 import LayoutSection from './LayoutSection.vue'
 import LayoutDecoration from './LayoutDecoration.vue'
-import TicketField from '@/components/tickets/TicketField.vue'
+import ReadonlyField from '@/components/ReadonlyField.vue'
 
 const props = defineProps<{
   definition: ProcessDefinition
@@ -133,7 +133,7 @@ const subText = (v: unknown): string => subValueText(v)
              class="col-span-12" :class="colSpanClass(row.cols)">
           <template v-if="row.kind === 'field'">
             <!-- Wiederholgruppe als kleine Tabelle -->
-            <TicketField v-if="isCollection(row.f)" :label="row.f.label || row.f.key">
+            <ReadonlyField v-if="isCollection(row.f)" :label="row.f.label || row.f.key">
               <span v-if="!rowsOf(row.f).length" class="text-gray-400 italic">—</span>
               <div v-else class="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10">
                 <table class="w-full text-sm">
@@ -155,9 +155,9 @@ const subText = (v: unknown): string => subValueText(v)
                   </tbody>
                 </table>
               </div>
-            </TicketField>
+            </ReadonlyField>
 
-            <TicketField
+            <ReadonlyField
               v-else
               :label="row.f.label || row.f.key"
               :value="display(row.f, vals[row.f.key])"

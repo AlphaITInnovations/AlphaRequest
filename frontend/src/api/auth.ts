@@ -1,5 +1,5 @@
 import { client } from '@/api/client'
-import type { DataResponse, User } from '@/types/ticket'
+import type { DataResponse, User } from '@/types/api'
 
 export const authApi = {
   me:             () => client.get<DataResponse<User>>('/auth/me'),

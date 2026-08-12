@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
-import type { User, Permission, TicketType } from '@/types/ticket'
+import type { User, Permission } from '@/types/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user    = ref<User | null>(null)
@@ -25,18 +25,6 @@ export const useAuthStore = defineStore('auth', () => {
   const canView   = computed(() => hasPermission('view'))
   const canManage = computed(() => hasPermission('manage'))
   const isAdmin   = computed(() => hasPermission('admin'))
-
-  // ── Ticket-Erstellung ─────────────────────────────────────────────────────────
-
-  function canCreateTicket(type: TicketType): boolean {
-    return hasPermission(`create_${type}`)
-  }
-
-  const allowedTicketTypes = computed<TicketType[]>(() =>
-    permissions.value
-      .filter(p => p.startsWith('create_'))
-      .map(p => p.replace('create_', '') as TicketType)
-  )
 
   // ── API ───────────────────────────────────────────────────────────────────────
 
@@ -123,7 +111,6 @@ export const useAuthStore = defineStore('auth', () => {
     user, loading, sessionExpired, reauthenticating, hadSession,
     isLoggedIn, permissions, hasPermission,
     canView, canManage, isAdmin,
-    canCreateTicket, allowedTicketTypes,
     fetchMe, refreshSession, logout, markSessionExpired, reloginViaPopup,
   }
 })

@@ -18,18 +18,14 @@ function isActive(path: string) {
   return route.path.startsWith(path)
 }
 
-// Prozess-Ticket = /tickets/new und alle /tickets/new/:type AUSSER basis-ticket.
-// (Sonst würde /tickets/new/basis-ticket auch hier matchen, weil es mit
-//  /tickets/new beginnt – dann leuchten beide Buttons.)
-const isBasisTicketActive   = computed(() => route.path === '/tickets/new/basis-ticket')
-const isProcessTicketActive = computed(
-  () => route.path.startsWith('/tickets/new') && !isBasisTicketActive.value,
+// Der Anlege-Weg (Katalog + Formular) hebt den Anlege-Knopf hervor …
+const isAnlegenActive = computed(() => route.path.startsWith('/prozess-auftraege/neu'))
+// … und darf deshalb nicht zusätzlich „Prozess-Aufträge" (die Liste) aktiv
+// setzen: /prozess-auftraege/neu beginnt mit /prozess-auftraege. In der
+// Einzelansicht (/prozess-auftraege/:id) leuchtet die Liste bewusst mit.
+const isAuftraegeActive = computed(
+  () => route.path.startsWith('/prozess-auftraege') && !isAnlegenActive.value,
 )
-
-// „Alle Aufträge" = nur die Liste selbst (/tickets). In der Einzelticket-Ansicht
-// (/tickets/overview/:id) bzw. der Arbeitsansicht (/tickets/view/:type/:id) ist
-// bewusst KEIN Navigationspunkt aktiv.
-const isAuftraegeActive = computed(() => route.path === '/tickets')
 
 function navigate(path: string) {
   router.push(path)
@@ -109,33 +105,22 @@ defineProps<{ title?: string }>()
         </button>
       </div>
 
-      <!-- Ticket-Erstellung -->
-      <div class="px-3 pt-4 pb-2 space-y-1.5">
-        <button @click="navigate('/tickets/new')"
+      <!-- Auftrag anlegen: EIN Knopf in den Katalog. Früher standen hier zwei
+           (Prozess-Ticket / Basis-Ticket) – das Basis-Ticket ist heute einer der
+           Prozesse im Katalog und braucht keinen eigenen Einstieg mehr. -->
+      <div class="px-3 pt-4 pb-2">
+        <button @click="navigate('/prozess-auftraege/neu')"
                 class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
                 :class="[
                   sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
-                  isProcessTicketActive
+                  isAnlegenActive
                     ? 'bg-white text-[#3EAAB8] font-semibold shadow-sm'
                     : 'bg-white/20 hover:bg-white/30 text-white'
                 ]">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" d="M12 4v16m8-8H4"/>
           </svg>
-          <span v-if="sidebarOpen" class="text-sm truncate">Neues Prozess-Ticket</span>
-        </button>
-        <button @click="navigate('/tickets/new/basis-ticket')"
-                class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
-                :class="[
-                  sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
-                  isBasisTicketActive
-                    ? 'bg-white text-[#3EAAB8] font-semibold shadow-sm'
-                    : 'bg-white/20 hover:bg-white/30 text-white'
-                ]">
-          <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-            <path stroke-linecap="round" d="M12 4v16m8-8H4"/>
-          </svg>
-          <span v-if="sidebarOpen" class="text-sm truncate">Neues Ticket</span>
+          <span v-if="sidebarOpen" class="text-sm truncate">Neuer Auftrag</span>
         </button>
       </div>
 
@@ -161,34 +146,18 @@ defineProps<{ title?: string }>()
           <span v-if="sidebarOpen" class="truncate">Übersicht</span>
         </a>
 
-        <a v-if="auth.canView"
-           @click.prevent="navigate('/tickets')"
-           href="/tickets"
+        <!-- Prozess-Aufträge. Bewusst NICHT im Admin-Block: die Endpunkte sind für
+             alle Beteiligten offen (Ersteller:in, Zuständige, Beobachter:innen) –
+             im Admin-Block wäre der Menüpunkt für genau die Personen unsichtbar,
+             die dort arbeiten sollen. -->
+        <a @click.prevent="navigate('/prozess-auftraege')"
+           href="/prozess-auftraege"
            class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
            :class="[
              isAuftraegeActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
              sidebarOpen ? '' : 'justify-center'
            ]">
           <div v-if="isAuftraegeActive" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
-          <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
-            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-          </svg>
-          <span v-if="sidebarOpen" class="truncate">Alle Aufträge</span>
-        </a>
-
-        <!-- Aufträge aus dynamischen Prozessen. Bewusst NICHT im Admin-Block:
-             die Endpunkte sind für alle Beteiligten offen (Ersteller:in,
-             Zuständige, Beobachter:innen) – im Admin-Block wäre der Menüpunkt für
-             genau die Personen unsichtbar, die dort arbeiten sollen. -->
-        <a @click.prevent="navigate('/prozess-auftraege')"
-           href="/prozess-auftraege"
-           class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
-           :class="[
-             isActive('/prozess-auftraege') ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
-             sidebarOpen ? '' : 'justify-center'
-           ]">
-          <div v-if="isActive('/prozess-auftraege')" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
           <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12h4l3 8 4-16 3 8h4"/>
           </svg>

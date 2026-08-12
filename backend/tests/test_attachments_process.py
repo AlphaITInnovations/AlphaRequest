@@ -71,15 +71,16 @@ def sql(monkeypatch):
 
 
 def test_list_for_ticket_filtert_immer_nach_entity_type(sql):
-    """Ohne entity_type-Filter würden Ticket #7 und Prozess-Ticket #7 dieselben
-    Anhänge sehen – beide Welten teilen die Tabelle und den ID-Raum."""
+    """Ohne entity_type-Filter würden Alt-Ticket #7 und Prozess-Ticket #7 dieselben
+    Anhänge sehen – die Alt-Zeilen liegen weiter in derselben Tabelle und teilen
+    den Spaltennamen `ticket_id`, obwohl die ID-Räume verschieden sind."""
     att_db.list_for_ticket(7)
     stmt, params = sql[-1]
     assert "entity_type=%s" in stmt
-    assert params == ("ticket", 7)                     # Default = Alt-System
+    assert params == ("process_ticket", 7)              # Default = Prozess-Welt
 
-    att_db.list_for_ticket(7, entity_type=att_db.ENTITY_PROCESS_TICKET)
-    assert sql[-1][1] == ("process_ticket", 7)
+    att_db.list_for_ticket(7, entity_type=att_db.ENTITY_TICKET)
+    assert sql[-1][1] == ("ticket", 7)
 
 
 def test_list_for_ticket_field_key_ist_optionaler_filter(sql):
@@ -124,7 +125,7 @@ class FakeAttDb:
     def insert_attachment(self, *, ticket_id, phase_key, family_id, original_filename,
                           stored_path, content_type, size_bytes, sha256,
                           uploaded_by_id, uploaded_by_name,
-                          entity_type=att_db.ENTITY_TICKET, field_key=None):
+                          entity_type=att_db.ENTITY_PROCESS_TICKET, field_key=None):
         self.seq += 1
         version = 1
         if family_id:
@@ -148,7 +149,7 @@ class FakeAttDb:
         return next((dict(r) for r in self.rows if r["id"] == aid), None)
 
     def list_for_ticket(self, ticket_id, *, include_versions=False,
-                        entity_type=att_db.ENTITY_TICKET, field_key=None):
+                        entity_type=att_db.ENTITY_PROCESS_TICKET, field_key=None):
         out = [r for r in self.rows
                if r["entity_type"] == entity_type and r["ticket_id"] == ticket_id
                and r["deleted_at"] is None
@@ -218,10 +219,6 @@ def ctx(monkeypatch):
     monkeypatch.setattr(att_api, "storage", FakeStorage())
     monkeypatch.setattr(att_api, "vis", FakeVis())
     monkeypatch.setattr(att_api, "record_audit", lambda **kw: audits.append(kw))
-    # Alt-Welt: Ticket-Zugriff ohne DB (die Trennung soll geprüft werden, nicht
-    # der Alt-Zugriff) – Ticket #7 existiert und ist zugänglich.
-    monkeypatch.setattr(att_api, "_get_ticket_or_404", lambda tid: {"id": tid})
-    monkeypatch.setattr(att_api, "_assert_ticket_access", lambda ticket, user: None)
     return {"att": fake_att, "audits": audits}
 
 
@@ -315,24 +312,44 @@ def test_neue_version_ueber_family_id(owner_client):
     assert len(mit_historie) == 2
 
 
-# ── Trennung der beiden Welten ────────────────────────────────────────────────
+# ── Abgrenzung zu den verbliebenen Alt-Zeilen ─────────────────────────────────
 
-def test_prozess_anhang_erscheint_nicht_in_der_alt_liste(owner_client, ctx):
-    """Ticket #7 (alt) und Prozess-Ticket #7 sind verschiedene Aufträge."""
-    upload(owner_client, field_key="vertrag")
-    alt = owner_client.get("/tickets/7/attachments")
-    assert alt.status_code == 200 and alt.json()["data"] == []
-    neu = owner_client.get("/process-tickets/7/attachments")
-    assert len(neu.json()["data"]) == 1
+def test_alt_endpunkte_gibt_es_nicht_mehr(owner_client):
+    """Die Alt-Routen /tickets/{id}/attachments sind mit dem Alt-System entfallen –
+    der Pfad /tickets ist damit frei."""
+    assert owner_client.get("/tickets/7/attachments").status_code == 404
+    assert owner_client.post("/tickets/7/attachments").status_code == 404
 
 
 def test_alt_anhang_erscheint_nicht_in_der_prozess_liste(owner_client, ctx):
+    """Alt-Ticket #7 und Prozess-Ticket #7 sind verschiedene Aufträge – die
+    Alt-Zeilen liegen weiter in derselben Tabelle."""
     ctx["att"].insert_attachment(
         ticket_id=7, phase_key=None, family_id=None, original_filename="alt.pdf",
         stored_path="ab/alt", content_type="application/pdf", size_bytes=3, sha256=None,
-        uploaded_by_id="u_owner", uploaded_by_name="Owner")   # entity_type = Default
+        uploaded_by_id="u_owner", uploaded_by_name="Owner",
+        entity_type=att_db.ENTITY_TICKET)
     assert owner_client.get("/process-tickets/7/attachments").json()["data"] == []
-    assert len(owner_client.get("/tickets/7/attachments").json()["data"]) == 1
+
+
+def test_alt_anhang_ist_nur_fuer_admins_erreichbar(owner_client, ctx):
+    """Ohne das Alt-Ticket ist nicht mehr entscheidbar, wer die Datei sehen durfte
+    (vertrauliche Beschreibungsteile hingen daran) – also fail-closed."""
+    ctx["att"].insert_attachment(
+        ticket_id=7, phase_key=None, family_id=None, original_filename="alt.pdf",
+        stored_path="ab/alt", content_type="application/pdf", size_bytes=3, sha256=None,
+        uploaded_by_id="u_owner", uploaded_by_name="Owner",
+        entity_type=att_db.ENTITY_TICKET)
+    # Selbst die hochladende Person kommt nicht mehr heran …
+    r = owner_client.delete("/attachments/1")
+    assert r.status_code == 403 and r.json()["error"]["code"] == "ADMIN_REQUIRED"
+    assert owner_client.get("/attachments/1/download").status_code == 403
+    assert ctx["att"].rows[0]["deleted_at"] is None
+    # … die Aufsicht schon (zum Aufräumen des Speichers).
+    admin = make_client({"id": "u_admin", "displayName": "Admin",
+                         "permissions": ["view", "manage", "admin"]})
+    assert admin.delete("/attachments/1").status_code == 200
+    assert ctx["att"].rows[0]["deleted_at"] is not None
 
 
 # ── Zugriff ───────────────────────────────────────────────────────────────────

@@ -57,15 +57,26 @@ def test_leerer_tickettyp_erzeugt_leere_rechte_keine_meldung():
     assert res.ineffective_groups == {}
 
 
+# Die Tickettypen des Alt-Systems (früher `models.models.TicketType`). Hier als
+# Literal festgeschrieben, weil das Enum mit dem Alt-System entfallen ist – die
+# Abbildung muss die Liste trotzdem vollständig abdecken, sonst verliert ein
+# Kunde beim Cutover still die Erstellrechte eines Typs.
+ALT_TICKETTYPEN = {
+    "hardware", "niederlassung-anmelden", "niederlassung-schliessen",
+    "niederlassung-umzug", "einstellung", "zugang-beantragen", "zugang-sperren",
+    "marketing-stellenanzeige", "hotelbuchung", "basis-ticket",
+}
+
+
 def test_abbildung_deckt_alle_alt_tickettypen_ab():
     """Explizite Abbildung – kein Typ darf beim Cutover unbemerkt wegfallen."""
-    from backend.models.models import TicketType
-    assert set(LEGACY_TYPE_TO_PROCESS_KEY) == {t.value for t in TicketType}
+    assert set(LEGACY_TYPE_TO_PROCESS_KEY) == ALT_TICKETTYPEN
 
 
 def test_sentinel_stimmt_mit_alt_system_ueberein():
-    from backend.services.ticket_permissions import EVERYONE
-    assert EVERYONE_SENTINEL == EVERYONE
+    """Der Wert steht so in den Alt-Zeilen von `ticket_group_permissions` – er ist
+    Datenformat, nicht Geschmackssache, und darf sich nicht ändern."""
+    assert EVERYONE_SENTINEL == "__everyone__"
 
 
 def test_merge_nimmt_dem_seed_nichts_weg():

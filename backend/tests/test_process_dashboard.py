@@ -232,9 +232,12 @@ def test_store_fehler_liefert_leeren_block(monkeypatch, defs):
     assert block.my == [] and block.involved == [] and block.counts == {}
 
 
-def test_antwort_behaelt_die_alten_schluessel():
-    """Der Prozess-Block ist additiv – das Frontend darf nichts verlieren."""
-    keys = set(dash.DashboardResponseWithProcess.model_fields)
-    assert {"orders", "watched_orders", "department_board", "my_departments",
-            "allowed_ticket_types"} <= keys
-    assert "process" in keys
+def test_antwort_enthaelt_nur_noch_prozess_und_fachabteilungen():
+    """Nach dem Rückbau des Alt-Systems trägt die Antwort genau zwei Schlüssel:
+    den Prozess-Block und die Fachabteilungen des Nutzers. Die Klammer `process`
+    bleibt bewusst stehen, damit `data.process.*` im Frontend gültig bleibt."""
+    keys = set(dash.DashboardResponse.model_fields)
+    assert keys == {"my_departments", "process"}
+    # Die Alt-Schlüssel sind weg – sonst liest das Frontend leere Listen als „nichts zu tun".
+    assert not ({"orders", "watched_orders", "department_board",
+                 "allowed_ticket_types"} & keys)

@@ -19,47 +19,6 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
 
-    // ── Ticket Overview ────────────────────────────────────────────────────────
-    {
-      path: '/tickets',
-      component: () => import('@/views/TicketOverviewView.vue'),
-      meta: { requiresAuth: true, requiresPermission: 'view' },
-    },
-    {
-      path: '/tickets/new',
-      component: () => import('@/views/TicketCreateView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
-      // Kein requiresPermission: 'view' – auch involvierte Nutzer ohne globale
-      // view-Rolle dürfen IHRE Tickets öffnen. Der Backend-Endpoint prüft den
-      // Zugriff pro Ticket (view/manage/admin oder beteiligt).
-      path: '/tickets/overview/:id',
-      component: () => import('@/views/TicketOverviewDetailView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
-      // Admin-Detail mit Notfall-Aktionen (Zuständigkeit, Sperre, Archiv, Löschen,
-      // Raw-JSON). Nur für Admins; der Backend-Endpoint prüft ebenfalls.
-      path: '/admin/tickets/:id',
-      component: () => import('@/views/AdminTicketDetailView.vue'),
-      meta: { requiresAuth: true, requiresPermission: 'admin' },
-    },
-
-    // ── Generic ticket routes (new) ────────────────────────────────────────────
-    // /tickets/new/:type     → create a ticket of a given type
-    // /tickets/view/:type/:id → edit (assignment phase) or fachabteilung view (dept-review phase)
-    {
-      path: '/tickets/new/:type',
-      component: () => import('@/views/tickets/TicketCreateView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/tickets/view/:type/:id',
-      component: () => import('@/views/tickets/TicketDetailView.vue'),
-      meta: { requiresAuth: true },
-    },
-
     // ── Settings ───────────────────────────────────────────────────────────────
     {
       path: '/settings',
@@ -67,26 +26,31 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresPermission: 'admin' },
     },
 
-    // ── Dynamische Prozesse ────────────────────────────────────────────────────
+    // ── Prozess-Definitionen ───────────────────────────────────────────────────
     // Editor: nur Admin (die Definitions-Endpunkte sind ebenfalls admin-gated).
     {
       path: '/prozesse/:key/:version',
       component: () => import('@/views/ProcessEditorView.vue'),
       meta: { requiresAuth: true, requiresPermission: 'admin' },
     },
-    // Aufträge aus dynamischen Prozessen: für ALLE Angemeldeten erreichbar.
-    // Kein `requiresPermission` – wer was sehen und tun darf, entscheidet der
-    // Server pro Auftrag (Aufsicht · Ersteller:in · Zuständige · Beobachter:innen)
-    // und liefert es als `abilities`/`visible_fields` mit. Ein Rechte-Gate an der
-    // Route wäre hier falsch: es würde Beteiligte aussperren, die kein Admin sind.
+
+    // ── Prozess-Aufträge ───────────────────────────────────────────────────────
+    // Für ALLE Angemeldeten erreichbar. Kein `requiresPermission` – wer was
+    // sehen und tun darf, entscheidet der Server pro Auftrag (Aufsicht ·
+    // Ersteller:in · Zuständige · Beobachter:innen) und liefert es als
+    // `abilities`/`visible_fields` mit. Ein Rechte-Gate an der Route wäre hier
+    // falsch: es würde Beteiligte aussperren, die kein Admin sind.
     {
       path: '/prozess-auftraege',
       component: () => import('@/views/processes/ProcessTicketListView.vue'),
       meta: { requiresAuth: true },
     },
     {
+      // Katalog der veröffentlichten Prozesse – der EINE Weg zum Anlegen.
+      // Ohne Rechte-Gate: der Katalog zeigt jedem, was es gibt, und markiert
+      // deaktiviert, was diese Person nicht anlegen darf (may_create).
       path: '/prozess-auftraege/neu',
-      component: () => import('@/views/processes/ProcessTicketCreateView.vue'),
+      component: () => import('@/views/ProcessCatalogView.vue'),
       meta: { requiresAuth: true },
     },
     {
@@ -130,11 +94,6 @@ router.beforeEach(async (to) => {
 
   const requiredPerm = to.meta.requiresPermission as string | undefined
   if (requiredPerm && !auth.hasPermission(requiredPerm)) {
-    return { path: '/dashboard' }
-  }
-
-  const requiredType = to.meta.requiresTicketType as string | undefined
-  if (requiredType && !auth.canCreateTicket(requiredType as any)) {
     return { path: '/dashboard' }
   }
 

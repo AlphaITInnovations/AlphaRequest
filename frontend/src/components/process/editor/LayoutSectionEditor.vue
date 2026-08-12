@@ -2,8 +2,8 @@
 /**
  * Ein Abschnitt („Karte") im Layout-Editor.
  *
- * Die Karte sieht absichtlich so aus wie das Ergebnis im Ticket
- * (components/tickets/TicketSection.vue): Akzentleiste oben, Symbol-Chip,
+ * Die Karte sieht absichtlich so aus wie das Ergebnis im Formular
+ * (components/process/form/LayoutSection.vue): Akzentleiste oben, Symbol-Chip,
  * Titel, optionales Badge. Wer hier baut, sieht damit direkt, was später
  * herauskommt – die kleine Raster-Vorschau am Fuß der Karte zeigt zusätzlich
  * die gewählten Breiten.

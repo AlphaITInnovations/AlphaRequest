@@ -14,18 +14,11 @@ from backend.database.users import (
     add_extra_permission, remove_extra_permission, set_extra_permissions,
     VALID_ROLES, PERM_ADMIN,
 )
-from backend.models.models import TicketType
 from backend.database.audit_log import record_audit, list_audit, distinct_actions
 from backend.schemas.responses import DataResponse
 from backend.services.microsoft_mail import send_test_mail
-from backend.services.ticket_permissions import (
-    set_ticket_permissions_safe, load_ticket_permissions,
-    load_group_ticket_permissions, set_group_ticket_permissions,
-)
-from backend.services.workflow_state import is_required_group_name
 from backend.utils.config import config
 from backend.utils.logger import logger
-from backend.utils.ticket_labels import TICKET_LABELS
 
 router = APIRouter()
 
@@ -58,6 +51,50 @@ def _names_from(request) -> dict:
 
 def _summary(parts: list[str], noun: str) -> str:
     return parts[0] if len(parts) == 1 else f"{len(parts)} Änderungen an {noun}"
+
+
+# ── Pflicht-Fachabteilungen ───────────────────────────────────────────────────
+#
+# Namensquelle ist `services/seed_definitions.py` (dieselbe Liste, aus der die
+# ausgelieferten Prozesse ihre Platzhalter auflösen). Der Schutz hängt bewusst am
+# NAMEN und nicht an der ID: der Seeder findet die Gruppe über den Namen. Wird
+# eine Pflichtgruppe umbenannt, legt der nächste Lauf eine zweite – leere –
+# Gruppe an, und die Zuständigen des Prozesses stehen in der falschen.
+#
+# Die ID-Seite deckt `_assert_groups_unreferenced` ab (Referenzen aus
+# veröffentlichten UND archivierten Definitionen). Beides ist nötig: eine vom
+# Admin selbst angelegte Fachabteilung steht in keiner Namensliste, wird aber
+# von einer Definition referenziert.
+
+def _required_group_names() -> set[str]:
+    """Pflicht-Namen, kleingeschrieben und getrimmt (Vergleich ist case-insensitiv,
+    weil eine Gruppe in der DB „IT" oder „it" heißen kann)."""
+    from backend.services.seed_definitions import required_group_names
+    return {(n or "").strip().lower() for n in required_group_names() if (n or "").strip()}
+
+
+def _is_required_group_name(name: str) -> bool:
+    """True, wenn eine Gruppe mit diesem Namen für die Prozesse existieren muss."""
+    if not name:
+        return False
+    return name.strip().lower() in _required_group_names()
+
+
+def _referenced_group_ids(group_ids: set) -> set:
+    """Teilmenge der IDs, die von irgendeiner Prozess-Definition referenziert wird.
+
+    Nur für die ANZEIGE (`GroupOut.required`) – deshalb hier fail-OPEN: schlägt die
+    Abfrage fehl, fehlt höchstens ein Schloss-Symbol. Das tatsächliche Löschen
+    bleibt über `_assert_groups_unreferenced` fail-closed geschützt.
+    """
+    if not group_ids:
+        return set()
+    from backend.database import process_definitions as _pdefs
+    try:
+        return _pdefs.groups_referenced_in_definitions(set(group_ids))
+    except Exception:
+        logger.warning("Prozess-Referenzen für die Gruppen-Anzeige nicht ladbar")
+        return set()
 
 
 def _assert_groups_unreferenced(group_ids: set) -> None:
@@ -381,98 +418,6 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
     return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
 
 
-# ── Ticket Permissions ────────────────────────────────────────────────────────
-
-class TicketTypeInfo(BaseModel):
-    key: str
-    label: str
-    allowed_users: list[str]
-    allowed_groups: list[str]
-
-class PermissionsOut(BaseModel):
-    types: list[TicketTypeInfo]
-
-class PermissionsIn(BaseModel):
-    # Pydantic validiert die Keys direkt gegen den Enum
-    permissions: dict[TicketType, list[str]]
-    group_permissions: dict[TicketType, list[str]] = {}
-
-
-@router.get("/settings/ticket-types", response_model=DataResponse[list[TicketTypeInfo]])
-def get_ticket_types(user: dict = Depends(get_current_user)):
-    """Listet alle gültigen Tickettypen – nützlich für Frontend-Dropdowns."""
-    require_admin(user)
-    return DataResponse(data=[
-        TicketTypeInfo(key=t.value, label=TICKET_LABELS.get(t, t.value), allowed_users=[], allowed_groups=[])
-        for t in TicketType
-    ])
-
-
-@router.get("/settings/permissions", response_model=DataResponse[PermissionsOut])
-def get_permissions(user: dict = Depends(get_current_user)):
-    require_admin(user)
-    perms = load_ticket_permissions()
-    group_perms = load_group_ticket_permissions()
-    return DataResponse(data=PermissionsOut(types=[
-        TicketTypeInfo(
-            key=t.value,
-            label=TICKET_LABELS.get(t, t.value),
-            allowed_users=perms.get(t.value, []),
-            allowed_groups=group_perms.get(t.value, []),
-        )
-        for t in TicketType
-    ]))
-
-
-@router.put("/settings/permissions", response_model=DataResponse[PermissionsOut])
-def set_permissions(
-    payload: PermissionsIn,
-    request: Request,
-    user: dict = Depends(get_current_user),
-):
-    require_admin(user)
-    user_cache = getattr(request.app.state, "user_cache", [])
-    old_users = load_ticket_permissions()
-    old_groups = load_group_ticket_permissions()
-
-    set_ticket_permissions_safe(
-        {k.value: v for k, v in payload.permissions.items()},
-        user_cache=user_cache,
-    )
-    new_users = {k.value: v for k, v in payload.permissions.items()}
-    new_groups = {k.value: v for k, v in payload.group_permissions.items()}
-    # Gruppen-Permissions speichern
-    if payload.group_permissions:
-        set_group_ticket_permissions(new_groups)
-
-    # Nur echte Änderungen protokollieren – mit Person/Gruppe (aufgelöst zu Namen).
-    from backend.database.groups import get_groups as _get_groups
-    names = _names_from(request)
-    gmap = {g["id"]: g["name"] for g in _get_groups()}
-    for g in getattr(request.app.state, "group_cache", []):
-        gmap.setdefault(g["id"], g.get("displayName") or g["id"])
-    def _glabel(gid: str) -> str:
-        return "Jeder" if gid == "__everyone__" else gmap.get(gid, gid)
-
-    parts: list[str] = []
-    for t in TicketType:
-        tk = t.value
-        ou, nu = set(old_users.get(tk, [])), set(new_users.get(tk, []))
-        og, ng = set(old_groups.get(tk, [])), set(new_groups.get(tk, []))
-        ch: list[str] = []
-        if nu - ou: ch.append("Person +: " + ", ".join(sorted(names.get(i, i) for i in nu - ou)))
-        if ou - nu: ch.append("Person −: " + ", ".join(sorted(names.get(i, i) for i in ou - nu)))
-        if ng - og: ch.append("Gruppe +: " + ", ".join(sorted(_glabel(i) for i in ng - og)))
-        if og - ng: ch.append("Gruppe −: " + ", ".join(sorted(_glabel(i) for i in og - ng)))
-        if ch:
-            parts.append(f"„{TICKET_LABELS.get(t, tk)}“: {'; '.join(ch)}")
-    if parts:
-        _audit(user, "ticket_permissions_changed", entity_type="settings", entity_id="ticket_permissions",
-               summary=_summary(parts, "Erstellrechten"), details={"changes": parts})
-
-    return get_permissions(user)
-
-
 # ── AD Groups (Cache) ────────────────────────────────────────────────────────
 
 class AdGroupOut(BaseModel):
@@ -503,7 +448,9 @@ class GroupOut(BaseModel):
     name: str
     members: list[str]
     distributions: list[str]
-    # True, wenn die Gruppe von den Workflows benötigt wird (nicht lösch-/umbenennbar).
+    # True, wenn die Gruppe für die Prozesse gebraucht wird: entweder trägt sie
+    # einen Pflicht-Namen (Namensquelle: seed_definitions) oder eine
+    # Prozess-Definition referenziert ihre ID. Dann nicht lösch-/umbenennbar.
     required: bool = False
     # True → Gruppe wird in Auswahl-Dropdowns im Frontend nicht angezeigt
     # (z.B. Gruppen, die nur über spezielle Phasen automatisch zugewiesen werden).
@@ -545,16 +492,29 @@ def _validate_emails(emails: list[str]) -> list[str]:
     return list(set(cleaned))
 
 
-def _group_out(g: dict) -> GroupOut:
-    """GroupOut inkl. required-/hidden-Flag aus einem gespeicherten Gruppen-Dict bauen."""
+def _group_out(g: dict, referenced_ids: Optional[set] = None) -> GroupOut:
+    """GroupOut inkl. required-/hidden-Flag aus einem gespeicherten Gruppen-Dict bauen.
+
+    `referenced_ids` ist die vorab EINMAL geladene Menge der in Definitionen
+    referenzierten IDs. Ohne sie wird sie für diese eine Gruppe nachgeschlagen –
+    in Listen deshalb immer mitgeben, sonst läuft eine Abfrage pro Zeile (N+1).
+    """
+    if referenced_ids is None:
+        referenced_ids = _referenced_group_ids({g["id"]})
     return GroupOut(
         id=g["id"],
         name=g["name"],
         members=g.get("members", []),
         distributions=g.get("distributions", []),
-        required=is_required_group_name(g["name"]),
+        required=_is_required_group_name(g["name"]) or g["id"] in referenced_ids,
         hidden=bool(g.get("hidden", False)),
     )
+
+
+def _groups_out(groups: list[dict]) -> list[GroupOut]:
+    """Ganze Liste – Referenz-Prüfung für alle IDs in EINER Abfrage."""
+    referenced = _referenced_group_ids({g["id"] for g in groups})
+    return [_group_out(g, referenced) for g in groups]
 
 
 @router.get("/settings/groups", response_model=DataResponse[list[GroupOut]])
@@ -563,7 +523,7 @@ def list_groups(user: dict = Depends(get_current_user)):
     groups = get_groups()
     for g in groups:
         g.setdefault("distributions", [])
-    return DataResponse(data=[_group_out(g) for g in groups])
+    return DataResponse(data=_groups_out(groups))
 
 
 @router.put("/settings/groups", response_model=DataResponse[list[GroupOut]])
@@ -571,7 +531,6 @@ def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depend
     """Bulk-Replace der Fachabteilungen (wie PUT /settings/companies): das Frontend
     schickt die komplette gewünschte Liste; anlegen/ändern/löschen passiert in einem
     Schritt. Pflichtgruppen dürfen nicht gelöscht/umbenannt werden."""
-    from backend.services.workflow_state import required_group_names
     require_admin(user)
     valid_ids = {u["id"] for u in getattr(request.app.state, "user_cache", [])}
     old_groups = get_groups()
@@ -596,8 +555,11 @@ def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depend
             "hidden": bool(item.hidden),
         })
 
-    # Pflichtgruppen (von den Workflows benötigt) müssen erhalten bleiben.
-    present = {c["name"].lower() for c in cleaned}
+    # Pflichtgruppen (von den Prozessen benötigt) müssen erhalten bleiben. Der
+    # Check über die NAMEN erfasst Löschen UND Umbenennen in einem Zug: fehlt der
+    # Name in der neuen Liste, ist die Gruppe entweder weg oder heißt anders.
+    from backend.services.seed_definitions import required_group_names
+    present = {c["name"].strip().lower() for c in cleaned}
     for req in required_group_names():
         if (req or "").strip().lower() not in present:
             raise HTTPException(
@@ -622,7 +584,7 @@ def set_groups_bulk(payload: GroupsBulkIn, request: Request, user: dict = Depend
     groups = get_groups()
     for g in groups:
         g.setdefault("distributions", [])
-    return DataResponse(data=[_group_out(g) for g in groups])
+    return DataResponse(data=_groups_out(groups))
 
 
 @router.post("/settings/groups", response_model=DataResponse[GroupOut], status_code=201)
@@ -662,12 +624,13 @@ def update_group(
     groups = get_groups()
     for g in groups:
         if g["id"] == group_id:
-            # Pflichtgruppen dürfen nicht umbenannt werden – der Workflow löst sie
-            # über den Namen auf. Mitglieder/Verteiler bleiben editierbar.
-            if is_required_group_name(g["name"]) and new_name.lower() != g["name"].lower():
+            # Pflichtgruppen dürfen nicht umbenannt werden – die ausgelieferten
+            # Prozesse werden über den NAMEN auf die Gruppe aufgelöst (siehe
+            # seed_definitions). Mitglieder/Verteiler bleiben editierbar.
+            if _is_required_group_name(g["name"]) and new_name.lower() != g["name"].lower():
                 raise HTTPException(
                     409,
-                    f"Die Fachabteilung '{g['name']}' wird von den Workflows benötigt "
+                    f"Die Fachabteilung '{g['name']}' wird von den Prozessen benötigt "
                     f"und kann nicht umbenannt werden.",
                 )
             g["name"]          = new_name
@@ -687,11 +650,11 @@ def delete_group(group_id: str, user: dict = Depends(get_current_user)):
     target = next((g for g in groups if g["id"] == group_id), None)
     if not target:
         raise HTTPException(404, "Gruppe nicht gefunden")
-    # Workflow-Pflichtgruppen dürfen nicht gelöscht werden.
-    if is_required_group_name(target["name"]):
+    # Pflicht-Fachabteilungen dürfen nicht gelöscht werden.
+    if _is_required_group_name(target["name"]):
         raise HTTPException(
             409,
-            f"Die Fachabteilung '{target['name']}' wird von den Workflows benötigt "
+            f"Die Fachabteilung '{target['name']}' wird von den Prozessen benötigt "
             f"und kann nicht gelöscht werden.",
         )
     # …ebenso wenig von Prozess-Definitionen referenzierte (gleicher Schutz wie im Bulk-Pfad).

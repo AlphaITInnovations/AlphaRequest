@@ -64,39 +64,102 @@ const page       = computed(() => Math.floor(offset.value / pageSize) + 1)
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
 // ── Aktions-Metadaten (Label + Schweregrad) ─────────────────────────────────────
+//
+// Das Audit-Log ist append-only: Einträge des entfernten Alt-Systems bleiben in
+// der Tabelle. Ihre Beschriftungen stehen deshalb weiter hier – ohne sie zeigte
+// das Panel für alte Zeilen nur noch den rohen Schlüssel.
 const ACTION_LABEL: Record<string, string> = {
+  // ── Prozess-Aufträge ──
+  // Namen aus backend/services/process_events.py: `process_ticket_<action>` für
+  // jeden Verlaufs-Eintrag (jedes Ereignis wird zusätzlich auditiert).
+  process_ticket_created: 'Auftrag erstellt',
+  process_ticket_updated: 'Angaben geändert',
+  process_ticket_advanced: 'Phase weiter',
+  process_ticket_rejected: 'Auftrag abgelehnt',
+  process_ticket_reopened: 'Auftrag wieder aufgenommen',
+  process_ticket_comment: 'Nachtrag',
+  process_ticket_department_done: 'Fachabteilung erledigt',
+  process_ticket_department_skipped: 'Fachabteilung nicht zuständig',
+  process_ticket_department_rejected: 'Fachabteilung abgelehnt',
+  process_ticket_watcher_added: 'Beobachter:in eingetragen',
+  process_ticket_watcher_removed: 'Beobachtung beendet',
+  process_ticket_automation_fired: 'Automation ausgeführt',
+  process_ticket_priority_changed: 'Priorität geändert',
+  process_ticket_approval_decided: 'Freigabe entschieden',
+  process_ticket_approval_sent_back: 'Zur Nachbesserung zurück',
+  process_ticket_approval_no_recipient: 'Freigabe-Mail ohne Empfänger',
+  process_ticket_deleted: 'Auftrag gelöscht',
+  // Direkte Audit-Einträge ohne Verlaufs-Eintrag (System-Pfade)
+  process_approval_decided: 'Freigabe entschieden (Mail-Link)',
+  process_approval_no_recipient: 'Freigabe-Mail ohne Empfänger',
+  process_phase_notified: 'Phase benachrichtigt',
+  process_automation_fired: 'Automation ausgeführt',
+  process_automation_failed: 'Automation fehlgeschlagen',
+  process_timer_stamp_failed: 'Timer konnte nicht gesetzt werden',
+  // ── Prozess-Definitionen ──
+  process_created: 'Prozess erstellt', process_draft_created: 'Entwurf angelegt',
+  process_draft_updated: 'Entwurf gespeichert', process_published: 'Prozess veröffentlicht',
+  process_duplicated: 'Prozess kopiert', process_imported: 'Prozess importiert',
+  process_version_deleted: 'Version gelöscht',
+  // ── System / Rechte ──
+  login: 'Login', logout: 'Logout', login_failed: 'Login fehlgeschlagen', session_revoked: 'Session abgemeldet',
+  admin_granted: 'Admin gewährt', admin_revoked: 'Admin entzogen', access_denied: 'Zugriff verweigert',
+  user_role_changed: 'Rolle geändert', user_permissions_set: 'Rechte gesetzt',
+  user_permission_added: 'Recht hinzugefügt', user_permission_removed: 'Recht entfernt',
+  companies_changed: 'Firmen geändert',
+  group_created: 'Gruppe erstellt', group_deleted: 'Gruppe gelöscht', group_updated: 'Gruppe geändert',
+  group_member_added: 'Mitglied hinzugefügt', group_member_removed: 'Mitglied entfernt',
+  personalnummer_assigned: 'Personalnr. vergeben', personalnummer_range_low: 'Personalnr. fast erschöpft',
+  personalnummer_exhausted: 'Personalnr. erschöpft',
+  // ── Alt-System (nur noch historische Einträge) ──
   ticket_created: 'Ticket erstellt', ticket_updated: 'Ticket bearbeitet', ticket_deleted: 'Ticket gelöscht',
   ticket_submitted: 'Übergeben', ticket_rejected: 'Abgelehnt', ticket_archived_manual: 'Archiviert',
   phase_advanced: 'Phase weiter', status_changed: 'Status geändert',
   responsibility_overridden: 'Zuständigkeit (Admin)', lock_released: 'Sperre aufgehoben',
   admin_raw_edited: 'Raw-Bearbeitung', department_status_changed: 'Fachabteilung', nachtrag_added: 'Nachtrag',
   freigabe_approved_mail: 'Freigegeben (Mail)', freigabe_rejected_mail: 'Abgelehnt (Mail)',
-  login: 'Login', logout: 'Logout', login_failed: 'Login fehlgeschlagen', session_revoked: 'Session abgemeldet',
-  admin_granted: 'Admin gewährt', admin_revoked: 'Admin entzogen', access_denied: 'Zugriff verweigert',
-  user_role_changed: 'Rolle geändert', user_permissions_set: 'Rechte gesetzt',
-  user_permission_added: 'Recht hinzugefügt', user_permission_removed: 'Recht entfernt',
-  companies_changed: 'Firmen geändert', ticket_permissions_changed: 'Erstellrechte geändert',
-  group_created: 'Gruppe erstellt', group_deleted: 'Gruppe gelöscht', group_updated: 'Gruppe geändert',
-  group_member_added: 'Mitglied hinzugefügt', group_member_removed: 'Mitglied entfernt',
-  personalnummer_assigned: 'Personalnr. vergeben', personalnummer_range_low: 'Personalnr. fast erschöpft',
-  personalnummer_exhausted: 'Personalnr. erschöpft',
+  ticket_permissions_changed: 'Erstellrechte geändert',
 }
 function actionLabel(a: string) { return ACTION_LABEL[a] ?? a }
 
 type Severity = 'danger' | 'warning' | 'success' | 'info' | 'neutral'
 const SEVERITY: Record<string, Severity> = {
-  ticket_deleted: 'danger', access_denied: 'danger', login_failed: 'danger',
-  personalnummer_exhausted: 'danger', admin_revoked: 'danger', group_deleted: 'danger', ticket_rejected: 'danger',
-  freigabe_rejected_mail: 'danger',
-  responsibility_overridden: 'warning', admin_raw_edited: 'warning', lock_released: 'warning', session_revoked: 'warning',
-  personalnummer_range_low: 'warning', group_member_removed: 'warning', user_permission_removed: 'warning',
-  ticket_created: 'success', personalnummer_assigned: 'success', admin_granted: 'success',
-  group_created: 'success', group_member_added: 'success', freigabe_approved_mail: 'success',
-  user_permission_added: 'success',
-  login: 'info', logout: 'info', ticket_updated: 'info', phase_advanced: 'info', ticket_submitted: 'info',
+  // ── Prozess-Aufträge ──
+  process_ticket_deleted: 'danger', process_ticket_rejected: 'danger',
+  process_ticket_department_rejected: 'danger',
+  process_ticket_approval_no_recipient: 'danger', process_approval_no_recipient: 'danger',
+  process_automation_failed: 'danger', process_timer_stamp_failed: 'danger',
+  process_ticket_reopened: 'warning', process_ticket_approval_sent_back: 'warning',
+  process_ticket_automation_fired: 'warning', process_automation_fired: 'warning',
+  process_ticket_created: 'success', process_ticket_advanced: 'success',
+  process_ticket_department_done: 'success',
+  process_ticket_updated: 'info', process_ticket_comment: 'info',
+  process_ticket_department_skipped: 'info', process_ticket_priority_changed: 'info',
+  process_ticket_watcher_added: 'info', process_ticket_watcher_removed: 'info',
+  process_ticket_approval_decided: 'info', process_approval_decided: 'info',
+  process_phase_notified: 'info',
+  // ── Prozess-Definitionen: Veröffentlichen und Löschen sind die Eingriffe, die
+  //    auf ALLE künftigen Aufträge wirken – die müssen herausstechen. ──
+  process_version_deleted: 'danger',
+  process_published: 'warning', process_imported: 'warning',
+  process_created: 'success', process_duplicated: 'success',
+  process_draft_created: 'info', process_draft_updated: 'info',
+  // ── System / Rechte ──
+  access_denied: 'danger', login_failed: 'danger',
+  personalnummer_exhausted: 'danger', admin_revoked: 'danger', group_deleted: 'danger',
+  session_revoked: 'warning', personalnummer_range_low: 'warning',
+  group_member_removed: 'warning', user_permission_removed: 'warning',
+  personalnummer_assigned: 'success', admin_granted: 'success',
+  group_created: 'success', group_member_added: 'success', user_permission_added: 'success',
+  login: 'info', logout: 'info', user_role_changed: 'info', user_permissions_set: 'info',
+  companies_changed: 'info', group_updated: 'info',
+  // ── Alt-System (nur noch historische Einträge) ──
+  ticket_deleted: 'danger', ticket_rejected: 'danger', freigabe_rejected_mail: 'danger',
+  responsibility_overridden: 'warning', admin_raw_edited: 'warning', lock_released: 'warning',
+  ticket_created: 'success', freigabe_approved_mail: 'success',
+  ticket_updated: 'info', phase_advanced: 'info', ticket_submitted: 'info',
   ticket_archived_manual: 'info', department_status_changed: 'info', nachtrag_added: 'info',
-  status_changed: 'info', user_role_changed: 'info', user_permissions_set: 'info',
-  companies_changed: 'info', ticket_permissions_changed: 'info', group_updated: 'info',
+  status_changed: 'info', ticket_permissions_changed: 'info',
 }
 function severity(a: string): Severity { return SEVERITY[a] ?? 'neutral' }
 
@@ -112,14 +175,33 @@ const BORDER_CLASS: Record<Severity, string> = {
   info: 'border-l-[#3EAAB8]', neutral: 'border-l-gray-300 dark:border-l-white/20',
 }
 
-const ENTITY_ICON: Record<string, string> = { ticket: '🎫', auth: '🔑', user: '👤', settings: '⚙️', group: '🏢' }
+const ENTITY_ICON: Record<string, string> = {
+  process_ticket: '🎫', process_definition: '🧩',
+  auth: '🔑', user: '👤', settings: '⚙️', group: '🏢',
+  // Alt-System: Einträge bleiben im append-only Log, sind aber nicht mehr öffenbar.
+  ticket: '🗄️',
+}
+
 function entityText(e: AuditEntry) {
   if (!e.entity_type) return '—'
-  if (e.entity_type === 'ticket') return `Ticket #${e.entity_id}`
+  if (e.entity_type === 'process_ticket') return `Auftrag #${e.entity_id}`
+  if (e.entity_type === 'process_definition') return `Prozess: ${e.entity_id}`
+  if (e.entity_type === 'ticket') return `Alt-Ticket #${e.entity_id}`
   return e.entity_id ? `${e.entity_type}: ${e.entity_id}` : e.entity_type
 }
+
+/**
+ * Nur Prozess-Aufträge haben eine Zielseite. Alt-Ticket-Einträge bleiben im Log
+ * stehen (append-only), führen aber nirgendwohin – auf /prozess-auftraege/:id zu
+ * verweisen wäre falsch, die ID gehört zu einem anderen Auftrag. Prozess-
+ * DEFINITIONEN haben ebenfalls keinen Verweis: der Editor braucht `key` UND
+ * `version`, im Audit steht nur der Key.
+ */
+function canOpen(e: AuditEntry): boolean {
+  return e.entity_type === 'process_ticket' && !!e.entity_id
+}
 function openEntity(e: AuditEntry) {
-  if (e.entity_type === 'ticket' && e.entity_id) router.push(`/admin/tickets/${e.entity_id}`)
+  if (canOpen(e)) router.push(`/prozess-auftraege/${e.entity_id}`)
 }
 
 function formatDate(ts: string) {
@@ -273,7 +355,8 @@ onUnmounted(() => {
     <div class="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-900/20
                 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 mb-4">
       Revisionssicheres Protokoll aller wichtigen Aktionen – mit Zeitpunkt und ausführender Person.
-      Einträge bleiben auch nach dem Löschen eines Tickets erhalten.
+      Einträge bleiben auch nach dem Löschen eines Auftrags erhalten; Einträge des entfernten
+      Alt-Systems ebenfalls, sie führen aber auf keine Seite mehr.
     </div>
 
     <!-- Filter -->
@@ -285,11 +368,13 @@ onUnmounted(() => {
       </select>
       <select v-model="fEntityType" class="afi">
         <option value="">Alle Objekte</option>
-        <option value="ticket">Tickets</option>
+        <option value="process_ticket">Prozess-Aufträge</option>
+        <option value="process_definition">Prozesse</option>
         <option value="auth">Auth</option>
         <option value="user">Benutzer</option>
         <option value="settings">Einstellungen</option>
         <option value="group">Gruppen</option>
+        <option value="ticket">Alt-System (Archiv)</option>
       </select>
       <input v-model="fActor" placeholder="Person…" class="afi" />
       <select v-model="range" class="afi" title="Zeitbereich">
@@ -339,9 +424,9 @@ onUnmounted(() => {
                 <span v-else>{{ e.actor_name || '—' }}</span>
               </td>
               <td class="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-gray-300">
-                <button v-if="e.entity_type === 'ticket' && e.entity_id" @click.stop="openEntity(e)"
+                <button v-if="canOpen(e)" @click.stop="openEntity(e)"
                         class="text-[#3EAAB8] hover:underline">
-                  {{ ENTITY_ICON[e.entity_type] }} {{ entityText(e) }}
+                  {{ ENTITY_ICON[e.entity_type ?? ''] ?? '' }} {{ entityText(e) }}
                 </button>
                 <span v-else><span class="mr-1">{{ ENTITY_ICON[e.entity_type ?? ''] ?? '' }}</span>{{ entityText(e) }}</span>
               </td>

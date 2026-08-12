@@ -12,7 +12,7 @@ Warum ein Skript und kein Automatismus:
 Die Fachlogik liegt in `backend/services/seed_definitions.py` – ein
 Admin-Endpunkt kann sie später unverändert benutzen.
 
-Ablauf (Trockenlauf ist der Standard, wie bei import_old_tickets.py):
+Ablauf (Trockenlauf ist der Standard):
     python backend/scripts/seed_processes.py
     python backend/scripts/seed_processes.py --commit
 

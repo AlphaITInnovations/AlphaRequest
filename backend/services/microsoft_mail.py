@@ -1,10 +1,17 @@
-# backend/microsoft_mail.py
+"""Mailversand über Microsoft Graph.
+
+Nur noch die Bausteine, an denen der Benachrichtigungs-Pfad des Prozess-Systems
+hängt: Payload bauen, versenden (app-only und delegiert), Audit/Metrik je
+Versand, Anhänge. Die fachlichen Alt-Mails (Eingangs-, Freigabe-, Ablehnungs-,
+Nachtrags-Mail des Ticket-Systems) sind mit dem Alt-System entfallen – die
+Prozess-Aufträge bauen ihre Mails selbst (services/process_actions.py).
+"""
 
 from __future__ import annotations
 
 import pathlib
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Union, Set
+from typing import Any, Dict, List, Optional, Sequence, Union
 import base64
 import mimetypes
 import os
@@ -12,8 +19,6 @@ import os
 import requests
 from fastapi import Request
 
-from backend.database.groups import get_groups
-from backend.models.models import TicketPriority, TicketType, Ticket
 from backend.services.microsoft_auth import acquire_app_token
 from backend.utils.logger import logger
 from backend.utils.mail_templates import render_corporate_email
@@ -370,258 +375,4 @@ def send_personalnummer_warning_mail(company_name: str, remaining: int, pnr_to: 
         ),
         to_recipients=[to],
         body_type="HTML",
-    )
-
-
-def send_newrequest_mail(to: str, prio: TicketPriority, titel: str, ttype: TicketType, ticketid):
-
-    ticket_type_labels = {
-        TicketType.hardware: "Hardware Bestellung",
-        TicketType.niederlassung_anmelden: "Onboarding Niederlassung",
-        TicketType.niederlassung_schliessen: "Offboarding Niederlassung",
-        TicketType.niederlassung_umzug: "Umzug Niederlassung",
-        TicketType.zugang_beantragen: "Onboarding Mitarbeiter:innen",
-        TicketType.zugang_sperren: "Offboarding Mitarbeiter:innen",
-    }
-
-    priority_labels = {
-        TicketPriority.low: "Niedrig",
-        TicketPriority.medium: "Mittel",
-        TicketPriority.high: "Hoch",
-        TicketPriority.critical: "Kritisch",
-    }
-
-    readable_type = ticket_type_labels.get(ttype, ttype.value)
-
-    readable_prio = priority_labels.get(prio, prio.value)
-
-    send_mail_app_only(
-        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-        subject=f"Neuer Auftrag {readable_type} #{ticketid} in AlphaRequest",
-        kind="newrequest",
-        body=render_corporate_email(
-            subject=titel,
-            headline="AlphaRequest (hier klicken)",
-            intro=(
-                f"Hallo,\n\n"
-                f"Ihnen wurde ein neuer Auftrag „{titel}“ "
-                f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
-                f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
-            ),
-            info_box_url=config.FRONTEND_URL + "/dashboard",
-            info_rows=[("Auftrag", f"#{ticketid}"), ("Typ", readable_type), ("Priorität", readable_prio)],
-            content="",
-        ),
-        to_recipients=[to],
-        body_type="HTML",
-        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
-    )
-
-def send_mail_to_fachabteilung(to: str, prio: TicketPriority, titel: str, ttype: TicketType, ticketid):
-    ticket_type_labels = {
-        TicketType.hardware: "Hardware Bestellung",
-        TicketType.niederlassung_anmelden: "Onboarding Niederlassung",
-        TicketType.niederlassung_schliessen: "Offboarding Niederlassung",
-        TicketType.niederlassung_umzug: "Umzug Niederlassung",
-        TicketType.zugang_beantragen: "Onboarding Mitarbeiter:innen",
-        TicketType.zugang_sperren: "Offboarding Mitarbeiter:innen",
-    }
-
-    priority_labels = {
-        TicketPriority.low: "Niedrig",
-        TicketPriority.medium: "Mittel",
-        TicketPriority.high: "Hoch",
-        TicketPriority.critical: "Kritisch",
-    }
-
-    readable_type = ticket_type_labels.get(ttype, ttype.value)
-    readable_prio = priority_labels.get(prio, prio.value)
-    send_mail_app_only(
-        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-        subject=f"Neuer Fachabteilungsauftrag #{ticketid} in AlphaRequest",
-        kind="fachabteilung",
-        body=render_corporate_email(
-            subject=titel,
-            headline="AlphaRequest (hier klicken)",
-            intro=(
-                f"Hallo,\n\n"
-                f"Ihrer Fachabteilung wurde ein neuer Auftrag „{readable_type}“ "
-                f"mit der Priorität „{readable_prio}“ zugewiesen.\n\n"
-                f"Bitte prüfen Sie die Details im System und übernehmen Sie die weitere Bearbeitung."
-            ),
-            info_box_url=config.FRONTEND_URL + "/dashboard",
-            info_rows=[("Auftrag", f"#{ticketid}"), ("Typ", readable_type), ("Priorität", readable_prio)],
-            content="",
-        ),
-        to_recipients=[to],
-        body_type="HTML",
-        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
-    )
-
-
-
-def send_mail_to_all_fachabteilung(departments: dict, ticket: Ticket):
-    """
-    Sammelt alle Verteiler-Mailadressen der betroffenen
-    Fachabteilungen und sendet eine Mail.
-    departments: dict mapping group_id → {name, required, status}
-    """
-
-    if not departments:
-        logger.warning("Workflow enthält keine Departments")
-        return
-
-    department_ids = departments.keys()
-
-    groups = get_groups()
-
-    # Alle Verteiler sammeln (unique)
-    recipients: Set[str] = set()
-
-    for group in groups:
-        if group.get("id") in department_ids:
-            distributions = group.get("distributions", [])
-            if isinstance(distributions, list):
-                for mail in distributions:
-                    if mail:
-                        recipients.add(mail.strip().lower())
-
-    if not recipients:
-        logger.warning(
-            "Keine Verteiler-Mailadressen für Ticket %s gefunden",
-            ticket.id,
-        )
-        return
-
-    logger.info(
-        "Sende Ticket %s an Verteiler: %s",
-        ticket.id,
-        list(recipients),
-    )
-
-    for mail in recipients:
-        send_mail_to_fachabteilung(
-            to=mail,
-            prio=ticket.priority,
-            titel=ticket.title,
-            ttype=ticket.ticket_type,
-            ticketid=ticket.id,
-        )
-
-
-def _freigabe_buttons_html(approve_url: str, reject_url: str) -> str:
-    """Zwei E-Mail-sichere Aktions-Buttons (grün Freigeben / rot Ablehnen)."""
-    return f"""
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;">
-      <tr>
-        <td style="padding-right:12px;">
-          <a href="{approve_url}"
-             style="display:inline-block; background:#16A34A; color:#ffffff;
-                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
-                    text-decoration:none; padding:12px 28px; border-radius:10px;">
-            &#10003;&nbsp; Freigeben
-          </a>
-        </td>
-        <td>
-          <a href="{reject_url}"
-             style="display:inline-block; background:#DC2626; color:#ffffff;
-                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
-                    text-decoration:none; padding:12px 28px; border-radius:10px;">
-            &#10007;&nbsp; Ablehnen
-          </a>
-        </td>
-      </tr>
-    </table>
-    """
-
-
-def send_freigabe_mail(ticket, approve_url: str, reject_url: str, to_recipients: List[str]):
-    """
-    Freigabe-Mail an die Verteiler der Gruppe FreigabeHerrLutz: Auftragsübersicht
-    plus JA/NEIN-Buttons, die per signiertem Link freigeben oder ablehnen.
-    """
-    if not to_recipients:
-        logger.warning(
-            "Freigabe-Mail: keine Verteiler-Adresse (FreigabeHerrLutz) für Ticket %s", ticket.id
-        )
-        return
-
-    intro = (
-        "Hallo,\n\n"
-        "ein neuer Antrag für neue Mitarbeiter:innen liegt zur Freigabe vor.\n\n"
-        "Bitte geben Sie den Antrag frei oder lehnen Sie ihn ab:"
-    )
-
-    send_mail_app_only(
-        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-        subject=f"Freigabe erforderlich: {ticket.title}",
-        kind="freigabe",
-        body=render_corporate_email(
-            subject=ticket.title,
-            headline="Antrag neue Mitarbeiter:innen – Freigabe",
-            intro=intro,
-            info_rows=[("Auftrag", ticket.title), ("Ticket-Nr.", f"#{ticket.id}"), ("Erstellt von", ticket.owner_name)],
-            content="",
-            action_html=_freigabe_buttons_html(approve_url, reject_url),
-            info_box_url=config.FRONTEND_URL + "/dashboard",
-        ),
-        to_recipients=to_recipients,
-        body_type="HTML",
-        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
-    )
-
-
-def send_nachtrag_mail(ticket, text: str, to_recipients: List[str]):
-    """
-    Benachrichtigt die beteiligten Fachabteilungen, dass zu einem (i.d.R.
-    archivierten) Auftrag ein Nachtrag verfasst wurde.
-    """
-    if not to_recipients:
-        logger.info("Nachtrag-Mail: keine Empfänger für Ticket %s", ticket.id)
-        return
-
-    intro = "Hallo,\n\nzu folgendem Auftrag wurde ein Nachtrag verfasst:"
-
-    send_mail_app_only(
-        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-        subject=f"Nachtrag zu Auftrag #{ticket.id}: {ticket.title}",
-        kind="nachtrag",
-        body=render_corporate_email(
-            subject=ticket.title,
-            headline="Nachtrag zu einem Auftrag",
-            intro=intro,
-            info_rows=[("Auftrag", ticket.title), ("Ticket-Nr.", f"#{ticket.id}")],
-            content=f"Nachtrag:\n{text}",
-            info_box_url=config.FRONTEND_URL + "/dashboard",
-        ),
-        to_recipients=to_recipients,
-        body_type="HTML",
-        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
-    )
-
-
-def send_rejection_mail(ticket, reason: str, to: str):
-    """Benachrichtigt den Ersteller, dass sein Auftrag abgelehnt wurde."""
-    if not to:
-        logger.warning("Ablehnungs-Mail: keine Empfängeradresse für Ticket %s", ticket.id)
-        return
-
-    reason_txt = reason.strip() if (reason or "").strip() else ""
-    intro = f"Hallo,\n\nIhr Auftrag „{ticket.title}“ (#{ticket.id}) wurde abgelehnt."
-
-    send_mail_app_only(
-        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
-        subject=f"Auftrag #{ticket.id} wurde abgelehnt",
-        kind="rejection",
-        body=render_corporate_email(
-            subject=ticket.title,
-            headline="Auftrag abgelehnt",
-            intro=intro,
-            info_rows=[("Auftrag", ticket.title), ("Ticket-Nr.", f"#{ticket.id}")],
-            content=(f"Grund:\n{reason_txt}" if reason_txt else ""),
-            info_box_url=config.FRONTEND_URL + "/dashboard",
-        ),
-        to_recipients=[to],
-        body_type="HTML",
-        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
     )

@@ -7,7 +7,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
-import type { OptionSources, ProcessDefinition, ProcessOut } from '@/types/process'
+import type { OptionSources, ProcessDefinition } from '@/types/process'
 import type { SimFieldError, SimViewer } from '@/lib/processSim'
 import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
@@ -25,7 +25,6 @@ const { showToast } = useToast()
 
 const loading = ref(true)
 const submitting = ref(false)
-const catalog = ref<ProcessOut[]>([])
 const selectedKey = ref<string>(String(route.params.key || ''))
 const definition = ref<ProcessDefinition | null>(null)
 const values = ref<Record<string, unknown>>({})
@@ -49,10 +48,6 @@ const viewer = computed<SimViewer>(() => ({
   visibleKeys: zugriff.value?.visible ?? new Set<string>(),
   editableKeys: zugriff.value?.editable ?? new Set<string>(),
 }))
-
-/** Nur Prozesse anbieten, die diese Person auch anlegen darf – sonst endet jede
- *  Auswahl im 403 des Servers. */
-const anlegbar = computed(() => catalog.value.filter((p) => p.may_create !== false))
 
 const startPhase = computed(() => definition.value?.phases?.[0] ?? null)
 
@@ -122,9 +117,6 @@ async function submit() {
 
 onMounted(async () => {
   sources.value = await loadOptionSources(true)
-  try {
-    catalog.value = await processesApi.listProcesses()
-  } catch { /* Katalog optional, wenn der Key aus der Route kommt */ }
   if (selectedKey.value) await loadProcess(selectedKey.value)
   loading.value = false
 })
@@ -140,22 +132,15 @@ onMounted(async () => {
       </div>
 
       <template v-else>
-        <!-- Prozess-Auswahl -->
-        <section class="card-section mb-4">
-          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Prozess</label>
-          <select v-model="selectedKey" class="afi w-full" @change="loadProcess(selectedKey)">
-            <option value="">– bitte wählen –</option>
-            <option v-for="p in anlegbar" :key="p.key" :value="p.key">
-              {{ p.icon ? `${p.icon} ` : '' }}{{ p.name }}
-            </option>
-          </select>
-          <p v-if="!catalog.length" class="text-xs text-gray-400 mt-2">
-            Es ist noch kein Prozess veröffentlicht.
-          </p>
-          <p v-else-if="!anlegbar.length" class="text-xs text-gray-400 mt-2">
-            Sie haben für keinen der veröffentlichten Prozesse das Recht, Aufträge anzulegen.
-          </p>
-        </section>
+        <!-- Kein Prozess-Auswahlfeld: der Einstieg ist der Katalog
+             (/prozess-auftraege/neu). Ein zweites Auswahlfeld hier hätte den
+             Prozess gewechselt, ohne die Adresse zu ändern – ein Neuladen wäre
+             dann beim alten gelandet. -->
+        <p v-if="!definition" class="text-sm text-gray-500 dark:text-gray-400">
+          Dieser Prozess ist nicht (mehr) verfügbar.
+          <button @click="router.push('/prozess-auftraege/neu')"
+                  class="text-[#3EAAB8] hover:underline">Zur Auswahl</button>
+        </p>
 
         <template v-if="definition && startPhase">
           <section class="card-section mb-4">

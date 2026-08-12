@@ -337,7 +337,7 @@ export const WIDTH_LABEL: Record<LayoutWidth, string> = {
 export const SECTION_VARIANTS: readonly SectionVariant[] =
   ['default', 'base', 'hr', 'it', 'fuhrpark', 'marketing', 'travel']
 
-/** Symbol + Akzentfarben je Variante – identisch zur bestehenden TicketSection. */
+/** Symbol + Akzentfarben je Variante (gerendert von process/form/LayoutSection.vue). */
 export const VARIANT_STYLE: Record<SectionVariant, {
   label: string; icon: string; chip: string; badge: string; bar: string
 }> = {

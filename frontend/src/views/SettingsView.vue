@@ -7,7 +7,6 @@ import { useSettingsSaveBar } from '@/composables/settingsSave'
 import EnvInfoPanel from '@/components/settings/EnvInfoPanel.vue'
 import CompaniesPanel from '@/components/settings/CompaniesPanel.vue'
 import DepartmentsPanel from '@/components/settings/DepartmentsPanel.vue'
-import TicketPermissionsPanel from '@/components/settings/TicketPermissionsPanel.vue'
 import AppUsersPanel from '@/components/settings/AppUsersPanel.vue'
 import TestMailPanel from '@/components/settings/TestMailPanel.vue'
 import AuditLogPanel from '@/components/AuditLogPanel.vue'
@@ -15,7 +14,12 @@ import ActiveSessionsPanel from '@/components/settings/ActiveSessionsPanel.vue'
 import AttachmentsPanel from '@/components/settings/AttachmentsPanel.vue'
 import ProcessesPanel from '@/components/settings/ProcessesPanel.vue'
 
-const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'permissions', 'app-users', 'testmail', 'audit', 'attachments', 'processes'] as const
+// „permissions" (Erstellrechte je Auftragstyp) ist entfallen: wer einen Auftrag
+// anlegen darf, steht heute als `createPermissions` IN der Prozess-Definition und
+// wird im Prozess-Editor gepflegt. Ein zweiter Rechte-Bildschirm hier hätte auf
+// nichts mehr gewirkt. Ein Deep-Link ?section=permissions landet über die
+// Whitelist-Prüfung unten auf „general".
+const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'app-users', 'testmail', 'audit', 'attachments', 'processes'] as const
 type Section = typeof SECTIONS[number]
 
 const route  = useRoute()
@@ -42,7 +46,6 @@ const nav = [
   { key: 'companies',   label: 'Firmen',             group: 'Organisation' },
   { key: 'groups',      label: 'Fachabteilungen',    group: 'Organisation' },
   { key: 'processes',   label: 'Prozesse',           group: 'Organisation' },
-  { key: 'permissions', label: 'Erstellrechte',      group: 'Berechtigungen' },
   { key: 'app-users',   label: 'Benutzer & Rollen',  group: 'Berechtigungen' },
   { key: 'testmail',    label: 'Testmail',           group: 'Kommunikation' },
 ] as const
@@ -125,7 +128,6 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
           <ActiveSessionsPanel     v-else-if="active === 'sessions'" />
           <CompaniesPanel          v-else-if="active === 'companies'" />
           <DepartmentsPanel        v-else-if="active === 'groups'" />
-          <TicketPermissionsPanel  v-else-if="active === 'permissions'" />
           <AppUsersPanel           v-else-if="active === 'app-users'" />
           <AuditLogPanel           v-else-if="active === 'audit'" />
           <AttachmentsPanel        v-else-if="active === 'attachments'" />

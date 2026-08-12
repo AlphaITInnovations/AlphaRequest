@@ -3,7 +3,7 @@
  * Auswahl der Abschnitts-Variante.
  *
  * Jede Variante wird in IHRER eigenen Farbe angezeigt (VARIANT_STYLE.chip –
- * dieselbe Palette wie TicketSection). Der Admin sieht damit direkt, welchen
+ * dieselbe Palette wie die Abschnitte im Formular). Der Admin sieht damit direkt, welchen
  * Akzent er wählt, statt nur einen Namen zu lesen.
  */
 import type { SectionVariant } from '@/types/process'

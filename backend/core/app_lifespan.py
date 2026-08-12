@@ -5,8 +5,6 @@ from backend.utils.config import config
 from backend.services.microsoft_graph import list_all_users_with_e3_license, list_all_groups
 from backend.services.microsoft_auth import acquire_app_token
 from backend.utils.logger import logger
-from backend.database.ticket_group_permissions import ensure_table as ensure_group_perms_table
-from backend.database.ticket_locks import ensure_table as ensure_ticket_locks_table
 from backend.database.sessions import (
     ensure_table as ensure_sessions_table, clear_all_sessions, prune_stale,
 )
@@ -56,9 +54,8 @@ async def lifespan(app):
     app.state.group_cache = []
     app.state.group_cache_timestamp = 0
 
-    # DB-Tabellen anlegen
-    ensure_group_perms_table()
-    ensure_ticket_locks_table()
+    # DB-Tabellen anlegen (die Alt-Tabellen ticket_locks/ticket_group_permissions
+    # sind mit dem Alt-System entfallen und werden nicht mehr angelegt).
     ensure_sessions_table()
     # Neustart invalidiert via SERVER_BOOT_ID ohnehin alle Cookies → Tabelle leeren,
     # damit die Live-Liste nicht mit toten Sessions startet.

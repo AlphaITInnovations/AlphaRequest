@@ -1,12 +1,13 @@
 """
 Admin-Anhang-Übersicht (/settings/attachments) – Ebene-1 (KEINE echte DB).
 
-Die Übersicht ist die EINZIGE Stelle, an der Anhänge beider Welten in einer
-Liste stehen. Geprüft wird deshalb:
+Die Übersicht ist die EINZIGE Stelle, an der auch die Anhänge des entfernten
+Alt-Systems noch auftauchen (Zeilen mit `entity_type='ticket'` liegen weiter in
+der Tabelle und belegen Speicher). Geprüft wird deshalb:
   1. DB-Schicht (database.attachments.list_all/_search_where): trägt die Ausgabe
-     `entity_type`, wirkt der Welt-Filter auf Seite UND Gesamtzahl, und
-     verschluckt der Titel-Join keine Zeilen? Dafür werden nur die SQL-Helfer
-     abgefangen und die ECHTE Query inspiziert.
+     `entity_type`, wirkt der Filter auf Seite UND Gesamtzahl, und verschluckt
+     der Titel-Join keine Zeilen? Dafür werden nur die SQL-Helfer abgefangen und
+     die ECHTE Query inspiziert.
   2. API-Schicht (api.v1.attachments): Admin-Schutz, Filter-Validierung (422)
      und Durchreichen von entity_type/ticket_title.
 """
@@ -53,8 +54,8 @@ def _count_and_page(calls: list[tuple[str, tuple]]) -> tuple[tuple[str, tuple], 
     return calls[0], calls[1]
 
 
-def test_liste_ohne_filter_enthaelt_beide_welten(sql):
-    """`entity_type=None` = keine Einschränkung: Alt-Tickets UND Prozess-Aufträge."""
+def test_liste_ohne_filter_enthaelt_auch_alt_zeilen(sql):
+    """`entity_type=None` = keine Einschränkung: Prozess-Aufträge UND Alt-Zeilen."""
     att_db.list_all(limit=10, offset=0)
     (count_sql, count_params), (page_sql, page_params) = _count_and_page(sql)
     assert "entity_type=%s" not in count_sql
@@ -79,37 +80,39 @@ def test_entity_type_filter_wirkt_auf_seite_und_gesamtzahl(sql):
 
 def test_projektion_liefert_entity_type_und_aufgeloesten_titel(sql):
     """Ohne `entity_type` in der Ausgabe kann die Oberfläche nicht richtig verlinken;
-    der Titel muss je Welt aus der passenden Tabelle kommen."""
+    der Titel kommt aus `process_tickets`."""
     att_db.list_all()
     _, (page_sql, _) = _count_and_page(sql)
     assert "a.entity_type" in page_sql
     assert "a.field_key" in page_sql
-    assert "COALESCE(t.title, pt.title) AS ticket_title" in page_sql
+    assert "pt.title AS ticket_title" in page_sql
 
 
-def test_titel_join_verschluckt_keine_zeilen_und_verwechselt_die_welten_nicht(sql):
-    """Zwei LEFT JOINs (kein INNER) und entity_type in der ON-Bedingung: sonst
-    fielen Prozess-Zeilen aus der Liste bzw. bekämen den Titel des Alt-Tickets
-    mit derselben ID (Ticket #7 und Prozess-Ticket #7 existieren gleichzeitig)."""
+def test_titel_join_verschluckt_keine_zeilen_und_greift_nicht_ins_alt_system(sql):
+    """LEFT JOIN (kein INNER) und entity_type in der ON-Bedingung: sonst fielen die
+    Alt-Zeilen aus der Liste bzw. bekämen den Titel des Prozess-Auftrags mit
+    derselben ID (Alt-Ticket #7 und Prozess-Ticket #7 existieren gleichzeitig).
+    Die verwaiste Alt-Tabelle `tickets` wird nicht mehr gejoint."""
     att_db.list_all()
     (count_sql, _), (page_sql, _) = _count_and_page(sql)
     for stmt in (count_sql, page_sql):
-        assert stmt.count("LEFT JOIN") == 2
+        assert stmt.count("LEFT JOIN") == 1
         assert "INNER JOIN" not in stmt
-        assert "LEFT JOIN tickets t ON a.entity_type='ticket' AND t.id=a.ticket_id" in stmt
+        assert "JOIN tickets" not in stmt
         assert ("LEFT JOIN process_tickets pt ON a.entity_type='process_ticket' "
                 "AND pt.id=a.ticket_id") in stmt
     # Ein einziges Statement je Seite → kein N+1 für die Titel.
     assert page_sql.count("SELECT") == 1
 
 
-def test_suche_greift_dateiname_person_und_titel_beider_welten(sql):
+def test_suche_greift_dateiname_person_und_auftragstitel(sql):
     att_db.list_all(q="Vertrag")
     _, (page_sql, page_params) = _count_and_page(sql)
     assert "a.original_filename LIKE %s" in page_sql
     assert "a.uploaded_by_name LIKE %s" in page_sql
-    assert "t.title LIKE %s" in page_sql and "pt.title LIKE %s" in page_sql
-    assert page_params == ("%Vertrag%", "%Vertrag%", "%Vertrag%", "%Vertrag%", 50, 0)
+    # Genau EINE Titel-Spalte – die Alt-Tabelle wird nicht mehr durchsucht.
+    assert page_sql.count("title LIKE %s") == 1
+    assert page_params == ("%Vertrag%", "%Vertrag%", "%Vertrag%", 50, 0)
 
 
 def test_numerische_suche_trifft_weiterhin_die_ticket_nummer(sql):
@@ -129,13 +132,13 @@ def test_suche_und_welt_filter_kombinierbar(sql):
     assert count_params[-1] == 7
 
 
-def test_search_where_default_ist_beide_welten():
+def test_search_where_default_filtert_nicht():
     where, params = att_db._search_where()
     assert where == "a.deleted_at IS NULL" and params == ()
 
 
 def test_ungueltiger_entity_type_wird_in_der_db_schicht_abgelehnt(sql):
-    """Ein Tippfehler darf nicht still zu „beide Welten" werden."""
+    """Ein Tippfehler darf nicht still zu „kein Filter" werden."""
     with pytest.raises(ValueError):
         att_db.list_all(entity_type="prozess_ticket")
     assert sql == []                      # keine Abfrage abgesetzt
@@ -159,7 +162,8 @@ def _row(aid: int, entity_type: str, ticket_id: int, title: str | None,
 
 
 ROWS = [
-    _row(1, att_db.ENTITY_TICKET, 7, "Alt-Ticket sieben", "alt.pdf"),
+    # Alt-Zeile: liegt noch in der Tabelle, hat aber keinen auflösbaren Titel mehr.
+    _row(1, att_db.ENTITY_TICKET, 7, None, "alt.pdf"),
     _row(2, att_db.ENTITY_PROCESS_TICKET, 7, "Onboarding Meier", "vertrag.pdf",
          field_key="vertrag"),
     _row(3, att_db.ENTITY_PROCESS_TICKET, 9, "Zugang Schulz", "ausweis.pdf"),
@@ -215,7 +219,7 @@ def admin_client(fake_db):
     return make_client(ADMIN)
 
 
-def test_liste_ohne_filter_zeigt_beide_welten_mit_entity_type(admin_client, fake_db):
+def test_liste_ohne_filter_zeigt_auch_alt_zeilen_mit_entity_type(admin_client, fake_db):
     r = admin_client.get("/settings/attachments")
     assert r.status_code == 200, r.text
     data = r.json()["data"]
@@ -227,11 +231,11 @@ def test_liste_ohne_filter_zeigt_beide_welten_mit_entity_type(admin_client, fake
 def test_liste_reicht_titel_und_feld_mit_aus(admin_client):
     items = admin_client.get("/settings/attachments").json()["data"]["items"]
     nach_id = {i["id"]: i for i in items}
-    assert nach_id[1]["ticket_title"] == "Alt-Ticket sieben"
+    assert nach_id[1]["ticket_title"] is None            # Alt-Zeile, kein Titel mehr
     assert nach_id[2]["ticket_title"] == "Onboarding Meier"
     assert nach_id[2]["field_key"] == "vertrag"
     assert nach_id[1]["field_key"] is None
-    # Alt-Spalten bleiben unverändert vorhanden
+    # Die übrigen Spalten bleiben unverändert vorhanden
     assert nach_id[1]["size_human"] and nach_id[1]["family_id"] == "fam1"
 
 

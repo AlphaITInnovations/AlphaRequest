@@ -2,38 +2,26 @@ import asyncio
 import sys
 import uvicorn
 from pathlib import Path
-from typing import cast
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.datastructures import State
-from backend.api.v1 import tickets as tickets_v1
 from backend.api.v1 import auth as auth_v1
 from backend.core.app_lifespan import lifespan
 from backend.core.session import setup_session
 from backend.database import init_db
-from backend.models.models import TicketType
 from backend.metrics.metrics import init_metrics
-from backend.services.ticket_service import TicketService
 from backend.utils.config import config
 from backend.api.v1 import dashboard as dashboard_v1
 from backend.api.v1 import users as users_v1
 from backend.api.v1 import companies as companies_v1
-from backend.api.v1 import ticket_view as ticket_view_v1
 from backend.api.v1 import settings as settings_v1
-from backend.api.v1 import ticket_overview as ticket_overview_v1
 from backend.api.v1 import feedback as feedback_v1
-from backend.api.v1 import freigabe as freigabe_v1
 from backend.api.v1 import sessions as sessions_v1
 from backend.api.v1 import health as health_v1
 from backend.api.v1 import attachments as attachments_v1
 from backend.api.v1 import processes as processes_v1
 from backend.api.v1 import process_tickets as process_tickets_v1
 from backend.api.v1 import process_approval as process_approval_v1
-
-
-def get_ticket_type_dict():
-    return {t.name: t.value for t in TicketType}
 
 
 def _assert_secure_config() -> None:
@@ -91,8 +79,6 @@ def _install_error_handlers(app: FastAPI) -> None:
 def create_app() -> FastAPI:
     _assert_secure_config()
     app = FastAPI(lifespan=lifespan)
-    app.state = cast(State, app.state)
-    app.state.manager = TicketService()
     _install_error_handlers(app)
 
     BASE_DIR = Path(__file__).resolve().parent
@@ -101,10 +87,9 @@ def create_app() -> FastAPI:
 
     app.templates = Jinja2Templates(directory=BASE_DIR / "templates")
     app.templates.env.globals["SESSION_TIMEOUT"] = config.SESSION_TIMEOUT
-    app.templates.env.globals["TicketTypes"] = get_ticket_type_dict()
 
     setup_session(app)
-    init_metrics(app, app.state.manager)
+    init_metrics(app)
 
     @app.middleware("http")
     async def _security_headers(request, call_next):
@@ -143,15 +128,11 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_v1.router)
     app.include_router(auth_v1.router, prefix="/api/v1")
-    app.include_router(tickets_v1.router, prefix="/api/v1")
     app.include_router(dashboard_v1.router, prefix="/api/v1")
     app.include_router(users_v1.router, prefix="/api/v1")
     app.include_router(companies_v1.router, prefix="/api/v1")
-    app.include_router(ticket_view_v1.router, prefix="/api/v1")
     app.include_router(settings_v1.router, prefix="/api/v1")
-    app.include_router(ticket_overview_v1.router, prefix="/api/v1")
     app.include_router(feedback_v1.router, prefix="/api/v1")
-    app.include_router(freigabe_v1.router, prefix="/api/v1")
     app.include_router(sessions_v1.router, prefix="/api/v1")
     app.include_router(attachments_v1.router, prefix="/api/v1")
     app.include_router(processes_v1.router, prefix="/api/v1")

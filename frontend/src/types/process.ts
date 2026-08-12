@@ -303,6 +303,8 @@ export interface ProcessOut {
   may_create?: boolean | null
   /** Nur im Katalog: Symbol aus der Definition (die selbst nicht mitkommt). */
   icon?: string | null
+  /** Nur im Katalog: Kurzbeschreibung aus der Definition. */
+  description?: string | null
 }
 
 /** Welche Felder beim ANLEGEN sichtbar/ausfüllbar sind (GET /processes/{key}/field-access). */

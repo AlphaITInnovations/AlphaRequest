@@ -1,4 +1,12 @@
 <script setup lang="ts">
+/**
+ * Eine Angabe in einer Nur-Lese-Ansicht: Beschriftung über dem Wert.
+ *
+ * Bewusst dumm und ohne Fachbezug – die Lese-Ansicht der Prozess-Aufträge
+ * (components/process/form/SchemaReadonlyView.vue) baut damit ihr Raster auf.
+ * Ein leerer Wert wird als „—" gezeigt, nie als Leerzeile: sonst sieht eine
+ * nicht ausgefüllte Angabe wie ein Darstellungsfehler aus.
+ */
 withDefaults(defineProps<{
   label: string
   value?: string | number | null
@@ -23,7 +31,7 @@ function display(v: unknown): string {
 </template>
 
 <style scoped>
-@reference "../../style.css";
+@reference "../style.css";
 .ro-label { @apply text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5; }
 .ro-value { @apply text-sm text-gray-900 dark:text-white; }
 </style>

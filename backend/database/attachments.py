@@ -6,14 +6,16 @@ Versionierung: gleiche „logische" Datei erneut hochladen → neue Version ders
 `family_id` (alte bleibt, is_current=0). Löschen = Soft-Delete (deleted_at) – die
 Zeile bleibt für die Nachverfolgung erhalten, der Blob wird entfernt.
 
-Zwei Welten an EINER Tabelle: Anhänge gehören entweder zu einem Alt-Ticket
-(`tickets`) oder zu einem Prozess-Ticket (`process_tickets`). Unterschieden wird
-über `entity_type` ('ticket' | 'process_ticket'); die Spalte `ticket_id` heißt aus
-Kompatibilitätsgründen weiter so, bedeutet aber „ID der Entität vom Typ
-`entity_type`". Eine Umbenennung würde jeden bestehenden Aufrufer brechen und den
-Cutover des Alt-Systems unnötig verkomplizieren – der Name bleibt, die Bedeutung
-steht hier. `field_key` bindet eine Datei an ein konkretes Anhang-Feld der
-Prozess-Definition (NULL = allgemeiner Anhang).
+Anhänge gehören zu einem Prozess-Ticket (`process_tickets`); die Spalte
+`ticket_id` heißt aus Kompatibilitätsgründen weiter so, bedeutet aber „ID der
+Entität vom Typ `entity_type`". `field_key` bindet eine Datei an ein konkretes
+Anhang-Feld der Prozess-Definition (NULL = allgemeiner Anhang).
+
+`entity_type` bleibt trotz Wegfall des Alt-Systems erhalten – und zwar mit dem
+Wert 'ticket' in ENTITY_TYPES: in einer bestehenden Installation liegen Zeilen
+mit diesem Marker noch in der Tabelle. Sie belegen echten Speicher, müssen also
+in der Admin-Übersicht auffindbar und löschbar bleiben. Neue Zeilen entstehen
+ausschließlich mit 'process_ticket'.
 """
 
 import uuid
@@ -52,15 +54,20 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 # Idempotente In-Place-Migrationen (für bereits bestehende Tabellen). Additiv:
 # `entity_type` bekommt den Default 'ticket', damit JEDE bestehende Zeile ohne
-# Backfill weiterhin korrekt dem Alt-System zugeordnet bleibt.
+# Backfill ihren Alt-Marker behält.
+#
+# Der Spalten-Default bleibt bewusst 'ticket' und wird NICHT auf 'process_ticket'
+# umgestellt: ein MODIFY COLUMN auf einer gewachsenen Kundentabelle ist ein
+# Kopiervorgang unter Sperre, und der Default wird ohnehin nie benutzt –
+# insert_attachment schreibt `entity_type` immer mit.
 ATTACHMENTS_MIGRATIONS = [
     "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS entity_type VARCHAR(32) NOT NULL DEFAULT 'ticket'",
     "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS field_key VARCHAR(255) NULL",
     "ALTER TABLE attachments ADD INDEX IF NOT EXISTS idx_att_entity (entity_type, ticket_id)",
 ]
 
-# Anhänge des Alt-Systems – Default für alle Funktionen, damit bestehende
-# Aufrufer unverändert weiterlaufen.
+#: Marker der Alt-Zeilen. Kein Schreibpfad erzeugt ihn noch – er bleibt, weil
+#: bestehende Zeilen ihn tragen und in der Admin-Übersicht sichtbar sein müssen.
 ENTITY_TICKET = "ticket"
 ENTITY_PROCESS_TICKET = "process_ticket"
 # Erlaubte Werte – Grundlage der Filter-Prüfung in list_all.
@@ -72,20 +79,21 @@ _COLS = (
     "uploaded_by_name, uploaded_at, deleted_at"
 )
 
-# ── Admin-Übersicht: beide Welten in EINER Liste ──────────────────────────────
-# Der Auftrags-Titel liegt je Welt in einer anderen Tabelle, deshalb zwei LEFT
-# JOINs + COALESCE in EINEM Statement (kein N+1 über die Seite).
+# ── Admin-Übersicht ───────────────────────────────────────────────────────────
+# Der Auftrags-Titel steht in `process_tickets`, deshalb ein LEFT JOIN in EINEM
+# Statement (kein N+1 über die Seite).
 #
 # Zwei Details, die hier leicht schiefgehen:
-#   1. Die ON-Bedingung MUSS `entity_type` enthalten. Ticket #7 und
+#   1. Die ON-Bedingung MUSS `entity_type` enthalten. Alt-Ticket #7 und
 #      Prozess-Ticket #7 existieren gleichzeitig – ohne sie stünde am
-#      Prozess-Anhang der Titel eines völlig fremden Alt-Tickets.
+#      Alt-Anhang der Titel eines völlig fremden Prozess-Auftrags.
 #   2. LEFT, nicht INNER: ein Anhang ohne (oder mit inzwischen gelöschter)
-#      Entität – und jede Zeile der jeweils anderen Welt – muss in der Liste
-#      bleiben, sonst verschluckt der Join halbe Seiten und die Paginierung lügt.
+#      Entität – und jede Alt-Zeile – muss in der Liste bleiben, sonst
+#      verschluckt der Join halbe Seiten und die Paginierung lügt. Alt-Zeilen
+#      haben deshalb `ticket_title = NULL`; die Tabelle `tickets` wird nicht
+#      mehr gejoint (das Alt-System ist weg, die Tabelle verwaist).
 _ADMIN_FROM = (
     "FROM attachments a "
-    f"LEFT JOIN tickets t ON a.entity_type='{ENTITY_TICKET}' AND t.id=a.ticket_id "
     f"LEFT JOIN process_tickets pt ON a.entity_type='{ENTITY_PROCESS_TICKET}' AND pt.id=a.ticket_id"
 )
 
@@ -93,7 +101,7 @@ _ADMIN_FROM = (
 # Co. sonst mehrdeutig) – plus der aufgelöste Titel.
 _ADMIN_COLS = (
     ", ".join(f"a.{c.strip()}" for c in _COLS.split(","))
-    + ", COALESCE(t.title, pt.title) AS ticket_title"
+    + ", pt.title AS ticket_title"
 )
 
 
@@ -101,7 +109,7 @@ def insert_attachment(*, ticket_id: Optional[int], phase_key: Optional[str],
                       family_id: Optional[str], original_filename: str, stored_path: str,
                       content_type: Optional[str], size_bytes: int, sha256: Optional[str],
                       uploaded_by_id: Optional[str], uploaded_by_name: Optional[str],
-                      entity_type: str = ENTITY_TICKET,
+                      entity_type: str = ENTITY_PROCESS_TICKET,
                       field_key: Optional[str] = None) -> dict:
     """Legt eine Anhang-Version an. Ohne `family_id` = neue Datei (Version 1); mit
     `family_id` = neue Version (bisherige verlieren is_current).
@@ -144,14 +152,14 @@ def get_attachment(attachment_id: int) -> Optional[dict]:
 
 
 def list_for_ticket(ticket_id: int, *, include_versions: bool = False,
-                    entity_type: str = ENTITY_TICKET,
+                    entity_type: str = ENTITY_PROCESS_TICKET,
                     field_key: Optional[str] = None) -> List[dict]:
     """Anhänge EINER Entität (nicht gelöscht). Standard: nur aktuelle Versionen.
 
-    `entity_type` ist bewusst ein expliziter Parameter mit Default 'ticket': so
-    mischen sich Alt-Tickets und Prozess-Tickets NIE versehentlich, obwohl beide
-    Welten dieselbe Tabelle und denselben ID-Raum-Namen (`ticket_id`) benutzen –
-    Ticket #7 und Prozess-Ticket #7 existieren gleichzeitig.
+    `entity_type` bleibt ein expliziter Parameter: Alt-Zeilen und Prozess-Zeilen
+    liegen in derselben Tabelle und teilen den Namen `ticket_id`, obwohl die
+    ID-Räume verschieden sind – Alt-Ticket #7 und Prozess-Ticket #7 existieren
+    gleichzeitig. Ohne den Filter mischten sie sich.
 
     `field_key=None` heißt hier „kein Filter" (alle Anhänge der Entität), NICHT
     „nur allgemeine Anhänge" – für Letzteres gibt es count_for_field."""
@@ -202,11 +210,9 @@ def soft_delete(attachment_id: int) -> None:
 def _search_where(q: Optional[str] = None,
                   entity_type: Optional[str] = None) -> Tuple[str, tuple]:
     """WHERE-Teil der Admin-Übersicht – Spalten sind auf die Aliase von
-    `_ADMIN_FROM` qualifiziert (a = attachments, t = tickets, pt = process_tickets).
+    `_ADMIN_FROM` qualifiziert (a = attachments, pt = process_tickets).
 
-    `entity_type=None` heißt „beide Welten" (kein Filter). Die Freitextsuche geht
-    über BEIDE Titel-Spalten; die COALESCE-Spalte selbst ist im WHERE nicht
-    verfügbar, deshalb stehen t.title/pt.title einzeln in der OR-Kette."""
+    `entity_type=None` heißt „kein Filter" (auch die Alt-Zeilen)."""
     where = "a.deleted_at IS NULL"
     params: tuple = ()
     if entity_type is not None:
@@ -215,8 +221,8 @@ def _search_where(q: Optional[str] = None,
     if q and q.strip():
         like = f"%{q.strip()}%"
         where += (" AND (a.original_filename LIKE %s OR a.uploaded_by_name LIKE %s"
-                  " OR t.title LIKE %s OR pt.title LIKE %s")
-        params += (like, like, like, like)
+                  " OR pt.title LIKE %s")
+        params += (like, like, like)
         if q.strip().isdigit():
             where += " OR a.ticket_id=%s"
             params += (int(q.strip()),)
@@ -228,10 +234,10 @@ def list_all(*, q: Optional[str] = None, entity_type: Optional[str] = None,
              limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
     """Admin-Übersicht: nicht gelöschte Anhänge, neueste zuerst, optional gefiltert.
 
-    `entity_type=None` = Anhänge BEIDER Welten (mit `entity_type` in der Ausgabe,
-    damit die Oberfläche sie unterscheiden und richtig verlinken kann); gesetzt =
-    nur diese Welt. Der Filter gilt für Seite UND Gesamtzahl, sonst zeigt die
-    Paginierung Seiten an, die es nicht gibt.
+    `entity_type=None` = alle Anhänge, auch die Alt-Zeilen (mit `entity_type` in
+    der Ausgabe, damit die Oberfläche sie unterscheiden und richtig verlinken
+    kann); gesetzt = nur dieser Marker. Der Filter gilt für Seite UND Gesamtzahl,
+    sonst zeigt die Paginierung Seiten an, die es nicht gibt.
 
     Rückgabe: (Zeilen der Seite inkl. `ticket_title`, Gesamtzahl)."""
     if entity_type is not None and entity_type not in ENTITY_TYPES:

@@ -1,8 +1,6 @@
 from backend.database.connection import get_connection, _exec
-from backend.database.tickets import DDL_TICKETS, TICKETS_MIGRATIONS
 from backend.database.settings import DDL_SETTINGS
 from backend.database.users import USERS_DDL, USERS_MIGRATIONS
-from backend.database.ticket_watchers import TICKET_WATCHERS_DDL, backfill_owner_watchers
 from backend.database.audit_log import AUDIT_LOG_DDL
 from backend.database.attachments import ATTACHMENTS_DDL, ATTACHMENTS_MIGRATIONS
 from backend.database.process_definitions import (
@@ -24,12 +22,10 @@ def init_db():
     logger.info("Initializing database (MariaDB)")
     conn = get_connection()
     try:
-        _exec(conn, DDL_TICKETS)
         _exec(conn, DDL_SETTINGS)
         _exec(conn, USERS_DDL)
         for migration in USERS_MIGRATIONS:
             _exec(conn, migration)
-        _exec(conn, TICKET_WATCHERS_DDL)
         _exec(conn, AUDIT_LOG_DDL)
         _exec(conn, ATTACHMENTS_DDL)
         _exec(conn, PROCESS_DEFINITIONS_DDL)
@@ -46,11 +42,15 @@ def init_db():
     # Indizes/Spalten idempotent nachrüsten (in-place, non-fatal – reine Performance
     # bzw. additive Spalten). Greift nur für bereits bestehende Tabellen; neu
     # angelegte enthalten alles schon aus dem DDL.
+    #
+    # Die Tabellen des entfernten Alt-Systems (tickets, ticket_watchers,
+    # ticket_locks, ticket_group_permissions) werden hier NICHT mehr angelegt oder
+    # migriert. Bestehende Installationen behalten sie – gedroppt wird nichts, das
+    # ist eine bewusste Entscheidung des Betriebs und nicht Aufgabe des Starts.
     try:
         conn = get_connection()
         try:
-            for migration in (list(TICKETS_MIGRATIONS)
-                              + list(ATTACHMENTS_MIGRATIONS)
+            for migration in (list(ATTACHMENTS_MIGRATIONS)
                               + list(PROCESS_DEFINITIONS_MIGRATIONS)
                               + list(PROCESS_TICKETS_MIGRATIONS)
                               + list(PROCESS_TICKET_EVENTS_MIGRATIONS)
@@ -62,36 +62,18 @@ def init_db():
     except Exception as e:
         logger.warning(f"Index-/Spalten-Migrationen übersprungen: {e}")
 
-    # Bestehende Tickets: Ersteller als Beobachter nachtragen (idempotent)
+    # Pflicht-Fachabteilungen sicherstellen: fehlende werden leer angelegt, damit
+    # jeder ausgelieferte Prozess eine zuständige Gruppe auflösen kann. Namensquelle
+    # ist services/seed_definitions – dieselbe Liste, aus der die Seeds ihre
+    # Gruppen-Platzhalter auflösen. Ohne diesen Schritt hätte eine frische
+    # Installation keine einzige Fachabteilung.
     try:
-        backfill_owner_watchers()
-    except Exception as e:
-        logger.warning(f"Watcher-Backfill übersprungen: {e}")
-
-    # Bestehende Tickets: Zuständigkeit der Bearbeitungsphase in den Workflow
-    # migrieren (aus den Alt-Spalten assignee_*), damit diese nicht mehr nötig sind.
-    try:
-        from backend.services.workflow_state import backfill_phase_responsibility
-        backfill_phase_responsibility()
-    except Exception as e:
-        logger.warning(f"Responsibility-Backfill übersprungen: {e}")
-
-    # Bestehende Onboarding-Tickets einmalig ins neue base-Format migrieren
-    # (Basisdaten aus personal → base, private_address → private_street,
-    # allgemein.appearance_company → it.appearance_company). Danach greifen alle
-    # Tickets einheitlich ohne Legacy-Fallbacks.
-    try:
-        from backend.services.onboarding_migration import backfill_onboarding_descriptions
-        backfill_onboarding_descriptions()
-    except Exception as e:
-        logger.warning(f"Onboarding-Format-Migration übersprungen: {e}")
-
-    # Workflow-Pflichtgruppen (Fachabteilungen) sicherstellen: fehlende werden
-    # leer angelegt, damit jeder Workflow eine zuständige Gruppe auflösen kann.
-    try:
-        from backend.services.workflow_state import required_group_names, assign_group_names
+        from backend.services.seed_definitions import (
+            AUTO_ASSIGNED_GROUP_NAMES, required_group_names,
+        )
         from backend.database.groups import ensure_required_groups
-        created = ensure_required_groups(required_group_names(), hidden_names=assign_group_names())
+        created = ensure_required_groups(required_group_names(),
+                                        hidden_names=AUTO_ASSIGNED_GROUP_NAMES)
         if created:
             logger.info("Fehlende Pflichtgruppen angelegt: %s", ", ".join(created))
     except Exception as e:
