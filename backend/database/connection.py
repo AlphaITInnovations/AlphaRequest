@@ -13,8 +13,14 @@ from typing import Any, Tuple
 
 import pymysql
 from pymysql.cursors import DictCursor
+from sqlalchemy.dialects.mysql import pymysql as _pymysql_dialect
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import QueuePool
+
+# pre_ping braucht einen Dialekt: ein nackter Pool kennt do_ping() nicht und
+# wirft beim ERSTEN Wiederverwenden einer Verbindung
+# "NotImplementedError: The ping feature requires that a dialect is passed".
+_DIALECT = _pymysql_dialect.dialect()
 
 _pool = None
 _pool_dsn = None
@@ -57,6 +63,7 @@ def _get_pool(dsn: str):
                 max_overflow=POOL_MAX_OVERFLOW,
                 recycle=POOL_RECYCLE,
                 pre_ping=True,          # tote Verbindungen still ersetzen
+                dialect=_DIALECT,       # nötig für pre_ping (do_ping)
                 reset_on_return="rollback",
             )
             _pool_dsn = dsn
