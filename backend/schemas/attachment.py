@@ -20,8 +20,21 @@ class AttachmentOut(BaseModel):
     uploaded_at: Optional[str] = None
 
 
+class AttachmentAdminOut(AttachmentOut):
+    """Zeile der Admin-Übersicht.
+
+    Dort stehen Anhänge BEIDER Welten in einer Liste, deshalb ist `entity_type`
+    Pflicht: die Oberfläche verlinkt danach (Alt-Ticket vs. Prozess-Auftrag – die
+    IDs überschneiden sich!). Ein Default wäre hier gefährlich, weil eine fehlende
+    Angabe still als Alt-Ticket durchgehen und auf ein fremdes Ticket zeigen würde.
+    `ticket_title` löst die DB-Schicht je Welt auf (NULL = Entität gelöscht/unbekannt)."""
+    entity_type: str
+    field_key: Optional[str] = None
+    ticket_title: Optional[str] = None
+
+
 class AttachmentListOut(BaseModel):
-    items: list[AttachmentOut]
+    items: list[AttachmentAdminOut]
     total: int
 
 

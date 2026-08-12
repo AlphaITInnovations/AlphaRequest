@@ -63,11 +63,37 @@ ATTACHMENTS_MIGRATIONS = [
 # Aufrufer unverändert weiterlaufen.
 ENTITY_TICKET = "ticket"
 ENTITY_PROCESS_TICKET = "process_ticket"
+# Erlaubte Werte – Grundlage der Filter-Prüfung in list_all.
+ENTITY_TYPES = (ENTITY_TICKET, ENTITY_PROCESS_TICKET)
 
 _COLS = (
     "id, entity_type, ticket_id, field_key, phase_key, family_id, version, is_current, "
     "original_filename, stored_path, content_type, size_bytes, sha256, uploaded_by_id, "
     "uploaded_by_name, uploaded_at, deleted_at"
+)
+
+# ── Admin-Übersicht: beide Welten in EINER Liste ──────────────────────────────
+# Der Auftrags-Titel liegt je Welt in einer anderen Tabelle, deshalb zwei LEFT
+# JOINs + COALESCE in EINEM Statement (kein N+1 über die Seite).
+#
+# Zwei Details, die hier leicht schiefgehen:
+#   1. Die ON-Bedingung MUSS `entity_type` enthalten. Ticket #7 und
+#      Prozess-Ticket #7 existieren gleichzeitig – ohne sie stünde am
+#      Prozess-Anhang der Titel eines völlig fremden Alt-Tickets.
+#   2. LEFT, nicht INNER: ein Anhang ohne (oder mit inzwischen gelöschter)
+#      Entität – und jede Zeile der jeweils anderen Welt – muss in der Liste
+#      bleiben, sonst verschluckt der Join halbe Seiten und die Paginierung lügt.
+_ADMIN_FROM = (
+    "FROM attachments a "
+    f"LEFT JOIN tickets t ON a.entity_type='{ENTITY_TICKET}' AND t.id=a.ticket_id "
+    f"LEFT JOIN process_tickets pt ON a.entity_type='{ENTITY_PROCESS_TICKET}' AND pt.id=a.ticket_id"
+)
+
+# Dieselben Spalten wie _COLS, nur qualifiziert (der Join macht `id`, `title` &
+# Co. sonst mehrdeutig) – plus der aufgelöste Titel.
+_ADMIN_COLS = (
+    ", ".join(f"a.{c.strip()}" for c in _COLS.split(","))
+    + ", COALESCE(t.title, pt.title) AS ticket_title"
 )
 
 
@@ -173,31 +199,54 @@ def soft_delete(attachment_id: int) -> None:
         conn.close()
 
 
-def _search_where(q: Optional[str]) -> Tuple[str, tuple]:
-    where = "deleted_at IS NULL"
+def _search_where(q: Optional[str] = None,
+                  entity_type: Optional[str] = None) -> Tuple[str, tuple]:
+    """WHERE-Teil der Admin-Übersicht – Spalten sind auf die Aliase von
+    `_ADMIN_FROM` qualifiziert (a = attachments, t = tickets, pt = process_tickets).
+
+    `entity_type=None` heißt „beide Welten" (kein Filter). Die Freitextsuche geht
+    über BEIDE Titel-Spalten; die COALESCE-Spalte selbst ist im WHERE nicht
+    verfügbar, deshalb stehen t.title/pt.title einzeln in der OR-Kette."""
+    where = "a.deleted_at IS NULL"
     params: tuple = ()
-    if q:
+    if entity_type is not None:
+        where += " AND a.entity_type=%s"
+        params += (entity_type,)
+    if q and q.strip():
         like = f"%{q.strip()}%"
-        where += " AND (original_filename LIKE %s OR uploaded_by_name LIKE %s"
-        params = (like, like)
+        where += (" AND (a.original_filename LIKE %s OR a.uploaded_by_name LIKE %s"
+                  " OR t.title LIKE %s OR pt.title LIKE %s")
+        params += (like, like, like, like)
         if q.strip().isdigit():
-            where += " OR ticket_id=%s"
+            where += " OR a.ticket_id=%s"
             params += (int(q.strip()),)
         where += ")"
     return where, params
 
 
-def list_all(*, q: Optional[str] = None, limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
+def list_all(*, q: Optional[str] = None, entity_type: Optional[str] = None,
+             limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
     """Admin-Übersicht: nicht gelöschte Anhänge, neueste zuerst, optional gefiltert.
-    Rückgabe: (Zeilen der Seite, Gesamtzahl)."""
-    where, params = _search_where(q)
+
+    `entity_type=None` = Anhänge BEIDER Welten (mit `entity_type` in der Ausgabe,
+    damit die Oberfläche sie unterscheiden und richtig verlinken kann); gesetzt =
+    nur diese Welt. Der Filter gilt für Seite UND Gesamtzahl, sonst zeigt die
+    Paginierung Seiten an, die es nicht gibt.
+
+    Rückgabe: (Zeilen der Seite inkl. `ticket_title`, Gesamtzahl)."""
+    if entity_type is not None and entity_type not in ENTITY_TYPES:
+        # Hart fehlschlagen statt still „beide Welten" zu liefern – ein Tippfehler
+        # im Aufrufer wäre sonst als vollständige Liste getarnt.
+        raise ValueError(f"Unbekannter entity_type: {entity_type!r}")
+    where, params = _search_where(q, entity_type)
     conn = get_connection()
     try:
-        total_row = _fetchone(conn, f"SELECT COUNT(*) AS c FROM attachments WHERE {where}", params)
-        total = total_row["c"] if total_row else 0
+        total_row = _fetchone(conn, f"SELECT COUNT(*) AS c {_ADMIN_FROM} WHERE {where}", params)
+        total = int(total_row["c"]) if total_row else 0
         rows = _fetchall(
             conn,
-            f"SELECT {_COLS} FROM attachments WHERE {where} ORDER BY uploaded_at DESC LIMIT %s OFFSET %s",
+            f"SELECT {_ADMIN_COLS} {_ADMIN_FROM} WHERE {where} "
+            "ORDER BY a.uploaded_at DESC LIMIT %s OFFSET %s",
             params + (limit, offset),
         )
         return rows, total

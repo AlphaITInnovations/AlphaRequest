@@ -1,12 +1,23 @@
-<script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { client } from '@/api/client'
-import { useToast } from '@/composables/useToast'
+<script lang="ts">
+/**
+ * Reine Helfer der Anhang-Übersicht.
+ *
+ * Bewusst im normalen <script>-Block: so sind sie ohne Mounting testbar (das
+ * Projekt hat kein @vue/test-utils) und bleiben im <script setup> nutzbar.
+ */
 
-interface Attachment {
+/** Die zwei Welten an EINER Anhang-Tabelle (Backend: att_db.ENTITY_*). */
+export const ENTITY_TICKET = 'ticket'
+export const ENTITY_PROCESS_TICKET = 'process_ticket'
+
+export type EntityType = 'ticket' | 'process_ticket'
+
+export interface Attachment {
   id: number
+  entity_type: string
   ticket_id: number | null
+  field_key: string | null
+  ticket_title: string | null
   phase_key: string | null
   family_id: string
   version: number
@@ -21,6 +32,32 @@ interface Attachment {
   uploaded_at: string | null
 }
 
+/**
+ * Zielroute einer Zeile. Beide Welten haben eigene ID-Räume – Ticket #7 und
+ * Prozess-Auftrag #7 existieren gleichzeitig. Ohne Unterscheidung würde eine
+ * Prozess-Zeile ein fremdes Alt-Ticket öffnen. Routen siehe router/index.ts
+ * (/admin/tickets/:id für das Alt-System, /prozess-auftraege/:id für Prozesse).
+ */
+export function entityPath(entityType: string | null | undefined,
+                           ticketId: number | null | undefined): string | null {
+  if (!ticketId) return null
+  return entityType === ENTITY_PROCESS_TICKET
+    ? `/prozess-auftraege/${ticketId}`
+    : `/admin/tickets/${ticketId}`
+}
+
+/** Kurz-Kennzeichnung der Welt für das Badge in der Tabelle. */
+export function entityLabel(entityType: string | null | undefined): string {
+  return entityType === ENTITY_PROCESS_TICKET ? 'Prozess' : 'Ticket'
+}
+</script>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { client } from '@/api/client'
+import { useToast } from '@/composables/useToast'
+
 const router = useRouter()
 const { showToast } = useToast()
 
@@ -32,6 +69,8 @@ const expanded = ref<number | null>(null)
 const stats = ref<{ count: number; total_bytes: number; total_human: string } | null>(null)
 
 const fSearch  = ref('')
+// '' = beide Welten; sonst der entity_type-Filter für die API.
+const fEntity  = ref<'' | EntityType>('')
 const pageSize = 25
 const offset   = ref(0)
 
@@ -51,8 +90,14 @@ function formatDate(ts: string | null) {
   })
 }
 
-function openTicket(a: Attachment) {
-  if (a.ticket_id) router.push(`/admin/tickets/${a.ticket_id}`)
+// Ziel/Kennzeichnung je Welt – die reinen Helfer liegen oben im <script>-Block.
+const rowPath  = (a: Attachment) => entityPath(a.entity_type, a.ticket_id)
+const rowLabel = (a: Attachment) => entityLabel(a.entity_type)
+const isProcess = (a: Attachment) => a.entity_type === ENTITY_PROCESS_TICKET
+
+function openEntity(a: Attachment) {
+  const path = rowPath(a)
+  if (path) router.push(path)
 }
 function toggle(id: number) { expanded.value = expanded.value === id ? null : id }
 
@@ -70,7 +115,11 @@ async function load() {
   loading.value = true
   try {
     const { data } = await client.get('/settings/attachments', {
-      params: { limit: pageSize, offset: offset.value, q: fSearch.value || undefined },
+      params: {
+        limit: pageSize, offset: offset.value,
+        q: fSearch.value || undefined,
+        entity_type: fEntity.value || undefined,
+      },
     })
     if (my !== reqId) return
     items.value = data.data.items
@@ -85,6 +134,9 @@ watch(fSearch, () => {
   if (debounce) clearTimeout(debounce)
   debounce = setTimeout(() => { offset.value = 0; load() }, 250)
 })
+// Welt-Filter wirkt sofort (kein Debounce nötig) – Seite zurück auf Anfang,
+// sonst zeigt die Paginierung eine Seite, die es im Filter nicht mehr gibt.
+watch(fEntity, () => { offset.value = 0; load() })
 watch(offset, load)
 
 function prev() { if (offset.value > 0) offset.value -= pageSize }
@@ -116,7 +168,9 @@ onUnmounted(() => { if (debounce) clearTimeout(debounce) })
     <div class="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-900/20
                 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 mb-4">
       Übersicht aller hochgeladenen Dateien. Jeder Upload und jede Löschung ist im Audit-Log nachvollziehbar;
-      neue Versionen einer Datei bleiben über die Historie erhalten.
+      neue Versionen einer Datei bleiben über die Historie erhalten. Das Badge zeigt, ob eine Datei zu einem
+      Ticket oder zu einem Prozess-Auftrag gehört – beide haben eigene Nummernkreise, gleiche Nummer heißt
+      also nicht gleicher Auftrag.
     </div>
 
     <!-- Speicherplatz-Kacheln -->
@@ -131,9 +185,14 @@ onUnmounted(() => { if (debounce) clearTimeout(debounce) })
       </div>
     </div>
 
-    <!-- Suche -->
+    <!-- Suche + Welt-Filter -->
     <div class="flex flex-wrap gap-2 items-center mb-3">
-      <input v-model="fSearch" placeholder="Suche (Dateiname, Person, Ticket-Nr.…)" class="afi flex-1 min-w-[14rem]" />
+      <input v-model="fSearch" placeholder="Suche (Dateiname, Person, Titel, Nr.…)" class="afi flex-1 min-w-[14rem]" />
+      <select v-model="fEntity" class="afi w-52" title="Welche Ticket-Welt?">
+        <option value="">Alle Anhänge</option>
+        <option value="ticket">Nur Tickets</option>
+        <option value="process_ticket">Nur Prozess-Aufträge</option>
+      </select>
     </div>
 
     <div class="card-section !p-0 overflow-hidden">
@@ -167,10 +226,20 @@ onUnmounted(() => { if (debounce) clearTimeout(debounce) })
                   </div>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-gray-300">
-                  <button v-if="a.ticket_id" @click.stop="openTicket(a)" class="text-[#3EAAB8] hover:underline">
-                    🎫 #{{ a.ticket_id }}
-                  </button>
-                  <span v-else class="text-gray-400">—</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
+                          :class="isProcess(a)
+                            ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+                            : 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'">
+                      {{ rowLabel(a) }}
+                    </span>
+                    <button v-if="rowPath(a)" @click.stop="openEntity(a)"
+                            :title="a.ticket_title || undefined"
+                            class="text-[#3EAAB8] hover:underline">
+                      #{{ a.ticket_id }}
+                    </button>
+                    <span v-else class="text-gray-400">—</span>
+                  </div>
                 </td>
                 <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ a.uploaded_by_name || '—' }}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-gray-400">{{ formatDate(a.uploaded_at) }}</td>
@@ -188,6 +257,8 @@ onUnmounted(() => { if (debounce) clearTimeout(debounce) })
                 <td colspan="6" class="px-4 py-3">
                   <div class="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
                     <div><span class="font-mono">#{{ a.id }}</span> · Familie <span class="font-mono">{{ a.family_id }}</span> · Version {{ a.version }}{{ a.is_current ? ' (aktuell)' : '' }}</div>
+                    <div>{{ isProcess(a) ? 'Prozess-Auftrag' : 'Ticket' }}: {{ a.ticket_title || '—' }}</div>
+                    <div v-if="a.field_key">Feld: <span class="font-mono">{{ a.field_key }}</span></div>
                     <div v-if="a.phase_key">Phase: <span class="font-mono">{{ a.phase_key }}</span></div>
                     <div v-if="a.content_type">Typ: <span class="font-mono">{{ a.content_type }}</span></div>
                     <div v-if="a.sha256">SHA-256: <span class="font-mono break-all">{{ a.sha256 }}</span></div>

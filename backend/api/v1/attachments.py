@@ -12,7 +12,7 @@ definitions-getriebenen Aufträge (Zugriff über services.process_access). Die
 Endpunkte für Download/Löschen sind GEMEINSAM – sie finden den Anhang über seine
 ID und wählen die Zugriffsprüfung anhand von `entity_type`.
 """
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
@@ -28,7 +28,8 @@ from backend.services import attachment_storage as storage
 from backend.services import process_access as acc
 from backend.services import process_runtime as pr
 from backend.services import process_visibility as vis
-from backend.schemas.attachment import AttachmentOut, AttachmentListOut, AttachmentStats
+from backend.schemas.attachment import (AttachmentAdminOut, AttachmentOut, AttachmentListOut,
+                                        AttachmentStats)
 from backend.schemas.process_definition import ProcessDefinition, Widget
 from backend.schemas.responses import DataResponse, api_error, ErrorCode
 from backend.utils.config import config
@@ -72,6 +73,17 @@ def _to_process_out(row: dict) -> ProcessAttachmentOut:
         **_to_out(row).model_dump(),
         entity_type=row.get("entity_type") or att_db.ENTITY_PROCESS_TICKET,
         field_key=row.get("field_key"),
+    )
+
+
+def _to_admin_out(row: dict) -> AttachmentAdminOut:
+    """Zeile der Admin-Übersicht (beide Welten gemischt). Fallback auf das
+    Alt-System entspricht dem Spalten-Default `entity_type='ticket'`."""
+    return AttachmentAdminOut(
+        **_to_out(row).model_dump(),
+        entity_type=row.get("entity_type") or att_db.ENTITY_TICKET,
+        field_key=row.get("field_key"),
+        ticket_title=row.get("ticket_title"),
     )
 
 
@@ -371,9 +383,13 @@ def attachments_stats(user: dict = Depends(get_current_user)):
 def attachments_list(
     user: dict = Depends(get_current_user),
     q: Optional[str] = None,
+    # Welt-Filter; die Werte MÜSSEN att_db.ENTITY_TICKET / ENTITY_PROCESS_TICKET
+    # entsprechen (Literal braucht echte Literale – ein Test hält beides synchron).
+    # Alles andere → 422, damit ein Tippfehler nicht still „beide Welten" bedeutet.
+    entity_type: Optional[Literal["ticket", "process_ticket"]] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     _require_admin(user)
-    rows, total = att_db.list_all(q=q, limit=limit, offset=offset)
-    return DataResponse(data=AttachmentListOut(items=[_to_out(r) for r in rows], total=total))
+    rows, total = att_db.list_all(q=q, entity_type=entity_type, limit=limit, offset=offset)
+    return DataResponse(data=AttachmentListOut(items=[_to_admin_out(r) for r in rows], total=total))
