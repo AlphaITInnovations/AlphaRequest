@@ -25,6 +25,7 @@ from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
+from backend.services import process_access as acc
 from backend.services import process_compute as compute
 from backend.services import process_engine as engine
 from backend.services import process_permissions as perms
@@ -107,6 +108,12 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx) -> Pr
     # Zuständigkeit wird server-seitig (ungefiltert) aufgelöst; die Feldwerte im
     # Output werden nach Sichtbarkeit gefiltert (§5.1: einzige wertetragende Naht).
     resp = pr.resolve_responsibility(cur, row.get("values") or {}) if cur else None
+    # Bei Fachabteilungen den LIVE-Stand aus dem Runtime zeigen (wer hat schon
+    # abgeschlossen?) – resolve_responsibility kennt nur die Definition.
+    if resp and resp.get("kind") == "departments":
+        live = pr.current_departments(row.get("runtime") or {})
+        if live:
+            resp = {**resp, "departments": live}
     data = {k: row.get(k) for k in (
         "id", "process_key", "process_version", "title", "status", "priority",
         "owner_id", "owner_name", "runtime", "next_timer_due_at",
@@ -151,6 +158,24 @@ def _audit(user: dict, action: str, ticket_id, **details) -> None:
     )
 
 
+def _assert_view(row: dict, defn, user: dict) -> list:
+    """Zugriff prüfen und die Gruppen-Mitgliedschaft zurückgeben (einmal geladen)."""
+    gids = vis.user_group_ids(user)
+    if not acc.may_view(defn, row, user, gids):
+        # Bewusst 404: nicht verraten, dass es den Auftrag gibt.
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    return gids
+
+
+def _assert_edit(row: dict, defn, user: dict) -> list:
+    """Zusätzlich: nur die aktuell zuständige Stelle (und Admin) darf eingreifen."""
+    gids = _assert_view(row, defn, user)
+    if not acc.may_edit(defn, row, user, gids):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        "Nur die aktuell zuständige Stelle kann diesen Auftrag bearbeiten")
+    return gids
+
+
 # ── Endpunkte ────────────────────────────────────────────────────────────────
 
 @router.get("/process-tickets", response_model=ListResponse[ProcessTicketOut])
@@ -162,26 +187,32 @@ def list_process_tickets(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    _require_admin(user)
     rows, total = store.list_tickets(status=status, process_key=process_key, q=q,
                                      limit=limit, offset=offset)
     # Definitionen je (key, version) nur EINMAL laden/parsen und die Gruppen-
     # Mitgliedschaft einmal abfragen – sonst 2 DB-Abfragen + 1 Validierung pro Zeile.
     defn_cache: dict = {}
     gids = vis.user_group_ids(user)
+    # Ohne Aufsichtsrechte nur eigene/zugewiesene Auftraege zeigen. Die Gesamtzahl
+    # wird um die ausgefilterten korrigiert, damit die Blaetterung stimmt.
+    oversight = acc.has_oversight(user)
     out = []
+    hidden = 0
     for r in rows:
         try:
             d = _load_pinned_defn(r, defn_cache)
         except Exception:
             d = None
+        if not oversight and not acc.may_view(d, r, user, gids):
+            hidden += 1
+            continue
         out.append(_out(r, d, vis.build_viewer_ctx(user, r, d, group_ids=gids)))
-    return ListResponse(data=out, meta=Meta(total=total, limit=limit, offset=offset))
+    return ListResponse(data=out,
+                        meta=Meta(total=max(0, total - hidden), limit=limit, offset=offset))
 
 
 @router.post("/process-tickets", response_model=DataResponse[ProcessTicketOut])
 def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_current_user)):
-    _require_admin(user)
     pub = defstore.get_published(body.processKey)
     if not pub or not pub.get("definition"):
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {body.processKey}")
@@ -208,11 +239,13 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
                                 for k in unknown])
 
     now = utcnow_iso()
-    runtime = pr.initial_runtime(defn, now)
     start_phase = defn.phases[0]
     # Provisorischer Kontext (Ersteller:in = Owner → Vollsicht); Schreibschutz auf
-    # die editierbaren Felder der Start-Phase anwenden.
-    provisional = {"owner_id": user.get("id"), "status": "in_progress", "runtime": runtime, "values": {}}
+    # die editierbaren Felder der Start-Phase anwenden. Der endgültige Runtime
+    # entsteht erst UNTEN mit den fertigen Werten – nur so kann die Start-Phase
+    # ihre bedingten Fachabteilungen korrekt bestimmen.
+    provisional = {"owner_id": user.get("id"), "status": "in_progress",
+                   "runtime": pr.initial_runtime(defn, now), "values": {}}
     ctx = vis.build_viewer_ctx(user, provisional, defn)
     try:
         values = vis.apply_writes(defn, start_phase, {}, submitted, ctx)
@@ -227,6 +260,7 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     values = compute.stamp_server_fields(defn, values, {}, actor=_actor_name(user), now_iso=now)
     values = compute.apply_computed(defn, values)
 
+    runtime = pr.initial_runtime(defn, now, values)
     status = pr.enter_status_for(start_phase)
     row = store.create(
         process_key=defn.key, process_version=pub["version"],
@@ -243,7 +277,6 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
 
 @router.get("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
 def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
-    _require_admin(user)
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
@@ -251,19 +284,21 @@ def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
-    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
+    gids = _assert_view(row, defn, user)
+    return DataResponse(data=_out(row, defn,
+                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids)))
 
 
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
 def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = Depends(get_current_user)):
-    _require_admin(user)
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    defn = _load_pinned_defn(row)
+    gids = _assert_edit(row, defn, user)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist abgeschlossen/abgelehnt")
-    defn = _load_pinned_defn(row)
-    ctx = vis.build_viewer_ctx(user, row, defn)
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
     phase = pr.current_phase(defn, row["runtime"])
     if phase is None:
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Keine aktive Phase")
@@ -313,13 +348,13 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
 
 @router.post("/process-tickets/{ticket_id}:advance", response_model=DataResponse[ProcessTicketOut])
 def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
-    _require_admin(user)
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    defn = _load_pinned_defn(row)
+    _assert_edit(row, defn, user)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist abgeschlossen/abgelehnt")
-    defn = _load_pinned_defn(row)
     runtime = row["runtime"]
     values = row.get("values") or {}
     phase = pr.current_phase(defn, runtime)
@@ -329,6 +364,15 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
     errs = pv.validate_phase_completion(defn, phase, values)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Phase kann nicht abgeschlossen werden", fields=errs)
+
+    # Fachabteilungs-Phase: erst wenn alle PFLICHT-Abteilungen fertig sind.
+    offen = pr.open_required_departments(runtime)
+    if offen:
+        raise api_error(409, ErrorCode.DEPARTMENT_FORBIDDEN,
+                        "Es stehen noch Fachabteilungen aus",
+                        fields=[{"path": d["group"], "code": "DEPARTMENT_OPEN",
+                                 "message": "Diese Fachabteilung hat noch nicht abgeschlossen"}
+                                for d in offen])
 
     # Phasenübergang zentral in der Engine: on_exit → advance → on_enter → Timer.
     try:
@@ -341,10 +385,14 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
 
 @router.post("/process-tickets/{ticket_id}:reject", response_model=DataResponse[ProcessTicketOut])
 def reject_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
-    _require_admin(user)
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn_for_acc = _load_pinned_defn(row)
+    except Exception:
+        defn_for_acc = None
+    _assert_edit(row, defn_for_acc, user)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist bereits abgeschlossen/abgelehnt")
     runtime = pr.reject(row["runtime"])
@@ -359,3 +407,78 @@ def reject_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)
     except Exception:
         defn = None
     return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
+
+
+# ── Fachabteilungen einzeln abschließen ──────────────────────────────────────
+
+class DepartmentActionRequest(BaseModel):
+    note: Optional[str] = None
+
+
+def _department_action(ticket_id: int, group_id: str, status: str,
+                       note: Optional[str], user: dict) -> ProcessTicketOut:
+    """Gemeinsamer Pfad für :complete / :reject / :skip einer Fachabteilung."""
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    defn = _load_pinned_defn(row)
+    gids = _assert_view(row, defn, user)
+    if _is_terminal(row):
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist abgeschlossen/abgelehnt")
+
+    # Nur Mitglieder GENAU DIESER Abteilung (oder Admin) – sonst könnte die IT
+    # für den Fuhrpark quittieren.
+    if not acc.may_complete_department(defn, row, user, gids, group_id):
+        raise api_error(403, ErrorCode.DEPARTMENT_FORBIDDEN,
+                        "Nur Mitglieder dieser Fachabteilung können hier abschließen")
+
+    runtime = row["runtime"]
+    if not pr.set_department_status(runtime, group_id, status,
+                                   by=user.get("id"), by_name=_actor_name(user),
+                                   at=utcnow_iso(), note=note):
+        raise api_error(409, ErrorCode.DEPARTMENT_FORBIDDEN,
+                        "Diese Fachabteilung ist an der aktuellen Phase nicht beteiligt")
+
+    # Bei Ablehnung wird der ganze Auftrag abgelehnt (wie im Alt-System).
+    new_status = row["status"]
+    if status == "rejected":
+        runtime = pr.reject(runtime)
+        new_status = "rejected"
+    try:
+        row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                   status=new_status, expected_rev=row.get("rev"),
+                                   next_timer_due_at=row.get("next_timer_due_at"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+
+    _audit(user, f"process_department_{status}", ticket_id, group=group_id, note=note)
+    return _out(row, defn, vis.build_viewer_ctx(user, row, defn, group_ids=gids))
+
+
+@router.post("/process-tickets/{ticket_id}/departments/{group_id}:complete",
+             response_model=DataResponse[ProcessTicketOut])
+def complete_department(ticket_id: int, group_id: str,
+                        body: Optional[DepartmentActionRequest] = None,
+                        user: dict = Depends(get_current_user)):
+    return DataResponse(data=_department_action(
+        ticket_id, group_id, "done", (body.note if body else None), user))
+
+
+@router.post("/process-tickets/{ticket_id}/departments/{group_id}:skip",
+             response_model=DataResponse[ProcessTicketOut])
+def skip_department(ticket_id: int, group_id: str,
+                   body: Optional[DepartmentActionRequest] = None,
+                   user: dict = Depends(get_current_user)):
+    """Nicht zuständig / nichts zu tun – gilt als erledigt, ohne Bearbeitung."""
+    return DataResponse(data=_department_action(
+        ticket_id, group_id, "skipped", (body.note if body else None), user))
+
+
+@router.post("/process-tickets/{ticket_id}/departments/{group_id}:reject",
+             response_model=DataResponse[ProcessTicketOut])
+def reject_department(ticket_id: int, group_id: str,
+                     body: Optional[DepartmentActionRequest] = None,
+                     user: dict = Depends(get_current_user)):
+    """Ablehnung durch eine Fachabteilung lehnt den gesamten Auftrag ab."""
+    return DataResponse(data=_department_action(
+        ticket_id, group_id, "rejected", (body.note if body else None), user))

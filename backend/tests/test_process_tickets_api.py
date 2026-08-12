@@ -183,12 +183,51 @@ def test_full_lifecycle_advance_and_archive(client):
     # Zuständigkeit der review-Phase = Abteilung g_it
     assert d1["responsibility"]["kind"] == "departments"
     assert d1["responsibility"]["departments"][0]["group"] == "g_it"
+    # Die Fachabteilung steht noch aus → Abschluss ist gesperrt.
+    blocked = client.post(f"/process-tickets/{tid}:advance")
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "DEPARTMENT_FORBIDDEN"
+
+    # Abteilung schließt ab → jetzt geht es weiter.
+    done = client.post(f"/process-tickets/{tid}/departments/g_it:complete")
+    assert done.status_code == 200
+    dep = done.json()["data"]["responsibility"]["departments"][0]
+    assert dep["status"] == "done" and dep["by"] == "u1"
+
     r2 = client.post(f"/process-tickets/{tid}:advance")
     assert r2.status_code == 200
     assert r2.json()["data"]["status"] == "archived"
     # danach ist das Ticket terminal → weitere Aktion 409
     r3 = client.post(f"/process-tickets/{tid}:advance")
     assert r3.status_code == 409
+
+
+def test_fachabteilung_ueberspringen_zaehlt_als_erledigt(client):
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    client.post(f"/process-tickets/{tid}:advance")
+    assert client.post(f"/process-tickets/{tid}/departments/g_it:skip").status_code == 200
+    # skipped blockiert nicht
+    assert client.post(f"/process-tickets/{tid}:advance").json()["data"]["status"] == "archived"
+
+
+def test_fachabteilung_ablehnung_lehnt_auftrag_ab(client):
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    client.post(f"/process-tickets/{tid}:advance")
+    r = client.post(f"/process-tickets/{tid}/departments/g_it:reject",
+                    json={"note": "Budget fehlt"})
+    assert r.status_code == 200
+    assert r.json()["data"]["status"] == "rejected"
+
+
+def test_unbeteiligte_abteilung_kann_nicht_abschliessen(client):
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    client.post(f"/process-tickets/{tid}:advance")
+    # g_fremd ist an dieser Phase nicht beteiligt
+    r = client.post(f"/process-tickets/{tid}/departments/g_fremd:complete")
+    assert r.status_code in (403, 409)
 
 
 def test_reject_then_locked(client):

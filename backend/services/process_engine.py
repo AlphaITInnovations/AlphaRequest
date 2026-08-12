@@ -158,7 +158,10 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
     if old_phase is not None:
         run_inline(row, defn, old_phase, {TriggerType.on_exit})
 
-    runtime, status = pr.advance(defn, row.get("runtime") or {}, now_iso)
+    # Werte mitgeben: die neue Phase entscheidet damit, WELCHE Fachabteilungen
+    # beteiligt sind (bedingte Regeln werden erst beim Eintritt ausgewertet).
+    runtime, status = pr.advance(defn, row.get("runtime") or {}, now_iso,
+                                 row.get("values") or {})
     fresh = store.update_runtime(row["id"], runtime_json=json.dumps(runtime, ensure_ascii=False),
                                  status=status, expected_rev=expected_rev)
     if fresh:
