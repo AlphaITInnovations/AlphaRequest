@@ -7,9 +7,13 @@ injizierbaren Sender) und gibt die gewünschten Zustandsänderungen als dict
 zurück ({status?, priority?, values?, advance?}). Der Aufrufer (Scheduler bzw.
 Request-Pfad) wendet sie an – so bleibt die Logik ohne DB testbar.
 
-In Stufe 5 umgesetzt: notify, escalate, set_status, set_priority, set_field,
-auto_advance. Erkannt-aber-noch-nicht-ausgeführt (geloggt): spawn_process,
-assign_sequence, require_attachment (Attachments hängen noch am Alt-Ticket-System).
+Umgesetzt: notify, escalate, set_status, set_priority, set_field, auto_advance.
+Erkannt-aber-noch-nicht-ausgeführt (und daher beim Veröffentlichen abgelehnt,
+s. UNIMPLEMENTED_ACTIONS): spawn_process, assign_sequence, require_attachment.
+
+Neben den Automations-Actions liegen hier die beiden festen Benachrichtigungen,
+die JEDER Prozess braucht und die niemand pro Prozess konfigurieren soll:
+`notify_phase_entry` (Arbeit liegt an) und `notify_comment` (Nachtrag).
 """
 import html
 import json
@@ -24,25 +28,49 @@ from backend.utils.logger import logger
 
 
 def _user_email(user_id: Optional[str]) -> Optional[str]:
-    """Mail-Adresse einer Person aus dem AD-Cache. None, wenn nicht auflösbar."""
+    """Mail-Adresse einer Person aus dem AD-Cache. None, wenn nicht auflösbar.
+
+    `get_user` liefert eine `AppUser`-Dataclass (kein dict) – deshalb per
+    getattr. Beides zu unterstützen ist Absicht: Tests reichen hier Dicts herein.
+    """
     if not user_id:
         return None
     try:
         from backend.database.users import get_user
         row = get_user(user_id)
-        mail = (row or {}).get("mail") or (row or {}).get("email")
-        return mail or None
+        if row is None:
+            return None
+        if isinstance(row, dict):
+            return row.get("mail") or row.get("email") or None
+        return getattr(row, "email", None) or getattr(row, "mail", None) or None
     except Exception:
         logger.warning("Mail-Adresse für %s nicht auflösbar", user_id)
         return None
 
 
+def watcher_emails(ticket_id) -> list[str]:
+    """Mail-Adressen der Beobachter:innen eines Auftrags (leer, wenn keine)."""
+    if ticket_id is None:
+        return []
+    try:
+        from backend.database import process_ticket_watchers as watchers
+        ids = watchers.watcher_ids(int(ticket_id))
+    except Exception:
+        logger.warning("Beobachter für #%s nicht ladbar", ticket_id)
+        return []
+    return [m for m in (_user_email(uid) for uid in sorted(ids)) if m]
+
+
 def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
                        groups: Optional[list] = None) -> list[str]:
     """Empfänger-Adressen für notify/escalate. Gruppen liefern ihre Verteiler
-    (distributions). Nicht auf Adressen auflösbare Ziele (owner/user/watchers/
-    supervisor) sowie ein leeres Ergebnis fallen auf TICKET_MAIL zurück – eine
-    Aktion läuft NIE stumm ins Leere."""
+    (distributions). Nicht auf Adressen auflösbare Ziele (owner/user/supervisor)
+    sowie ein leeres Ergebnis fallen auf TICKET_MAIL zurück – eine Aktion läuft
+    NIE stumm ins Leere.
+
+    Ausnahme `watchers`: „niemand beobachtet" ist ein gültiges leeres Ergebnis
+    und kein Auflöse-Fehler. Dafür die Zentral-Adresse anzuschreiben wäre nur Lärm.
+    """
     if groups is None:
         from backend.database.groups import get_groups
         groups = get_groups()
@@ -79,11 +107,14 @@ def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
         mail = _user_email(row.get("owner_id"))
         if mail:
             emails.add(mail)
+    elif to == "watchers":
+        emails |= set(watcher_emails(row.get("id")))
     elif to and to.startswith("group:"):
         emails |= set(dist(to.split(":", 1)[1]))
-    # watchers: kommt mit der Beobachter-Funktion; bis dahin greift der Fallback.
 
     emails = {e for e in emails if e}
+    if not emails and to == "watchers":
+        return []
     if not emails:
         fb = getattr(config, "TICKET_MAIL", "") or ""
         if fb:
@@ -162,20 +193,73 @@ def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[Phase
         return []
     try:
         recips = resolve_recipients("responsible", row, phase, groups)
+        title = str(row.get("title") or f"Auftrag #{row.get('id')}")
+        phase_lbl = str(phase.label or phase.key)
+        link = f"{config.FRONTEND_URL}/prozess-auftraege/{row.get('id')}"
+        if recips:
+            subject = (f"[AlphaRequest] Neue Aufgabe: {title}"
+                       .replace("\r", " ").replace("\n", " ")[:200])
+            body = (f"<p>Der Auftrag „{html.escape(title)}“ liegt jetzt bei Ihnen "
+                    f"(Phase: {html.escape(phase_lbl)}).</p>"
+                    f"<p>Zum Bearbeiten: {html.escape(link)}</p>")
+            sender(recips, subject, body, kind="phase_entry")
+
+        # Beobachter:innen bekommen eine EIGENE Mail – „liegt jetzt bei Ihnen"
+        # wäre für sie falsch, sie sollen nur mitlesen. Wer schon als zuständige
+        # Stelle angeschrieben wurde, bekommt sie nicht doppelt.
+        extra = [m for m in watcher_emails(row.get("id")) if m not in set(recips)]
+        if extra:
+            w_subject = (f"[AlphaRequest] Zur Information: {title}"
+                         .replace("\r", " ").replace("\n", " ")[:200])
+            w_body = (f"<p>Der von Ihnen beobachtete Auftrag „{html.escape(title)}“ "
+                      f"ist jetzt in der Phase „{html.escape(phase_lbl)}“.</p>"
+                      f"<p>Ansehen: {html.escape(link)}</p>")
+            sender(extra, w_subject, w_body, kind="phase_entry_watcher")
+        return list(recips) + extra
+    except Exception:
+        logger.exception("Phasen-Benachrichtigung für Ticket #%s fehlgeschlagen", row.get("id"))
+        return []
+
+
+def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
+                   body_text: str, internal: bool = False,
+                   actor_email: Optional[str] = None,
+                   sender: Callable = _default_sender,
+                   groups: Optional[list] = None) -> list[str]:
+    """Über einen Nachtrag (Kommentar) informieren. Wirft nicht.
+
+    Empfänger: die zuständige Stelle, die Ersteller:in und die Beobachter:innen –
+    ohne die schreibende Person selbst (die weiß es ja). Bei einem INTERNEN
+    Nachtrag entfallen Ersteller:in und Beobachter:innen: der Text ist nur für
+    die bearbeitende Seite gedacht, also darf er auch nur dorthin gemailt werden.
+    """
+    try:
+        recips = set(resolve_recipients("responsible", row, phase, groups))
+        if not internal:
+            owner = _user_email(row.get("owner_id"))
+            if owner:
+                recips.add(owner)
+            recips |= set(watcher_emails(row.get("id")))
+        if actor_email:
+            recips.discard(actor_email)
         if not recips:
             return []
         title = str(row.get("title") or f"Auftrag #{row.get('id')}")
-        phase_lbl = str(phase.label or phase.key)
-        subject = (f"[AlphaRequest] Neue Aufgabe: {title}"
+        marker = "Interner Nachtrag" if internal else "Nachtrag"
+        subject = (f"[AlphaRequest] {marker}: {title}"
                    .replace("\r", " ").replace("\n", " ")[:200])
-        body = (f"<p>Der Auftrag „{html.escape(title)}“ liegt jetzt bei Ihnen "
-                f"(Phase: {html.escape(phase_lbl)}).</p>"
-                f"<p>Zum Bearbeiten: {html.escape(config.FRONTEND_URL)}"
-                f"/prozess-auftraege/{row.get('id')}</p>")
-        sender(recips, subject, body, kind="phase_entry")
-        return recips
+        # Freitext einer Person → konsequent escapen, Zeilenumbrüche erhalten.
+        text = html.escape(body_text or "").replace("\n", "<br>")
+        out = sorted(recips)
+        mail_body = (f"<p><b>{html.escape(marker)}</b> von {html.escape(author_name)} "
+                     f"zum Auftrag „{html.escape(title)}“:</p>"
+                     f"<blockquote>{text}</blockquote>"
+                     f"<p>Zum Auftrag: {html.escape(config.FRONTEND_URL)}"
+                     f"/prozess-auftraege/{row.get('id')}</p>")
+        sender(out, subject, mail_body, kind="comment")
+        return out
     except Exception:
-        logger.exception("Phasen-Benachrichtigung für Ticket #%s fehlgeschlagen", row.get("id"))
+        logger.exception("Nachtrags-Benachrichtigung für Ticket #%s fehlgeschlagen", row.get("id"))
         return []
 
 

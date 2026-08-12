@@ -17,12 +17,18 @@ import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import * as processesApi from '@/api/processes'
 import * as ticketsApi from '@/api/processTickets'
+import { reopenTicket } from '@/api/processEvents'
+import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
+import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
+import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
+import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { showToast } = useToast()
+const auth = useAuthStore()
 
 const id = computed(() => Number(route.params.id))
 const loading = ref(true)
@@ -34,9 +40,18 @@ const errors = ref<SimFieldError[]>([])
 const sources = ref<OptionSources>(emptySources())
 const loadError = ref<string | null>(null)
 
-/** Endpunkte sind derzeit admin-only – daher volle Sicht. Sobald der Zugriff für
- *  Beteiligte geöffnet wird, liefert der Server bereits gefilterte Werte; die
- *  Anzeige filtert zusätzlich clientseitig identisch. */
+/**
+ * Sichtbarkeits-Kontext für die ANZEIGE.
+ *
+ * Verbindlich filtert der Server: `ticket.values` enthält nur freigegebene
+ * Felder, und Schreibzugriffe auf gesperrte Felder verwirft er.
+ *
+ * OFFEN: Das Frontend kennt die Gruppen-Mitgliedschaft nicht (`/auth/me` liefert
+ * sie nicht mit), deshalb steht hier noch `fullView`. Folge: das Formular kann
+ * ein Eingabefeld für ein Feld zeigen, das diese Person nicht sehen darf – es
+ * käme leer an und der Server verwürfe die Eingabe. Sauber wird das, wenn die
+ * Antwort die sichtbaren/editierbaren Feld-Schlüssel mitliefert (wie `abilities`).
+ */
 const viewer = computed<SimViewer>(() => ({ fullView: true, isAdmin: true, groupIds: [] }))
 
 const phase = computed(() => {
@@ -45,8 +60,29 @@ const phase = computed(() => {
   return definition.value.phases[i] ?? null
 })
 
-const terminal = computed(() =>
-  !!ticket.value && ['archived', 'rejected'].includes(ticket.value.status))
+/**
+ * Erlaubte Aktionen kommen vom Server (`abilities`). Fehlt das Feld (alte
+ * Antwort), wird konservativ NICHTS angeboten – lieber eine fehlende
+ * Schaltfläche als eine, die mit 403 endet.
+ */
+const abilities = computed(() => ticket.value?.abilities ?? {
+  edit: false, internal_comment: false, manage_watchers: false, reopen: false,
+})
+
+/** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
+const fieldLabels = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {}
+  for (const f of definition.value?.fields ?? []) out[f.key] = f.label || f.key
+  return out
+})
+const phaseLabels = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {}
+  for (const p of definition.value?.phases ?? []) out[p.key] = p.label || p.key
+  return out
+})
+
+/** Verlauf nach jeder Aktion neu laden (Referenz auf die Komponente). */
+const timeline = ref<{ reload: () => void } | null>(null)
 
 const dirty = computed(() =>
   JSON.stringify(values.value) !== JSON.stringify(ticket.value?.values ?? {}))
@@ -89,6 +125,7 @@ async function saveValues() {
     values.value = { ...(ticket.value.values || {}) }
     errors.value = []
     showToast('Gespeichert')
+    timeline.value?.reload()
   } catch (e) {
     errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
     showToast(errorMessage(e, 'Speichern fehlgeschlagen'), false)
@@ -107,6 +144,7 @@ async function advance() {
     values.value = { ...(ticket.value.values || {}) }
     errors.value = []
     showToast('Phase abgeschlossen')
+    timeline.value?.reload()
   } catch (e) {
     errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
     showToast(errorMessage(e, 'Weiterschalten fehlgeschlagen'), false)
@@ -114,13 +152,31 @@ async function advance() {
 }
 
 async function reject() {
-  if (!confirm('Auftrag ablehnen? Das lässt sich derzeit nicht rückgängig machen.')) return
+  if (!confirm('Auftrag ablehnen? Ein Admin kann ihn danach wieder aufnehmen.')) return
   busy.value = true
   try {
     ticket.value = await ticketsApi.rejectTicket(id.value)
     showToast('Auftrag abgelehnt')
+    timeline.value?.reload()
   } catch (e) {
     showToast(errorMessage(e, 'Ablehnen fehlgeschlagen'), false)
+  } finally { busy.value = false }
+}
+
+/** Wiederaufnahme: nur Admin, nur bei fertigem Auftrag, Grund ist Pflicht. */
+async function reopen() {
+  const reason = prompt('Warum wird der Auftrag wieder aufgenommen? '
+    + '(steht anschließend im Verlauf)')
+  if (reason === null) return
+  if (!reason.trim()) { showToast('Ohne Grund keine Wiederaufnahme', false); return }
+  busy.value = true
+  try {
+    ticket.value = await reopenTicket(id.value, reason.trim())
+    values.value = { ...(ticket.value.values || {}) }
+    showToast('Auftrag wieder aufgenommen')
+    timeline.value?.reload()
+  } catch (e) {
+    showToast(errorMessage(e, 'Wiederaufnahme fehlgeschlagen'), false)
   } finally { busy.value = false }
 }
 
@@ -156,15 +212,21 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <button v-if="!terminal" @click="saveValues" :disabled="busy || !dirty"
+            <button v-if="abilities.edit" @click="saveValues" :disabled="busy || !dirty"
                     class="btn-secondary text-sm">Speichern</button>
-            <button v-if="!terminal" @click="advance" :disabled="busy"
+            <button v-if="abilities.edit" @click="advance" :disabled="busy"
                     class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
                            disabled:opacity-40 transition">Phase abschließen</button>
-            <button v-if="!terminal" @click="reject" :disabled="busy"
+            <button v-if="abilities.edit" @click="reject" :disabled="busy"
                     class="px-3 py-2 rounded-xl text-sm border border-red-300 text-red-600
                            hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 transition">
               Ablehnen
+            </button>
+            <button v-if="abilities.reopen" @click="reopen" :disabled="busy"
+                    class="px-3 py-2 rounded-xl text-sm border border-amber-300 text-amber-700
+                           dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20
+                           disabled:opacity-40 transition">
+              Wieder aufnehmen
             </button>
           </div>
         </div>
@@ -199,8 +261,8 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
           </div>
         </div>
 
-        <!-- Formular der aktuellen Phase -->
-        <template v-if="!terminal && phase">
+        <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
+        <template v-if="abilities.edit && phase">
           <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                       :viewer="viewer" :errors="errors" :sources="sources"
                       @update:model-value="onValues($event)" />
@@ -221,6 +283,21 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
           <h3 class="section-title">Alle Angaben</h3>
           <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
                               :sources="sources" />
+        </div>
+
+        <!-- Allgemeine Anhänge des Auftrags (Feld-Anhänge stehen im Formular) -->
+        <div class="mt-4">
+          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit" />
+        </div>
+
+        <div class="grid gap-4 mt-4 lg:grid-cols-[2fr_1fr] items-start">
+          <ProcessTimeline ref="timeline" :ticket-id="ticket.id"
+                           :field-labels="fieldLabels" :phase-labels="phaseLabels"
+                           :group-name="groupName"
+                           :can-be-internal="abilities.internal_comment" />
+          <ProcessWatchers :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
+                           :can-manage="abilities.manage_watchers"
+                           :users="sources.users" />
         </div>
       </template>
     </div>

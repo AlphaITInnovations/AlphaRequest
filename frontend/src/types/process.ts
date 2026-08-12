@@ -278,6 +278,17 @@ export type ResolvedResponsibility =
   | { kind: 'originator' }
   | { kind: 'unknown' }
 
+/**
+ * Was die angemeldete Person mit DIESEM Auftrag darf – kommt vom Server.
+ * Nicht nachbauen: das Frontend kennt die Gruppen-Mitgliedschaft nicht.
+ */
+export interface TicketAbilities {
+  edit: boolean
+  internal_comment: boolean
+  manage_watchers: boolean
+  reopen: boolean
+}
+
 export interface ProcessTicketOut {
   id: number
   process_key: string
@@ -296,6 +307,7 @@ export interface ProcessTicketOut {
   next_timer_due_at: string | null
   created_at: string | null
   updated_at: string | null
+  abilities?: TicketAbilities
 }
 
 // ── Editor-interne Typen ──────────────────────────────────────────────────────

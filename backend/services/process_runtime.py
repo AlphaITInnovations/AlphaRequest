@@ -154,6 +154,59 @@ def reject(runtime: dict) -> dict:
     return runtime
 
 
+def phase_index(defn: ProcessDefinition, phase_key: str) -> Optional[int]:
+    for i, p in enumerate(defn.phases):
+        if p.key == phase_key:
+            return i
+    return None
+
+
+def reopen(defn: ProcessDefinition, runtime: dict, now_iso: str, *,
+           phase_key: Optional[str] = None,
+           values: Optional[dict] = None) -> tuple[dict, str]:
+    """Abgeschlossenen oder abgelehnten Auftrag wieder aufnehmen.
+
+    `phase_key` bestimmt, wo weitergearbeitet wird (Standard: die letzte Phase,
+    die schon einmal betreten wurde – bei einem archivierten Auftrag also die
+    letzte, bei einem abgelehnten die, in der abgelehnt wurde).
+
+    Der **Epoch wird erhöht**. Das ist nicht kosmetisch: die Timer-Sperre
+    (`process_timer_fires`) schlüsselt über `(ticket, phase, epoch, ...)`. Ohne
+    Bump würde eine Eskalation, die im ersten Durchlauf schon gefeuert hat, im
+    zweiten nie wieder feuern – der wiederaufgenommene Auftrag hätte stumme
+    Fristen. Aus demselben Grund wird `entered_at` neu gesetzt: die Frist läuft
+    ab der Wiederaufnahme, nicht ab dem ersten Betreten.
+
+    Gibt (runtime, status) zurück. Wirft ValueError bei unbekanntem Phasen-Key.
+    """
+    phases = runtime.get("phases") or []
+    if phase_key is not None:
+        idx = phase_index(defn, phase_key)
+        if idx is None or idx >= len(phases):
+            raise ValueError(f"Unbekannte Phase: {phase_key}")
+    else:
+        # Letzte Phase, die schon einmal betreten wurde.
+        entered = [i for i, p in enumerate(phases) if p.get("entered_at")]
+        idx = entered[-1] if entered else 0
+
+    runtime["epoch"] = int(runtime.get("epoch", 0)) + 1
+    runtime["rejected"] = False
+    runtime["current_index"] = idx
+    for i, entry in enumerate(phases):
+        if i < idx:
+            # Davor liegende Phasen bleiben erledigt (ihre Arbeit ist getan).
+            entry["status"] = "done"
+        elif i == idx:
+            entry["status"] = "open"
+            entry["entered_at"] = now_iso
+            entry["departments"] = seed_departments(defn.phases[i], values or {})
+        else:
+            entry["status"] = "pending"
+            entry["entered_at"] = None
+            entry["departments"] = []
+    return runtime, enter_status_for(defn.phases[idx])
+
+
 def resolve_responsibility(phase: PhaseDef, values: dict) -> dict:
     """Wer ist für die Phase zuständig? Bedingte Abteilungen via DSL ausgewertet."""
     r = phase.responsibility

@@ -44,6 +44,39 @@ def responsible_groups(defn: Optional[ProcessDefinition], row: dict) -> set:
     return set()
 
 
+def staff_groups(defn: Optional[ProcessDefinition]) -> set:
+    """ALLE Gruppen, die in irgendeiner Phase des Prozesses zuständig sind.
+
+    Im Gegensatz zu `responsible_groups` phasen-UNABHÄNGIG – gedacht für
+    Entscheidungen, die über den Auftrag hinweg stabil bleiben müssen (interne
+    Nachträge). Wäre „intern" an die aktuelle Phase gekoppelt, würde eine Notiz,
+    die die IT in Phase 2 geschrieben hat, in Phase 4 für die IT unsichtbar.
+    """
+    if defn is None:
+        return set()
+    out: set = set()
+    for p in defn.phases:
+        r = p.responsibility
+        if r.kind == ResponsibilityKind.group and r.group:
+            out.add(r.group)
+        elif r.kind == ResponsibilityKind.departments:
+            out |= {dr.group for dr in r.rule if dr.group}
+    return out
+
+
+def is_process_staff(defn: Optional[ProcessDefinition], user: dict,
+                     group_ids: Iterable[str]) -> bool:
+    """Gehört der/die Nutzende zur bearbeitenden Seite dieses Prozesses?
+
+    Aufsicht oder Mitglied einer der beteiligten Fachabteilungen. Maßgeblich für
+    interne Nachträge: die sieht die Bearbeitungsseite, NICHT die antragstellende
+    Person (auch dann nicht, wenn sie den Auftrag angelegt hat oder beobachtet).
+    """
+    if has_oversight(user):
+        return True
+    return bool(set(group_ids or ()) & staff_groups(defn))
+
+
 def is_responsible(defn: Optional[ProcessDefinition], row: dict, user: dict,
                    group_ids: Iterable[str]) -> bool:
     """Ist der/die Nutzende für die aktuelle Phase zuständig?"""

@@ -1,4 +1,11 @@
-/** API-Client für Prozess-Tickets (/api/v1/process-tickets). Aktuell Admin-only. */
+/**
+ * API-Client für Prozess-Tickets (/api/v1/process-tickets).
+ *
+ * Zugriff regelt der Server: Aufsicht, Ersteller:in, aktuell Zuständige und
+ * Beobachter:innen dürfen lesen; die gelieferten `values` sind bereits nach
+ * Sichtbarkeit gefiltert. Was die angemeldete Person tun darf, steht in
+ * `abilities` der Antwort – Verlauf/Nachträge/Beobachter in `api/processEvents`.
+ */
 import { client } from '@/api/client'
 import type { ProcessTicketOut } from '@/types/process'
 

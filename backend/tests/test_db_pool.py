@@ -9,8 +9,14 @@ ensure_table()-Aufruf in der Lifespan), war lokal aber unsichtbar, weil ohne DB
 gar nicht verbunden wird.
 
 Diese Tests prüfen den Pool daher mit einer Attrappe statt einer echten DB.
+Sie sind deshalb von der Fail-Fast-Sperre in conftest ausgenommen (Marke
+`echter_pool`) – sie WOLLEN echte Pool-Mechanik, nur ohne Server.
 """
+import pytest
+
 import backend.database.connection as conn_mod
+
+pytestmark = pytest.mark.echter_pool
 
 
 class FakeCursor:

@@ -24,6 +24,7 @@ from backend.database.audit_log import record_audit
 from backend.schemas.process_definition import ProcessDefinition, PhaseDef, TriggerType
 from backend.services import process_actions as actions
 from backend.services import process_automations as pa
+from backend.services import process_events as events
 from backend.services import process_runtime as pr
 from backend.services.condition_dsl import evaluate
 from backend.utils.logger import logger
@@ -57,16 +58,20 @@ def guard_passes(automation, row: dict) -> bool:
 
 
 def _audit_fired(row: dict, phase: PhaseDef, automation, occurrence: Optional[int]) -> None:
+    details = {"automation": automation.id, "occurrence": occurrence,
+               "trigger": automation.trigger.type.value,
+               "action": automation.action.type.value}
     record_audit(
         action="process_automation_fired", actor_id=None, actor_name="System",
         actor_type="system", entity_type="process_ticket", entity_id=str(row["id"]),
         summary=(f"Automation „{automation.id}“"
                  + (f" (Occ. {occurrence})" if occurrence is not None else "")
                  + f" in Phase {phase.key} gefeuert"),
-        details={"automation": automation.id, "occurrence": occurrence,
-                 "trigger": automation.trigger.type.value,
-                 "action": automation.action.type.value},
+        details=details,
     )
+    # Auch im Verlauf sichtbar machen: eine Eskalation, die niemand im Ticket
+    # sieht, wirkt wie „es ist nichts passiert" (das Audit liest nur der Admin).
+    events.system(row, events.AUTOMATION_FIRED, phase_key=phase.key, details=details)
 
 
 def _audit_failed(row: dict, automation, exc: Exception) -> None:
@@ -148,11 +153,15 @@ def restamp(row: dict, defn: Optional[ProcessDefinition]) -> None:
 # ── Phasenübergang ────────────────────────────────────────────────────────────
 
 def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int] = None,
-               now_iso: Optional[str] = None, _depth: int = 0) -> str:
+               now_iso: Optional[str] = None, actor: Optional[dict] = None,
+               _depth: int = 0) -> str:
     """Aktuelle Phase abschließen und die nächste betreten:
     on_exit → advance (persistiert) → on_enter → Timer neu stempeln.
     Ein von on_enter ausgelöstes auto_advance wird (begrenzt) weiterverfolgt.
-    Gibt den neuen Ticket-Status zurück."""
+    Gibt den neuen Ticket-Status zurück.
+
+    `actor` (optional) landet im Verlauf. Ohne Angabe gilt der Übergang als
+    System-Aktion – so wie beim Scheduler und bei verketteten auto_advance."""
     now_iso = now_iso or utcnow_iso()
     old_phase = pr.current_phase(defn, row.get("runtime") or {})
     if old_phase is not None:
@@ -170,6 +179,21 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
         row["runtime"], row["status"] = runtime, status
 
     new_phase = pr.current_phase(defn, row.get("runtime") or {})
+    # Verlauf: Phasenwechsel ist das wichtigste Ereignis am Auftrag. Details
+    # tragen nur Phasen-Keys, keine Feldwerte – also nichts zu redigieren.
+    ev_details = {"from_phase": old_phase.key if old_phase else None,
+                  "to_phase": new_phase.key if new_phase else None,
+                  "status": row.get("status", status)}
+    if actor is not None:
+        events.record(row, events.ADVANCED,
+                      actor_id=actor.get("id"),
+                      actor_name=(actor.get("displayName") or actor.get("email")
+                                  or actor.get("id") or "—"),
+                      phase_key=ev_details["from_phase"], details=ev_details)
+    else:
+        events.system(row, events.ADVANCED, phase_key=ev_details["from_phase"],
+                      details={**ev_details, "auto": True})
+
     # Zuständige Stelle automatisch informieren – ohne das erfährt niemand, dass
     # Arbeit ansteht (das Alt-System hat an sechs Stellen gemailt). Abschaltbar
     # je Phase über responsibility.notifyOnEnter.

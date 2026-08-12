@@ -11,7 +11,9 @@
  *
  * `canEdit` steuert nur die OBERFLÄCHE. Verbindlich ist der Server: Upload und
  * Löschen setzen dort die Zuständigkeit für die aktuelle Phase voraus.
- * Diese Komponente wird bewusst NICHT selbst in eine View eingehängt.
+ *
+ * Eingehängt in `views/processes/ProcessTicketDetailView.vue` (ohne `fieldKey`,
+ * also als allgemeine Ablage des Auftrags).
  */
 import { ref, onMounted, watch } from 'vue'
 import {

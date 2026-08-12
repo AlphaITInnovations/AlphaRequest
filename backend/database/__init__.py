@@ -9,6 +9,10 @@ from backend.database.process_definitions import (
     PROCESS_DEFINITIONS_DDL, PROCESS_DEFINITIONS_MIGRATIONS,
 )
 from backend.database.process_tickets import PROCESS_TICKETS_DDL, PROCESS_TICKETS_MIGRATIONS
+from backend.database.process_ticket_events import (
+    PROCESS_TICKET_EVENTS_DDL, PROCESS_TICKET_EVENTS_MIGRATIONS,
+)
+from backend.database.process_ticket_watchers import PROCESS_TICKET_WATCHERS_DDL
 from backend.database.process_timer_fires import (
     PROCESS_TIMER_FIRES_DDL, PROCESS_TIMER_FIRES_MIGRATIONS,
 )
@@ -29,6 +33,8 @@ def init_db():
         _exec(conn, ATTACHMENTS_DDL)
         _exec(conn, PROCESS_DEFINITIONS_DDL)
         _exec(conn, PROCESS_TICKETS_DDL)
+        _exec(conn, PROCESS_TICKET_EVENTS_DDL)
+        _exec(conn, PROCESS_TICKET_WATCHERS_DDL)
         _exec(conn, PROCESS_TIMER_FIRES_DDL)
         conn.commit()
         logger.info("All tables ready")
@@ -45,6 +51,7 @@ def init_db():
                               + list(ATTACHMENTS_MIGRATIONS)
                               + list(PROCESS_DEFINITIONS_MIGRATIONS)
                               + list(PROCESS_TICKETS_MIGRATIONS)
+                              + list(PROCESS_TICKET_EVENTS_MIGRATIONS)
                               + list(PROCESS_TIMER_FIRES_MIGRATIONS)):
                 _exec(conn, migration)
             conn.commit()

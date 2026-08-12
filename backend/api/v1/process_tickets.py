@@ -2,8 +2,12 @@
 REST-API für definitions-getriebene Tickets (Prozess-Instanzen, Stufe 2).
 
 Neues, sauberes Schema (ersetzt später `view`/`overview`); während des Umbaus
-unter /process-tickets parallel zum Alt-System. Bis Stufe 3 (Sichtbarkeit) sind
-die Endpunkte admin-gated, damit ungefilterte Feldwerte nicht an Unbefugte gehen.
+unter /process-tickets parallel zum Alt-System.
+
+Zugriff (nicht mehr admin-only): `_assert_view` lässt Aufsicht, Ersteller:in,
+aktuell Zuständige und Beobachter:innen herein – und liefert nur die Feldwerte
+aus, die der Sichtbarkeits-Filter freigibt. `_assert_edit` verlangt zusätzlich
+die Zuständigkeit für die AKTUELLE Phase.
 
 Jedes Ticket wird gegen seine GEPINNTE Definition validiert/abgewickelt.
 Server-Validierung in zwei Pässen (§9): Wert-Form bei POST/PATCH,
@@ -18,6 +22,7 @@ from pydantic import BaseModel
 from backend.core.dependencies import get_current_user
 from backend.database import process_tickets as store
 from backend.database import process_definitions as defstore
+from backend.database import process_ticket_watchers as watchers
 from backend.database.audit_log import record_audit
 from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN
@@ -26,8 +31,10 @@ from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
 from backend.services import process_access as acc
+from backend.services import process_actions as pactions
 from backend.services import process_compute as compute
 from backend.services import process_engine as engine
+from backend.services import process_events as events
 from backend.services import process_permissions as perms
 from backend.services import process_runtime as pr
 from backend.services import process_validation as pv
@@ -58,6 +65,19 @@ class PatchTicketRequest(BaseModel):
     values: Optional[dict] = None
 
 
+class TicketAbilities(BaseModel):
+    """Was DIESE Person mit DIESEM Auftrag darf.
+
+    Damit muss die Oberfläche die Rechte nicht nachbauen (sie kennt die
+    Gruppen-Mitgliedschaft gar nicht) und zeigt keine Schaltflächen, die der
+    Server anschließend mit 403 abweist. Verbindlich bleiben die Endpunkte.
+    """
+    edit: bool = False
+    internal_comment: bool = False
+    manage_watchers: bool = False
+    reopen: bool = False
+
+
 class ProcessTicketOut(BaseModel):
     id: int
     process_key: str
@@ -75,6 +95,7 @@ class ProcessTicketOut(BaseModel):
     next_timer_due_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    abilities: TicketAbilities = TicketAbilities()
 
 
 # ── Helfer ─────────────────────────────────────────────────────────────────
@@ -103,7 +124,23 @@ def _is_terminal(row: dict) -> bool:
     return row["status"] in ("archived", "rejected") or bool((row.get("runtime") or {}).get("rejected"))
 
 
-def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx) -> ProcessTicketOut:
+def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict],
+               group_ids) -> TicketAbilities:
+    if not user:
+        return TicketAbilities()
+    gids = set(group_ids or ())
+    darf_bearbeiten = acc.may_edit(defn, row, user, gids) and not _is_terminal(row)
+    return TicketAbilities(
+        edit=darf_bearbeiten,
+        internal_comment=acc.is_process_staff(defn, user, gids),
+        manage_watchers=acc.may_edit(defn, row, user, gids),
+        # Wiederaufnahme greift in einen FERTIGEN Auftrag ein – nur Admin.
+        reopen=acc.is_admin(user) and _is_terminal(row),
+    )
+
+
+def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
+         user: Optional[dict] = None, group_ids=()) -> ProcessTicketOut:
     cur = pr.current_phase(defn, row["runtime"]) if defn else None
     # Zuständigkeit wird server-seitig (ungefiltert) aufgelöst; die Feldwerte im
     # Output werden nach Sichtbarkeit gefiltert (§5.1: einzige wertetragende Naht).
@@ -122,6 +159,7 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx) -> Pr
     data["current_phase"] = cur.key if cur else None
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
     data["responsibility"] = resp
+    data["abilities"] = _abilities(row, defn, user, group_ids)
     return ProcessTicketOut(**data)
 
 
@@ -146,22 +184,20 @@ def _safe_restamp(row: dict, defn: ProcessDefinition) -> None:
         )
 
 
-def _audit(user: dict, action: str, ticket_id, **details) -> None:
-    record_audit(
-        action=action,
-        actor_id=user.get("id"),
-        actor_name=user.get("displayName") or user.get("email") or "",
-        entity_type="process_ticket",
-        entity_id=str(ticket_id),
-        summary=f"Prozess-Ticket #{ticket_id}: {action}",
-        details=details,
-    )
+def _watcher_ids(ticket_id) -> set:
+    """Beobachter-IDs – fail-closed: nicht ladbar heißt „keine Beobachter“, also
+    kein Zugriff über diesen Weg (statt versehentlich allen Zugriff zu geben)."""
+    try:
+        return watchers.watcher_ids(int(ticket_id))
+    except Exception:
+        logger.warning("Beobachter für Ticket #%s nicht ladbar – fail-closed", ticket_id)
+        return set()
 
 
 def _assert_view(row: dict, defn, user: dict) -> list:
     """Zugriff prüfen und die Gruppen-Mitgliedschaft zurückgeben (einmal geladen)."""
     gids = vis.user_group_ids(user)
-    if not acc.may_view(defn, row, user, gids):
+    if not acc.may_view(defn, row, user, gids, _watcher_ids(row["id"])):
         # Bewusst 404: nicht verraten, dass es den Auftrag gibt.
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
     return gids
@@ -196,6 +232,14 @@ def list_process_tickets(
     # Ohne Aufsichtsrechte nur eigene/zugewiesene Auftraege zeigen. Die Gesamtzahl
     # wird um die ausgefilterten korrigiert, damit die Blaetterung stimmt.
     oversight = acc.has_oversight(user)
+    # Beobachter aller Zeilen in EINER Abfrage (ohne Aufsichtsrechte relevant für
+    # die Sichtbarkeit) – je Zeile einzeln wäre das ein N+1.
+    watch_map: dict = {}
+    if not oversight and rows:
+        try:
+            watch_map = watchers.watcher_ids_for_tickets([r["id"] for r in rows])
+        except Exception:
+            logger.warning("Beobachter-Liste nicht ladbar – fail-closed")
     out = []
     hidden = 0
     for r in rows:
@@ -203,10 +247,11 @@ def list_process_tickets(
             d = _load_pinned_defn(r, defn_cache)
         except Exception:
             d = None
-        if not oversight and not acc.may_view(d, r, user, gids):
+        if not oversight and not acc.may_view(d, r, user, gids, watch_map.get(r["id"], ())):
             hidden += 1
             continue
-        out.append(_out(r, d, vis.build_viewer_ctx(user, r, d, group_ids=gids)))
+        out.append(_out(r, d, vis.build_viewer_ctx(user, r, d, group_ids=gids),
+                        user, gids))
     return ListResponse(data=out,
                         meta=Meta(total=max(0, total - hidden), limit=limit, offset=offset))
 
@@ -269,10 +314,21 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         values_json=json.dumps(values, ensure_ascii=False),
         runtime_json=json.dumps(runtime, ensure_ascii=False),
     )
-    _audit(user, "process_ticket_created", row["id"], process_key=defn.key, version=pub["version"])
+    # Ersteller:in beobachtet den eigenen Auftrag automatisch (wie im Alt-System) –
+    # so bekommt sie die Fortschritts-Mails, ohne zuständig zu sein.
+    try:
+        watchers.add_watcher(row["id"], user.get("id"),
+                             user.get("displayName") or user.get("email"),
+                             added_by=user.get("id"))
+    except Exception:
+        logger.warning("Ersteller:in konnte für #%s nicht als Beobachter eingetragen werden",
+                       row["id"])
+    events.record(row, events.CREATED, actor_id=user.get("id"), actor_name=_actor_name(user),
+                  details={"process_key": defn.key, "version": pub["version"]})
     engine.run_inline(row, defn, pr.current_phase(defn, row["runtime"]), {TriggerType.on_enter})
     _safe_restamp(row, defn)
-    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
+    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn),
+                                  user, group_ids))
 
 
 @router.get("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
@@ -286,7 +342,8 @@ def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
         defn = None
     gids = _assert_view(row, defn, user)
     return DataResponse(data=_out(row, defn,
-                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids)))
+                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  user, gids))
 
 
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
@@ -335,15 +392,19 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
                                   title=body.title, expected_rev=row.get("rev"))
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
-    _audit(user, "process_ticket_updated", ticket_id, fields=list(to_apply.keys()))
     if to_apply:
+        # Verlauf: NUR die Feld-Schlüssel, nie die Werte. Wer ein Feld nicht sehen
+        # darf, sieht den Eintrag auch nicht (Redaktion in process_events.redact).
+        events.record(row, events.UPDATED, actor_id=user.get("id"),
+                      actor_name=_actor_name(user),
+                      details={"fields": sorted(to_apply.keys())})
         wants_advance = engine.run_inline(row, defn, phase, {TriggerType.on_field_change},
                                           changed_fields=set(to_apply.keys()))
         if wants_advance:
             engine.transition(row, defn)
         else:
             _safe_restamp(row, defn)
-    return DataResponse(data=_out(row, defn, ctx))
+    return DataResponse(data=_out(row, defn, ctx, user, gids))
 
 
 @router.post("/process-tickets/{ticket_id}:advance", response_model=DataResponse[ProcessTicketOut])
@@ -375,12 +436,16 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
                                 for d in offen])
 
     # Phasenübergang zentral in der Engine: on_exit → advance → on_enter → Timer.
+    # Den Verlaufs-Eintrag schreibt die Engine (mit `actor`) – nur so ist er auch
+    # bei verketteten auto_advance und beim Scheduler garantiert dabei.
     try:
-        status = engine.transition(row, defn, expected_rev=row.get("rev"))
+        engine.transition(row, defn, expected_rev=row.get("rev"), actor=user)
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
-    _audit(user, "process_ticket_advanced", ticket_id, from_phase=phase.key, status=status)
-    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn,
+                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  user, gids))
 
 
 @router.post("/process-tickets/{ticket_id}:reject", response_model=DataResponse[ProcessTicketOut])
@@ -401,12 +466,16 @@ def reject_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)
                                    status="rejected", expected_rev=row.get("rev"))
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
-    _audit(user, "process_ticket_rejected", ticket_id)
+    events.record(row, events.REJECTED, actor_id=user.get("id"),
+                  actor_name=_actor_name(user))
     try:
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
-    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn)))
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn,
+                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  user, gids))
 
 
 # ── Fachabteilungen einzeln abschließen ──────────────────────────────────────
@@ -451,8 +520,13 @@ def _department_action(ticket_id: int, group_id: str, status: str,
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
 
-    _audit(user, f"process_department_{status}", ticket_id, group=group_id, note=note)
-    return _out(row, defn, vis.build_viewer_ctx(user, row, defn, group_ids=gids))
+    events.record(row, {"done": events.DEPARTMENT_DONE,
+                        "skipped": events.DEPARTMENT_SKIPPED,
+                        "rejected": events.DEPARTMENT_REJECTED}[status],
+                  actor_id=user.get("id"), actor_name=_actor_name(user),
+                  body=note, details={"group": group_id})
+    return _out(row, defn, vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                user, gids)
 
 
 @router.post("/process-tickets/{ticket_id}/departments/{group_id}:complete",
@@ -482,3 +556,234 @@ def reject_department(ticket_id: int, group_id: str,
     """Ablehnung durch eine Fachabteilung lehnt den gesamten Auftrag ab."""
     return DataResponse(data=_department_action(
         ticket_id, group_id, "rejected", (body.note if body else None), user))
+
+
+# ── Verlauf & Nachträge ──────────────────────────────────────────────────────
+
+MAX_COMMENT_LEN = 5000
+
+
+class EventOut(BaseModel):
+    id: int
+    action: str
+    phase_key: Optional[str] = None
+    epoch: int = 0
+    actor_id: Optional[str] = None
+    actor_name: Optional[str] = None
+    actor_type: str = "user"
+    internal: bool = False
+    body: Optional[str] = None
+    details: dict = {}
+    created_at: Optional[str] = None
+
+
+class CommentRequest(BaseModel):
+    body: str
+    internal: bool = False
+
+
+def _load_for_view(ticket_id: int, user: dict) -> tuple[dict, Optional[ProcessDefinition], list]:
+    """Ticket + gepinnte Definition laden und Leserecht prüfen."""
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    return row, defn, _assert_view(row, defn, user)
+
+
+@router.get("/process-tickets/{ticket_id}/events", response_model=ListResponse[EventOut])
+def list_ticket_events(ticket_id: int, user: dict = Depends(get_current_user),
+                       limit: int = Query(200, ge=1, le=500),
+                       offset: int = Query(0, ge=0)):
+    """Verlauf eines Auftrags – redigiert: Einträge über nicht sichtbare Felder
+    entfallen, interne Nachträge sieht nur die bearbeitende Seite."""
+    row, defn, gids = _load_for_view(ticket_id, user)
+    evs, total = events.for_viewer(row, defn, user, gids, limit=limit, offset=offset)
+    return ListResponse(data=[EventOut(**e) for e in evs],
+                        meta=Meta(total=total, limit=limit, offset=offset))
+
+
+@router.post("/process-tickets/{ticket_id}/comments", response_model=DataResponse[EventOut])
+def add_ticket_comment(ticket_id: int, body: CommentRequest,
+                       user: dict = Depends(get_current_user)):
+    """Nachtrag schreiben. Jede Person mit Leserecht darf – ein interner Nachtrag
+    nur die bearbeitende Seite (sonst könnte die antragstellende Person Text
+    hinterlegen, den sie selbst anschließend nicht mehr sieht)."""
+    row, defn, gids = _load_for_view(ticket_id, user)
+    text = (body.body or "").strip()
+    if not text:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Nachtrag ist leer",
+                        fields=[{"path": "body", "code": "REQUIRED",
+                                 "message": "Bitte einen Text eingeben"}])
+    if len(text) > MAX_COMMENT_LEN:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Nachtrag zu lang",
+                        fields=[{"path": "body", "code": "TOO_LONG",
+                                 "message": f"Maximal {MAX_COMMENT_LEN} Zeichen"}])
+    if body.internal and not acc.is_process_staff(defn, user, gids):
+        raise api_error(403, ErrorCode.PERMISSION_DENIED,
+                        "Interne Nachträge kann nur die bearbeitende Seite schreiben")
+
+    # Bewusst `write` (nicht `record`): geht der Nachtrag verloren, muss der
+    # Aufrufer einen Fehler sehen und nicht ein stilles „gespeichert".
+    ev = events.write(row, events.COMMENT, actor_id=user.get("id"),
+                      actor_name=_actor_name(user), internal=body.internal, body=text)
+    try:
+        recips = pactions.notify_comment(
+            row, pr.current_phase(defn, row["runtime"]) if defn else None,
+            author_name=_actor_name(user), body_text=text, internal=body.internal,
+            actor_email=user.get("email") or user.get("mail"))
+        if recips:
+            logger.info("Nachtrag zu #%s an %s Empfänger", ticket_id, len(recips))
+    except Exception:
+        logger.exception("Nachtrags-Mail für #%s fehlgeschlagen", ticket_id)
+    return DataResponse(data=EventOut(**ev))
+
+
+# ── Wiederaufnahme ───────────────────────────────────────────────────────────
+
+class ReopenRequest(BaseModel):
+    reason: str
+    phase: Optional[str] = None
+
+
+@router.post("/process-tickets/{ticket_id}:reopen", response_model=DataResponse[ProcessTicketOut])
+def reopen_process_ticket(ticket_id: int, body: ReopenRequest,
+                          user: dict = Depends(get_current_user)):
+    """Abgeschlossenen/abgelehnten Auftrag wieder aufnehmen.
+
+    Nur Admin (Notfall-Eingriff in einen fertigen Auftrag). Ein Grund ist Pflicht –
+    ohne ihn wäre im Verlauf nicht nachvollziehbar, warum ein fertiger Auftrag
+    wieder offen ist. Nicht für aktive Aufträge: „zurück zu Phase X" ist eine
+    andere Aktion und hat hier absichtlich keinen Einstieg.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    if not acc.is_admin(user):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED,
+                        "Nur Admins können einen abgeschlossenen Auftrag wieder aufnehmen")
+    defn = _load_pinned_defn(row)
+    if not _is_terminal(row):
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag ist noch aktiv – hier gibt es nichts wieder aufzunehmen")
+    reason = (body.reason or "").strip()
+    if not reason:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Grund fehlt",
+                        fields=[{"path": "reason", "code": "REQUIRED",
+                                 "message": "Bitte begründen, warum der Auftrag wieder aufgenommen wird"}])
+
+    try:
+        runtime, status = pr.reopen(defn, row["runtime"], utcnow_iso(),
+                                    phase_key=body.phase, values=row.get("values") or {})
+    except ValueError as exc:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, str(exc),
+                        fields=[{"path": "phase", "code": "UNKNOWN_REF", "message": str(exc)}])
+    try:
+        row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                   status=status, expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+
+    phase = pr.current_phase(defn, row["runtime"])
+    events.write(row, events.REOPENED, actor_id=user.get("id"), actor_name=_actor_name(user),
+                 body=reason, details={"phase": phase.key if phase else None,
+                                       "epoch": runtime.get("epoch")})
+    # Die Phase wird ERNEUT betreten: on_enter-Automationen und die
+    # Zuständigkeits-Mail müssen laufen, sonst wartet die Stelle auf nichts.
+    engine.run_inline(row, defn, phase, {TriggerType.on_enter})
+    try:
+        pactions.notify_phase_entry(row, defn, phase)
+    except Exception:
+        logger.exception("Benachrichtigung nach Wiederaufnahme von #%s fehlgeschlagen", ticket_id)
+    _safe_restamp(row, defn)
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn,
+                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  user, gids))
+
+
+# ── Beobachter:innen ─────────────────────────────────────────────────────────
+
+class WatcherOut(BaseModel):
+    id: str
+    name: Optional[str] = None
+    added_by: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class WatcherRequest(BaseModel):
+    userId: Optional[str] = None      # leer = sich selbst eintragen
+
+
+def _display_name(user_id: str) -> Optional[str]:
+    """Anzeigename einer Person (denormalisiert in der Watcher-Zeile).
+
+    `get_user` liefert eine Dataclass, kein dict – deshalb getattr.
+    """
+    try:
+        from backend.database.users import get_user
+        row = get_user(user_id)
+        if row is None:
+            return None
+        if isinstance(row, dict):
+            return row.get("displayName") or row.get("display_name") or row.get("email")
+        return getattr(row, "display_name", None) or getattr(row, "email", None)
+    except Exception:
+        logger.warning("Anzeigename für %s nicht auflösbar", user_id)
+        return None
+
+
+@router.get("/process-tickets/{ticket_id}/watchers", response_model=ListResponse[WatcherOut])
+def list_ticket_watchers(ticket_id: int, user: dict = Depends(get_current_user)):
+    row, _defn, _gids = _load_for_view(ticket_id, user)
+    rows = watchers.list_watchers(row["id"])
+    return ListResponse(data=[WatcherOut(**w) for w in rows],
+                        meta=Meta(total=len(rows), limit=len(rows), offset=0))
+
+
+@router.post("/process-tickets/{ticket_id}/watchers", response_model=ListResponse[WatcherOut])
+def add_ticket_watcher(ticket_id: int, body: Optional[WatcherRequest] = None,
+                       user: dict = Depends(get_current_user)):
+    """Beobachter:in eintragen.
+
+    Sich selbst darf jede Person mit Leserecht. FREMDE einzutragen ist eine
+    Rechte-Vergabe (der/die Eingetragene darf den Auftrag danach lesen) – das
+    dürfen nur die zuständige Stelle und Admins.
+    """
+    row, defn, gids = _load_for_view(ticket_id, user)
+    target = (body.userId if body else None) or user.get("id")
+    if not target:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Keine Person angegeben",
+                        fields=[{"path": "userId", "code": "REQUIRED", "message": "Pflichtfeld"}])
+    if target != user.get("id") and not acc.may_edit(defn, row, user, gids):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        "Nur die zuständige Stelle kann andere Personen als Beobachter eintragen")
+
+    name = (_actor_name(user) if target == user.get("id") else _display_name(target))
+    if watchers.add_watcher(row["id"], target, name, added_by=user.get("id")):
+        events.record(row, events.WATCHER_ADDED, actor_id=user.get("id"),
+                      actor_name=_actor_name(user),
+                      details={"watcher": target, "watcher_name": name})
+    rows = watchers.list_watchers(row["id"])
+    return ListResponse(data=[WatcherOut(**w) for w in rows],
+                        meta=Meta(total=len(rows), limit=len(rows), offset=0))
+
+
+@router.delete("/process-tickets/{ticket_id}/watchers/{watcher_id}",
+               response_model=ListResponse[WatcherOut])
+def remove_ticket_watcher(ticket_id: int, watcher_id: str,
+                          user: dict = Depends(get_current_user)):
+    """Beobachtung beenden. Sich selbst immer; andere nur die zuständige Stelle."""
+    row, defn, gids = _load_for_view(ticket_id, user)
+    if watcher_id != user.get("id") and not acc.may_edit(defn, row, user, gids):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        "Nur die zuständige Stelle kann andere Beobachter:innen entfernen")
+    if watchers.remove_watcher(row["id"], watcher_id):
+        events.record(row, events.WATCHER_REMOVED, actor_id=user.get("id"),
+                      actor_name=_actor_name(user), details={"watcher": watcher_id})
+    rows = watchers.list_watchers(row["id"])
+    return ListResponse(data=[WatcherOut(**w) for w in rows],
+                        meta=Meta(total=len(rows), limit=len(rows), offset=0))
