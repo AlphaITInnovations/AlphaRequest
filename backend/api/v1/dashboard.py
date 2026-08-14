@@ -56,7 +56,12 @@ class ProcessDashboardTicket(BaseModel):
 
 class ProcessDashboardBlock(BaseModel):
     my: list[ProcessDashboardTicket] = []
+    #: Sichtbar, weil zuständig oder aufsichtsberechtigt – NICHT beobachtet.
     involved: list[ProcessDashboardTicket] = []
+    #: Ausdrücklich beobachtet (Eintrag in der Beobachter-Liste). Bewusst GETRENNT
+    #: von `involved`: „ich folge dem freiwillig" ist eine andere Aussage als „ich
+    #: bin daran beteiligt", und nur so lassen sich beide Zahlen einzeln lesen.
+    watched: list[ProcessDashboardTicket] = []
     # Anzahl je Status – nur über die Aufträge, die dieser Nutzer sehen darf.
     counts: dict[str, int] = {}
 
@@ -124,37 +129,65 @@ def _to_process_ticket(row: dict, defn: Optional[ProcessDefinition],
     )
 
 
-def _process_block(user: dict) -> ProcessDashboardBlock:
-    """Prozess-Aufträge fürs Dashboard: eigene + solche, an denen ich beteiligt bin.
+def _watched_ticket_ids(user_id: Optional[str]) -> set:
+    """Aufträge, die diese Person beobachtet – EINE Abfrage, nicht pro Zeile.
 
-    Beteiligung entscheidet ausschließlich process_access.may_view (Aufsicht ·
-    Ersteller:in · aktuell Zuständige) – dieselbe Naht wie in der Detail-Route,
-    damit hier nichts auftaucht, was dort 404 wäre. Wer Aufsichtsrechte hat, sieht
-    entsprechend alle aktiven Aufträge (wie in der Liste /process-tickets).
+    Darf das Dashboard nicht kippen; im Fehlerfall gilt „keine Beobachtungen".
+    Das ist fail-closed: es fehlt höchstens eine Liste, es erscheint nichts Fremdes.
+    """
+    if not user_id:
+        return set()
+    try:
+        from backend.database import process_ticket_watchers as watchers
+        return set(watchers.ticket_ids_for_watcher(user_id))
+    except Exception as exc:
+        logger.warning("Beobachtete Aufträge nicht ladbar: %s", exc)
+        return set()
+
+
+def _process_block(user: dict) -> ProcessDashboardBlock:
+    """Prozess-Aufträge fürs Dashboard: eigene, beteiligte und beobachtete.
+
+    Sichtbarkeit entscheidet ausschließlich process_access.may_view (Aufsicht ·
+    Ersteller:in · aktuell Zuständige · Beobachter:innen) – dieselbe Naht wie in
+    der Detail-Route, damit hier nichts auftaucht, was dort 404 wäre. Wer
+    Aufsichtsrechte hat, sieht entsprechend alle aktiven Aufträge.
+
+    `watched` und `involved` sind GETRENNT und überschneiden sich nicht: wer einen
+    Auftrag beobachtet, findet ihn unter „Beobachtet", auch wenn er zusätzlich
+    zuständig ist. Sonst wäre nicht erkennbar, welche Aufträge man freiwillig
+    verfolgt und welche Arbeit auf einen wartet.
     """
     uid = user.get("id")
-    # Gruppen-Mitgliedschaft und Definitionen EINMAL – nicht pro Zeile (N+1).
+    # Gruppen-Mitgliedschaft, Beobachtungen und Definitionen EINMAL – nicht pro
+    # Zeile (N+1).
     group_ids = vis.user_group_ids(user)
+    beobachtet_ids = _watched_ticket_ids(uid)
     defn_cache: dict = {}
 
     my_rows = pstore.list_for_owner(uid, limit=_PROCESS_MY_LIMIT, include_runtime=True) if uid else []
     my = [_to_process_ticket(r, _load_process_defn(r, defn_cache), True) for r in my_rows]
 
     involved: list[ProcessDashboardTicket] = []
+    watched: list[ProcessDashboardTicket] = []
     for row in pstore.list_active(limit=_PROCESS_SCAN_LIMIT):
         if uid and row.get("owner_id") == uid:
             continue                        # steht schon unter „my"
         defn = _load_process_defn(row, defn_cache)
-        if not acc.may_view(defn, row, user, group_ids):
+        beobachtet = row["id"] in beobachtet_ids
+        # Beobachtung MUSS in die Sichtbarkeitsprüfung: ohne sie fehlte ein rein
+        # beobachteter Auftrag hier vollständig – man hätte ihn abonniert und
+        # bekäme ihn trotzdem nie zu sehen.
+        if not acc.may_view(defn, row, user, group_ids, [uid] if beobachtet else ()):
             continue
-        involved.append(_to_process_ticket(row, defn, False))
+        (watched if beobachtet else involved).append(_to_process_ticket(row, defn, False))
 
     # Zähler nur über die SICHTBAREN Aufträge – eine globale Statistik würde
     # Unbeteiligten verraten, wie viel im System läuft.
     counts: dict[str, int] = {}
-    for t in my + involved:
+    for t in my + involved + watched:
         counts[t.status] = counts.get(t.status, 0) + 1
-    return ProcessDashboardBlock(my=my, involved=involved, counts=counts)
+    return ProcessDashboardBlock(my=my, involved=involved, watched=watched, counts=counts)
 
 
 def _process_block_safe(user: dict) -> ProcessDashboardBlock:

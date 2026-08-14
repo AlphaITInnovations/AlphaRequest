@@ -56,6 +56,8 @@ interface ProcessOrder {
 interface ProcessBlock {
   my: ProcessOrder[]
   involved: ProcessOrder[]
+  /** Ausdrücklich beobachtet – vom Server GETRENNT von `involved` geliefert. */
+  watched: ProcessOrder[]
   /** Anzahl je Status – nur über die für mich sichtbaren Aufträge. */
   counts: Record<string, number>
 }
@@ -64,7 +66,7 @@ interface DepartmentRef { id: string; name: string }
 // ── Zustand ───────────────────────────────────────────────────────────────────
 
 const loading = ref(true)
-const block = ref<ProcessBlock>({ my: [], involved: [], counts: {} })
+const block = ref<ProcessBlock>({ my: [], involved: [], watched: [], counts: {} })
 const myDepartments = ref<DepartmentRef[]>([])
 const blockError = ref<string | null>(null)
 
@@ -77,7 +79,7 @@ const rowsTotal = ref(0)
 
 // ── Reiter ────────────────────────────────────────────────────────────────────
 
-type Tab = 'assigned' | 'departments' | 'involved'
+type Tab = 'assigned' | 'departments' | 'watched' | 'involved'
 const activeTab = ref<Tab>('assigned')
 
 function selectTab(tab: Tab) {
@@ -224,10 +226,17 @@ const zeilenInvolved = computed(() =>
     badge: { text: 'Beteiligt', class: 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20' },
   })))
 
+const zeilenWatched = computed(() =>
+  block.value.watched.map((o) => ({
+    ...zeileAusBlock(o),
+    badge: { text: 'Beobachtet', class: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+  })))
+
 const zeilen = computed<Zeile[]>(() => {
   switch (activeTab.value) {
     case 'assigned':    return zeilenAssigned.value
     case 'departments': return zeilenDepartments.value
+    case 'watched':     return zeilenWatched.value
     default:            return zeilenInvolved.value
   }
 })
@@ -237,6 +246,7 @@ const zeilen = computed<Zeile[]>(() => {
 const countAssigned    = computed(() => mirZugewiesen.value.length)
 const countDepartments = computed(() => meineAbteilungen.value.length)
 const countInvolved    = computed(() => block.value.involved.length)
+const countWatched     = computed(() => block.value.watched.length)
 const offeneAufgaben   = computed(() => countAssigned.value + countDepartments.value)
 
 /** Status-Plaketten im Kopf – vom Server gezählt, nur über Sichtbares. */
@@ -277,6 +287,7 @@ async function ladeDashboard() {
     block.value = {
       my:       d.process?.my ?? [],
       involved: d.process?.involved ?? [],
+      watched: d.process?.watched ?? [],
       counts:   d.process?.counts ?? {},
     }
     myDepartments.value = d.my_departments ?? []
@@ -305,6 +316,7 @@ onMounted(async () => {
   // Auf den Reiter springen, in dem tatsächlich Arbeit liegt.
   if (countAssigned.value > 0) activeTab.value = 'assigned'
   else if (countDepartments.value > 0) activeTab.value = 'departments'
+  else if (countWatched.value > 0) activeTab.value = 'watched'
   else if (countInvolved.value > 0) activeTab.value = 'involved'
 })
 </script>
@@ -350,7 +362,7 @@ onMounted(async () => {
         <p v-if="blockError"
            class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50
                   dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-          {{ blockError }} – „Von mir angelegt“ und „Beteiligt“ sind unvollständig.
+          {{ blockError }} – „Beobachtet“ und „Beteiligt“ sind unvollständig.
         </p>
       </div>
 
@@ -388,10 +400,26 @@ onMounted(async () => {
           </p>
         </button>
 
+        <button @click="selectTab('watched')" class="stat" :class="activeTab === 'watched' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            </span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countWatched }}</span>
+          </div>
+          <p class="stat-label inline-flex items-center gap-1">
+            Beobachtet
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Aufträge, die du ausdrücklich verfolgst – du bekommst ihre Mails, musst aber nichts tun.</span>
+            </span>
+          </p>
+        </button>
+
         <button @click="selectTab('involved')" class="stat" :class="activeTab === 'involved' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
             </span>
             <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countInvolved }}</span>
           </div>
@@ -399,7 +427,7 @@ onMounted(async () => {
             Beteiligt
             <span class="hint" @click.stop>
               <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
-              <span class="bubble">Aufträge anderer, die du sehen darfst – als Zuständige:r, Beobachter:in oder mit Aufsichtsrecht.</span>
+              <span class="bubble">Aufträge anderer, die du sehen darfst, weil du zuständig bist oder Aufsichtsrecht hast. Beobachtete stehen in ihrer eigenen Kachel.</span>
             </span>
           </p>
         </button>
@@ -458,6 +486,7 @@ onMounted(async () => {
             <li v-if="zeilen.length === 0" class="empty">
               <template v-if="activeTab === 'assigned'">Keine dir persönlich zugewiesenen Aufträge.</template>
               <template v-else-if="activeTab === 'departments'">Keine Aufträge für deine Fachabteilungen.</template>
+              <template v-else-if="activeTab === 'watched'">Du beobachtest gerade keinen Auftrag.</template>
               <template v-else>Keine Aufträge, an denen du beteiligt bist.</template>
             </li>
           </ul>

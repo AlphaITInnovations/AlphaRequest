@@ -241,3 +241,69 @@ def test_antwort_enthaelt_nur_noch_prozess_und_fachabteilungen():
     # Die Alt-Schlüssel sind weg – sonst liest das Frontend leere Listen als „nichts zu tun".
     assert not ({"orders", "watched_orders", "department_board",
                  "allowed_ticket_types"} & keys)
+
+
+# ── Beobachtet vs. beteiligt ─────────────────────────────────────────────────
+
+def _beobachtet(monkeypatch, ids):
+    """Beobachtungen dieser Person vorgeben (sonst DB-Zugriff)."""
+    monkeypatch.setattr(dash, "_watched_ticket_ids", lambda uid: set(ids))
+
+
+def test_beobachteter_auftrag_erscheint_ueberhaupt(monkeypatch, defs):
+    """Vorher fehlte er VOLLSTÄNDIG: may_view wurde ohne Beobachter-IDs gerufen –
+    man konnte einen Auftrag abonnieren und bekam ihn nie zu sehen."""
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=1, title="bei der IT")])
+    _beobachtet(monkeypatch, [1])
+    block = dash._process_block(_user("u_fremd"))          # keine Gruppe, keine Rechte
+    assert [t.id for t in block.watched] == [1]
+    assert block.involved == [] and block.my == []
+
+
+def test_ohne_beobachtung_bleibt_fremdes_unsichtbar(monkeypatch, defs):
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=1)])
+    _beobachtet(monkeypatch, [])
+    block = dash._process_block(_user("u_fremd"))
+    assert block.watched == [] and block.involved == []
+
+
+def test_beobachtet_und_beteiligt_sind_getrennt(monkeypatch, defs):
+    """Ein Auftrag steht in GENAU einer der beiden Listen – sonst wären die Zahlen
+    nicht einzeln lesbar."""
+    _use_rows(monkeypatch, [
+        _row(1, owner="u1", index=1, title="beobachtet UND zuständig"),
+        _row(2, owner="u1", index=1, title="nur zuständig"),
+    ])
+    _beobachtet(monkeypatch, [1])
+    block = dash._process_block(_user("u2", groups=["g_it"]))
+    assert [t.id for t in block.watched] == [1]
+    assert [t.id for t in block.involved] == [2]
+
+
+def test_eigene_auftraege_stehen_nicht_zusaetzlich_unter_beobachtet(monkeypatch, defs):
+    """Wer anlegt, wird automatisch Beobachter:in – ohne diese Regel stünde jeder
+    eigene Auftrag doppelt (unter „my" und unter „Beobachtet")."""
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=0)])
+    _beobachtet(monkeypatch, [1])
+    block = dash._process_block(_user("u1"))
+    assert [t.id for t in block.my] == [1]
+    assert block.watched == [] and block.involved == []
+
+
+def test_counts_zaehlen_auch_beobachtete(monkeypatch, defs):
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=1, status="in_request")])
+    _beobachtet(monkeypatch, [1])
+    block = dash._process_block(_user("u_fremd"))
+    assert block.counts == {"in_request": 1}
+
+
+def test_fehler_beim_laden_der_beobachtungen_kippt_nichts(monkeypatch, defs):
+    """fail-closed: es fehlt höchstens eine Liste, es erscheint nichts Fremdes."""
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=1)])
+
+    def boom(uid):
+        raise RuntimeError("Tabelle fehlt")
+    monkeypatch.setattr(dash, "_watched_ticket_ids", boom)
+    block = dash._process_block_safe(_user("u2", groups=["g_it"]))
+    # Der geschützte Pfad liefert im Fehlerfall einen leeren Block.
+    assert block.watched == []
