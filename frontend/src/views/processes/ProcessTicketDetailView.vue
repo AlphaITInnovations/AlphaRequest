@@ -83,16 +83,14 @@ const serverAbilities = computed(() => ticket.value?.abilities ?? {
   reopen: false, archive: false, delete: false,
 })
 
-/** LESEN ist der Standard, Bearbeiten reiner SEITEN-Zustand – nichts davon
- *  steht in der URL, es gibt also auch nichts zum Dran-Herumbasteln. Die
- *  Arbeits-Reiter der Übersicht („Mir zugewiesen", „Meine Abteilungen") reichen
- *  ihre Absicht unsichtbar über den History-State mit; alle anderen Wege
- *  (Beobachtet, Beteiligt, Auftragsliste, Mail-Links) starten lesend, und
- *  Berechtigte wechseln über den Knopf im Banner. Rechte VERGIBT der Modus
- *  nicht: Eingaben und Knöpfe hängen an den Server-Rechten (abilities), und
- *  verbindlich prüft der Server ohnehin jede Änderung. */
-const bearbeiten = ref(history.state?.ansichtBearbeiten === true)
-const leseModus = computed(() => !bearbeiten.value)
+/** LESEN ist der Standard, Bearbeiten das Opt-in (?ansicht=bearbeiten): so gibt
+ *  es keinen URL-Parameter, dessen ENTFERNEN mehr Oberfläche freischaltet. Den
+ *  Parameter von Hand anzuhängen bringt nichts Verbotenes – die Knöpfe hängen
+ *  weiter an den Server-Rechten (abilities), und verbindlich prüft ohnehin der
+ *  Server jede Änderung. Die Arbeits-Reiter der Übersicht („Mir zugewiesen",
+ *  „Meine Abteilungen") verlinken direkt in die Bearbeitung; „Beobachtet",
+ *  „Beteiligt" und alle sonstigen Wege landen im Lesemodus. */
+const leseModus = computed(() => route.query.ansicht !== 'bearbeiten')
 
 const abilities = computed(() => (leseModus.value
   ? { ...serverAbilities.value, edit: false, internal_comment: false,
@@ -106,7 +104,7 @@ const koennteBearbeiten = computed(() => {
 })
 
 function zurBearbeitung() {
-  bearbeiten.value = true
+  router.replace({ query: { ...route.query, ansicht: 'bearbeiten' } })
 }
 
 /** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */

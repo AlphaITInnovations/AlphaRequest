@@ -188,10 +188,10 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
 # ── Freigabe per Mail-Link ────────────────────────────────────────────────────
 
 def _ticket_link(row: dict) -> str:
-    """Die Detailseite öffnet grundsätzlich lesend (der Ansichts-Modus lebt im
-    Frontend-Zustand, bewusst NICHT in der URL) – Berechtigte wechseln dort mit
-    einem Klick in die Bearbeitung."""
-    return f"{config.FRONTEND_URL}/prozess-auftraege/{row.get('id')}"
+    """Mail-Link in die BEARBEITUNGS-Ansicht: die Detailseite öffnet standardmäßig
+    nur lesend, und Mails gehen an die Stelle, die handeln soll. Ohne Rechte
+    zeigt der Parameter trotzdem nur die Leseansicht (abilities entscheiden)."""
+    return f"{config.FRONTEND_URL}/prozess-auftraege/{row.get('id')}?ansicht=bearbeiten"
 
 
 def _subject(text: str) -> str:
