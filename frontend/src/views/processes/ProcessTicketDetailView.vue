@@ -293,16 +293,10 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
       <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
 
       <template v-else>
-        <!-- Erzwungene Leseansicht: Hinweis + bewusster Wechsel zur Bearbeitung -->
-        <div v-if="leseModus && ticket"
-             class="mb-4 rounded-xl border border-gray-200 dark:border-white/10
-                    bg-gray-50 dark:bg-white/5 px-4 py-3
-                    flex items-center gap-3 flex-wrap">
-          <span class="text-sm text-gray-600 dark:text-gray-300">
-            Leseansicht – hier lässt sich nichts ändern.
-          </span>
-          <button v-if="koennteBearbeiten" @click="zurBearbeitung"
-                  class="ml-auto text-sm text-[#3EAAB8] hover:underline">
+        <!-- Leseansicht: nur der bewusste Wechsel zur Bearbeitung (für alle, die
+             laut Server etwas dürfen) – ohne erklärenden Hinweis-Banner. -->
+        <div v-if="leseModus && ticket && koennteBearbeiten" class="mb-4 flex justify-end">
+          <button @click="zurBearbeitung" class="btn-secondary text-sm">
             Zur Bearbeitungsansicht
           </button>
         </div>

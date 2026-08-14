@@ -284,13 +284,12 @@ const listeAbgeschnitten = computed(() => rowsTotal.value > rows.value.length)
 // ── Aktionen ──────────────────────────────────────────────────────────────────
 
 function open(z: Zeile) {
-  // Lesen ist der STANDARD der Detailansicht. Nur die Arbeits-Reiter („Mir
-  // zugewiesen", „Meine Abteilungen") springen direkt in die Bearbeitung –
-  // „Beobachtet" und „Beteiligt" öffnen die Leseansicht, aus der man bei
-  // vorhandenen Rechten bewusst in die Bearbeitung wechselt.
+  // Lesen ist der STANDARD der Detailansicht (auch ganz ohne Parameter). Die
+  // Arbeits-Reiter („Mir zugewiesen", „Meine Abteilungen") springen direkt in
+  // die Bearbeitung, die Beobachtungs-Reiter benennen das Lesen explizit –
+  // Rechte vergibt der Parameter nicht (abilities entscheiden, Server prüft).
   const arbeit = activeTab.value === 'assigned' || activeTab.value === 'departments'
-  router.push(arbeit ? `/prozess-auftraege/${z.id}?ansicht=bearbeiten`
-                     : `/prozess-auftraege/${z.id}`)
+  router.push(`/prozess-auftraege/${z.id}?ansicht=${arbeit ? 'bearbeiten' : 'lesen'}`)
 }
 
 // ── Laden ─────────────────────────────────────────────────────────────────────
