@@ -254,7 +254,9 @@ async function reopen() {
 
 const groupName = (gid: string) => sources.value.groups.find((g) => g.id === gid)?.name || gid
 
-onMounted(async () => { sources.value = await loadOptionSources(true); await load() })
+// auth.isAdmin: normale Nutzer:innen direkt über den öffentlichen /groups-Endpunkt
+// (der Admin-Endpunkt gäbe 403 – ohne Gruppennamen stünden rohe IDs in der Ansicht).
+onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); await load() })
 </script>
 
 <template>

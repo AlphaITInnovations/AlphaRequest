@@ -14,23 +14,37 @@ export function emptySources(): OptionSources {
   return { groups: [], users: [], companies: [] }
 }
 
+async function fetchGroups(pfad: '/settings/groups' | '/groups') {
+  const { data } = await client.get(pfad)
+  const list = Array.isArray(data?.data) ? data.data : []
+  return list
+    .filter((g: any) => g && g.id)
+    .map((g: any) => ({ id: String(g.id), name: String(g.name ?? g.id) }))
+}
+
 /**
  * Lädt alle Quellen. Einzelne Fehlschläge sind nicht fatal (dann fehlen nur
  * Namen), werden aber protokolliert – nie stumm verschluckt.
- * `adminGroups`: /settings/groups liefert auch versteckte Gruppen (nur Admin);
- * ohne Adminrechte auf den öffentlichen /groups-Endpunkt ausweichen.
+ * `adminGroups`: /settings/groups liefert auch versteckte Gruppen (nur Admin).
+ * Schlägt der Admin-Endpunkt fehl (typisch: 403 ohne Adminrechte), wird auf den
+ * öffentlichen /groups-Endpunkt AUSGEWICHEN statt leer weiterzumachen – ohne
+ * Namen zeigte die Oberfläche rohe Gruppen-IDs an.
  */
 export async function loadOptionSources(adminGroups = true): Promise<OptionSources> {
   const out = emptySources()
 
   try {
-    const { data } = await client.get(adminGroups ? '/settings/groups' : '/groups')
-    const list = Array.isArray(data?.data) ? data.data : []
-    out.groups = list
-      .filter((g: any) => g && g.id)
-      .map((g: any) => ({ id: String(g.id), name: String(g.name ?? g.id) }))
+    out.groups = await fetchGroups(adminGroups ? '/settings/groups' : '/groups')
   } catch (e) {
-    console.warn('Fachabteilungen konnten nicht geladen werden', e)
+    if (adminGroups) {
+      try {
+        out.groups = await fetchGroups('/groups')
+      } catch (e2) {
+        console.warn('Fachabteilungen konnten nicht geladen werden', e2)
+      }
+    } else {
+      console.warn('Fachabteilungen konnten nicht geladen werden', e)
+    }
   }
 
   try {

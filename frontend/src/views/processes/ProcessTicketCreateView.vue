@@ -131,7 +131,9 @@ async function submit() {
 }
 
 onMounted(async () => {
-  sources.value = await loadOptionSources(true)
+  // auth.isAdmin: normale Nutzer:innen direkt über den öffentlichen
+  // /groups-Endpunkt (der Admin-Endpunkt gäbe 403 → rohe IDs statt Namen).
+  sources.value = await loadOptionSources(auth.isAdmin)
   if (selectedKey.value) await loadProcess(selectedKey.value)
   loading.value = false
 })
