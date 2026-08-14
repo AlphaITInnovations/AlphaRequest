@@ -158,7 +158,9 @@ async function saveValues() {
     values.value = { ...(ticket.value.values || {}) }
     errors.value = []
     showToast('Gespeichert')
-    timeline.value?.reload()
+    // Speichern heißt: hier fertig für jetzt – zurück zur Übersicht (einheitlich
+    // mit „Speichern & später weiterbearbeiten" im Basis-Ticket).
+    router.push('/dashboard')
   } catch (e) {
     errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
     showToast(errorMessage(e, 'Speichern fehlgeschlagen'), false)
@@ -177,7 +179,7 @@ async function advance() {
     values.value = { ...(ticket.value.values || {}) }
     errors.value = []
     showToast('Phase abgeschlossen')
-    timeline.value?.reload()
+    router.push('/dashboard')
   } catch (e) {
     errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
     showToast(errorMessage(e, 'Weiterschalten fehlgeschlagen'), false)
@@ -195,7 +197,7 @@ async function reject() {
   try {
     ticket.value = await ticketsApi.rejectTicket(id.value, grund.trim())
     showToast('Auftrag abgelehnt')
-    timeline.value?.reload()
+    router.push('/dashboard')
   } catch (e) {
     showToast(errorMessage(e, 'Ablehnen fehlgeschlagen'), false)
   } finally { busy.value = false }

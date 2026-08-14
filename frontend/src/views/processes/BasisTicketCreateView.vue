@@ -171,7 +171,9 @@ async function erstellen() {
     }
 
     showToast('Auftrag angelegt')
-    router.push(`/prozess-auftraege/${t.id}`)
+    // Nach dem Anlegen zur Übersicht – dort steht der Auftrag jetzt (Beobachtet/
+    // Beteiligt), weiterlesen kann man ihn von da mit einem Klick.
+    router.push('/dashboard')
   } catch (e) {
     const issues = issuesFromError(e)
     const f: Record<string, string> = {}

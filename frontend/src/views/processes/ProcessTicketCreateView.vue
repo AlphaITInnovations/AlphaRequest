@@ -112,14 +112,15 @@ async function submit() {
   }
   submitting.value = true
   try {
-    const t = await createTicket({
+    await createTicket({
       processKey: definition.value.key,
       title: title.value || null,
       priority: priority.value,
       values: values.value,
     })
     showToast('Auftrag angelegt')
-    router.push(`/prozess-auftraege/${t.id}`)
+    // Nach dem Anlegen zur Übersicht (einheitlich mit dem Basis-Ticket).
+    router.push('/dashboard')
   } catch (e) {
     const issues = issuesFromError(e)
     errors.value = issues.map((i) => ({ path: i.path, code: i.code, message: i.message }))

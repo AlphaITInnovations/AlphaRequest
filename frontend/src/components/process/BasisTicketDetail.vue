@@ -193,7 +193,11 @@ async function speichern(leise = false): Promise<boolean> {
     if (Object.keys(body).length) {
       uebernehmen(await ticketsApi.patchTicket(ticket.value.id, body))
     }
-    if (!leise) showToast('Gespeichert')
+    if (!leise) {
+      showToast('Gespeichert')
+      // „Speichern & später weiterbearbeiten" heißt: hier fertig für jetzt.
+      router.push('/dashboard')
+    }
     return true
   } catch (e) {
     const issues = issuesFromError(e)
@@ -211,6 +215,7 @@ async function abschliessen() {
   try {
     uebernehmen(await ticketsApi.advanceTicket(ticket.value.id))
     showToast('Auftrag abgeschlossen')
+    router.push('/dashboard')
   } catch (e) {
     const issues = issuesFromError(e)
     showToast(issues[0]?.message || errorMessage(e, 'Abschließen fehlgeschlagen'), false)
