@@ -78,10 +78,32 @@ const phase = computed(() => {
  * Antwort), wird konservativ NICHTS angeboten – lieber eine fehlende
  * Schaltfläche als eine, die mit 403 endet.
  */
-const abilities = computed(() => ticket.value?.abilities ?? {
+const serverAbilities = computed(() => ticket.value?.abilities ?? {
   edit: false, internal_comment: false, manage_watchers: false, attach: false,
   reopen: false, archive: false, delete: false,
 })
+
+/** Erzwungene Leseansicht (?ansicht=lesen): so verlinken die Reiter „Beobachtet"
+ *  und „Beteiligt" der Übersicht. Dort wird NICHTS zum Bearbeiten angeboten –
+ *  selbst wenn der Server es erlaubte; wer bearbeiten will, wechselt bewusst
+ *  über den Knopf im Hinweis-Banner in die Bearbeitungsansicht. */
+const leseModus = computed(() => route.query.ansicht === 'lesen')
+
+const abilities = computed(() => (leseModus.value
+  ? { ...serverAbilities.value, edit: false, internal_comment: false,
+      manage_watchers: false, attach: false, reopen: false, archive: false, delete: false }
+  : serverAbilities.value))
+
+/** Gäbe es in der Bearbeitungsansicht überhaupt etwas zu tun? */
+const koennteBearbeiten = computed(() => {
+  const a = serverAbilities.value
+  return a.edit || a.attach || a.manage_watchers || a.reopen || a.archive || a.delete
+})
+
+function zurBearbeitung() {
+  const { ansicht: _weg, ...rest } = route.query
+  router.replace({ query: rest })
+}
 
 /** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
 const fieldLabels = computed<Record<string, string>>(() => {
@@ -268,10 +290,26 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
 
       <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
 
-      <BasisTicketDetail v-else-if="istBasis && ticket && definition"
-                         :ticket="ticket" :definition="definition" :sources="sources" />
+      <template v-else>
+        <!-- Erzwungene Leseansicht: Hinweis + bewusster Wechsel zur Bearbeitung -->
+        <div v-if="leseModus && ticket"
+             class="mb-4 rounded-xl border border-gray-200 dark:border-white/10
+                    bg-gray-50 dark:bg-white/5 px-4 py-3
+                    flex items-center gap-3 flex-wrap">
+          <span class="text-sm text-gray-600 dark:text-gray-300">
+            Leseansicht – hier lässt sich nichts ändern.
+          </span>
+          <button v-if="koennteBearbeiten" @click="zurBearbeitung"
+                  class="ml-auto text-sm text-[#3EAAB8] hover:underline">
+            Zur Bearbeitungsansicht
+          </button>
+        </div>
 
-      <template v-else-if="ticket && definition">
+        <BasisTicketDetail v-if="istBasis && ticket && definition"
+                           :ticket="ticket" :definition="definition" :sources="sources"
+                           :readonly="leseModus" />
+
+        <template v-else-if="ticket && definition">
         <!-- Kopf -->
         <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
           <div class="min-w-0">
@@ -361,13 +399,15 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
         <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen blockiert
              `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst AUSSERHALB von
              abilities.edit: quittieren muss auch, wer den Auftrag nicht bearbeiten darf. -->
+        <!-- `terminal` unterdrückt die Quittier-Knöpfe – in der Leseansicht
+             genauso gewollt wie bei abgeschlossenen Aufträgen. -->
         <ProcessDepartments
           v-if="ticket.responsibility?.kind === 'departments'"
           class="mb-4"
           :ticket-id="ticket.id"
           :departments="ticket.responsibility.departments"
           :group-name="groupName"
-          :terminal="terminal"
+          :terminal="terminal || leseModus"
           @updated="onDepartmentsUpdated" />
 
         <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
@@ -420,6 +460,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                            :can-manage="abilities.manage_watchers"
                            :users="sources.users" />
         </div>
+        </template>
       </template>
     </div>
   </AppLayout>

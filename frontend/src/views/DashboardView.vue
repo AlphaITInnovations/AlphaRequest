@@ -283,7 +283,15 @@ const listeAbgeschnitten = computed(() => rowsTotal.value > rows.value.length)
 
 // ── Aktionen ──────────────────────────────────────────────────────────────────
 
-function open(z: Zeile) { router.push(`/prozess-auftraege/${z.id}`) }
+function open(z: Zeile) {
+  // „Beobachtet" und „Beteiligt" sind Beobachtungs-Reiter: sie öffnen den
+  // Auftrag IMMER in der Leseansicht – auch wer bearbeiten dürfte, kommt dort
+  // nur über den bewussten Wechsel in die Bearbeitungsansicht. Die
+  // Arbeits-Reiter („Mir zugewiesen", „Meine Abteilungen") öffnen normal.
+  const lesen = activeTab.value === 'watched' || activeTab.value === 'involved'
+  router.push(lesen ? `/prozess-auftraege/${z.id}?ansicht=lesen`
+                    : `/prozess-auftraege/${z.id}`)
+}
 
 // ── Laden ─────────────────────────────────────────────────────────────────────
 

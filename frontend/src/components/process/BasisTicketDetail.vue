@@ -38,11 +38,14 @@ import {
 } from '@/api/processEvents'
 import type { OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   ticket: ProcessTicketOut
   definition: ProcessDefinition
   sources: OptionSources
-}>()
+  /** Erzwungene Leseansicht (Reiter „Beobachtet"/„Beteiligt"): NICHTS anbieten,
+   *  was ändert – selbst wenn der Server es erlaubte. */
+  readonly?: boolean
+}>(), { readonly: false })
 
 const router = useRouter()
 const { showToast } = useToast()
@@ -71,18 +74,21 @@ const fachabteilung = ref<{ id: string; name: string } | null>(gruppeAusTicket(p
 const neuerEintrag = ref('')
 
 // ── Abgeleitetes ──────────────────────────────────────────────────────────────
-const abilities = computed(() => ticket.value.abilities ?? {
+const KEINE_RECHTE = {
   edit: false, internal_comment: false, manage_watchers: false, attach: false,
   reopen: false, archive: false, delete: false,
-})
+}
+const abilities = computed(() => (props.readonly
+  ? KEINE_RECHTE
+  : ticket.value.abilities ?? KEINE_RECHTE))
 const terminal = computed(() => {
   const t = ticket.value
   return t.status === 'archived' || t.status === 'rejected' || !!t.runtime?.rejected
 })
-const darfWeiterreichen = computed(() =>
-  (ticket.value.editable_fields ?? []).includes(FELD_GRUPPE) && !terminal.value)
-const darfEintragen = computed(() =>
-  (ticket.value.editable_fields ?? []).includes(FELD_EINTRAEGE) && !terminal.value)
+const darfWeiterreichen = computed(() => !props.readonly
+  && (ticket.value.editable_fields ?? []).includes(FELD_GRUPPE) && !terminal.value)
+const darfEintragen = computed(() => !props.readonly
+  && (ticket.value.editable_fields ?? []).includes(FELD_EINTRAEGE) && !terminal.value)
 /** Titel: nur änderbar, wenn die Prozess-Definition das erlaubt (das
  *  Basis-Ticket legt ihn beim Anlegen fest) – der Server weist Änderungen
  *  sonst ohnehin mit TITLE_LOCKED ab. */
