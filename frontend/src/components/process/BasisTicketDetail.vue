@@ -2,9 +2,15 @@
 /**
  * Ansicht eines Basis-Tickets – BEWUSST eine eigene, feste Oberfläche im Layout
  * des Alt-Systems (Gegenstück zur Anlage in views/processes/
- * BasisTicketCreateView.vue): links Fortschritt und Details (Verantwortlicher,
- * Beobachter), rechts Titel, Verlauf und „Neuer Eintrag“, unten
- * „Abbrechen · Speichern & später weiterbearbeiten · Abschließen“.
+ * BasisTicketCreateView.vue): links Details (Verantwortlicher, Beobachter),
+ * rechts Titel, „Neuer Eintrag“ und darunter der Verlauf (neueste zuerst),
+ * unten „Abbrechen · Speichern & später weiterbearbeiten · Abschließen“.
+ *
+ * KEINE Fortschritts-/Phasenanzeige: das Basis-Ticket wird zwischen
+ * Fachabteilungen hin- und hergereicht, seine zwei internen Phasen sagen
+ * nichts aus. Nur der Zustand (in Bearbeitung/abgeschlossen/abgelehnt) wird
+ * als Badge gezeigt. Dynamische Prozesse behalten ihre Phasenanzeige – die
+ * rendert ProcessTicketDetailView, nicht diese Komponente.
  *
  * PRIORITÄT UND KOMMENTAR sind hier bewusst NICHT setzbar: Backend und Datenbank
  * kennen beides weiterhin (PATCH `priority`, Nachtrags-Endpunkt), aber solange
@@ -82,12 +88,21 @@ const eintraege = computed<Eintrag[]>(() => {
   return Array.isArray(v) ? (v as Eintrag[]) : []
 })
 
-const phasen = computed(() => props.definition.phases.map((p) => p.label || p.key))
-const aktuellerIndex = computed(() => ticket.value.runtime?.current_index ?? 0)
-const fortschrittBadge = computed(() => {
-  if (ticket.value.status === 'rejected') return 'Abgelehnt'
-  if (aktuellerIndex.value >= phasen.value.length) return 'Abgeschlossen'
-  return `Phase ${aktuellerIndex.value + 1} von ${phasen.value.length}`
+/** Nur die ANZEIGE ist neueste zuerst – gespeichert (und beim Speichern
+ *  mitgesendet) bleibt die chronologische Reihenfolge, der Server prüft
+ *  append_only gegen genau die. */
+const eintraegeNeuesteZuerst = computed(() => [...eintraege.value].reverse())
+
+/** Zustand statt Phasen: „Phase 1 von 2“ sagt beim Basis-Ticket nichts. */
+const statusBadge = computed(() => {
+  if (ticket.value.status === 'rejected' || ticket.value.runtime?.rejected) return 'Abgelehnt'
+  if (terminal.value) return 'Abgeschlossen'
+  return 'In Bearbeitung'
+})
+const statusBadgeKlasse = computed(() => {
+  if (statusBadge.value === 'Abgelehnt') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (statusBadge.value === 'Abgeschlossen') return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+  return 'bg-[#3EAAB8]/10 text-[#3EAAB8]'
 })
 
 /** Naive UTC-Zeitstempel (DB) als UTC lesen, sonst verschöbe sich die Anzeige. */
@@ -207,48 +222,13 @@ async function abschliessen() {
     <p class="text-xs text-gray-400 mt-1 mb-5">Erstellt am {{ formatiert(ticket.created_at) }}</p>
 
     <div class="grid gap-4 lg:grid-cols-[minmax(280px,1fr)_2fr] items-start">
-      <!-- Links: Fortschritt + Details -->
+      <!-- Links: Details (bewusst OHNE Fortschritt/Phasen – siehe Kopfkommentar) -->
       <div class="card-section space-y-5">
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Fortschritt</p>
-            <span class="text-[11px] font-medium px-2 py-0.5 rounded-full
-                         bg-[#3EAAB8]/10 text-[#3EAAB8]">{{ fortschrittBadge }}</span>
-          </div>
-          <ol class="space-y-1">
-            <li v-for="(p, i) in phasen" :key="p" class="flex gap-3">
-              <div class="flex flex-col items-center">
-                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs"
-                      :class="i < aktuellerIndex
-                        ? 'bg-green-500 text-white'
-                        : i === aktuellerIndex && !terminal
-                          ? 'bg-[#3EAAB8] text-white'
-                          : i === aktuellerIndex || aktuellerIndex >= phasen.length
-                            ? 'bg-green-500 text-white'
-                            : 'bg-gray-200 dark:bg-white/10 text-gray-400'">
-                  <svg v-if="i < aktuellerIndex || aktuellerIndex >= phasen.length"
-                       class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"
-                       stroke="currentColor" stroke-width="3">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                  <span v-else class="w-2 h-2 rounded-full bg-white" />
-                </span>
-                <span v-if="i < phasen.length - 1"
-                      class="w-px flex-1 min-h-3 bg-gray-200 dark:bg-white/10" />
-              </div>
-              <div class="pb-3">
-                <p class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ p }}</p>
-                <p class="text-xs text-gray-400">
-                  {{ i < aktuellerIndex || aktuellerIndex >= phasen.length ? 'Erledigt'
-                     : i === aktuellerIndex ? 'Aktuell' : 'Ausstehend' }}
-                </p>
-              </div>
-            </li>
-          </ol>
+        <div class="flex items-center justify-between">
+          <h3 class="text-base font-semibold text-gray-800 dark:text-gray-100">Details</h3>
+          <span class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                :class="statusBadgeKlasse">{{ statusBadge }}</span>
         </div>
-
-        <h3 class="text-base font-semibold text-gray-800 dark:text-gray-100 border-t
-                   border-gray-100 dark:border-white/[0.06] pt-4">Details</h3>
 
         <div>
           <!-- Editierbar = Weiterreichen (das Feld trägt die Zuständigkeit); ob das
@@ -300,10 +280,20 @@ async function abschliessen() {
           <input v-model="titel" maxlength="255" class="afi w-full" :disabled="!abilities.edit" />
         </div>
 
+        <div v-if="darfEintragen" class="card-section">
+          <h3 class="section-title">Neuer Eintrag</h3>
+          <textarea v-model="neuerEintrag" rows="5" class="afi w-full resize-y"
+                    placeholder="Ergänzende Informationen, Rückfragen, Statusupdates…" />
+          <p class="text-xs text-gray-400 mt-2">
+            Wird beim Speichern automatisch mit deinem Namen und Zeitstempel hinterlegt.
+          </p>
+        </div>
+
         <div class="card-section">
           <h3 class="section-title">Verlauf</h3>
+          <!-- Neueste zuerst – der frischeste Stand steht direkt unter dem Eingabefeld. -->
           <ul class="space-y-3">
-            <li v-for="(e, i) in eintraege" :key="i" class="flex gap-3">
+            <li v-for="(e, i) in eintraegeNeuesteZuerst" :key="i" class="flex gap-3">
               <span class="w-2 h-2 rounded-full bg-[#3EAAB8] mt-2 flex-shrink-0" />
               <div class="flex-1 rounded-xl border border-gray-100 dark:border-white/[0.06]
                           px-4 py-3">
@@ -330,15 +320,6 @@ async function abschliessen() {
           <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
                               :can-attach="abilities.attach"
                               :current-user-id="auth.user?.id ?? null" />
-        </div>
-
-        <div v-if="darfEintragen" class="card-section">
-          <h3 class="section-title">Neuer Eintrag</h3>
-          <textarea v-model="neuerEintrag" rows="5" class="afi w-full resize-y"
-                    placeholder="Ergänzende Informationen, Rückfragen, Statusupdates…" />
-          <p class="text-xs text-gray-400 mt-2">
-            Wird beim Speichern automatisch mit deinem Namen und Zeitstempel hinterlegt.
-          </p>
         </div>
       </div>
     </div>

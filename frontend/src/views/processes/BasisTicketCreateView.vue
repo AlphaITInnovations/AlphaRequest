@@ -4,9 +4,10 @@
  *
  * Das Basis-Ticket ist der eine Prozess, der immer gleich aussieht („Neues
  * Ticket“). Sein Formular ist deshalb nicht generisch aus der Definition
- * gerendert, sondern das Layout des Alt-Systems: Phasen-Vorschau oben, links das
- * Details-Panel (Fachabteilung, Beobachter), rechts Titel und Beschreibung,
- * unten die Aktionsleiste.
+ * gerendert, sondern das Layout des Alt-Systems: links das Details-Panel
+ * (Fachabteilung, Beobachter), rechts Titel und Beschreibung, unten die
+ * Aktionsleiste. BEWUSST ohne Phasen-Vorschau – die zwei internen Phasen des
+ * Basis-Tickets sagen nichts aus (dynamische Prozesse behalten ihre).
  *
  * PRIORITÄT UND KOMMENTAR sind hier bewusst NICHT setzbar: Backend und Datenbank
  * kennen beides weiterhin (PATCH `priority`, Nachtrags-Endpunkt), aber solange
@@ -43,10 +44,6 @@ const auth = useAuthStore()
 const loading = ref(true)
 const submitting = ref(false)
 const verfuegbar = ref(true)
-
-/** Phasen für „So läuft dieser Auftrag“ – aus der veröffentlichten Definition,
- *  nicht hartcodiert: ändert sich der Ablauf, stimmt die Vorschau weiter. */
-const phasen = ref<string[]>([])
 
 // ── Eingaben ──────────────────────────────────────────────────────────────────
 const titel = ref('')
@@ -106,8 +103,8 @@ onMounted(async () => {
     beobachter.value = [{ id: auth.user.id, name: auth.user.displayName || auth.user.id }]
   }
   try {
-    const row = await processesApi.getPublished(BASIS_TICKET_KEY)
-    phasen.value = (row.definition?.phases ?? []).map((p) => p.label || p.key)
+    // Nur die Verfügbarkeit prüfen – gerendert wird aus der Definition nichts.
+    await processesApi.getPublished(BASIS_TICKET_KEY)
   } catch (e) {
     // Der System-Prozess entsteht beim Anwendungsstart von selbst. Fehlt er,
     // ist der Start nicht durchgelaufen – das ist ein Betriebsproblem, kein
@@ -209,27 +206,6 @@ async function erstellen() {
       </div>
 
       <template v-else>
-        <!-- Phasen-Vorschau -->
-        <div class="card-section mb-4">
-          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            So läuft dieser Auftrag
-          </p>
-          <ol class="flex items-center gap-2 flex-wrap">
-            <li v-for="(p, i) in phasen" :key="p" class="flex items-center gap-2">
-              <span class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold"
-                      :class="i === 0 ? 'bg-[#3EAAB8] text-white'
-                                      : 'bg-[#3EAAB8]/10 text-[#3EAAB8]'">{{ i + 1 }}</span>
-                <span class="text-sm text-gray-700 dark:text-gray-200">{{ p }}</span>
-              </span>
-              <svg v-if="i < phasen.length - 1" class="w-4 h-4 text-gray-300 dark:text-gray-600"
-                   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5-5 5M6 12h12"/>
-              </svg>
-            </li>
-          </ol>
-        </div>
-
         <div class="grid gap-4 lg:grid-cols-[minmax(280px,1fr)_2fr] items-start">
           <!-- Details (links) -->
           <div class="card-section space-y-5">
