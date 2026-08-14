@@ -13,6 +13,11 @@ s. UNIMPLEMENTED_ACTIONS): spawn_process, assign_sequence, require_attachment.
 
 Neben den Automations-Actions liegen hier die festen Benachrichtigungen, die
 JEDER Prozess braucht und die niemand pro Prozess konfigurieren soll:
+Diese Mails gehen an die ZUSTÄNDIGE Stelle (und bei Ablehnung/Rücksprung an die
+Ersteller:in), NIE automatisch an Beobachter:innen – Beobachten heißt mitlesen.
+Wer sie doch anschreiben will, konfiguriert das im Prozess ausdrücklich:
+`notify` mit `to: "watchers"`.
+
 `notify_phase_entry` (Arbeit liegt an – bei einer Freigabe-Phase mit
 Entscheidungs-Links statt „bitte im System bearbeiten“), `notify_comment`
 (Nachtrag), `notify_rejection` (Auftrag abgelehnt) und `notify_sent_back`
@@ -356,18 +361,12 @@ def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[Phase
                     f"<p>Zum Bearbeiten: {html.escape(link)}</p>")
             sender(recips, subject, body, kind="phase_entry")
 
-        # Beobachter:innen bekommen eine EIGENE Mail – „liegt jetzt bei Ihnen"
-        # wäre für sie falsch, sie sollen nur mitlesen. Wer schon als zuständige
-        # Stelle angeschrieben wurde, bekommt sie nicht doppelt.
-        extra = [m for m in watcher_emails(row.get("id")) if m not in set(recips)]
-        if extra:
-            w_subject = (f"[AlphaRequest] Zur Information: {title}"
-                         .replace("\r", " ").replace("\n", " ")[:200])
-            w_body = (f"<p>Der von Ihnen beobachtete Auftrag „{html.escape(title)}“ "
-                      f"ist jetzt in der Phase „{html.escape(phase_lbl)}“.</p>"
-                      f"<p>Ansehen: {html.escape(link)}</p>")
-            sender(extra, w_subject, w_body, kind="phase_entry_watcher")
-        return list(recips) + extra
+        # KEINE Mail an Beobachter:innen. Beobachten heißt MITLESEN: der Auftrag
+        # erscheint in der Übersicht und zeigt dort den aktuellen Stand. Wer
+        # freiwillig folgt, will nicht bei jedem Phasenwechsel eine Mail – und ein
+        # Postfach voller „zur Information“ macht die Mails unwichtig, die
+        # wirklich eine Aufgabe ankündigen.
+        return list(recips)
     except Exception:
         logger.exception("Phasen-Benachrichtigung für Ticket #%s fehlgeschlagen", row.get("id"))
         return []
@@ -391,7 +390,8 @@ def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
             owner = _user_email(row.get("owner_id"))
             if owner:
                 recips.add(owner)
-            recips |= set(watcher_emails(row.get("id")))
+            # Bewusst OHNE Beobachter:innen – Beobachten heißt mitlesen, nicht
+            # benachrichtigt werden (siehe notify_phase_entry).
         if actor_email:
             recips.discard(actor_email)
         if not recips:
@@ -471,7 +471,7 @@ def notify_sent_back(row: dict, defn: Optional[ProcessDefinition],
         owner = _user_email(row.get("owner_id"))
         if owner:
             recips.add(owner)
-        recips |= set(watcher_emails(row.get("id")))
+        # Bewusst OHNE Beobachter:innen – Beobachten heißt mitlesen.
         if not recips:
             return []
         title = str(row.get("title") or f"Auftrag #{row.get('id')}")

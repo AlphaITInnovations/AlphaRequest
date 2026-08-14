@@ -157,6 +157,11 @@ def _process_block(user: dict) -> ProcessDashboardBlock:
     Auftrag beobachtet, findet ihn unter „Beobachtet", auch wenn er zusätzlich
     zuständig ist. Sonst wäre nicht erkennbar, welche Aufträge man freiwillig
     verfolgt und welche Arbeit auf einen wartet.
+
+    EIGENE Aufträge werden NICHT übersprungen. Wer anlegt, wird automatisch
+    Beobachter:in – so findet man den eigenen Auftrag unter „Beobachtet" wieder,
+    auch wenn er längst bei einer Fachabteilung liegt. Ohne das wäre er nach dem
+    Wegfall der Kachel „Von mir angelegt" auf der Übersicht unsichtbar.
     """
     uid = user.get("id")
     # Gruppen-Mitgliedschaft, Beobachtungen und Definitionen EINMAL – nicht pro
@@ -171,8 +176,6 @@ def _process_block(user: dict) -> ProcessDashboardBlock:
     involved: list[ProcessDashboardTicket] = []
     watched: list[ProcessDashboardTicket] = []
     for row in pstore.list_active(limit=_PROCESS_SCAN_LIMIT):
-        if uid and row.get("owner_id") == uid:
-            continue                        # steht schon unter „my"
         defn = _load_process_defn(row, defn_cache)
         beobachtet = row["id"] in beobachtet_ids
         # Beobachtung MUSS in die Sichtbarkeitsprüfung: ohne sie fehlte ein rein
@@ -180,12 +183,26 @@ def _process_block(user: dict) -> ProcessDashboardBlock:
         # bekäme ihn trotzdem nie zu sehen.
         if not acc.may_view(defn, row, user, group_ids, [uid] if beobachtet else ()):
             continue
-        (watched if beobachtet else involved).append(_to_process_ticket(row, defn, False))
+        if beobachtet:
+            # Auch EIGENE Aufträge: wer anlegt, wird automatisch Beobachter:in –
+            # darüber findet man sie wieder, wenn sie längst bei einer
+            # Fachabteilung liegen.
+            watched.append(_to_process_ticket(row, defn, False))
+        elif uid and row.get("owner_id") == uid:
+            continue                        # steht schon unter „my"
+        else:
+            involved.append(_to_process_ticket(row, defn, False))
 
     # Zähler nur über die SICHTBAREN Aufträge – eine globale Statistik würde
     # Unbeteiligten verraten, wie viel im System läuft.
+    # Über die IDs entdoppelt: ein eigener Auftrag steht in `my` UND (weil die
+    # erstellende Person automatisch beobachtet) in `watched`.
     counts: dict[str, int] = {}
+    gesehen: set = set()
     for t in my + involved + watched:
+        if t.id in gesehen:
+            continue
+        gesehen.add(t.id)
         counts[t.status] = counts.get(t.status, 0) + 1
     return ProcessDashboardBlock(my=my, involved=involved, watched=watched, counts=counts)
 

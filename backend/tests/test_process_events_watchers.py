@@ -214,7 +214,8 @@ def _capture():
                                                                 "subject": subj})
 
 
-def test_nachtrag_geht_an_zustaendige_ersteller_und_beobachter(monkeypatch):
+def test_nachtrag_geht_an_zustaendige_und_ersteller_aber_nicht_an_beobachter(monkeypatch):
+    """Beobachten heißt mitlesen – Beobachter:innen bekommen keine Mail."""
     monkeypatch.setattr(pactions, "_user_email",
                         lambda uid: {"u_owner": "owner@x.de", "u_w": "watch@x.de"}.get(uid))
     monkeypatch.setattr(pactions, "watcher_emails", lambda tid: ["watch@x.de"])
@@ -224,7 +225,8 @@ def test_nachtrag_geht_an_zustaendige_ersteller_und_beobachter(monkeypatch):
                                   sender=sender,
                                   groups=[{"id": "g_it", "distributions": ["it@x.de"]},
                                           {"id": "g_fp", "distributions": ["fp@x.de"]}])
-    assert set(out) == {"it@x.de", "fp@x.de", "owner@x.de", "watch@x.de"}
+    assert set(out) == {"it@x.de", "fp@x.de", "owner@x.de"}
+    assert "watch@x.de" not in out
     assert sent[0]["kind"] == "comment"
 
 

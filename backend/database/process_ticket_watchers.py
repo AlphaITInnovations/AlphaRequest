@@ -1,8 +1,11 @@
 """
 Beobachter (Watcher) eines Prozess-Tickets.
 
-Beobachten heißt: mitlesen dürfen, ohne zuständig zu sein (`process_access.may_view`
-nimmt die IDs entgegen) und über Phasenwechsel/Nachträge benachrichtigt werden.
+Beobachten heißt AUSSCHLIESSLICH: mitlesen dürfen, ohne zuständig zu sein
+(`process_access.may_view` nimmt die IDs entgegen). Es gehen KEINE Mails an
+Beobachter:innen – der Auftrag erscheint in der Übersicht und zeigt dort den
+aktuellen Bearbeitungsstand. Wer sie doch anschreiben will, konfiguriert das im
+Prozess ausdrücklich (`notify` mit `to: "watchers"`).
 
 Eigene Tabelle, NICHT die Alt-Tabelle `ticket_watchers` um `entity_type` erweitert
 (wie bei den Anhängen): dort ist `PRIMARY KEY (ticket_id, user_id)`, und ein

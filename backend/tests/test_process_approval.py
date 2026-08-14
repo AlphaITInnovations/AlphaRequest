@@ -576,14 +576,18 @@ def test_ohne_externallink_geht_die_normale_aufgaben_mail_raus(monkeypatch):
     assert "process-freigabe" not in sent[0]["body"]
 
 
-def test_beobachter_bekommen_keine_entscheidungslinks(monkeypatch):
+def test_beobachter_bekommen_ueberhaupt_keine_mail(monkeypatch):
+    """Beobachten heißt MITLESEN: der Auftrag steht in der Übersicht und zeigt dort
+    den Stand. Eine Mail je Phasenwechsel würde die Mails unwichtig machen, die
+    wirklich eine Aufgabe ankündigen – und ein Entscheidungs-Link an eine nur
+    mitlesende Person wäre ohnehin falsch."""
     monkeypatch.setattr(pactions, "watcher_emails", lambda tid: ["beobachter@example.org"])
     sent, sender = _capture()
-    pactions.notify_phase_entry(ticket(), DEFN, DEFN.phases[1], sender=sender,
-                                groups=GROUPS)
-    watcher_mail = [m for m in sent if m["kind"] == "phase_entry_watcher"]
-    assert len(watcher_mail) == 1
-    assert "process-freigabe" not in watcher_mail[0]["body"]
+    empfaenger = pactions.notify_phase_entry(ticket(), DEFN, DEFN.phases[1],
+                                             sender=sender, groups=GROUPS)
+    assert "beobachter@example.org" not in empfaenger
+    for m in sent:
+        assert "beobachter@example.org" not in m["to"]
 
 
 def test_fehlender_verteiler_bleibt_nicht_stumm(monkeypatch):

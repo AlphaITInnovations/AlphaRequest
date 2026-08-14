@@ -2,8 +2,9 @@
 /**
  * Beobachter:innen eines Prozess-Auftrags.
  *
- * Beobachten heißt: mitlesen dürfen, ohne zuständig zu sein – und über
- * Phasenwechsel und Nachträge benachrichtigt werden.
+ * Beobachten heißt AUSSCHLIESSLICH: mitlesen dürfen, ohne zuständig zu sein.
+ * Es gehen KEINE Mails an Beobachter:innen – der Auftrag erscheint in der
+ * Übersicht und zeigt dort den aktuellen Bearbeitungsstand.
  *
  * Sich selbst darf jede Person mit Leserecht ein-/austragen. FREMDE einzutragen
  * ist eine Rechte-Vergabe und daher der zuständigen Stelle vorbehalten

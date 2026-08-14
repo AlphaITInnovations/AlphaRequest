@@ -130,15 +130,16 @@ def test_aufsicht_sieht_alle_aktiven(monkeypatch, defs):
     assert sorted(t.id for t in block.involved) == [1, 2]
 
 
-def test_eigene_stehen_unter_my_und_nicht_doppelt(monkeypatch, defs):
+def test_eigene_stehen_unter_my(monkeypatch, defs):
     _use_rows(monkeypatch, [
         _row(1, owner="u1", index=0),
         _row(2, owner="u2", index=1),
     ])
+    _beobachtet(monkeypatch, [])
     block = dash._process_block(_user("u1", groups=["g_it"]))
     assert [t.id for t in block.my] == [1]
     assert block.my[0].is_owner is True
-    # #1 gehört u1 → nur unter „my"; #2 liegt bei g_it → beteiligt.
+    # #2 liegt bei g_it → beteiligt.
     assert [t.id for t in block.involved] == [2]
     assert block.involved[0].is_owner is False
 
@@ -280,14 +281,25 @@ def test_beobachtet_und_beteiligt_sind_getrennt(monkeypatch, defs):
     assert [t.id for t in block.involved] == [2]
 
 
-def test_eigene_auftraege_stehen_nicht_zusaetzlich_unter_beobachtet(monkeypatch, defs):
-    """Wer anlegt, wird automatisch Beobachter:in – ohne diese Regel stünde jeder
-    eigene Auftrag doppelt (unter „my" und unter „Beobachtet")."""
-    _use_rows(monkeypatch, [_row(1, owner="u1", index=0)])
+def test_eigene_auftraege_findet_man_unter_beobachtet(monkeypatch, defs):
+    """Wer anlegt, wird automatisch Beobachter:in – und genau darüber findet man
+    den eigenen Auftrag wieder, auch wenn er längst bei einer Fachabteilung liegt.
+    Ohne das wäre er nach dem Wegfall der Kachel „Von mir angelegt" auf der
+    Übersicht unsichtbar."""
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=1, title="jetzt bei der IT")])
     _beobachtet(monkeypatch, [1])
     block = dash._process_block(_user("u1"))
-    assert [t.id for t in block.my] == [1]
-    assert block.watched == [] and block.involved == []
+    assert [t.id for t in block.watched] == [1]
+    assert block.involved == []
+
+
+def test_counts_zaehlen_einen_auftrag_nur_einmal(monkeypatch, defs):
+    """Ein eigener Auftrag steht in `my` UND (als Beobachtung) in `watched` –
+    der Zähler darf ihn deshalb nicht doppelt führen."""
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=1, status="in_request")])
+    _beobachtet(monkeypatch, [1])
+    block = dash._process_block(_user("u1"))
+    assert block.counts == {"in_request": 1}
 
 
 def test_counts_zaehlen_auch_beobachtete(monkeypatch, defs):
