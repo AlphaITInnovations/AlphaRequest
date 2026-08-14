@@ -258,18 +258,6 @@ async function erstellen() {
 
             <div class="card-section">
               <label class="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1.5">
-                Beschreibung <span class="text-red-500">*</span>
-              </label>
-              <textarea v-model="beschreibung" rows="6" class="afi w-full resize-y"
-                        :class="feldFehler.beschreibung ? '!border-red-400' : ''"
-                        placeholder="Beschreibe dein Anliegen ausführlich…" />
-              <p v-if="feldFehler.beschreibung" class="text-xs text-red-500 mt-1">
-                {{ feldFehler.beschreibung }}
-              </p>
-            </div>
-
-            <div class="card-section">
-              <label class="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1.5">
                 Anhänge
               </label>
               <ul v-if="dateien.length"
@@ -281,8 +269,8 @@ async function erstellen() {
                         :title="f.name">{{ f.name }}</span>
                   <span class="text-xs text-gray-400 whitespace-nowrap">{{ groesse(f.size) }}</span>
                   <button type="button" @click="dateiWeg(i)"
-                          class="ml-auto text-gray-300 hover:text-red-500 transition"
-                          :aria-label="`${f.name} entfernen`">✕</button>
+                          class="ml-auto text-xs text-red-500 hover:text-red-600
+                                 hover:underline transition">Löschen</button>
                 </li>
               </ul>
               <input ref="dateiInput" type="file" multiple class="hidden"
@@ -292,6 +280,18 @@ async function erstellen() {
               </button>
               <p class="text-xs text-gray-400 mt-2">
                 Die Dateien werden beim Erstellen des Auftrags hochgeladen.
+              </p>
+            </div>
+
+            <div class="card-section">
+              <label class="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1.5">
+                Beschreibung <span class="text-red-500">*</span>
+              </label>
+              <textarea v-model="beschreibung" rows="6" class="afi w-full resize-y"
+                        :class="feldFehler.beschreibung ? '!border-red-400' : ''"
+                        placeholder="Beschreibe dein Anliegen ausführlich…" />
+              <p v-if="feldFehler.beschreibung" class="text-xs text-red-500 mt-1">
+                {{ feldFehler.beschreibung }}
               </p>
             </div>
           </div>

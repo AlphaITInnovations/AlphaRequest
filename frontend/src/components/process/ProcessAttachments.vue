@@ -204,12 +204,8 @@ function formatDate(ts: string | null) {
           </div>
         </div>
 
-        <div class="flex items-center gap-2 shrink-0">
-          <a
-            :href="downloadUrl(a.id)"
-            class="text-[#3EAAB8] hover:underline text-sm"
-            title="Herunterladen"
-          >⬇</a>
+        <!-- Kein eigenes Download-Icon: der Dateiname IST der Download-Link. -->
+        <div class="flex items-center gap-3 shrink-0">
           <button
             v-if="darfAendern(a)"
             type="button"
@@ -221,11 +217,10 @@ function formatDate(ts: string | null) {
           <button
             v-if="darfAendern(a)"
             type="button"
-            class="text-red-500 hover:text-red-600 disabled:opacity-40"
+            class="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40"
             :disabled="deleting === a.id"
-            title="Löschen"
             @click="remove(a)"
-          >🗑</button>
+          >Löschen</button>
         </div>
       </li>
     </ul>
