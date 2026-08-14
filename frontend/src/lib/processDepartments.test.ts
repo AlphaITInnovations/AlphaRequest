@@ -238,6 +238,43 @@ describe('awaitsDepartment', () => {
     expect(awaitsDepartment(undefined, 'g_it')).toBe(false)
   })
 
+  // ── Einfache Gruppen-Zuständigkeit (kind='group', z. B. Basis-Ticket) ────────
+  // So liefert der Server auch group_from_field aus. Ohne diese Fälle fehlte ein
+  // Basis-Ticket, das bei der eigenen Abteilung liegt, im Reiter „Meine
+  // Abteilungen" vollständig.
+
+  const beiIT: DepartmentAwareTicket = {
+    status: 'in_progress',
+    runtime: { rejected: false },
+    responsibility: { kind: 'group', group: 'g_it' },
+  }
+
+  it('zählt einen Auftrag, der bei genau dieser Abteilung liegt', () => {
+    expect(awaitsDepartment(beiIT, 'g_it')).toBe(true)
+    expect(awaitsDepartment(beiIT, 'g_hr')).toBe(false)
+  })
+
+  it('requiredOnly ändert daran nichts – eine Gruppen-Zuständigkeit blockiert immer', () => {
+    expect(awaitsDepartment(beiIT, 'g_it', { requiredOnly: true })).toBe(true)
+  })
+
+  it('leeres Gruppen-Feld (niemand zuständig) wartet auf niemanden', () => {
+    expect(awaitsDepartment({ ...beiIT, responsibility: { kind: 'group', group: null } },
+      'g_it')).toBe(false)
+  })
+
+  it('terminale Gruppen-Aufträge warten nie', () => {
+    expect(awaitsDepartment({ ...beiIT, status: 'archived' }, 'g_it')).toBe(false)
+  })
+
+  it('nimmt Gruppen-Aufträge in die Abteilungs-Arbeitsliste auf', () => {
+    const beiHR: DepartmentAwareTicket = {
+      status: 'in_progress',
+      responsibility: { kind: 'group', group: 'g_hr' },
+    }
+    expect(ticketsAwaitingAnyDepartment([beiIT, beiHR], ['g_it'])).toEqual([beiIT])
+  })
+
   it('akzeptiert eine echte Server-Antwort (ProcessTicketOut) unverändert', () => {
     // Strukturprüfung: die Arbeitsliste soll ohne Umbau mit der API-Form arbeiten.
     const t = {

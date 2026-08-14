@@ -130,7 +130,7 @@ def test_aufsicht_sieht_alle_aktiven(monkeypatch, defs):
     assert sorted(t.id for t in block.involved) == [1, 2]
 
 
-def test_eigene_stehen_unter_my(monkeypatch, defs):
+def test_eigene_stehen_unter_my_und_unter_beteiligt(monkeypatch, defs):
     _use_rows(monkeypatch, [
         _row(1, owner="u1", index=0),
         _row(2, owner="u2", index=1),
@@ -139,9 +139,10 @@ def test_eigene_stehen_unter_my(monkeypatch, defs):
     block = dash._process_block(_user("u1", groups=["g_it"]))
     assert [t.id for t in block.my] == [1]
     assert block.my[0].is_owner is True
-    # #2 liegt bei g_it → beteiligt.
-    assert [t.id for t in block.involved] == [2]
-    assert block.involved[0].is_owner is False
+    # Beteiligt = Ersteller:in ODER zuständig: #1 als Ersteller, #2 über g_it.
+    assert [t.id for t in block.involved] == [1, 2]
+    assert block.involved[0].is_owner is True
+    assert block.involved[1].is_owner is False
 
 
 def test_terminale_auftraege_erscheinen_nicht(monkeypatch, defs):
@@ -268,9 +269,11 @@ def test_ohne_beobachtung_bleibt_fremdes_unsichtbar(monkeypatch, defs):
     assert block.watched == [] and block.involved == []
 
 
-def test_beobachtet_und_beteiligt_sind_getrennt(monkeypatch, defs):
-    """Ein Auftrag steht in GENAU einer der beiden Listen – sonst wären die Zahlen
-    nicht einzeln lesbar."""
+def test_beobachtet_und_beteiligt_ueberschneiden_sich(monkeypatch, defs):
+    """Jede Liste beantwortet ihre Frage VOLLSTÄNDIG: wer beobachtet UND zuständig
+    ist, findet den Auftrag in beiden. Vorher nahm „Beobachtet" der Liste
+    „Beteiligt" die Einträge weg – ein Auftrag der eigenen Abteilung fehlte dort,
+    nur weil man ihn zusätzlich beobachtete."""
     _use_rows(monkeypatch, [
         _row(1, owner="u1", index=1, title="beobachtet UND zuständig"),
         _row(2, owner="u1", index=1, title="nur zuständig"),
@@ -278,19 +281,29 @@ def test_beobachtet_und_beteiligt_sind_getrennt(monkeypatch, defs):
     _beobachtet(monkeypatch, [1])
     block = dash._process_block(_user("u2", groups=["g_it"]))
     assert [t.id for t in block.watched] == [1]
-    assert [t.id for t in block.involved] == [2]
+    assert [t.id for t in block.involved] == [1, 2]
+
+
+def test_reine_beobachtung_macht_nicht_beteiligt(monkeypatch, defs):
+    """Die Beobachtung allein ist KEINE Beteiligung – sonst stünde jeder
+    abonnierte fremde Auftrag als „Beteiligt" da."""
+    _use_rows(monkeypatch, [_row(1, owner="u1", index=1)])
+    _beobachtet(monkeypatch, [1])
+    block = dash._process_block(_user("u_fremd"))
+    assert [t.id for t in block.watched] == [1]
+    assert block.involved == []
 
 
 def test_eigene_auftraege_findet_man_unter_beobachtet(monkeypatch, defs):
-    """Wer anlegt, wird automatisch Beobachter:in – und genau darüber findet man
-    den eigenen Auftrag wieder, auch wenn er längst bei einer Fachabteilung liegt.
-    Ohne das wäre er nach dem Wegfall der Kachel „Von mir angelegt" auf der
-    Übersicht unsichtbar."""
+    """Wer anlegt, wird automatisch Beobachter:in – und findet den eigenen Auftrag
+    unter „Beobachtet" UND (als Ersteller:in beteiligt) unter „Beteiligt", auch
+    wenn er längst bei einer Fachabteilung liegt."""
     _use_rows(monkeypatch, [_row(1, owner="u1", index=1, title="jetzt bei der IT")])
     _beobachtet(monkeypatch, [1])
     block = dash._process_block(_user("u1"))
     assert [t.id for t in block.watched] == [1]
-    assert block.involved == []
+    assert [t.id for t in block.involved] == [1]
+    assert block.involved[0].is_owner is True
 
 
 def test_counts_zaehlen_einen_auftrag_nur_einmal(monkeypatch, defs):

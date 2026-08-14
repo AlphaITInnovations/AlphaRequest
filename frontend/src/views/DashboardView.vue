@@ -192,7 +192,13 @@ const gruppenName = computed(() => {
 function meineOffenenAbteilungen(t: ProcessTicketOut): string[] {
   const meine = new Set(meineGruppen.value)
   const r = t.responsibility
-  if (!r || r.kind !== 'departments') return []
+  if (!r) return []
+  // Einfache Gruppen-Zuständigkeit (z. B. Basis-Ticket): der Auftrag liegt bei
+  // genau einer Abteilung – meiner, sonst stünde er nicht in dieser Liste.
+  if (r.kind === 'group') {
+    return r.group && meine.has(r.group) ? [gruppenName.value(r.group)] : []
+  }
+  if (r.kind !== 'departments') return []
   return (r.departments ?? [])
     .filter((d) => d && meine.has(d.group) && d.status !== 'done'
       && d.status !== 'skipped' && d.status !== 'rejected')
@@ -214,7 +220,10 @@ const zeilenDepartments = computed(() =>
     return {
       ...zeileAusRow(t),
       depts: {
-        text: departmentProgress(depts).text,
+        // Einfache Gruppen-Zuständigkeit hat keinen Quittier-Fortschritt – dort
+        // wäre „Keine Fachabteilungen beteiligt" schlicht falsch.
+        text: r?.kind === 'group' ? 'Liegt bei der Abteilung'
+                                  : departmentProgress(depts).text,
         mine: meineOffenenAbteilungen(t),
       },
     }

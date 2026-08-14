@@ -39,11 +39,17 @@ export interface DepartmentState {
 /**
  * Schmale Sicht auf einen Auftrag – nur was die Arbeitslisten-Frage braucht.
  * `ProcessTicketOut` erfüllt das strukturell, ebenso ein Listen-Eintrag.
+ * `group` trägt die EINFACHE Gruppen-Zuständigkeit (kind='group'; auch
+ * group_from_field liefert der Server so aus, z. B. das Basis-Ticket).
  */
 export interface DepartmentAwareTicket {
   status?: string | null
   runtime?: { rejected?: boolean } | null
-  responsibility?: { kind: string; departments?: DepartmentState[] } | null
+  responsibility?: {
+    kind: string
+    group?: string | null
+    departments?: DepartmentState[]
+  } | null
 }
 
 // ── Beschriftung ──────────────────────────────────────────────────────────────
@@ -173,10 +179,16 @@ export interface AwaitOptions {
 }
 
 /**
- * Muss `groupId` bei diesem Auftrag noch quittieren?
+ * Wartet dieser Auftrag noch auf die Abteilung `groupId`?
  *
- * Nur die AKTUELLE Phase zählt: `responsibility.departments` enthält
- * ausschließlich sie. Terminale Aufträge (abgelehnt/archiviert) warten nie.
+ * Zwei Zuständigkeits-Formen zählen:
+ *  - kind='departments': die Abteilung muss noch quittieren (Pending-Regeln oben),
+ *  - kind='group': der Auftrag LIEGT bei genau dieser Abteilung (so liefert der
+ *    Server auch group_from_field aus – z. B. das Basis-Ticket). Eine einfache
+ *    Gruppen-Zuständigkeit blockiert immer, `requiredOnly` ändert daran nichts.
+ *
+ * Nur die AKTUELLE Phase zählt: `responsibility` beschreibt ausschließlich sie.
+ * Terminale Aufträge (abgelehnt/archiviert) warten nie.
  */
 export function awaitsDepartment(
   ticket: DepartmentAwareTicket | null | undefined,
@@ -186,7 +198,9 @@ export function awaitsDepartment(
   if (!ticket || !groupId) return false
   if (isTicketTerminal(ticket)) return false
   const resp = ticket.responsibility
-  if (!resp || resp.kind !== 'departments') return false
+  if (!resp) return false
+  if (resp.kind === 'group') return resp.group === groupId
+  if (resp.kind !== 'departments') return false
   return (resp.departments ?? []).some((d) =>
     !!d && d.group === groupId && isDepartmentPending(d)
     && (!opts.requiredOnly || isRequired(d)))

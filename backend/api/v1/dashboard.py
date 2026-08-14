@@ -56,13 +56,16 @@ class ProcessDashboardTicket(BaseModel):
 
 class ProcessDashboardBlock(BaseModel):
     my: list[ProcessDashboardTicket] = []
-    #: Sichtbar, weil zuständig oder aufsichtsberechtigt – NICHT beobachtet.
+    #: Beteiligt: Ersteller:in, aktuell zuständig (auch über die Fachabteilung)
+    #: oder aufsichtsberechtigt.
     involved: list[ProcessDashboardTicket] = []
-    #: Ausdrücklich beobachtet (Eintrag in der Beobachter-Liste). Bewusst GETRENNT
-    #: von `involved`: „ich folge dem freiwillig" ist eine andere Aussage als „ich
-    #: bin daran beteiligt", und nur so lassen sich beide Zahlen einzeln lesen.
+    #: Ausdrücklich beobachtet (Eintrag in der Beobachter-Liste). Die Listen
+    #: ÜBERSCHNEIDEN sich bewusst: wer einen Auftrag beobachtet UND daran
+    #: beteiligt ist, findet ihn in beiden – jede Liste beantwortet ihre Frage
+    #: vollständig, statt dass eine der anderen Einträge wegnimmt.
     watched: list[ProcessDashboardTicket] = []
-    # Anzahl je Status – nur über die Aufträge, die dieser Nutzer sehen darf.
+    # Anzahl je Status – nur über die Aufträge, die dieser Nutzer sehen darf
+    # (über die IDs entdoppelt, ein Auftrag zählt einmal).
     counts: dict[str, int] = {}
 
 
@@ -153,15 +156,14 @@ def _process_block(user: dict) -> ProcessDashboardBlock:
     der Detail-Route, damit hier nichts auftaucht, was dort 404 wäre. Wer
     Aufsichtsrechte hat, sieht entsprechend alle aktiven Aufträge.
 
-    `watched` und `involved` sind GETRENNT und überschneiden sich nicht: wer einen
-    Auftrag beobachtet, findet ihn unter „Beobachtet", auch wenn er zusätzlich
-    zuständig ist. Sonst wäre nicht erkennbar, welche Aufträge man freiwillig
-    verfolgt und welche Arbeit auf einen wartet.
+    `watched` und `involved` ÜBERSCHNEIDEN sich bewusst: jede Liste beantwortet
+    ihre Frage vollständig. Wer einen Auftrag beobachtet UND daran beteiligt ist
+    (z. B. selbst angelegt und Mitglied der zuständigen Fachabteilung), findet
+    ihn in BEIDEN Listen – vorher nahm „Beobachtet" der Liste „Beteiligt" die
+    Einträge weg, und ein Auftrag der eigenen Abteilung fehlte dort.
 
-    EIGENE Aufträge werden NICHT übersprungen. Wer anlegt, wird automatisch
-    Beobachter:in – so findet man den eigenen Auftrag unter „Beobachtet" wieder,
-    auch wenn er längst bei einer Fachabteilung liegt. Ohne das wäre er nach dem
-    Wegfall der Kachel „Von mir angelegt" auf der Übersicht unsichtbar.
+    Beteiligt heißt: Ersteller:in, aktuell zuständig oder Aufsicht – das ist
+    may_view OHNE die Beobachtung. Die Beobachtung allein macht nicht beteiligt.
     """
     uid = user.get("id")
     # Gruppen-Mitgliedschaft, Beobachtungen und Definitionen EINMAL – nicht pro
@@ -178,20 +180,17 @@ def _process_block(user: dict) -> ProcessDashboardBlock:
     for row in pstore.list_active(limit=_PROCESS_SCAN_LIMIT):
         defn = _load_process_defn(row, defn_cache)
         beobachtet = row["id"] in beobachtet_ids
-        # Beobachtung MUSS in die Sichtbarkeitsprüfung: ohne sie fehlte ein rein
-        # beobachteter Auftrag hier vollständig – man hätte ihn abonniert und
-        # bekäme ihn trotzdem nie zu sehen.
-        if not acc.may_view(defn, row, user, group_ids, [uid] if beobachtet else ()):
+        beteiligt = acc.may_view(defn, row, user, group_ids)
+        if not beteiligt and not beobachtet:
             continue
+        eintrag = _to_process_ticket(row, defn, bool(uid and row.get("owner_id") == uid))
         if beobachtet:
             # Auch EIGENE Aufträge: wer anlegt, wird automatisch Beobachter:in –
             # darüber findet man sie wieder, wenn sie längst bei einer
             # Fachabteilung liegen.
-            watched.append(_to_process_ticket(row, defn, False))
-        elif uid and row.get("owner_id") == uid:
-            continue                        # steht schon unter „my"
-        else:
-            involved.append(_to_process_ticket(row, defn, False))
+            watched.append(eintrag)
+        if beteiligt:
+            involved.append(eintrag)
 
     # Zähler nur über die SICHTBAREN Aufträge – eine globale Statistik würde
     # Unbeteiligten verraten, wie viel im System läuft.
