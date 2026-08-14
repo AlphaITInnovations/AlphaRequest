@@ -188,7 +188,10 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
 # ── Freigabe per Mail-Link ────────────────────────────────────────────────────
 
 def _ticket_link(row: dict) -> str:
-    return f"{config.FRONTEND_URL}/prozess-auftraege/{row.get('id')}"
+    """Mail-Link in die BEARBEITUNGS-Ansicht: die Detailseite öffnet standardmäßig
+    nur lesend, und Mails gehen an die Stelle, die handeln soll. Ohne Rechte
+    zeigt der Parameter trotzdem nur die Leseansicht (abilities entscheiden)."""
+    return f"{config.FRONTEND_URL}/prozess-auftraege/{row.get('id')}?ansicht=bearbeiten"
 
 
 def _subject(text: str) -> str:
@@ -406,8 +409,7 @@ def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
         mail_body = (f"<p><b>{html.escape(marker)}</b> von {html.escape(author_name)} "
                      f"zum Auftrag „{html.escape(title)}“:</p>"
                      f"<blockquote>{text}</blockquote>"
-                     f"<p>Zum Auftrag: {html.escape(config.FRONTEND_URL)}"
-                     f"/prozess-auftraege/{row.get('id')}</p>")
+                     f"<p>Zum Auftrag: {html.escape(_ticket_link(row))}</p>")
         sender(out, subject, mail_body, kind="comment")
         return out
     except Exception:

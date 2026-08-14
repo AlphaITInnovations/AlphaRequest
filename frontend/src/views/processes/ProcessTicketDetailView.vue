@@ -83,11 +83,14 @@ const serverAbilities = computed(() => ticket.value?.abilities ?? {
   reopen: false, archive: false, delete: false,
 })
 
-/** Erzwungene Leseansicht (?ansicht=lesen): so verlinken die Reiter „Beobachtet"
- *  und „Beteiligt" der Übersicht. Dort wird NICHTS zum Bearbeiten angeboten –
- *  selbst wenn der Server es erlaubte; wer bearbeiten will, wechselt bewusst
- *  über den Knopf im Hinweis-Banner in die Bearbeitungsansicht. */
-const leseModus = computed(() => route.query.ansicht === 'lesen')
+/** LESEN ist der Standard, Bearbeiten das Opt-in (?ansicht=bearbeiten): so gibt
+ *  es keinen URL-Parameter, dessen ENTFERNEN mehr Oberfläche freischaltet. Den
+ *  Parameter von Hand anzuhängen bringt nichts Verbotenes – die Knöpfe hängen
+ *  weiter an den Server-Rechten (abilities), und verbindlich prüft ohnehin der
+ *  Server jede Änderung. Die Arbeits-Reiter der Übersicht („Mir zugewiesen",
+ *  „Meine Abteilungen") verlinken direkt in die Bearbeitung; „Beobachtet",
+ *  „Beteiligt" und alle sonstigen Wege landen im Lesemodus. */
+const leseModus = computed(() => route.query.ansicht !== 'bearbeiten')
 
 const abilities = computed(() => (leseModus.value
   ? { ...serverAbilities.value, edit: false, internal_comment: false,
@@ -101,8 +104,7 @@ const koennteBearbeiten = computed(() => {
 })
 
 function zurBearbeitung() {
-  const { ansicht: _weg, ...rest } = route.query
-  router.replace({ query: rest })
+  router.replace({ query: { ...route.query, ansicht: 'bearbeiten' } })
 }
 
 /** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
