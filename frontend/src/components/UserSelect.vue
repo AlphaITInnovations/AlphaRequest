@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { usersApi, type UserEntry } from '@/api/users'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { usersApi } from '@/api/users'
 import { client } from '@/api/client'
 
 interface GroupEntry { id: string; name: string }
+/** Struktur-Minimum eines Eintrags – `UserEntry` aus der API erfüllt es genauso
+ *  wie die Quellen des Prozess-Renderers (OptionSources.users). */
+interface UserOption { id: string; displayName: string }
 
 const props = withDefaults(defineProps<{
   label?:        string
@@ -11,33 +14,50 @@ const props = withDefaults(defineProps<{
   modelValue?:   { id: string; name: string } | null
   showGroups?:   boolean
   showUsers?:    boolean
+  disabled?:     boolean
+  /** Übergebene Listen ERSETZEN das eigene Laden. Hosts, die ihre Quellen schon
+   *  haben (SchemaWidget, Simulator), reichen sie durch – sonst würde jedes
+   *  Feld eines Formulars einen eigenen /users- bzw. /groups-Request auslösen. */
+  users?:        UserOption[] | null
+  groups?:       GroupEntry[] | null
 }>(), {
   label:       'Benutzer',
   placeholder: 'Mitarbeiter:in auswählen…',
   modelValue:  null,
   showGroups:  false,
   showUsers:   true,
+  disabled:    false,
+  users:       null,
+  groups:      null,
 })
 
 const emit = defineEmits<{
   'update:modelValue': [value: { id: string; name: string } | null]
 }>()
 
-const users   = ref<UserEntry[]>([])
-const groups  = ref<GroupEntry[]>([])
+const geladeneUsers  = ref<UserOption[]>([])
+const geladeneGroups = ref<GroupEntry[]>([])
+const alleUsers  = computed(() => props.users  ?? geladeneUsers.value)
+const alleGroups = computed(() => props.groups ?? geladeneGroups.value)
 const loading = ref(false)
 const open    = ref(false)
 const search  = ref(props.modelValue?.name ?? '')
 const activeIndex = ref(-1)
 let debounce: ReturnType<typeof setTimeout> | null = null
 
+// Programmatische Wertänderung von außen (z. B. nach dem Speichern) muss das
+// Suchfeld nachziehen – aber nicht mitten ins Tippen hineinfunken.
+watch(() => props.modelValue, (v) => {
+  if (!open.value) search.value = v?.name ?? ''
+})
+
 // Filtered groups (only when showGroups is true)
 const filteredGroups = computed(() => {
   if (!props.showGroups) return []
   const q = search.value.toLowerCase().trim()
   return q
-    ? groups.value.filter(g => g.name.toLowerCase().includes(q))
-    : groups.value
+    ? alleGroups.value.filter(g => g.name.toLowerCase().includes(q))
+    : alleGroups.value
 })
 
 // Filtered users (only when showUsers is true)
@@ -45,29 +65,33 @@ const filteredUsers = computed(() => {
   if (!props.showUsers) return []
   const q = search.value.toLowerCase().trim()
   return q
-    ? users.value.filter(u => u.displayName.toLowerCase().includes(q))
-    : users.value
+    ? alleUsers.value.filter(u => u.displayName.toLowerCase().includes(q))
+    : alleUsers.value
 })
 
 // Combined count for keyboard navigation
 const totalFiltered = computed(() => filteredGroups.value.length + filteredUsers.value.length)
 
 onMounted(async () => {
+  // Nur laden, was nicht bereits per Prop übergeben wurde.
+  const usersLaden  = props.showUsers  && !props.users
+  const groupsLaden = props.showGroups && !props.groups
+  if (!usersLaden && !groupsLaden) return
   loading.value = true
   try {
     const [usersRes, groupsRes] = await Promise.all([
-      props.showUsers
+      usersLaden
         ? usersApi.list()
         : Promise.resolve(null),
-      props.showGroups
+      groupsLaden
         ? client.get<{ data: GroupEntry[] }>('/groups')
         : Promise.resolve(null),
     ])
     if (usersRes) {
-      users.value = usersRes.data.data.users
+      geladeneUsers.value = usersRes.data.data.users
     }
     if (groupsRes) {
-      groups.value = groupsRes.data.data
+      geladeneGroups.value = groupsRes.data.data
     }
   } catch (e) {
     console.error('User/Group fetch failed', e)
@@ -77,6 +101,7 @@ onMounted(async () => {
 })
 
 function openDropdown() {
+  if (props.disabled) return
   open.value = true
   activeIndex.value = -1
 }
@@ -90,6 +115,7 @@ function close() {
 }
 
 function onInput() {
+  if (props.disabled) return
   open.value = true
   if (debounce) clearTimeout(debounce)
   debounce = setTimeout(() => { activeIndex.value = -1 }, 150)
@@ -110,7 +136,7 @@ function confirm() {
   }
 }
 
-function selectUser(user: UserEntry) {
+function selectUser(user: UserOption) {
   search.value = user.displayName
   emit('update:modelValue', { id: user.id, name: user.displayName })
   open.value = false
@@ -152,14 +178,9 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
       @keydown.enter.prevent="confirm"
       @keydown.escape="close"
       :placeholder="placeholder"
+      :disabled="disabled"
       autocomplete="off"
-      class="w-full rounded-xl border border-gray-200 dark:border-white/10
-             bg-white dark:bg-[#263040]
-             text-gray-900 dark:text-gray-100
-             placeholder-gray-400 dark:placeholder-gray-500
-             px-3.5 py-2.5 text-sm
-             focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 focus:border-[#3EAAB8]/50
-             transition"
+      class="afi w-full"
     />
 
     <!-- Dropdown -->

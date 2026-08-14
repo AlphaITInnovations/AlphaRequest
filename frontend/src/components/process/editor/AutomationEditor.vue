@@ -324,11 +324,3 @@ const actionValueText = computed(() => {
   </div>
 </template>
 
-<style scoped>
-@reference "../../../style.css";
-.afi {
-  @apply rounded-xl border border-gray-200 dark:border-white/10
-         bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
-         px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition;
-}
-</style>

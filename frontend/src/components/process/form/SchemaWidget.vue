@@ -9,6 +9,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import type { FieldDef, OptionSources } from '@/types/process'
+import UserSelect from '@/components/UserSelect.vue'
 
 const props = withDefaults(defineProps<{
   field: FieldDef
@@ -104,6 +105,22 @@ function onSelect(e: Event) {
 // Beim Feldwechsel (Wiederverwendung der Komponente in einer v-for-Liste) den
 // Freitext-Modus zurücksetzen, sonst „klebt" er am nächsten Feld.
 watch(() => props.field?.key, () => { otherPicked.value = false })
+
+// ── Personen-/Gruppen-Auswahl ────────────────────────────────────────────────
+// user/group nutzen die Suchauswahl der ganzen Anwendung (UserSelect). Die
+// arbeitet mit {id, name} – gespeichert wird aber nur die ID; der Name wird
+// beim Anzeigen aus den Quellen aufgelöst.
+
+const pickModel = computed<{ id: string; name: string } | null>(() => {
+  const id = textModel.value
+  if (!id) return null
+  const label = optionList.value.find((o) => o.value === id)?.label ?? id
+  return { id, name: label }
+})
+
+function onPick(v: { id: string; name: string } | null) {
+  emit('update:modelValue', v ? v.id : null)
+}
 
 // ── Darstellung ──────────────────────────────────────────────────────────────
 
@@ -218,9 +235,26 @@ const readonlyText = computed(() => {
       <span>{{ field.placeholder || 'Ja' }}</span>
     </label>
 
-    <!-- Person / Firma / Fachabteilung – Auswahl aus den Stammdaten -->
+    <!-- Person / Fachabteilung – dieselbe Suchauswahl wie überall sonst.
+         Die Quellen kommen vom Host durch, damit nicht jedes Feld selbst lädt. -->
+    <UserSelect
+      v-else-if="field.widget === 'user' || field.widget === 'group'"
+      :model-value="pickModel"
+      label=""
+      :placeholder="field.placeholder
+        || (field.widget === 'group' ? 'Fachabteilung auswählen…' : 'Mitarbeiter:in auswählen…')"
+      :show-users="field.widget === 'user'"
+      :show-groups="field.widget === 'group'"
+      :users="sources?.users ?? []"
+      :groups="sources?.groups ?? []"
+      :disabled="disabled"
+      :class="invalid ? 'rounded-xl ring-1 ring-red-400' : ''"
+      @update:model-value="onPick"
+    />
+
+    <!-- Firma – Auswahl aus den Stammdaten -->
     <select
-      v-else-if="field.widget === 'user' || field.widget === 'company' || field.widget === 'group'"
+      v-else-if="field.widget === 'company'"
       v-model="textModel"
       :disabled="disabled"
       :class="inputClass"
@@ -256,11 +290,3 @@ const readonlyText = computed(() => {
   </div>
 </template>
 
-<style scoped>
-@reference "../../../style.css";
-.afi {
-  @apply rounded-xl border border-gray-200 dark:border-white/10
-         bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
-         px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition;
-}
-</style>
