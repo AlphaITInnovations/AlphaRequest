@@ -297,8 +297,9 @@ async function erstellen() {
           </div>
         </div>
 
-        <!-- Aktionsleiste -->
-        <div class="card-section mt-4 flex items-center justify-end gap-2">
+        <!-- Aktionsleiste – sticky: bleibt beim Scrollen immer im Bild. -->
+        <div class="card-section sticky bottom-4 z-20 shadow-lg mt-4
+                    flex items-center justify-end gap-2">
           <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
           <button @click="erstellen" :disabled="submitting"
                   class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]

@@ -3,8 +3,9 @@
  * Ansicht eines Basis-Tickets – BEWUSST eine eigene, feste Oberfläche im Layout
  * des Alt-Systems (Gegenstück zur Anlage in views/processes/
  * BasisTicketCreateView.vue): links Details (Verantwortlicher, Beobachter),
- * rechts Titel, „Neuer Eintrag“ und darunter der Verlauf (neueste zuerst),
- * unten „Abbrechen · Speichern & später weiterbearbeiten · Abschließen“.
+ * rechts Titel, Anhänge, „Neuer Eintrag“ und darunter der Verlauf (neueste
+ * zuerst), unten – immer im Bild (sticky) – die Aktionsleiste
+ * „Abbrechen · Speichern & später weiterbearbeiten · Abschließen“.
  *
  * KEINE Fortschritts-/Phasenanzeige: das Basis-Ticket wird zwischen
  * Fachabteilungen hin- und hergereicht, seine zwei internen Phasen sagen
@@ -280,6 +281,14 @@ async function abschliessen() {
           <input v-model="titel" maxlength="255" class="afi w-full" :disabled="!abilities.edit" />
         </div>
 
+        <!-- Anhänge: hochladen darf die zuständige Stelle UND die Ersteller:in
+             (Unterlagen nachreichen) – das entscheidet der Server (abilities). -->
+        <div class="card-section">
+          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
+                              :can-attach="abilities.attach"
+                              :current-user-id="auth.user?.id ?? null" />
+        </div>
+
         <div v-if="darfEintragen" class="card-section">
           <h3 class="section-title">Neuer Eintrag</h3>
           <textarea v-model="neuerEintrag" rows="5" class="afi w-full resize-y"
@@ -313,20 +322,14 @@ async function abschliessen() {
             </li>
           </ul>
         </div>
-
-        <!-- Anhänge: hochladen darf die zuständige Stelle UND die Ersteller:in
-             (Unterlagen nachreichen) – das entscheidet der Server (abilities). -->
-        <div class="card-section">
-          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
-                              :can-attach="abilities.attach"
-                              :current-user-id="auth.user?.id ?? null" />
-        </div>
       </div>
     </div>
 
-    <!-- Aktionsleiste -->
+    <!-- Aktionsleiste – sticky: bleibt beim Scrollen immer im Bild (der lange
+         Verlauf darf die Knöpfe nicht aus dem Fenster schieben). -->
     <div v-if="!terminal && abilities.edit"
-         class="card-section mt-4 flex items-center justify-end gap-2">
+         class="card-section sticky bottom-4 z-20 shadow-lg mt-4
+                flex items-center justify-end gap-2">
       <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
       <button @click="speichern()" :disabled="busy || !dirty"
               class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
