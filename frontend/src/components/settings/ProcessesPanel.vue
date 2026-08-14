@@ -10,6 +10,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   createDraft, deleteVersion, exportVersion, listProcesses, listVersions, publishVersion,
+  requestProcessDelete,
 } from '@/api/processes'
 import { errorCode, errorMessage } from '@/lib/processErrors'
 import { forgetKey, loadKnownKeys, rememberKey } from '@/components/process/processRegistry'
@@ -200,6 +201,53 @@ async function publish(p: ProcessOut) {
   }
 }
 
+/**
+ * Löschung des GANZEN Prozesses anfordern (alle Versionen + alle Aufträge).
+ *
+ * Löscht bewusst nichts direkt: der Server verschickt einen Bestätigungs-Link an
+ * die hinterlegte Admin-Adresse. Erst dort wird gelöscht – ein Knopf allein wäre
+ * für einen nicht umkehrbaren Eingriff dieser Größe zu wenig.
+ */
+async function requestDelete(r: ProcessOut) {
+  if (!confirm(
+    `Löschung von „${r.name || r.key}“ anfordern?
+
+`
+    + 'Es wird noch nichts gelöscht: an die hinterlegte Admin-Adresse geht ein '
+    + 'Bestätigungs-Link. Gelöscht würden ALLE Versionen und ALLE Aufträge dieses '
+    + 'Prozesses – das lässt sich dann nicht rückgängig machen.')) return
+  busy.value = `rm:${r.key}`
+  try {
+    // Erster Versuch ohne Zustimmung zu den Aufträgen: gibt es welche, antwortet
+    // der Server mit 409 und nennt die Anzahl – dann wird gezielt nachgefragt.
+    let res
+    try {
+      res = await requestProcessDelete(r.key, false)
+    } catch (e) {
+      if (errorCode(e) !== 'PROCESS_DELETE_NEEDS_TICKETS') throw e
+      if (!confirm(`${errorMessage(e, '')}
+
+Mit den Aufträgen löschen?`)) return
+      res = await requestProcessDelete(r.key, true)
+    }
+    showToast(`Bestätigungs-Mail an ${res.recipient} verschickt`
+      + (res.tickets ? ` – betrifft ${res.tickets} Auftrag/Aufträge` : ''))
+  } catch (e) {
+    const code = errorCode(e)
+    if (code === 'PROCESS_DELETE_NO_RECIPIENT') {
+      showToast('Es ist keine Admin-Adresse hinterlegt (ADMIN_MAIL). Ohne sie kann '
+        + 'kein Prozess gelöscht werden.', false)
+    } else if (code === 'PROCESS_DELETE_MAIL_FAILED') {
+      showToast('Die Bestätigungs-Mail konnte nicht versendet werden – es wurde '
+        + 'nichts gelöscht.', false)
+    } else {
+      showToast(errorMessage(e, 'Löschung konnte nicht angefordert werden'), false)
+    }
+  } finally {
+    busy.value = null
+  }
+}
+
 async function remove(p: ProcessOut) {
   if (!confirm(
     `Entwurf v${p.version} von „${p.name || p.key}“ wirklich löschen?\n\n`
@@ -365,6 +413,15 @@ onMounted(load)
                                    text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5
                                    transition">
                       Kopieren
+                    </button>
+                    <!-- Ganzen Prozess löschen: fordert nur an, die Bestätigung
+                         läuft über die Admin-Adresse. Optisch zurückhaltend –
+                         es ist der schärfste Eingriff in dieser Liste. -->
+                    <button @click.stop="requestDelete(r)" :disabled="busy === `rm:${r.key}`"
+                            title="Ganzen Prozess löschen (mit Mail-Bestätigung)"
+                            class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-red-600
+                                   disabled:opacity-40 transition">
+                      Löschen…
                     </button>
                     <button @click.stop="download(r.key, r.version)"
                             :disabled="busy === `x:${r.key}:${r.version}`"

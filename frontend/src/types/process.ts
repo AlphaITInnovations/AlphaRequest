@@ -307,6 +307,35 @@ export interface ProcessOut {
   description?: string | null
 }
 
+/** Eine Version im Lösch-Umfang. */
+export interface ProcessDeleteVersion {
+  version: number
+  status: string
+  rev: number | null
+  tickets: number
+}
+
+/** Antwort auf das Anfordern einer Löschung – es ist noch NICHTS gelöscht. */
+export interface ProcessDeleteRequestOut {
+  key: string
+  name: string
+  versions: ProcessDeleteVersion[]
+  tickets: number
+  /** Adresse, an die die Bestätigungs-Mail ging (ADMIN_MAIL). */
+  recipient: string
+  expires_at: string
+}
+
+/** Was der Bestätigungs-Link löschen würde. */
+export interface ProcessDeletePreview {
+  key: string
+  name: string
+  versions: ProcessDeleteVersion[]
+  tickets: number
+  with_tickets: boolean
+  requested_by: string | null
+}
+
 /** Welche Felder beim ANLEGEN sichtbar/ausfüllbar sind (GET /processes/{key}/field-access). */
 export interface FieldAccess {
   visible_fields: string[]

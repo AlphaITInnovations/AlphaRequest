@@ -24,6 +24,14 @@ class Config:
     TICKET_MAIL = os.getenv("TICKET_MAIL", "")
     # Empfänger für Fehlerberichte / Feedback aus der UI
     BUG_REPORT_MAIL = os.getenv("BUG_REPORT_MAIL", "")
+    # Bestätigungs-Adresse für nicht umkehrbare Eingriffe – heute: das Löschen
+    # eines ganzen Prozesses samt seiner Aufträge. OHNE diese Adresse ist das
+    # Löschen gesperrt (fail-closed): der Bestätigungsweg IST die Sicherung, und
+    # ein stiller Ersatz-Empfänger würde sie aushebeln.
+    ADMIN_MAIL = os.getenv("ADMIN_MAIL", "")
+    # Gültigkeit des Bestätigungs-Links (Sekunden, Standard 24 h). Läuft er ab,
+    # muss die Löschung neu angefordert werden.
+    PROCESS_DELETE_LINK_MAX_AGE = int(os.getenv("PROCESS_DELETE_LINK_MAX_AGE", 24 * 3600))
 
     SESSION_TIMEOUT = int(os.getenv("SESSION_TIMEOUT", 900))
 

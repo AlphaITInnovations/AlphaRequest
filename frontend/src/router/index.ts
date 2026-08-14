@@ -39,6 +39,15 @@ const router = createRouter({
     // ── Prozess-Definitionen ───────────────────────────────────────────────────
     // Editor: nur Admin (die Definitions-Endpunkte sind ebenfalls admin-gated).
     {
+      // Bestätigungsseite aus der Lösch-Mail. Admin-gated: der Link ist der ZWEITE
+      // Kanal, nicht die Berechtigung – eine weitergeleitete Mail darf keinen
+      // Prozess samt Aufträgen löschen können. Steht VOR /prozesse/:key/:version,
+      // sonst würde „loeschen" als Prozess-Key gelesen.
+      path: '/prozesse/loeschen',
+      component: () => import('@/views/ProcessDeleteConfirmView.vue'),
+      meta: { requiresAuth: true, requiresPermission: 'admin' },
+    },
+    {
       path: '/prozesse/:key/:version',
       component: () => import('@/views/ProcessEditorView.vue'),
       meta: { requiresAuth: true, requiresPermission: 'admin' },

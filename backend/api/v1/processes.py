@@ -24,9 +24,13 @@ from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN, PERM_MANAGE
 from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import DataResponse, api_error, ErrorCode
+import html
+
+from backend.services import process_delete as pdel
 from backend.services import process_permissions as perms
 from backend.services import process_runtime as pr
 from backend.services import process_visibility as vis
+from backend.utils.config import config
 from backend.utils.logger import logger
 from backend.utils.timeutil import utcnow_iso
 
@@ -371,3 +375,183 @@ def delete_process_version(key: str, version: int, user: dict = Depends(get_curr
         raise
     _audit(user, "process_version_deleted", key, version=version)
     return {"ok": True}
+
+
+# ── Ganzen Prozess löschen (zweistufig mit Mail-Bestätigung) ──────────────────
+
+class DeleteRequest(BaseModel):
+    #: Aufträge dieses Prozesses mit entfernen. Muss ausdrücklich gesetzt werden,
+    #: wenn es welche gibt – sonst antwortet der Endpunkt mit 409.
+    includeTickets: bool = False
+
+
+class DeleteRequestOut(BaseModel):
+    key: str
+    name: str
+    versions: list[dict] = []
+    tickets: int = 0
+    #: Wohin die Bestätigungs-Mail ging (ADMIN_MAIL).
+    recipient: str
+    expires_at: str
+
+
+class DeletePreviewOut(BaseModel):
+    """Was der Bestätigungs-Link löschen würde – reine Auskunft, kein Eingriff."""
+    key: str
+    name: str
+    versions: list[dict] = []
+    tickets: int = 0
+    with_tickets: bool = False
+    requested_by: Optional[str] = None
+
+
+class ConfirmDeleteRequest(BaseModel):
+    token: str
+
+
+def _delete_error(exc: pdel.DeleteError):
+    """Fachlicher Lösch-Abbruch -> HTTP. Die Codes sind für die Oberfläche gedacht."""
+    status = {
+        "no_recipient": 503,      # Konfiguration fehlt, nicht die Anfrage ist schuld
+        "needs_tickets": 409,
+        "not_found": 404,
+        "superseded": 409,
+        "expired": 410,
+        "invalid": 400,
+    }.get(exc.code, 400)
+    return api_error(status, f"PROCESS_DELETE_{exc.code.upper()}", exc.message)
+
+
+def _delete_mail(key: str, overview: dict, token: str, user: dict, empfaenger: str) -> None:
+    """Bestätigungs-Mail mit Link.
+
+    Ein Fehler hier darf NICHT stillschweigend durchgehen: ohne Mail gibt es keine
+    Bestätigung und damit keine Löschung – der Aufrufende muss das erfahren.
+    """
+    from backend.services.microsoft_mail import send_mail_app_only
+
+    link = f"{config.FRONTEND_URL}/prozesse/loeschen?token={token}"
+    wer = user.get("displayName") or user.get("email") or user.get("id") or "-"
+    n = int(overview.get("tickets") or 0)
+    versionen = ", ".join(f"v{v['version']} ({v['status']})" for v in overview["versions"])
+    betreff = (f"[AlphaRequest] Loeschung bestaetigen: Prozess {overview['name']}"
+               .replace("\r", " ").replace("\n", " ")[:200])
+    mit_anhang = " - samt Verlauf, Beobachter:innen und Anhaengen" if n else ""
+    body = (
+        f"<p><b>{html.escape(wer)}</b> moechte den Prozess "
+        f"{html.escape(str(overview['name']))} "
+        f"(<code>{html.escape(key)}</code>) loeschen.</p>"
+        f"<p>Geloescht wuerden:<br>"
+        f"&bull; Definition, alle Versionen: {html.escape(versionen)}<br>"
+        f"&bull; Auftraege dieses Prozesses: <b>{n}</b>{mit_anhang}</p>"
+        f"<p><b>Das laesst sich nicht rueckgaengig machen.</b></p>"
+        f"<p>Zum Pruefen und Bestaetigen (Anmeldung als Admin erforderlich):<br>"
+        f"{html.escape(link)}</p>"
+        f"<p>Wurde diese Loeschung nicht von Ihnen veranlasst, ignorieren Sie diese "
+        f"Mail - ohne Bestaetigung passiert nichts.</p>")
+    send_mail_app_only(
+        sender_upn_or_id="alpharequest@alpha-it-innovations.org",
+        subject=betreff, body=body, to_recipients=[empfaenger],
+        body_type="HTML", kind="process_delete_request",
+    )
+
+
+@router.post("/processes/{key}:request-delete", response_model=DataResponse[DeleteRequestOut])
+def request_process_delete(key: str, body: Optional[DeleteRequest] = None,
+                           user: dict = Depends(get_current_user)):
+    """Löschung eines ganzen Prozesses anfordern - löscht noch NICHTS.
+
+    Verschickt einen Bestätigungs-Link an `ADMIN_MAIL`. Erst die Bestätigung
+    (`:confirm-delete`) entfernt Definition und Aufträge.
+    """
+    _require_admin(user)
+    overview = db.process_overview(key)
+    if overview is None:
+        raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Prozess nicht gefunden: {key}")
+    mit_auftraegen = bool(body.includeTickets) if body else False
+    try:
+        empfaenger = pdel.recipient()
+        pdel.assert_tickets_acknowledged(overview, mit_auftraegen)
+        token = pdel.make_token(key, overview, requested_by=user.get("id"),
+                                include_tickets=mit_auftraegen)
+    except pdel.DeleteError as exc:
+        raise _delete_error(exc)
+    try:
+        _delete_mail(key, overview, token, user, empfaenger)
+    except Exception as exc:
+        logger.exception("Bestätigungs-Mail für die Löschung von %s fehlgeschlagen", key)
+        raise api_error(502, "PROCESS_DELETE_MAIL_FAILED",
+                        f"Die Bestätigungs-Mail konnte nicht versendet werden: {exc}")
+    _audit(user, pdel.AUDIT_REQUESTED, key, tickets=overview["tickets"],
+           with_tickets=mit_auftraegen, recipient=empfaenger)
+    return DataResponse(data=DeleteRequestOut(
+        key=key, name=overview["name"], versions=overview["versions"],
+        tickets=overview["tickets"], recipient=empfaenger,
+        expires_at=pdel.expires_at()))
+
+
+@router.get("/processes:delete-preview", response_model=DataResponse[DeletePreviewOut])
+def preview_process_delete(token: str, user: dict = Depends(get_current_user)):
+    """Was der Bestätigungs-Link löschen würde. Reine Auskunft, kein Eingriff."""
+    _require_admin(user)
+    try:
+        data = pdel.load_token(token)
+        overview = db.process_overview(str(data["key"]))
+        pdel.assert_matches(data, overview)
+    except pdel.DeleteError as exc:
+        raise _delete_error(exc)
+    return DataResponse(data=DeletePreviewOut(
+        key=overview["key"], name=overview["name"], versions=overview["versions"],
+        tickets=overview["tickets"], with_tickets=bool(data.get("with_tickets")),
+        requested_by=data.get("by")))
+
+
+@router.post("/processes:confirm-delete", response_model=DataResponse[dict])
+def confirm_process_delete(body: ConfirmDeleteRequest,
+                           user: dict = Depends(get_current_user)):
+    """Bestätigte Löschung ausführen: erst die Aufträge, dann die Definition.
+
+    Diese Reihenfolge ist wichtig. Ein Auftrag ohne seine gepinnte Definition wäre
+    nicht mehr lesbar (die API antwortet mit PROCESS_DEFINITION_MISSING); bricht es
+    dagegen NACH den Aufträgen ab, steht die Definition noch und der Vorgang lässt
+    sich wiederholen.
+    """
+    _require_admin(user)
+    try:
+        data = pdel.load_token(body.token)
+        key = str(data["key"])
+        overview = db.process_overview(key)
+        pdel.assert_matches(data, overview)
+        pdel.assert_tickets_acknowledged(overview, bool(data.get("with_tickets")))
+    except pdel.DeleteError as exc:
+        raise _delete_error(exc)
+
+    # Aufträge zuerst - jeder einzeln auditiert, damit nachvollziehbar bleibt, WAS
+    # verschwunden ist (der Audit-Eintrag überlebt die Löschung).
+    geloeschte_tickets = 0
+    if overview["tickets"]:
+        from backend.database import process_tickets as tstore
+        rows, _total = tstore.list_tickets(process_key=key, limit=10_000, offset=0)
+        for r in rows:
+            record_audit(
+                action="process_ticket_deleted", actor_id=user.get("id"),
+                actor_name=user.get("displayName") or user.get("email") or "",
+                entity_type="process_ticket", entity_id=str(r["id"]),
+                summary=f"Prozess-Ticket #{r['id']} mit dem Prozess {key} geloescht",
+                details={"process_key": key, "status": r.get("status"),
+                         "owner_id": r.get("owner_id"), "via": "process_delete"},
+            )
+            if tstore.delete(int(r["id"])):
+                geloeschte_tickets += 1
+
+    try:
+        versionen = db.delete_process(key)
+    except Exception as exc:
+        mapped = _map_db_error(exc)
+        if mapped:
+            raise mapped
+        raise
+    _audit(user, pdel.AUDIT_CONFIRMED, key, versions=versionen,
+           tickets=geloeschte_tickets, requested_by=data.get("by"))
+    return DataResponse(data={"key": key, "versions_deleted": versionen,
+                              "tickets_deleted": geloeschte_tickets})

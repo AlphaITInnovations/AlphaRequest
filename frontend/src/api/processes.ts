@@ -9,7 +9,10 @@
  *  - Der Doppelpunkt in `:publish`/`:export` darf NICHT URL-encodiert werden.
  */
 import { client } from '@/api/client'
-import type { FieldAccess, ProcessDefinition, ProcessOut } from '@/types/process'
+import type {
+  FieldAccess, ProcessDefinition, ProcessDeletePreview,
+  ProcessDeleteRequestOut, ProcessOut,
+} from '@/types/process'
 
 /** Veröffentlichter Katalog (jede:r Angemeldete). Ohne `definition`. */
 export async function listProcesses(): Promise<ProcessOut[]> {
@@ -97,6 +100,32 @@ export async function importProcess(
 }
 
 /** Entwurfs-Version löschen. Antwort ist {ok:true} ohne data-Envelope. */
+/**
+ * Löschung eines GANZEN Prozesses anfordern. Löscht noch nichts – der Server
+ * verschickt einen Bestätigungs-Link an die hinterlegte Admin-Adresse (ADMIN_MAIL).
+ * `includeTickets` muss gesetzt sein, wenn es Aufträge gibt; sonst 409.
+ */
+export async function requestProcessDelete(
+  key: string, includeTickets: boolean,
+): Promise<ProcessDeleteRequestOut> {
+  const { data } = await client.post(`/processes/${key}:request-delete`, { includeTickets })
+  return data.data
+}
+
+/** Was der Bestätigungs-Link löschen würde – reine Auskunft. */
+export async function previewProcessDelete(token: string): Promise<ProcessDeletePreview> {
+  const { data } = await client.get('/processes:delete-preview', { params: { token } })
+  return data.data
+}
+
+/** Bestätigte Löschung ausführen. Nicht umkehrbar. */
+export async function confirmProcessDelete(
+  token: string,
+): Promise<{ key: string; versions_deleted: number; tickets_deleted: number }> {
+  const { data } = await client.post('/processes:confirm-delete', { token })
+  return data.data
+}
+
 export async function deleteVersion(key: string, version: number): Promise<void> {
   await client.delete(`/processes/${encodeURIComponent(key)}/versions/${version}`)
 }

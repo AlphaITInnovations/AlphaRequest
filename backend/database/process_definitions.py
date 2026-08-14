@@ -444,3 +444,80 @@ def delete_version(key: str, version: int) -> None:
         raise
     finally:
         conn.close()
+
+
+# ── Ganzen Prozess löschen ────────────────────────────────────────────────────
+
+def process_overview(key: str) -> Optional[dict]:
+    """Was zu einem Prozess gehört – Grundlage für die Lösch-Bestätigung.
+
+    Liefert Name, alle Versionen mit Status, die Anzahl der Aufträge JE VERSION
+    und einen Fingerabdruck. Der Fingerabdruck geht in das Bestätigungs-Token:
+    ändert sich der Prozess nach dem Anfordern (neue Version, Veröffentlichung,
+    weitere Aufträge), wird der Link ungültig – sonst könnte man etwas bestätigen,
+    das man so nie zur Ansicht bekommen hat.
+    """
+    versions = list_versions(key)
+    if not versions:
+        return None
+    conn = get_connection()
+    try:
+        gesamt = 0
+        je_version = []
+        for v in versions:
+            n = _count_pinning_tickets(conn, key, int(v["version"]))
+            gesamt += n
+            je_version.append({"version": int(v["version"]), "status": v["status"],
+                               "rev": v.get("rev"), "tickets": n})
+    finally:
+        conn.close()
+    fingerprint = ";".join(f"{v['version']}:{v['status']}:{v['rev']}:{v['tickets']}"
+                           for v in je_version)
+    return {
+        "key": key,
+        "name": versions[0].get("name") or key,
+        "versions": je_version,
+        "tickets": gesamt,
+        "fingerprint": fingerprint,
+    }
+
+
+def delete_process(key: str) -> int:
+    """Löscht ALLE Versionen eines Prozesses. Gibt die Anzahl gelöschter Zeilen.
+
+    Bewusst OHNE die Schutzregeln von `delete_version` (nur draft, keine
+    referenzierenden Aufträge): dies ist der ausdrücklich bestätigte Eingriff.
+    Der Aufrufer MUSS die Aufträge vorher entfernen – in dieser Reihenfolge, weil
+    ein Auftrag ohne seine gepinnte Definition nicht mehr lesbar wäre (die API
+    antwortet dann mit PROCESS_DEFINITION_MISSING). Umgekehrt ist ein Abbruch
+    zwischen den Schritten harmlos: die Definition steht noch, es fehlen nur
+    Aufträge, und der Vorgang lässt sich wiederholen.
+    """
+    conn = get_connection()
+    try:
+        conn.begin()
+        offen = _count_pinning_tickets_any(conn, key)
+        if offen:
+            raise ProcessVersionInUse(
+                f"{key} wird noch von {offen} Auftrag/Aufträgen referenziert")
+        cur = _exec(conn, "DELETE FROM process_definitions WHERE `key`=%s", (key,))
+        n = cur.rowcount or 0
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    if not n:
+        raise ProcessNotFound(key)
+    return n
+
+
+def _count_pinning_tickets_any(conn, key: str) -> int:
+    """Aufträge dieses Prozesses über ALLE Versionen. 0, falls die Tabelle fehlt."""
+    try:
+        row = _fetchone(
+            conn, "SELECT COUNT(*) AS n FROM process_tickets WHERE process_key=%s", (key,))
+        return int(row["n"]) if row else 0
+    except pymysql.err.OperationalError:
+        return 0
