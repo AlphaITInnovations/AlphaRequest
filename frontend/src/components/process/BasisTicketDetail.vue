@@ -3,28 +3,30 @@
  * Ansicht eines Basis-Tickets – BEWUSST eine eigene, feste Oberfläche im Layout
  * des Alt-Systems (Gegenstück zur Anlage in views/processes/
  * BasisTicketCreateView.vue): links Fortschritt und Details (Verantwortlicher,
- * Beobachter, Priorität, Kommentar), rechts Titel, Verlauf und „Neuer Eintrag“,
- * unten „Abbrechen · Speichern & später weiterbearbeiten · Abschließen“.
+ * Beobachter), rechts Titel, Verlauf und „Neuer Eintrag“, unten
+ * „Abbrechen · Speichern & später weiterbearbeiten · Abschließen“.
+ *
+ * PRIORITÄT UND KOMMENTAR sind hier bewusst NICHT setzbar: Backend und Datenbank
+ * kennen beides weiterhin (PATCH `priority`, Nachtrags-Endpunkt), aber solange
+ * unklar ist, wie sie sinnvoll eingesetzt werden, bietet die Oberfläche sie
+ * nirgends an.
  *
  * NUR die Oberfläche ist fest – die Daten bleiben der dynamische System-Prozess:
  *   Verantwortlicher → ticket.fachabteilung (editierbar = Weiterreichen; ob das
  *                      erlaubt ist, sagt der Server über `editable_fields`)
  *   Verlauf          → ticket.eintraege (append-only; Autor und Zeitpunkt
  *                      stempelt der Server)
- *   Kommentar        → Nachtrag; vorbelegt mit dem letzten Kommentar, ein
- *                      geänderter Text wird beim Speichern als neuer angehängt
- *   Priorität        → Ticket-Metadatum (PATCH `priority`)
  *   Abschließen      → :advance (das Basis-Ticket hat danach keine weitere Phase)
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import UserSelect from '@/components/UserSelect.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import * as ticketsApi from '@/api/processTickets'
 import {
-  addComment, addWatcher, listEvents, listWatchers, removeWatcher,
-  type ProcessWatcher,
+  addWatcher, listWatchers, removeWatcher, type ProcessWatcher,
 } from '@/api/processEvents'
 import type { OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
 
@@ -47,21 +49,18 @@ const FELD_EINTRAEGE = 'ticket.eintraege'
 
 interface Eintrag { text?: string; author_name?: string; timestamp?: string }
 
+const gruppenName = (gid: string) =>
+  props.sources.groups.find((g) => g.id === gid)?.name || gid
+
+function gruppeAusTicket(t: ProcessTicketOut): { id: string; name: string } | null {
+  const gid = String(t.values[FELD_GRUPPE] ?? '')
+  return gid ? { id: gid, name: gruppenName(gid) } : null
+}
+
 // ── Eingaben ──────────────────────────────────────────────────────────────────
 const titel = ref(String(props.ticket.title || ''))
-const fachabteilung = ref(String(props.ticket.values[FELD_GRUPPE] ?? ''))
-const prioritaet = ref(String(props.ticket.priority || 'normal'))
+const fachabteilung = ref<{ id: string; name: string } | null>(gruppeAusTicket(props.ticket))
 const neuerEintrag = ref('')
-const kommentar = ref('')
-/** Stand des Kommentars beim Laden – nur ein GEÄNDERTER Text wird angehängt. */
-const kommentarUrsprung = ref('')
-
-const PRIORITAETEN = [
-  { value: 'low', label: 'Niedrig' },
-  { value: 'normal', label: 'Mittel' },
-  { value: 'high', label: 'Hoch' },
-  { value: 'urgent', label: 'Kritisch' },
-]
 
 // ── Abgeleitetes ──────────────────────────────────────────────────────────────
 const abilities = computed(() => ticket.value.abilities ?? {
@@ -90,9 +89,6 @@ const fortschrittBadge = computed(() => {
   return `Phase ${aktuellerIndex.value + 1} von ${phasen.value.length}`
 })
 
-const gruppenName = (gid: string) =>
-  props.sources.groups.find((g) => g.id === gid)?.name || gid
-
 /** Naive UTC-Zeitstempel (DB) als UTC lesen, sonst verschöbe sich die Anzeige. */
 function formatiert(iso: string | null | undefined): string {
   if (!iso) return ''
@@ -107,22 +103,18 @@ function formatiert(iso: string | null | undefined): string {
 
 // ── Beobachter ────────────────────────────────────────────────────────────────
 const beobachter = ref<ProcessWatcher[]>([])
-const beobachterAuswahl = ref('')
+/** Erzwingt nach jeder Auswahl einen frischen Picker (leert dessen Suchfeld). */
+const pickerKey = ref(0)
 
-const offenePersonen = computed(() => {
-  const drin = new Set(beobachter.value.map((w) => w.id))
-  return props.sources.users.filter((u) => !drin.has(u.id))
-})
 const nameVon = (w: ProcessWatcher) =>
   w.name || props.sources.users.find((u) => u.id === w.id)?.displayName || w.id
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
 
-async function beobachterHinzu() {
-  const uid = beobachterAuswahl.value
-  beobachterAuswahl.value = ''
-  if (!uid) return
+async function beobachterHinzu(sel: { id: string; name: string } | null) {
+  pickerKey.value++
+  if (!sel || beobachter.value.some((w) => w.id === sel.id)) return
   try {
-    beobachter.value = await addWatcher(ticket.value.id, uid)
+    beobachter.value = await addWatcher(ticket.value.id, sel.id)
   } catch (e) {
     showToast(errorMessage(e, 'Beobachter:in konnte nicht eingetragen werden'), false)
   }
@@ -136,66 +128,47 @@ async function beobachterWeg(uid: string) {
   }
 }
 
-// ── Laden ─────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
     beobachter.value = await listWatchers(ticket.value.id)
   } catch { /* Liste bleibt leer – kein Grund, die Ansicht zu kippen */ }
-  try {
-    // Kommentar-Vorbelegung: der JÜNGSTE Nachtrag. Die Nachtrags-Anzeige im
-    // Verlauf ruht derzeit – diese Box ist damit der sichtbare Ort des Kommentars.
-    const res = await listEvents(ticket.value.id, { limit: 500 })
-    const letzter = [...res.items].reverse().find((e) => e.action === 'comment')
-    kommentar.value = letzter?.body || ''
-    kommentarUrsprung.value = kommentar.value
-  } catch { /* dito */ }
 })
 
 // ── Speichern / Abschließen ───────────────────────────────────────────────────
 function uebernehmen(t: ProcessTicketOut) {
   ticket.value = t
   titel.value = String(t.title || '')
-  fachabteilung.value = String(t.values[FELD_GRUPPE] ?? '')
-  prioritaet.value = String(t.priority || 'normal')
+  fachabteilung.value = gruppeAusTicket(t)
   neuerEintrag.value = ''
 }
 
 /** Gibt es überhaupt etwas zu schreiben? */
 const dirty = computed(() =>
   titel.value.trim() !== String(ticket.value.title || '')
-  || fachabteilung.value !== String(ticket.value.values[FELD_GRUPPE] ?? '')
-  || prioritaet.value !== String(ticket.value.priority || 'normal')
-  || !!neuerEintrag.value.trim()
-  || kommentar.value.trim() !== kommentarUrsprung.value.trim())
+  || (fachabteilung.value?.id ?? '') !== String(ticket.value.values[FELD_GRUPPE] ?? '')
+  || !!neuerEintrag.value.trim())
 
 async function speichern(leise = false): Promise<boolean> {
   busy.value = true
   try {
     const values: Record<string, unknown> = {}
-    if (darfWeiterreichen.value
-        && fachabteilung.value !== String(ticket.value.values[FELD_GRUPPE] ?? '')) {
-      values[FELD_GRUPPE] = fachabteilung.value
+    if (darfWeiterreichen.value && fachabteilung.value
+        && fachabteilung.value.id !== String(ticket.value.values[FELD_GRUPPE] ?? '')) {
+      values[FELD_GRUPPE] = fachabteilung.value.id
     }
     if (darfEintragen.value && neuerEintrag.value.trim()) {
       // append_only: Bestand unverändert mitsenden, der Server prüft, dass nur
       // angehängt wurde, und stempelt Autor:in und Zeitpunkt des neuen Eintrags.
       values[FELD_EINTRAEGE] = [...eintraege.value, { text: neuerEintrag.value.trim() }]
     }
-    const body: { title?: string; priority?: string; values?: Record<string, unknown> } = {}
+    const body: { title?: string; values?: Record<string, unknown> } = {}
     if (titel.value.trim() && titel.value.trim() !== String(ticket.value.title || '')) {
       body.title = titel.value.trim()
-    }
-    if (prioritaet.value !== String(ticket.value.priority || 'normal')) {
-      body.priority = prioritaet.value
     }
     if (Object.keys(values).length) body.values = values
 
     if (Object.keys(body).length) {
       uebernehmen(await ticketsApi.patchTicket(ticket.value.id, body))
-    }
-    if (kommentar.value.trim() && kommentar.value.trim() !== kommentarUrsprung.value.trim()) {
-      await addComment(ticket.value.id, kommentar.value.trim())
-      kommentarUrsprung.value = kommentar.value
     }
     if (!leise) showToast('Gespeichert')
     return true
@@ -232,7 +205,7 @@ async function abschliessen() {
     </h1>
     <p class="text-xs text-gray-400 mt-1 mb-5">Erstellt am {{ formatiert(ticket.created_at) }}</p>
 
-    <div class="grid gap-4 lg:grid-cols-[minmax(260px,1fr)_2fr] items-start">
+    <div class="grid gap-4 lg:grid-cols-[minmax(280px,1fr)_2fr] items-start">
       <!-- Links: Fortschritt + Details -->
       <div class="card-section space-y-5">
         <div>
@@ -277,16 +250,20 @@ async function abschliessen() {
                    border-gray-100 dark:border-white/[0.06] pt-4">Details</h3>
 
         <div>
-          <label class="block text-sm text-gray-700 dark:text-gray-200 mb-1.5">Verantwortlicher</label>
           <!-- Editierbar = Weiterreichen (das Feld trägt die Zuständigkeit); ob das
                erlaubt ist, entscheidet der Server über editable_fields. -->
-          <select v-if="darfWeiterreichen" v-model="fachabteilung" class="afi w-full">
-            <option v-for="g in sources.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-          </select>
-          <div v-else class="afi w-full bg-gray-50 dark:bg-white/[0.04] text-gray-700
-                             dark:text-gray-200">
-            {{ fachabteilung ? gruppenName(fachabteilung) : '— niemand zugewiesen —' }}
-          </div>
+          <UserSelect v-if="darfWeiterreichen" v-model="fachabteilung"
+                      label="Verantwortlicher"
+                      placeholder="Fachabteilung auswählen…"
+                      :show-groups="true" :show-users="false" />
+          <template v-else>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Verantwortlicher
+            </label>
+            <div class="afi w-full !bg-gray-50 dark:!bg-white/[0.04]">
+              {{ fachabteilung?.name || '— niemand zugewiesen —' }}
+            </div>
+          </template>
         </div>
 
         <div>
@@ -308,24 +285,10 @@ async function abschliessen() {
               Niemand beobachtet diesen Auftrag.
             </li>
           </ul>
-          <select v-if="abilities.manage_watchers || !terminal"
-                  v-model="beobachterAuswahl" @change="beobachterHinzu" class="afi w-full">
-            <option value="">Beobachter hinzufügen…</option>
-            <option v-for="u in offenePersonen" :key="u.id" :value="u.id">{{ u.displayName }}</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm text-gray-700 dark:text-gray-200 mb-1.5">Priorität</label>
-          <select v-model="prioritaet" class="afi w-full" :disabled="!abilities.edit">
-            <option v-for="p in PRIORITAETEN" :key="p.value" :value="p.value">{{ p.label }}</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm text-gray-700 dark:text-gray-200 mb-1.5">Kommentar</label>
-          <textarea v-model="kommentar" rows="4" class="afi w-full resize-none"
-                    :disabled="terminal" placeholder="Optionaler Kommentar…" />
+          <UserSelect v-if="abilities.manage_watchers || !terminal"
+                      :key="pickerKey" :model-value="null" label=""
+                      placeholder="Beobachter hinzufügen…"
+                      @update:model-value="beobachterHinzu" />
         </div>
       </div>
 
@@ -388,3 +351,18 @@ async function abschliessen() {
     </div>
   </div>
 </template>
+
+<style scoped>
+@reference "../../style.css";
+/* `afi` ist KEINE globale Klasse – ohne diese Definition blieben die Felder
+   unstyled (roher Browser-Stil). Gleiche Optik wie das Eingabefeld von
+   UserSelect.vue, damit alle Felder der Seite zusammenpassen. */
+.afi {
+  @apply rounded-xl border border-gray-200 dark:border-white/10
+         bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+         placeholder-gray-400 dark:placeholder-gray-500
+         px-3.5 py-2.5 text-sm
+         focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 focus:border-[#3EAAB8]/50
+         transition;
+}
+</style>
