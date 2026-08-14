@@ -12,7 +12,6 @@ import type { SimFieldError, SimViewer } from '@/lib/processSim'
 import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
-import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import * as ticketsApi from '@/api/processTickets'
@@ -21,9 +20,9 @@ import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
 import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
-import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
 import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
 import ProcessDepartments from '@/components/process/ProcessDepartments.vue'
+import ProcessDetailsPanel from '@/components/process/ProcessDetailsPanel.vue'
 import SchemaExportView from '@/components/process/form/SchemaExportView.vue'
 
 const route = useRoute()
@@ -221,7 +220,7 @@ async function destroy() {
   try {
     await ticketsApi.deleteTicket(id.value)
     showToast('Auftrag gelöscht')
-    router.push('/prozess-auftraege')
+    router.push('/dashboard')
   } catch (e) {
     showToast(errorMessage(e, 'Löschen fehlgeschlagen'), false)
   } finally { busy.value = false }
@@ -245,13 +244,44 @@ async function reopen() {
 }
 
 const groupName = (gid: string) => sources.value.groups.find((g) => g.id === gid)?.name || gid
+const userName = (uid: string) =>
+  sources.value.users.find((u) => u.id === uid)?.displayName || uid
+const fieldName = (key: string) => fieldLabels.value[key] || key
 
-onMounted(async () => { sources.value = await loadOptionSources(true); await load() })
+/**
+ * „Weiterreichen": bei kind='assignable'/'group_from_field' steht die zuständige
+ * Stelle in einem FELD des Auftrags. Ist dieses Feld in der aktuellen Phase
+ * editierbar, darf man es im Details-Panel direkt umstellen – das ist der
+ * Basis-Auftrag, der zwischen Fachabteilungen hin- und hergeht.
+ *
+ * Gespeichert wird über denselben PATCH wie „Speichern": gleiche Prüfungen,
+ * gleicher Verlaufseintrag. Angefangene Formular-Änderungen gehen deshalb mit –
+ * das ist gewollt, sonst würde ein zweiter PATCH sie gleich wieder überschreiben.
+ */
+async function handover(field: string, value: string) {
+  onValues({ ...values.value, [field]: value })
+  await saveValues()
+}
+
+/**
+ * Namens-Quellen laden. `/settings/groups` verlangt ADMIN-Rechte – wer keine hat,
+ * bekam von dort eine leere Liste zurück: die Fachabteilungen erschienen dann als
+ * rohe IDs und die Weitergabe-Auswahl war leer, also genau bei den Personen
+ * kaputt, die Aufträge weiterreichen müssen. Ohne Adminrechte deshalb der
+ * öffentliche `/groups`-Endpunkt (dort fehlen nur als „hidden" markierte
+ * Gruppen – deren Name fällt wie bisher auf die ID zurück).
+ */
+onMounted(async () => {
+  sources.value = await loadOptionSources(auth.isAdmin)
+  await load()
+})
 </script>
 
 <template>
   <AppLayout>
-    <div class="max-w-5xl mx-auto px-4 py-6">
+    <!-- Breiter als die Erstellungsansicht: links das Details-Panel (320 px),
+         rechts Formular und Verlauf. -->
+    <div class="max-w-7xl mx-auto px-4 py-6">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
       </div>
@@ -262,17 +292,17 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
         <!-- Kopf -->
         <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
           <div class="min-w-0">
-            <button @click="router.push('/prozess-auftraege')"
+            <button @click="router.push('/dashboard')"
                     class="text-xs text-gray-400 hover:text-[#3EAAB8] mb-1">← Aufträge</button>
             <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100 truncate">
               {{ ticket.title }}
             </h1>
+            <!-- Kein „Phase: …" mehr: Phase und Status stehen im Details-Panel,
+                 dort mit Nummer, Namen und Fortschritt. Zwei Anzeigen derselben
+                 Sache widersprechen sich früher oder später. -->
             <div class="text-xs text-gray-400 flex items-center gap-2 flex-wrap">
               <span>#{{ ticket.id }}</span><span>·</span>
               <span class="font-mono">{{ ticket.process_key }} v{{ ticket.process_version }}</span>
-              <span>·</span>
-              <span>{{ STATUS_LABEL[ticket.status] || ticket.status }}</span>
-              <span v-if="ticket.current_phase_label">· Phase: {{ ticket.current_phase_label }}</span>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -309,95 +339,90 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
           </div>
         </div>
 
-        <!-- Phasenfortschritt -->
-        <div class="card-section mb-4">
-          <ol class="flex items-center gap-2 flex-wrap">
-            <li v-for="(p, i) in definition.phases" :key="p.key" class="flex items-center gap-2">
-              <span class="px-2.5 py-1 rounded-full text-xs"
-                    :class="i < (ticket.runtime?.current_index ?? 0)
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                      : i === (ticket.runtime?.current_index ?? 0)
-                        ? 'bg-[#3EAAB8]/15 text-[#3EAAB8]'
-                        : 'bg-gray-100 text-gray-400 dark:bg-white/10'">
-                {{ p.label || p.key }}
-              </span>
-              <span v-if="i < definition.phases.length - 1" class="text-gray-300">→</span>
-            </li>
-          </ol>
-          <div v-if="ticket.responsibility" class="text-xs text-gray-400 mt-2">
-            Zuständig:
-            <template v-if="ticket.responsibility.kind === 'departments'">
-              {{ ticket.responsibility.departments.map(d => groupName(d.group)).join(', ') || '—' }}
+        <!-- Kein `items-start`: die Spalten müssen sich strecken, sonst ist die
+             Seitenspalte genauso hoch wie das Panel und `lg:sticky` hat keinen
+             Weg, an dem es kleben könnte. -->
+        <div class="flex flex-col lg:flex-row gap-6">
+
+          <!-- ── Details-Panel: Fortschritt, Zuständigkeit, Beobachter:innen ──
+               Die waagerechte Phasen-Kette und die Zeile „Zuständig: …", die hier
+               vorher standen, sind bewusst hierher gewandert: senkrecht bleiben
+               die Phasen-Namen auch bei vielen Phasen lesbar, und Zuständigkeit
+               steht damit neben Status und Beobachter:innen statt getrennt davon. -->
+          <aside class="w-full lg:w-[320px] lg:flex-shrink-0">
+            <ProcessDetailsPanel
+              class="lg:sticky lg:top-4"
+              :ticket="ticket"
+              :phases="definition.phases"
+              :group-name="groupName"
+              :user-name="userName"
+              :field-name="fieldName"
+              :groups="sources.groups"
+              :users="sources.users"
+              :can-edit="abilities.edit"
+              :can-manage-watchers="abilities.manage_watchers"
+              :current-user-id="auth.user?.id ?? null"
+              :busy="busy"
+              @handover="handover" />
+          </aside>
+
+          <section class="flex-1 min-w-0 w-full space-y-4">
+
+            <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen blockiert
+                 `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst AUSSERHALB von
+                 abilities.edit: quittieren muss auch, wer den Auftrag nicht bearbeiten
+                 darf. Das Panel nennt links nur die ANZAHL – die Namen und Knöpfe
+                 stehen ausschließlich hier. -->
+            <ProcessDepartments
+              v-if="ticket.responsibility?.kind === 'departments'"
+              :ticket-id="ticket.id"
+              :departments="ticket.responsibility.departments"
+              :group-name="groupName"
+              :terminal="terminal"
+              @updated="onDepartmentsUpdated" />
+
+            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
+            <template v-if="abilities.edit && phase && !isExportPhase">
+              <SchemaForm :definition="definition" :phase="phase" :model-value="values"
+                          :viewer="viewer" :errors="errors" :sources="sources"
+                          @update:model-value="onValues($event)" />
+              <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst an. -->
+              <div v-if="generalErrors.length"
+                   class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
+                          px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                <ul class="list-disc list-inside">
+                  <li v-for="(e, i) in generalErrors" :key="i">
+                    <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
+                  </li>
+                </ul>
+              </div>
             </template>
-            <template v-else-if="ticket.responsibility.kind === 'group'">
-              {{ groupName(ticket.responsibility.group) }}
-            </template>
-            <template v-else-if="ticket.responsibility.kind === 'owner'">
-              {{ ticket.owner_name || 'Ersteller:in' }}
-            </template>
-            <template v-else>—</template>
-          </div>
-        </div>
 
-        <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen blockiert
-             `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst AUSSERHALB von
-             abilities.edit: quittieren muss auch, wer den Auftrag nicht bearbeiten darf. -->
-        <ProcessDepartments
-          v-if="ticket.responsibility?.kind === 'departments'"
-          class="mb-4"
-          :ticket-id="ticket.id"
-          :departments="ticket.responsibility.departments"
-          :group-name="groupName"
-          :terminal="terminal"
-          @updated="onDepartmentsUpdated" />
+            <!-- Export-Phase: druckbare Zusammenfassung; sonst die Gesamtansicht -->
+            <SchemaExportView
+              v-if="isExportPhase"
+              :definition="definition"
+              :ticket="ticket"
+              :phase="phase"
+              :viewer="viewer"
+              :sources="sources"
+              @exported="showToast('PDF erzeugt')"
+              @failed="showToast($event, false)" />
+            <div v-else class="card-section">
+              <h3 class="section-title">Alle Angaben</h3>
+              <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
+                                  :sources="sources" />
+            </div>
 
-        <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
-        <template v-if="abilities.edit && phase && !isExportPhase">
-          <SchemaForm :definition="definition" :phase="phase" :model-value="values"
-                      :viewer="viewer" :errors="errors" :sources="sources"
-                      @update:model-value="onValues($event)" />
-          <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst an. -->
-          <div v-if="generalErrors.length"
-               class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
-                      px-4 py-3 text-sm text-red-800 dark:text-red-200 mt-3">
-            <ul class="list-disc list-inside">
-              <li v-for="(e, i) in generalErrors" :key="i">
-                <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
-              </li>
-            </ul>
-          </div>
-        </template>
+            <!-- Allgemeine Anhänge des Auftrags (Feld-Anhänge stehen im Formular) -->
+            <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit" />
 
-        <!-- Export-Phase: druckbare Zusammenfassung; sonst die Gesamtansicht -->
-        <SchemaExportView
-          v-if="isExportPhase"
-          class="mt-4"
-          :definition="definition"
-          :ticket="ticket"
-          :phase="phase"
-          :viewer="viewer"
-          :sources="sources"
-          @exported="showToast('PDF erzeugt')"
-          @failed="showToast($event, false)" />
-        <div v-else class="card-section mt-4">
-          <h3 class="section-title">Alle Angaben</h3>
-          <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
-                              :sources="sources" />
-        </div>
-
-        <!-- Allgemeine Anhänge des Auftrags (Feld-Anhänge stehen im Formular) -->
-        <div class="mt-4">
-          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit" />
-        </div>
-
-        <div class="grid gap-4 mt-4 lg:grid-cols-[2fr_1fr] items-start">
-          <ProcessTimeline ref="timeline" :ticket-id="ticket.id"
-                           :field-labels="fieldLabels" :phase-labels="phaseLabels"
-                           :group-name="groupName"
-                           :can-be-internal="abilities.internal_comment" />
-          <ProcessWatchers :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
-                           :can-manage="abilities.manage_watchers"
-                           :users="sources.users" />
+            <!-- Verlauf ohne Nachträge (die Nachtrags-Anzeige ruht, siehe
+                 ProcessTimeline.vue). Beobachter:innen stehen jetzt im Panel. -->
+            <ProcessTimeline ref="timeline" :ticket-id="ticket.id"
+                             :field-labels="fieldLabels" :phase-labels="phaseLabels"
+                             :group-name="groupName" />
+          </section>
         </div>
       </template>
     </div>

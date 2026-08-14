@@ -14,6 +14,8 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      // Übersicht = Startseite: EINE Liste für alle Aufträge, mit den
+      // Arbeitslisten („wartet auf mich"/„auf meine Abteilung") als Sichten.
       path: '/dashboard',
       component: () => import('@/views/DashboardView.vue'),
       meta: { requiresAuth: true },
@@ -41,14 +43,19 @@ const router = createRouter({
     // `abilities`/`visible_fields` mit. Ein Rechte-Gate an der Route wäre hier
     // falsch: es würde Beteiligte aussperren, die kein Admin sind.
     {
+      // Die eigene Auftragsliste ist in der Übersicht aufgegangen. Weiterleitung
+      // statt Löschung, damit vorhandene Lesezeichen nicht ins Leere laufen.
+      // Greift NUR für den genauen Pfad – die Unterpfade (/neu, /:id) bleiben.
       path: '/prozess-auftraege',
-      component: () => import('@/views/processes/ProcessTicketListView.vue'),
-      meta: { requiresAuth: true },
+      redirect: '/dashboard',
     },
     {
-      // Katalog der veröffentlichten Prozesse – der EINE Weg zum Anlegen.
-      // Ohne Rechte-Gate: der Katalog zeigt jedem, was es gibt, und markiert
-      // deaktiviert, was diese Person nicht anlegen darf (may_create).
+      // Katalog der veröffentlichten Prozesse („Neues Prozess-Ticket"). Das
+      // Basis-Ticket fehlt hier als Kachel – es hat mit „Neues Ticket" einen
+      // eigenen Einstieg direkt auf /prozess-auftraege/neu/basis-ticket
+      // (lib/basisTicket.ts). Ohne Rechte-Gate: der Katalog zeigt jedem, was es
+      // gibt, und markiert deaktiviert, was diese Person nicht anlegen darf
+      // (may_create).
       path: '/prozess-auftraege/neu',
       component: () => import('@/views/ProcessCatalogView.vue'),
       meta: { requiresAuth: true },

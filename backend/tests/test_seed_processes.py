@@ -107,8 +107,7 @@ def test_es_sind_zehn_seeds_und_sie_liegen_unter_backend():
 
 def test_alle_seeds_validieren_nach_der_aufloesung():
     index = {n.lower(): f"gid-{i}" for i, n in enumerate(sd.required_group_names())}
-    index["sonderabteilung"] = "gid-basis"
-    mapping = sd.build_placeholder_mapping(index, basis_group_name="Sonderabteilung")
+    mapping = sd.build_placeholder_mapping(index)
     bekannt = set(index.values())
 
     geprueft = 0
@@ -124,7 +123,7 @@ def test_alle_seeds_validieren_nach_der_aufloesung():
 
 def test_platzhalter_abbildung_deckt_alle_vorkommen_ab():
     """Kein Seed darf einen Platzhalter enthalten, den die Konstante nicht kennt."""
-    bekannt = set(sd.PLACEHOLDER_GROUP_NAMES) | {sd.BASIS_TICKET_PLACEHOLDER}
+    bekannt = set(sd.PLACEHOLDER_GROUP_NAMES)
     gefunden: set[str] = set()
     for pfad in process_seed_files():
         text = pfad.read_text(encoding="utf-8")
@@ -223,11 +222,6 @@ def test_ungueltige_definition_wird_nicht_eingespielt(umgebung, monkeypatch, tmp
     assert "validiert nicht" in report.outcomes[0].meldung
 
 
-def test_unbekannte_basis_gruppe_bricht_den_lauf_ab(umgebung):
-    with pytest.raises(sd.SeedError, match="Basis-Ticket-Gruppe"):
-        sd.seed_processes(commit=True, basis_group_name="Tippfehler", with_permissions=False)
-
-
 # ── Idempotenz und Trockenlauf ───────────────────────────────────────────────
 
 def test_vorhandener_key_wird_uebersprungen_auch_als_entwurf(umgebung, monkeypatch, tmp_path):
@@ -243,12 +237,12 @@ def test_vorhandener_key_wird_uebersprungen_auch_als_entwurf(umgebung, monkeypat
 
 def test_trockenlauf_schreibt_nichts(umgebung):
     groups, store = umgebung
-    report = sd.seed_processes(commit=False, basis_group_name=None, with_permissions=False)
+    report = sd.seed_processes(commit=False, with_permissions=False)
     assert store.created == [] and store.published == []
     assert groups.ensure_aufrufe == []
-    assert report.erstellt == 9      # ohne Basis-Ticket (keine Gruppe konfiguriert)
-    assert report.uebersprungen == 1
-    assert all(o.aktion in ("would_create", "skipped") for o in report.outcomes)
+    assert report.erstellt == 10     # inklusive Basis-Ticket, ohne jede Konfiguration
+    assert report.uebersprungen == 0
+    assert all(o.aktion == "would_create" for o in report.outcomes)
 
 
 def test_trockenlauf_meldet_fehlende_gruppen_ohne_sie_anzulegen(monkeypatch):
@@ -265,35 +259,38 @@ def test_trockenlauf_meldet_fehlende_gruppen_ohne_sie_anzulegen(monkeypatch):
 
 # ── Commit ───────────────────────────────────────────────────────────────────
 
-def test_commit_legt_alle_neun_an_und_veroeffentlicht(umgebung):
+def test_commit_legt_alle_zehn_an_und_veroeffentlicht(umgebung):
     _, store = umgebung
     report = sd.seed_processes(commit=True, with_permissions=False)
 
     assert report.fehler == 0
-    assert len(store.created) == 9 and len(store.published) == 9
+    assert len(store.created) == 10 and len(store.published) == 10
     assert {k for k, *_ in store.created} == {
-        "einstellung", "hardware", "hotelbuchung", "marketing-stellenanzeige",
-        "niederlassung-anmelden", "niederlassung-schliessen", "niederlassung-umzug",
+        "basis-ticket", "einstellung", "hardware", "hotelbuchung",
+        "marketing-stellenanzeige", "niederlassung-anmelden",
+        "niederlassung-schliessen", "niederlassung-umzug",
         "zugang-beantragen", "zugang-sperren"}
     # Gespeichert wird die AUFGELÖSTE Definition, kein Platzhalter.
     for _, _, definition_json, *_ in store.created:
         assert "HIER_GRUPPEN_ID" not in definition_json
 
 
-def test_basis_ticket_ohne_konfiguration_uebersprungen_mit_konfiguration_angelegt(umgebung):
-    groups, store = umgebung
-    ohne = sd.seed_processes(commit=True, with_permissions=False)
-    basis = next(o for o in ohne.outcomes if o.key == "basis-ticket")
-    assert basis.aktion == "skipped" and "--basis-group" in basis.meldung
+def test_basis_ticket_braucht_keine_konfiguration_mehr(umgebung):
+    """Früher übersprungen (--basis-group / SEED_BASIS_TICKET_GROUP), heute nicht:
+    die zuständige Fachabteilung steht in einem FELD des Auftrags, nicht in der
+    Definition – es gibt also keinen Platzhalter mehr aufzulösen."""
+    _, store = umgebung
+    report = sd.seed_processes(commit=True, with_permissions=False, only={"basis-ticket"})
 
-    groups.groups.append({"id": "gid-sonder", "name": "Sonderabteilung"})
-    store.versionen.clear()
-    mit = sd.seed_processes(commit=True, basis_group_name="sonderabteilung",
-                            with_permissions=False)
-    basis = next(o for o in mit.outcomes if o.key == "basis-ticket")
-    assert basis.aktion == "created"
-    roh = next(j for k, _, j, *_ in store.created if k == "basis-ticket")
-    assert "gid-sonder" in roh
+    (o,) = report.outcomes
+    assert o.aktion == "created" and report.fehler == 0
+    defn = json.loads(store.created[0][2])
+    assert "HIER_" not in store.created[0][2]
+    # Jede:r durfte Basis-Tickets anlegen – das muss der Seed mitbringen.
+    assert defn["createPermissions"]["everyone"] is True
+    bearbeitung = defn["phases"][1]
+    assert bearbeitung["responsibility"]["kind"] == "group_from_field"
+    assert bearbeitung["responsibility"]["fromField"] == "ticket.fachabteilung"
 
 
 def test_commit_legt_fehlende_pflichtgruppen_versteckt_an(monkeypatch):
@@ -306,7 +303,7 @@ def test_commit_legt_fehlende_pflichtgruppen_versteckt_an(monkeypatch):
     assert sorted(report.angelegte_gruppen) == sorted(sd.required_group_names())
     (_, hidden), = groups.ensure_aufrufe
     assert hidden == sd.AUTO_ASSIGNED_GROUP_NAMES
-    assert report.fehler == 0 and len(store.created) == 9
+    assert report.fehler == 0 and len(store.created) == 10
 
 
 def test_nur_ein_prozess_mit_only(umgebung):

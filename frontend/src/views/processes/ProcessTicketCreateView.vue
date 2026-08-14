@@ -12,7 +12,6 @@ import type { SimFieldError, SimViewer } from '@/lib/processSim'
 import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
-import { PRIORITIES } from '@/lib/processSchema'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import * as processesApi from '@/api/processes'
@@ -29,6 +28,11 @@ const selectedKey = ref<string>(String(route.params.key || ''))
 const definition = ref<ProcessDefinition | null>(null)
 const values = ref<Record<string, unknown>>({})
 const title = ref('')
+/**
+ * Priorität wird NICHT abgefragt: die Anzeige ist überall ausgeblendet, bis
+ * geklärt ist, wie sie sinnvoll genutzt wird. Feld und API bleiben – deshalb
+ * geht weiter der Standardwert mit, statt ihn aus dem Aufruf zu entfernen.
+ */
 const priority = ref('normal')
 const errors = ref<SimFieldError[]>([])
 const sources = ref<OptionSources>(emptySources())
@@ -143,19 +147,11 @@ onMounted(async () => {
         </p>
 
         <template v-if="definition && startPhase">
+          <!-- Kein Prioritäts-Feld: die Priorität ist überall ausgeblendet, bis
+               geklärt ist, wie sie genutzt wird (Feld bleibt in DB und API). -->
           <section class="card-section mb-4">
-            <div class="grid md:grid-cols-3 gap-3">
-              <div class="md:col-span-2">
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titel</label>
-                <input v-model="title" class="afi w-full" maxlength="255" />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Priorität</label>
-                <select v-model="priority" class="afi w-full">
-                  <option v-for="p in PRIORITIES" :key="p" :value="p">{{ p }}</option>
-                </select>
-              </div>
-            </div>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titel</label>
+            <input v-model="title" class="afi w-full" maxlength="255" />
           </section>
 
           <SchemaForm :definition="definition" :phase="startPhase" :model-value="values"

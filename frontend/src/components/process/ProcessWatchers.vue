@@ -8,6 +8,10 @@
  * Sich selbst darf jede Person mit Leserecht ein-/austragen. FREMDE einzutragen
  * ist eine Rechte-Vergabe und daher der zuständigen Stelle vorbehalten
  * (`canManage` blendet die Auswahl aus; verbindlich prüft der Server).
+ *
+ * `embedded` ist die Panel-Optik: ohne eigene Karte und mit kleiner Überschrift,
+ * damit die Liste als Abschnitt in `ProcessDetailsPanel.vue` sitzt. Sonst bliebe
+ * eine Karte in der Karte – und es gäbe zwei Beobachter-Komponenten.
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import {
@@ -24,7 +28,9 @@ const props = withDefaults(defineProps<{
   canManage?: boolean
   /** Auswahlliste für das Eintragen fremder Personen. */
   users?: { id: string; displayName: string }[]
-}>(), { currentUserId: null, canManage: false, users: () => [] })
+  /** Panel-Optik: ohne eigene Karte, kleine Überschrift (siehe Docstring). */
+  embedded?: boolean
+}>(), { currentUserId: null, canManage: false, users: () => [], embedded: false })
 
 const emit = defineEmits<{ changed: [watchers: ProcessWatcher[]] }>()
 
@@ -80,9 +86,11 @@ watch(() => props.ticketId, load)
 </script>
 
 <template>
-  <div class="card-section">
+  <div :class="embedded ? '' : 'card-section'">
     <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
-      <h3 class="section-title mb-0">Beobachter:innen</h3>
+      <h3 :class="embedded
+            ? 'text-xs font-semibold text-gray-400 uppercase tracking-wider'
+            : 'section-title mb-0'">Beobachter:innen</h3>
       <button v-if="currentUserId" @click="umstellen(!beobachteIch)" :disabled="busy"
               class="text-xs px-2.5 py-1 rounded-lg border transition disabled:opacity-40"
               :class="beobachteIch
@@ -119,5 +127,28 @@ watch(() => props.ticketId, load)
       <button @click="umstellen(true, auswahl)" :disabled="busy || !auswahl"
               class="btn-secondary text-xs py-1.5">Hinzufügen</button>
     </div>
+
+    <!-- Datenschutz-Hinweis: wer beobachtet, liest ALLES mit. Steht nur dort, wo
+         fremde Personen eingetragen werden können – dort ist es eine Entscheidung. -->
+    <p v-if="canManage"
+       class="mt-2 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400/90">
+      <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24"
+           stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span>Beobachter:innen sehen <strong>alle sichtbaren Angaben</strong> des Auftrags.</span>
+    </p>
   </div>
 </template>
+
+<style scoped>
+@reference "../../style.css";
+/* Die Auswahl trug die Klasse `afi`, ohne dass sie hier definiert war – das
+   Feld war deshalb unstyled. Gleiche Definition wie in ProcessDepartments.vue. */
+.afi {
+  @apply rounded-xl border border-gray-200 dark:border-white/10
+         bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
+         px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition;
+}
+</style>

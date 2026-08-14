@@ -127,7 +127,11 @@ def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
 
 def _build_message(action: Action, row: dict, phase: Optional[PhaseDef]) -> tuple[str, str]:
     title = str(row.get("title") or f"Auftrag #{row.get('id')}")
-    verb = "Eskalation" if action.type == ActionType.escalate else "Erinnerung"
+    # `template` ist der frei wählbare Anlass-Text der Automation. Ohne ihn steht
+    # dort „Erinnerung" bzw. „Eskalation" – was für eine gerade übernommene
+    # Aufgabe falsch klingt („Erinnerung" an etwas, das man erstmals sieht).
+    verb = (action.template or "").strip() or (
+        "Eskalation" if action.type == ActionType.escalate else "Erinnerung")
     phase_lbl = str((phase.label or phase.key) if phase else "—")
     # Betreff: keine Zeilenumbrüche (Header-Injection); Body: HTML escapen.
     subject = f"[AlphaRequest] {verb}: {title}".replace("\r", " ").replace("\n", " ")[:200]

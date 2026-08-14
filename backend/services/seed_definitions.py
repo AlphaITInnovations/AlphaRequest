@@ -62,11 +62,6 @@ PLACEHOLDER_GROUP_NAMES: dict[str, str] = {
     "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN": "FreigabeHerrLutz",
 }
 
-#: Das Basis-Ticket lässt die zuständige Fachabteilung offen – es gibt dafür
-#: KEINEN kanonischen Namen (jede Installation entscheidet das selbst). Ohne
-#: Konfiguration wird dieser Seed übersprungen statt kaputt eingespielt.
-BASIS_TICKET_PLACEHOLDER = "HIER_GRUPPEN_ID_ZUSTAENDIGE_GRUPPE_EINSETZEN"
-
 #: Gruppen, die ausschließlich automatisch über eine Phase zugewiesen werden
 #: (responsibility.kind=group) und deshalb in Auswahl-Dropdowns nichts zu
 #: suchen haben. Entspricht `workflow_state.assign_group_names()` des
@@ -259,8 +254,7 @@ def _lade_seed(pfad: Path) -> dict:
     return json.loads(pfad.read_text(encoding="utf-8"))
 
 
-def build_placeholder_mapping(index: dict[str, str],
-                              basis_group_name: Optional[str] = None) -> dict[str, str]:
+def build_placeholder_mapping(index: dict[str, str]) -> dict[str, str]:
     """Platzhalter → echte Gruppen-ID. Nicht auflösbare Platzhalter fehlen in der
     Abbildung (und fliegen später in der Fail-closed-Prüfung auf)."""
     mapping: dict[str, str] = {}
@@ -268,15 +262,10 @@ def build_placeholder_mapping(index: dict[str, str],
         gid = index.get(name.strip().lower())
         if gid:
             mapping[ph] = gid
-    if basis_group_name:
-        gid = index.get(basis_group_name.strip().lower())
-        if gid:
-            mapping[BASIS_TICKET_PLACEHOLDER] = gid
     return mapping
 
 
 def seed_processes(*, commit: bool = False,
-                   basis_group_name: Optional[str] = None,
                    with_permissions: bool = True,
                    publish: bool = True,
                    only: Optional[set[str]] = None,
@@ -288,15 +277,9 @@ def seed_processes(*, commit: bool = False,
     """
     report = SeedReport(commit=commit)
 
-    # 1. Gruppen. Die konfigurierte Basis-Ticket-Gruppe wird NICHT angelegt: sie
-    #    ist eine Entscheidung des Betriebs, kein Standard – ein Tippfehler soll
-    #    auffallen, nicht eine leere Gruppe erzeugen.
+    # 1. Gruppen. Fehlende Pflichtgruppen entstehen nur mit `commit`; im
+    #    Trockenlauf treten Ersatz-IDs an ihre Stelle (siehe unten).
     vorher = build_group_index(groupsdb.get_groups())
-    if basis_group_name and basis_group_name.strip().lower() not in vorher:
-        raise SeedError(
-            f"Basis-Ticket-Gruppe „{basis_group_name}“ gibt es nicht. "
-            f"Vorhandene Gruppen: {', '.join(sorted(vorher)) or '(keine)'}")
-
     if commit:
         report.angelegte_gruppen = groupsdb.ensure_required_groups(
             required_group_names(), hidden_names=AUTO_ASSIGNED_GROUP_NAMES)
@@ -313,7 +296,7 @@ def seed_processes(*, commit: bool = False,
                 # obwohl `--commit` die Gruppe angelegt hätte.
                 index[name.strip().lower()] = _DRY_RUN_ID_PREFIX + name
 
-    mapping = build_placeholder_mapping(index, basis_group_name)
+    mapping = build_placeholder_mapping(index)
     bekannte_ids = set(index.values())
 
     # 2. Erstellrechte aus dem Alt-System (einmal laden, nicht je Prozess).
@@ -350,15 +333,6 @@ def _seed_one(pfad: Path, *, mapping: dict[str, str], bekannte_ids: set[str],
         return None
     if not key:
         return SeedOutcome(datei, None, "error", "Definition hat keinen `key`")
-
-    # Nicht konfigurierbare Platzhalter (Basis-Ticket) → überspringen statt
-    # kaputt einspielen.
-    offen = {w for _, w in collect_group_refs(roh)
-             if _PLACEHOLDER_RE.fullmatch(w) and w not in mapping}
-    if offen == {BASIS_TICKET_PLACEHOLDER}:
-        return SeedOutcome(datei, key, "skipped",
-                           "keine zuständige Gruppe konfiguriert "
-                           "(--basis-group / SEED_BASIS_TICKET_GROUP)")
 
     defn_dict = replace_placeholders(roh, mapping)
 

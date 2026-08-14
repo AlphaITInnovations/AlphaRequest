@@ -1,10 +1,15 @@
 <script setup lang="ts">
 /**
- * Katalog der veröffentlichten Prozesse – der EINE Weg, einen Auftrag anzulegen.
+ * Katalog der veröffentlichten Prozesse – der Weg zu einem PROZESS-Ticket
+ * („Neues Prozess-Ticket" in der Navigation).
  *
  * Ersetzt die früheren 10 fest verdrahteten Kacheln: was hier steht, kommt
  * ausschließlich aus `GET /processes`. Wird ein Prozess veröffentlicht, erscheint
  * er ohne Frontend-Änderung; wird er zurückgezogen, verschwindet er.
+ *
+ * EINE Ausnahme: das Basis-Ticket. Es hat mit „Neues Ticket" seinen eigenen Knopf
+ * in der Navigation und stünde hier ein zweites Mal – warum der Schlüssel dafür
+ * hart verdrahtet ist, steht in lib/basisTicket.ts.
  *
  * Ob jemand anlegen darf, entscheidet AUSSCHLIESSLICH der Server (`may_create`
  * je Prozess, gespeist aus `createPermissions` der Definition). Das Frontend
@@ -16,6 +21,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { listProcesses } from '@/api/processes'
+import { BASIS_TICKET_PATH, withoutBasisTicket } from '@/lib/basisTicket'
 import { errorMessage } from '@/lib/processErrors'
 import type { ProcessOut } from '@/types/process'
 
@@ -33,9 +39,12 @@ function darfAnlegen(p: ProcessOut): boolean {
   return p.may_create !== false
 }
 
+/** Alles außer dem Basis-Ticket – das hat seinen eigenen Einstieg. */
+const prozesse = computed(() => withoutBasisTicket(catalog.value))
+
 const gefiltert = computed(() => {
   const q = search.value.toLowerCase().trim()
-  return catalog.value.filter(
+  return prozesse.value.filter(
     (p) => !q || p.name.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)
       || (p.description || '').toLowerCase().includes(q),
   )
@@ -47,7 +56,7 @@ const kacheln = computed(() =>
 )
 
 const keinesAnlegbar = computed(
-  () => catalog.value.length > 0 && !catalog.value.some(darfAnlegen),
+  () => prozesse.value.length > 0 && !prozesse.value.some(darfAnlegen),
 )
 
 function oeffnen(p: ProcessOut) {
@@ -67,7 +76,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppLayout title="Neuer Auftrag">
+  <AppLayout title="Neues Prozess-Ticket">
     <div v-if="loading" class="flex items-center justify-center py-24">
       <div class="w-8 h-8 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin"/>
     </div>
@@ -75,18 +84,23 @@ onMounted(async () => {
     <div v-else class="max-w-4xl mx-auto space-y-6">
 
       <div>
-        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Neuen Auftrag anlegen</h1>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
+          Neues Prozess-Ticket anlegen
+        </h1>
         <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">Wähle den passenden Prozess aus.</p>
       </div>
 
-      <!-- Info: Was ist ein Prozess-Auftrag? -->
+      <!-- Info: Was ist ein Prozess-Ticket? -->
       <div class="flex items-start gap-3 rounded-2xl border border-[#3EAAB8]/25 bg-[#3EAAB8]/[0.06] p-4">
         <span class="text-lg leading-none mt-0.5">ℹ️</span>
         <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-          <span class="font-semibold text-gray-900 dark:text-white">Ein Prozess-Auftrag</span>
+          <span class="font-semibold text-gray-900 dark:text-white">Ein Prozess-Ticket</span>
           folgt einem festgelegten Ablauf: die Schritte (Antrag, Freigaben und Durchführung durch
           die zuständigen Fachabteilungen) sind im Prozess hinterlegt, sodass nichts vergessen wird
-          und jeder Vorgang gleich abläuft.
+          und jeder Vorgang gleich abläuft. Passt nichts davon, ist
+          <button @click="router.push(BASIS_TICKET_PATH)"
+                  class="text-[#3EAAB8] font-medium hover:underline">„Neues Ticket"</button>
+          der richtige Weg – ein einfaches Ticket ohne festen Ablauf.
         </p>
       </div>
 
@@ -97,7 +111,7 @@ onMounted(async () => {
       </div>
 
       <!-- Suche -->
-      <div v-if="catalog.length > 1" class="relative">
+      <div v-if="prozesse.length > 1" class="relative">
         <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
@@ -161,8 +175,8 @@ onMounted(async () => {
         </button>
       </div>
 
-      <p v-if="!catalog.length && !loadError" class="text-center text-sm text-gray-400 italic py-8">
-        Es ist noch kein Prozess veröffentlicht.
+      <p v-if="!prozesse.length && !loadError" class="text-center text-sm text-gray-400 italic py-8">
+        Es ist noch kein Prozess mit festem Ablauf veröffentlicht.
       </p>
       <p v-else-if="!kacheln.length" class="text-center text-sm text-gray-400 italic py-8">
         Kein passender Prozess gefunden.

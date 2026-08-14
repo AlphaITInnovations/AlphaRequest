@@ -16,10 +16,11 @@ Ablauf (Trockenlauf ist der Standard):
     python backend/scripts/seed_processes.py
     python backend/scripts/seed_processes.py --commit
 
-Basis-Ticket: dessen zuständige Fachabteilung ist installationsspezifisch und
-hat keinen kanonischen Namen. Ohne Angabe wird dieser eine Seed übersprungen:
-    python backend/scripts/seed_processes.py --basis-group "IT" --commit
-    (alternativ Umgebungsvariable SEED_BASIS_TICKET_GROUP)
+Konfiguration braucht der Lauf keine: alle ausgelieferten Prozesse kommen mit
+Platzhaltern aus, die sich aus den Pflichtgruppen auflösen lassen. (Das
+Basis-Ticket brauchte früher eine per --basis-group genannte Fachabteilung –
+seine Zuständigkeit steht jetzt in einem Feld des Auftrags und wird beim Anlegen
+gewählt, nicht in der Definition hinterlegt.)
 """
 
 import argparse
@@ -44,9 +45,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Prozess-Definitionen einspielen")
     ap.add_argument("--commit", action="store_true",
                     help="tatsächlich schreiben (ohne diese Angabe: Trockenlauf, schreibt nichts)")
-    ap.add_argument("--basis-group", default=os.environ.get("SEED_BASIS_TICKET_GROUP"),
-                    help="Name der zuständigen Fachabteilung für das Basis-Ticket "
-                         "(ohne Angabe wird dieser Seed übersprungen)")
     ap.add_argument("--skip-permissions", action="store_true",
                     help="Erstellrechte NICHT aus dem Alt-System übernehmen")
     ap.add_argument("--draft", action="store_true",
@@ -59,7 +57,6 @@ def main() -> int:
     try:
         report = seed_processes(
             commit=args.commit,
-            basis_group_name=args.basis_group,
             with_permissions=not args.skip_permissions,
             publish=not args.draft,
             only=set(args.only) if args.only else None,

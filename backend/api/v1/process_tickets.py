@@ -26,7 +26,7 @@ from backend.database import process_ticket_watchers as watchers
 from backend.database.audit_log import record_audit
 from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN
-from backend.schemas.process_definition import ProcessDefinition
+from backend.schemas.process_definition import ProcessDefinition, ResponsibilityKind
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
@@ -377,8 +377,28 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
                        row["id"])
     events.record(row, events.CREATED, actor_id=user.get("id"), actor_name=_actor_name(user),
                   details={"process_key": defn.key, "version": pub["version"]})
-    engine.run_inline(row, defn, pr.current_phase(defn, row["runtime"]), {TriggerType.on_enter})
-    _safe_restamp(row, defn)
+    # Ein `auto_advance` aus den on_enter-Automationen wurde hier bisher
+    # STILLSCHWEIGEND verworfen (der Rückgabewert wurde ignoriert). Prozesse, die
+    # direkt nach dem Anlegen weiterschalten sollen – z. B. das Basis-Ticket, das
+    # sofort bei der gewählten Fachabteilung landen muss – blieben dadurch in der
+    # Startphase bei der erstellenden Person liegen.
+    will_weiter = engine.run_inline(row, defn,
+                                    pr.current_phase(defn, row["runtime"]),
+                                    {TriggerType.on_enter})
+    if will_weiter:
+        # Vor dem automatischen Weiterschalten die Pflichtangaben der Startphase
+        # prüfen: `create` prüft nur die Wert-FORM, nicht den Phasen-Abschluss.
+        # Ohne das könnte ein Auftrag unvollständig in die nächste Phase rutschen.
+        offen = pv.validate_phase_completion(defn, start_phase, values)
+        if offen:
+            raise api_error(422, ErrorCode.VALIDATION_FAILED,
+                            "Pflichtangaben fehlen", fields=offen)
+        try:
+            engine.transition(row, defn, actor=user)
+        except seq.SequenceError as exc:
+            raise _sequence_error(exc)
+    else:
+        _safe_restamp(row, defn)
     return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn),
                                   user, group_ids))
 
@@ -456,6 +476,20 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
                         fields=[{"path": exc.field_key, "code": "APPEND_ONLY", "message": str(exc)}])
     allowed = vis.writable_keys(defn, phase, ctx, stored, submitted)
     to_apply = {k: v for k, v in merged_raw.items() if k in allowed and stored.get(k) != v}
+    # Das Feld, das die Zuständigkeit DIESER Phase trägt (group_from_field /
+    # assignable), darf nicht geleert werden: danach wäre NIEMAND mehr zuständig und
+    # nur ein Admin käme noch an den Auftrag. `validate_values` lässt ein explizites
+    # Leeren bewusst durch (Pflicht greift erst beim Phasenabschluss) – hier ist es
+    # aber kein halbfertiger Entwurf, sondern ein Rechteverlust.
+    quelle = phase.responsibility.fromField
+    if (phase.responsibility.kind in (ResponsibilityKind.group_from_field,
+                                      ResponsibilityKind.assignable)
+            and quelle in to_apply and not to_apply[quelle]):
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Zuständigkeit fehlt",
+                        fields=[{"path": quelle, "code": "REQUIRED",
+                                 "message": "Ohne zuständige Stelle könnte niemand "
+                                            "weiterarbeiten"}])
+
     errs = pv.validate_values(defn, to_apply)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig", fields=errs)

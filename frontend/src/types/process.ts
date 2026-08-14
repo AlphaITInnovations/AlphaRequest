@@ -335,8 +335,11 @@ export interface ProcessRuntime {
  */
 export type ResolvedResponsibility =
   | { kind: 'departments'; departments: { group: string; required: boolean; status: string }[] }
-  | { kind: 'group'; group: string; from_field?: string | null; assignable?: boolean }
-  | { kind: 'user'; user: string; from_field?: string | null; assignable?: boolean }
+  //: `group`/`user` sind NULL, wenn die Zuständigkeit aus einem Feld kommt und
+  //: dieses Feld (noch) leer ist – dann ist NIEMAND zuständig. Das muss die
+  //: Oberfläche zeigen können, statt an einem leeren String zu scheitern.
+  | { kind: 'group'; group: string | null; from_field?: string | null; assignable?: boolean }
+  | { kind: 'user'; user: string | null; from_field?: string | null; assignable?: boolean }
   | { kind: 'owner' }
   | { kind: 'unknown' }
 

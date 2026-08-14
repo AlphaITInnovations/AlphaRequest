@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "key": "basis-ticket",
   "name": "Basis-Ticket",
-  "description": "Allgemeines Ticket ohne festes Fachformular: Titel plus ein fortlaufender, append-only Verlauf. Erstellung durch den/die Anfordernde:n, danach Bearbeitung durch die zuständige Gruppe, die weitere Einträge anhängt.\n\nAbweichungen gegenüber dem Alt-System: (1) Die Bearbeitungsphase wurde im Alt-System der Gruppe zugewiesen, die der/die Ersteller:in beim Anlegen auswählte (Feld „Verantwortlich“, nur Gruppen). Eine solche zur Laufzeit gewählte Zuständigkeit kennt das neue Format nicht – hier ist stattdessen eine feste Gruppe zu hinterlegen (Platzhalter in der Phase „bearbeitung“). (2) Der Verlaufs-Eintrag hatte zusätzlich eine „author_id“; die Laufzeit stempelt nur einen Akteur-Namen, deshalb entfällt die ID. (3) Priorität und Kommentar sind ticket-eigene Angaben und daher keine Prozessfelder mehr. (4) Angelegt wurde dieser Typ über den separaten Endpunkt /tickets/basis; im neuen System läuft das Anlegen über die reguläre Prozess-Runtime; der Endpunkt kannte bewusst keine Rechteprüfung (jede:r eingeloggte Nutzer:in durfte anlegen), daher „createPermissions.everyone = true“.",
+  "description": "Ein einfaches Ticket für alles, was in keinen der anderen Prozesse passt: Titel, Anliegen als Freitext, zuständige Fachabteilung – fertig. Die Abteilung antwortet mit weiteren Einträgen; jeder bleibt mit Name und Zeitpunkt stehen, nichts wird überschrieben. Passt der Auftrag nicht zu ihr, wählt sie einfach eine andere Abteilung aus – er wandert samt Verlauf weiter.",
   "icon": "🎫",
   "createPermissions": {
     "everyone": true,
@@ -11,15 +11,15 @@
   },
   "fields": [
     {
-      "key": "ticket.titel",
-      "label": "Titel",
-      "widget": "text",
-      "help": "Freier Betreff des Tickets. Im Alt-System wurde dieser Wert beim Anlegen über den separaten Endpunkt /tickets/basis zugleich als Ticket-Titel übernommen.",
-      "placeholder": "Kurze Beschreibung des Anliegens…",
+      "key": "ticket.fachabteilung",
+      "label": "Zuständige Fachabteilung",
+      "widget": "group",
+      "help": "Wer soll den Auftrag bearbeiten? Die Abteilung, die hier steht, ist zuständig – sie kann den Auftrag später an eine andere weitergeben.",
+      "placeholder": "Fachabteilung auswählen…",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
-      "valueShape": null,
+      "valueShape": "id",
       "constraints": null,
       "visibility": null,
       "computed": null,
@@ -32,7 +32,7 @@
       "key": "ticket.eintraege",
       "label": "Verlauf",
       "widget": "collection",
-      "help": "Append-only Verlauf: Bestehende Einträge können weder geändert noch gelöscht werden, es lassen sich nur neue anhängen. Autor und Zeitstempel setzt der Server beim Speichern. Beim Anlegen ist der erste Eintrag (die ausführliche Beschreibung des Anliegens) verpflichtend.",
+      "help": "Beim Anlegen beschreiben Sie hier Ihr Anliegen. Danach hängen beide Seiten weitere Einträge an – Rückfragen, Zwischenstände, Ergebnisse. Bestehende Einträge lassen sich nicht mehr ändern oder löschen; Name und Zeitpunkt setzt das System.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -83,7 +83,7 @@
       },
       "fields": [
         {
-          "ref": "ticket.titel",
+          "ref": "ticket.fachabteilung",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -98,7 +98,17 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [
+        {
+          "id": "direkt_zur_fachabteilung",
+          "trigger": {
+            "type": "on_enter"
+          },
+          "action": {
+            "type": "auto_advance"
+          }
+        }
+      ]
     },
     {
       "key": "bearbeitung",
@@ -108,17 +118,18 @@
       "enterStatus": null,
       "grantsFullView": false,
       "responsibility": {
-        "kind": "group",
-        "group": "HIER_GRUPPEN_ID_ZUSTAENDIGE_GRUPPE_EINSETZEN",
+        "kind": "group_from_field",
+        "group": null,
         "user": null,
+        "fromField": "ticket.fachabteilung",
         "rule": [],
         "resetOnDescriptionChange": false
       },
       "fields": [
         {
-          "ref": "ticket.titel",
-          "mode": "readonly",
-          "required": false,
+          "ref": "ticket.fachabteilung",
+          "mode": "editable",
+          "required": true,
           "requiredWhen": null,
           "visibleWhen": null
         },
@@ -131,7 +142,26 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [
+        {
+          "id": "weitergabe_melden",
+          "trigger": {
+            "type": "on_field_change",
+            "after": null,
+            "repeat": null,
+            "field": "ticket.fachabteilung"
+          },
+          "guard": null,
+          "action": {
+            "type": "notify",
+            "to": "responsible",
+            "template": "Neue Aufgabe für Ihre Fachabteilung",
+            "field": null,
+            "value": null,
+            "counter": null
+          }
+        }
+      ]
     }
   ],
   "automations": []
