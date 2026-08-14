@@ -679,6 +679,11 @@ class ProcessDefinition(_Base):
     name: str
     description: Optional[str] = None
     icon: Optional[str] = None
+    #: Darf der Auftrags-Titel NACH dem Anlegen noch geändert werden? False =
+    #: der Titel wird beim Anlegen festgelegt und ist danach überall nur lesbar
+    #: (durchgesetzt im PATCH-Endpunkt, nicht nur in der Oberfläche). Default
+    #: True, damit bestehende Definitionen ihr Verhalten behalten.
+    titleEditable: bool = True
     createPermissions: CreatePermissions = Field(default_factory=CreatePermissions)
     fields: list[FieldDef] = Field(default_factory=list)
     phases: list[PhaseDef] = Field(default_factory=list)

@@ -313,6 +313,7 @@ export function blankCreatePermissions(): CreatePermissions {
 export function blankDefinition(key: string, name: string): ProcessDefinition {
   return {
     schemaVersion: SCHEMA_VERSION, key, name, description: null, icon: null,
+    titleEditable: true,          // Server-Default; abwählbar in den Kopfdaten
     createPermissions: blankCreatePermissions(),
     fields: [],
     phases: [blankPhase('erstellung', 'start')],

@@ -83,6 +83,11 @@ const darfWeiterreichen = computed(() =>
   (ticket.value.editable_fields ?? []).includes(FELD_GRUPPE) && !terminal.value)
 const darfEintragen = computed(() =>
   (ticket.value.editable_fields ?? []).includes(FELD_EINTRAEGE) && !terminal.value)
+/** Titel: nur änderbar, wenn die Prozess-Definition das erlaubt (das
+ *  Basis-Ticket legt ihn beim Anlegen fest) – der Server weist Änderungen
+ *  sonst ohnehin mit TITLE_LOCKED ab. */
+const darfTitelAendern = computed(() =>
+  (props.definition.titleEditable ?? true) && abilities.value.edit)
 
 const eintraege = computed<Eintrag[]>(() => {
   const v = ticket.value.values[FELD_EINTRAEGE]
@@ -161,7 +166,7 @@ function uebernehmen(t: ProcessTicketOut) {
 
 /** Gibt es überhaupt etwas zu schreiben? */
 const dirty = computed(() =>
-  titel.value.trim() !== String(ticket.value.title || '')
+  (darfTitelAendern.value && titel.value.trim() !== String(ticket.value.title || ''))
   || (fachabteilung.value?.id ?? '') !== String(ticket.value.values[FELD_GRUPPE] ?? '')
   || !!neuerEintrag.value.trim())
 
@@ -179,7 +184,8 @@ async function speichern(leise = false): Promise<boolean> {
       values[FELD_EINTRAEGE] = [...eintraege.value, { text: neuerEintrag.value.trim() }]
     }
     const body: { title?: string; values?: Record<string, unknown> } = {}
-    if (titel.value.trim() && titel.value.trim() !== String(ticket.value.title || '')) {
+    if (darfTitelAendern.value && titel.value.trim()
+        && titel.value.trim() !== String(ticket.value.title || '')) {
       body.title = titel.value.trim()
     }
     if (Object.keys(values).length) body.values = values
@@ -278,7 +284,10 @@ async function abschliessen() {
       <div class="space-y-4">
         <div class="card-section">
           <label class="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1.5">Titel</label>
-          <input v-model="titel" maxlength="255" class="afi w-full" :disabled="!abilities.edit" />
+          <input v-if="darfTitelAendern" v-model="titel" maxlength="255" class="afi w-full" />
+          <div v-else class="afi w-full !bg-gray-50 dark:!bg-white/[0.04]">
+            {{ ticket.title }}
+          </div>
         </div>
 
         <!-- Anhänge: hochladen darf die zuständige Stelle UND die Ersteller:in

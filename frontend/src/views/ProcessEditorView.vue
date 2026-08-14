@@ -258,6 +258,21 @@ onUnmounted(() => {
                         rows="2" class="afi w-full"
                         @input="setDefinition({ description: ($event.target as HTMLTextAreaElement).value || null })" />
             </div>
+            <div class="md:col-span-3">
+              <label class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300
+                            cursor-pointer select-none w-fit">
+                <input type="checkbox" :checked="ed.draft.value.titleEditable"
+                       :disabled="ed.readonly.value"
+                       class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]
+                              focus:ring-[#3EAAB8]/30 cursor-pointer"
+                       @change="setDefinition({ titleEditable: ($event.target as HTMLInputElement).checked })" />
+                <span>Titel darf nach dem Anlegen geändert werden</span>
+              </label>
+              <p class="text-xs text-gray-400 mt-1">
+                Abgewählt wird der Auftrags-Titel beim Anlegen festgelegt und ist danach
+                überall nur lesbar – das setzt der Server durch, nicht nur die Oberfläche.
+              </p>
+            </div>
           </div>
         </section>
 

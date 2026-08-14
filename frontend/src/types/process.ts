@@ -264,6 +264,10 @@ export interface ProcessDefinition {
   name: string
   description: string | null
   icon: string | null
+  /** Darf der Auftrags-Titel NACH dem Anlegen noch geändert werden? false =
+   *  beim Anlegen festgelegt, danach überall nur lesbar (der Server weist
+   *  Änderungen mit TITLE_LOCKED ab). */
+  titleEditable: boolean
   createPermissions: CreatePermissions
   fields: FieldDef[]
   phases: PhaseDef[]

@@ -91,16 +91,28 @@ class FakeStore:
         return rows, len(rows)
 
 
+#: Wie DEFN, aber mit festem Titel (titleEditable=false – wie das Basis-Ticket).
+DEFN_FIXED = {**DEFN, "key": "fix", "titleEditable": False}
+
+
 class FakeDefs:
     def __init__(self):
         self.definition_loads = 0
 
     def get_published(self, key):
-        return {"version": 1, "definition": DEFN} if key == "demo" else None
+        if key == "demo":
+            return {"version": 1, "definition": DEFN}
+        if key == "fix":
+            return {"version": 1, "definition": DEFN_FIXED}
+        return None
 
     def get_definition(self, key, ver):
         self.definition_loads += 1
-        return {"version": ver, "definition": DEFN} if key == "demo" else None
+        if key == "demo":
+            return {"version": ver, "definition": DEFN}
+        if key == "fix":
+            return {"version": ver, "definition": DEFN_FIXED}
+        return None
 
 
 class FakeFires:
@@ -164,6 +176,32 @@ def test_patch_merges_values(client):
     r = client.patch(f"/process-tickets/{tid}", json={"values": {"base.age": 30}})
     assert r.status_code == 200
     assert r.json()["data"]["values"] == {"base.name": "Max", "base.age": 30}
+
+
+def test_titel_bleibt_aenderbar_wenn_die_definition_nichts_sagt(client):
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.patch(f"/process-tickets/{tid}", json={"title": "Neuer Titel"})
+    assert r.status_code == 200
+    assert r.json()["data"]["title"] == "Neuer Titel"
+
+
+def test_fester_titel_wird_serverseitig_abgewiesen(client):
+    """titleEditable=false (Basis-Ticket): der Titel wird beim Anlegen festgelegt
+    und ist danach für ALLE nur lesbar – auch für Admins, sonst wäre die
+    Prozess-Einstellung nur Deko."""
+    tid = client.post("/process-tickets", json={"processKey": "fix", "title": "So bleibt es",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.patch(f"/process-tickets/{tid}", json={"title": "Umbenannt"})
+    assert r.status_code == 422
+    assert r.json()["error"]["fields"][0]["path"] == "title"
+    assert r.json()["error"]["fields"][0]["code"] == "TITLE_LOCKED"
+    assert client.get(f"/process-tickets/{tid}").json()["data"]["title"] == "So bleibt es"
+    # Der UNVERÄNDERTE Titel darf im Body mitkommen (kein Fehl-422 für Clients,
+    # die immer den ganzen Zustand senden).
+    r = client.patch(f"/process-tickets/{tid}", json={"title": "So bleibt es",
+                                                      "values": {"base.age": 1}})
+    assert r.status_code == 200
 
 
 def test_advance_blocked_when_required_missing(client):

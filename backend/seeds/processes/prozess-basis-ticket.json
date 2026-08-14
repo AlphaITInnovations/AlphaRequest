@@ -4,6 +4,7 @@
   "name": "Basis-Ticket",
   "description": "Ein einfaches Ticket für alles, was in keinen der anderen Prozesse passt: Titel, Anliegen als Freitext, zuständige Fachabteilung – fertig. Die Abteilung antwortet mit weiteren Einträgen; jeder bleibt mit Name und Zeitpunkt stehen, nichts wird überschrieben. Passt der Auftrag nicht zu ihr, wählt sie einfach eine andere Abteilung aus – er wandert samt Verlauf weiter.",
   "icon": "🎫",
+  "titleEditable": false,
   "createPermissions": {
     "everyone": true,
     "groups": [],

@@ -467,6 +467,16 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     if phase is None:
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Keine aktive Phase")
 
+    # Fester Titel: sagt die Definition titleEditable=false, wird der Titel beim
+    # Anlegen festgelegt und ist danach für ALLE nur lesbar – auch für die
+    # zuständige Stelle. Serverseitig, damit sich das nicht per API umgehen lässt.
+    if (body.title is not None and body.title != row.get("title")
+            and not defn.titleEditable):
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Titel ist fest",
+                        fields=[{"path": "title", "code": "TITLE_LOCKED",
+                                 "message": "Der Titel wird beim Anlegen festgelegt "
+                                            "und kann danach nicht geändert werden"}])
+
     submitted = body.values or {}
     catalog = {f.key for f in defn.fields}
     unknown = [k for k in submitted if k not in catalog]

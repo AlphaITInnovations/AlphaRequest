@@ -82,6 +82,12 @@ def test_seed_validiert_und_braucht_keinen_platzhalter():
     assert DEFN.createPermissions.everyone is True
 
 
+def test_titel_ist_fest():
+    """Der Titel wird beim Anlegen festgelegt und ist danach überall nur lesbar –
+    der PATCH-Endpunkt weist Änderungen mit TITLE_LOCKED ab."""
+    assert DEFN.titleEditable is False
+
+
 def test_immer_gleich_aufgebaut_ein_gruppenfeld_und_ein_freitext_verlauf():
     felder = {f.key: f for f in DEFN.fields}
     assert set(felder) == {FELD, "ticket.eintraege"}

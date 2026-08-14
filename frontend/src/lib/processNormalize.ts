@@ -220,6 +220,7 @@ export function normalizeDefinition(v: any): ProcessDefinition {
     name: String(v?.name ?? ''),
     description: str(v?.description),
     icon: str(v?.icon),
+    titleEditable: bool(v?.titleEditable, true),   // Default true (wie der Server)
     createPermissions: normCreatePermissions(v?.createPermissions),
     fields: arr(v?.fields).map(normalizeField),
     phases: arr(v?.phases).map(normalizePhase),
