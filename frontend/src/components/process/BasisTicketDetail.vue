@@ -132,6 +132,17 @@ const nameVon = (w: ProcessWatcher) =>
   w.name || props.sources.users.find((u) => u.id === w.id)?.displayName || w.id
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
 
+const binBeobachter = computed(() =>
+  !!auth.user?.id && beobachter.value.some((w) => w.id === auth.user?.id))
+
+/** Sich selbst eintragen darf jede Person mit Leserecht (Server erlaubt das
+ *  ausdrücklich) – FREMDE einzutragen nur die zuständige Stelle. */
+async function selbstBeobachten() {
+  const ich = auth.user?.id
+  if (!ich) return
+  await beobachterHinzu({ id: ich, name: auth.user?.displayName || ich })
+}
+
 async function beobachterHinzu(sel: { id: string; name: string } | null) {
   pickerKey.value++
   if (!sel || beobachter.value.some((w) => w.id === sel.id)) return
@@ -278,10 +289,18 @@ async function abschliessen() {
               Niemand beobachtet diesen Auftrag.
             </li>
           </ul>
-          <UserSelect v-if="abilities.manage_watchers || !terminal"
+          <!-- FREMDE eintragen ist eine Rechte-Vergabe → nur die zuständige
+               Stelle (der Server weist es sonst ohnehin mit 403 ab). Alle
+               anderen Lesenden dürfen nur SICH SELBST eintragen. -->
+          <UserSelect v-if="abilities.manage_watchers"
                       :key="pickerKey" :model-value="null" label=""
                       placeholder="Beobachter hinzufügen…"
                       @update:model-value="beobachterHinzu" />
+          <button v-else-if="!terminal && !binBeobachter"
+                  @click="selbstBeobachten"
+                  class="text-sm text-[#3EAAB8] hover:underline">
+            Diesen Auftrag selbst beobachten
+          </button>
         </div>
       </div>
 
