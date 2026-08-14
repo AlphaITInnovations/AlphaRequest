@@ -78,6 +78,14 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Das Basis-Ticket („Neues Ticket") hat ein EIGENES, festes Formular im
+      // Layout des Alt-Systems – nicht das generische, aus der Definition
+      // gerenderte. Statische Route vor der :key-Route.
+      path: '/prozess-auftraege/neu/basis-ticket',
+      component: () => import('@/views/processes/BasisTicketCreateView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/prozess-auftraege/neu/:key',
       component: () => import('@/views/processes/ProcessTicketCreateView.vue'),
       meta: { requiresAuth: true },
