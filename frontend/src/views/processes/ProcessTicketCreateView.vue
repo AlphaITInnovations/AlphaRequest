@@ -11,16 +11,18 @@ import type { OptionSources, ProcessDefinition } from '@/types/process'
 import type { SimFieldError, SimViewer } from '@/lib/processSim'
 import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
-import { errorMessage, issuesFromError } from '@/lib/processErrors'
+import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import * as processesApi from '@/api/processes'
 import { createTicket } from '@/api/processTickets'
+import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { showToast } = useToast()
+const auth = useAuthStore()
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -45,6 +47,8 @@ const sources = ref<OptionSources>(emptySources())
  * die der Server anschließend verwirft.
  */
 const zugriff = ref<{ visible: Set<string>; editable: Set<string> } | null>(null)
+/** Der Prozess existiert (noch) nicht als VERÖFFENTLICHTE Version. */
+const nichtVeroeffentlicht = ref(false)
 const viewer = computed<SimViewer>(() => ({
   fullView: false,
   isAdmin: false,
@@ -73,7 +77,13 @@ async function loadProcess(key: string) {
   } catch (e) {
     definition.value = null
     zugriff.value = null
-    showToast(errorMessage(e, 'Prozess konnte nicht geladen werden'), false)
+    // Den Grund festhalten: „nicht veröffentlicht" ist der häufigste Fall (die
+    // Definitionen sind noch nicht eingespielt) und braucht einen anderen
+    // Hinweis als ein echter Fehler.
+    nichtVeroeffentlicht.value = errorCode(e) === 'PROCESS_NOT_FOUND'
+    if (!nichtVeroeffentlicht.value) {
+      showToast(errorMessage(e, 'Prozess konnte nicht geladen werden'), false)
+    }
   }
 }
 
@@ -140,11 +150,38 @@ onMounted(async () => {
              (/prozess-auftraege/neu). Ein zweites Auswahlfeld hier hätte den
              Prozess gewechselt, ohne die Adresse zu ändern – ein Neuladen wäre
              dann beim alten gelandet. -->
-        <p v-if="!definition" class="text-sm text-gray-500 dark:text-gray-400">
-          Dieser Prozess ist nicht (mehr) verfügbar.
-          <button @click="router.push('/prozess-auftraege/neu')"
-                  class="text-[#3EAAB8] hover:underline">Zur Auswahl</button>
-        </p>
+        <div v-if="!definition"
+             class="rounded-2xl border border-amber-200 dark:border-amber-500/30
+                    bg-amber-50 dark:bg-amber-900/20 px-5 py-4">
+          <p class="text-sm text-amber-900 dark:text-amber-200">
+            <template v-if="nichtVeroeffentlicht">
+              Für <span class="font-mono">{{ selectedKey }}</span> ist keine
+              veröffentlichte Version vorhanden – deshalb lässt sich dazu kein
+              Auftrag anlegen.
+            </template>
+            <template v-else>
+              Dieser Prozess konnte nicht geladen werden.
+            </template>
+          </p>
+          <!-- Für Admins der konkrete nächste Schritt: die Definitionen liegen im
+               Paket (backend/seeds/processes/), müssen aber je Installation
+               eingespielt werden. Ohne diesen Hinweis sucht man den Fehler in der
+               Oberfläche, obwohl nur die Datenbank leer ist. -->
+          <p v-if="nichtVeroeffentlicht && auth.isAdmin"
+             class="text-xs text-amber-800 dark:text-amber-300/90 mt-2">
+            Die mitgelieferten Prozess-Definitionen sind noch nicht eingespielt.
+            Einspielen mit
+            <code class="font-mono">python -m backend.scripts.seed_processes --commit</code>
+            (ohne <code class="font-mono">--commit</code> läuft es als Trockenlauf).
+            Vorhandene Prozesse werden dabei übersprungen.
+          </p>
+          <div class="flex items-center gap-3 mt-3">
+            <button @click="router.push('/prozess-auftraege/neu')"
+                    class="text-sm text-[#3EAAB8] hover:underline">Zur Auswahl</button>
+            <button v-if="auth.isAdmin" @click="router.push('/settings')"
+                    class="text-sm text-[#3EAAB8] hover:underline">Zu den Prozessen</button>
+          </div>
+        </div>
 
         <template v-if="definition && startPhase">
           <!-- Kein Prioritäts-Feld: die Priorität ist überall ausgeblendet, bis

@@ -22,9 +22,11 @@ import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { listProcesses } from '@/api/processes'
 import { BASIS_TICKET_PATH, withoutBasisTicket } from '@/lib/basisTicket'
+import { useAuthStore } from '@/stores/authStore'
 import { errorMessage } from '@/lib/processErrors'
 import type { ProcessOut } from '@/types/process'
 
+const auth = useAuthStore()
 const router = useRouter()
 
 const loading = ref(true)
@@ -175,9 +177,19 @@ onMounted(async () => {
         </button>
       </div>
 
-      <p v-if="!prozesse.length && !loadError" class="text-center text-sm text-gray-400 italic py-8">
-        Es ist noch kein Prozess mit festem Ablauf veröffentlicht.
-      </p>
+      <div v-if="!prozesse.length && !loadError" class="text-center py-8">
+        <p class="text-sm text-gray-400 italic">
+          Es ist noch kein Prozess mit festem Ablauf veröffentlicht.
+        </p>
+        <!-- Admins bekommen den konkreten Schritt: die Definitionen liegen im
+             Paket, müssen aber je Installation eingespielt werden. Ohne den
+             Hinweis sucht man den Fehler in der Oberfläche. -->
+        <p v-if="auth.isAdmin" class="text-xs text-gray-400 mt-2 max-w-xl mx-auto">
+          Die mitgelieferten Definitionen sind noch nicht eingespielt. Einspielen mit
+          <code class="font-mono">python -m backend.scripts.seed_processes --commit</code>
+          (ohne <code class="font-mono">--commit</code> als Trockenlauf).
+        </p>
+      </div>
       <p v-else-if="!kacheln.length" class="text-center text-sm text-gray-400 italic py-8">
         Kein passender Prozess gefunden.
       </p>

@@ -32,11 +32,28 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, os.getcwd())
 
+# WICHTIG, nicht wegoptimieren: dieser Import lädt die `.env` (load_dotenv in
+# backend/utils/config.py). Die DB-Verbindung liest MARIADB_DSN direkt aus der
+# Umgebung – ohne diesen Import ist sie None und der Lauf endete in einem
+# SQLAlchemy-Traceback („Expected string or URL object, got None") statt in einer
+# lesbaren Meldung. Der App-Prozess importiert config über main.py, ein Skript nicht.
+from backend.utils.config import config  # noqa: E402,F401
 from backend.services.seed_definitions import (  # noqa: E402
     SeedError,
     required_group_names,
     seed_processes,
 )
+
+
+def _dsn_pruefen() -> None:
+    """Ohne Datenbank-Adresse gibt es nichts einzuspielen – das gehört als Satz
+    gesagt, nicht als Traceback."""
+    if not (os.getenv("MARIADB_DSN") or "").strip():
+        print("FEHLER: MARIADB_DSN ist nicht gesetzt.\n"
+              "Erwartet wird sie in der .env im Projektverzeichnis (dieselbe, die "
+              "die Anwendung nutzt) oder in der Umgebung.", file=sys.stderr)
+        raise SystemExit(2)
+
 
 _SYMBOL = {"created": "+", "would_create": "~", "skipped": ".", "error": "!"}
 
@@ -53,6 +70,7 @@ def main() -> int:
     ap.add_argument("--only", action="append", metavar="KEY",
                     help="nur diesen Prozess-Schlüssel einspielen (mehrfach erlaubt)")
     args = ap.parse_args()
+    _dsn_pruefen()
 
     try:
         report = seed_processes(
@@ -63,6 +81,15 @@ def main() -> int:
         )
     except SeedError as e:
         print(f"ABBRUCH: {e}")
+        return 2
+    except Exception as e:
+        # Häufigster Fall in der Praxis: die Datenbank ist von hier nicht
+        # erreichbar (falsche Adresse, kein Netz, Container nicht gestartet). Ein
+        # SQLAlchemy-/pymysql-Traceback beantwortet das nicht – die Ursache gehört
+        # als Satz gesagt, samt Ziel, damit man die Adresse prüfen kann.
+        ziel = (os.getenv("MARIADB_DSN") or "").split("@")[-1] or "unbekannt"
+        print(f"ABBRUCH: Datenbank nicht erreichbar oder Lauf fehlgeschlagen "
+              f"(Ziel: {ziel})\n{type(e).__name__}: {e}", file=sys.stderr)
         return 2
 
     print(f"Pflichtgruppen: {', '.join(required_group_names())}")
