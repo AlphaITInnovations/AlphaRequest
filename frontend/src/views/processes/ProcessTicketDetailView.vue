@@ -220,7 +220,7 @@ async function destroy() {
   try {
     await ticketsApi.deleteTicket(id.value)
     showToast('Auftrag gelöscht')
-    router.push('/dashboard')
+    router.push('/auftraege')
   } catch (e) {
     showToast(errorMessage(e, 'Löschen fehlgeschlagen'), false)
   } finally { busy.value = false }
@@ -292,7 +292,7 @@ onMounted(async () => {
         <!-- Kopf -->
         <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
           <div class="min-w-0">
-            <button @click="router.push('/dashboard')"
+            <button @click="router.push('/auftraege')"
                     class="text-xs text-gray-400 hover:text-[#3EAAB8] mb-1">← Aufträge</button>
             <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100 truncate">
               {{ ticket.title }}

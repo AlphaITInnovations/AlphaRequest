@@ -14,10 +14,18 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
-      // Übersicht = Startseite: EINE Liste für alle Aufträge, mit den
-      // Arbeitslisten („wartet auf mich"/„auf meine Abteilung") als Sichten.
+      // Startseite = Dashboard: „was liegt bei MIR an?" (drei Arbeitslisten,
+      // bewusst ohne Filterleiste). Das Suchen und Filtern über ALLE Aufträge ist
+      // die Aufgabe der Übersicht – zwei Ansichten mit derselben Filterleiste
+      // hatten sich gegenseitig die Aussage genommen.
       path: '/dashboard',
       component: () => import('@/views/DashboardView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      // Übersicht: alle Aufträge mit Suche, Filtern und Blätterung.
+      path: '/auftraege',
+      component: () => import('@/views/OverviewView.vue'),
       meta: { requiresAuth: true },
     },
 
@@ -43,11 +51,11 @@ const router = createRouter({
     // `abilities`/`visible_fields` mit. Ein Rechte-Gate an der Route wäre hier
     // falsch: es würde Beteiligte aussperren, die kein Admin sind.
     {
-      // Die eigene Auftragsliste ist in der Übersicht aufgegangen. Weiterleitung
-      // statt Löschung, damit vorhandene Lesezeichen nicht ins Leere laufen.
-      // Greift NUR für den genauen Pfad – die Unterpfade (/neu, /:id) bleiben.
+      // Alter Pfad der Auftragsliste → Übersicht. Weiterleitung statt Löschung,
+      // damit vorhandene Lesezeichen nicht ins Leere laufen. Greift NUR für den
+      // genauen Pfad – die Unterpfade (/neu, /:id) bleiben.
       path: '/prozess-auftraege',
-      redirect: '/dashboard',
+      redirect: '/auftraege',
     },
     {
       // Katalog der veröffentlichten Prozesse („Neues Prozess-Ticket"). Das

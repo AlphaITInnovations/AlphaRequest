@@ -1,357 +1,322 @@
 <script setup lang="ts">
 /**
- * Übersicht – die Startseite. EINE Liste für ALLE Aufträge.
+ * Übersicht: die Arbeitslisten der angemeldeten Person über alle Prozess-Aufträge.
  *
- * Zusammengelegt aus zwei Ansichten: der Arbeitslisten-Startseite (vier Kacheln)
- * und der eigenen Liste unter /prozess-auftraege. Die Arbeitslisten sind nicht
- * verschwunden, sie sind jetzt die SICHTEN dieser Liste (Kacheln oben, siehe
- * components/overview/OverviewScopeTiles.vue).
+ * ZWEI Quellen, absichtlich:
  *
- * DREI QUELLEN, jede mit einem Grund:
+ *  1. `GET /dashboard` → Block `process` (backend/api/v1/dashboard.py). Gelesen
+ *     werden `process.my`, `process.involved` und `process.counts`; dazu
+ *     `my_departments` für die Namen und IDs der eigenen Fachabteilungen. Der
+ *     Block ist bewusst WERTEFREI (keine Feldwerte, §5.1) und trägt deshalb auch
+ *     keine Zuständigkeit mit.
  *
- *  1. `GET /process-tickets` – die Aufträge selbst. Nur diese Zeilen tragen
- *     `responsibility` mit dem LIVE-Stand der Fachabteilungen; ohne sie lässt
- *     sich „wartet auf MEINE Abteilung" nicht beantworten (lib/processDepartments).
- *     Der Server filtert selbst, wer was sehen darf – hier wird nichts nachgebaut.
- *  2. `GET /dashboard` – NUR `my_departments`: in welchen Fachabteilungen bin
- *     ich? Das steht in keiner Auftragszeile und lässt sich hier nicht herleiten
- *     (das Frontend kennt die Gruppen-Mitgliedschaft nicht).
- *  3. `GET /processes` + Auswahl-Quellen – Namen und Symbole zu den IDs, die die
- *     Liste liefert (Prozess-Key, Gruppen-/Personen-IDs).
+ *  2. `GET /process-tickets` → vollständige `ProcessTicketOut`-Zeilen. Nur die
+ *     tragen `responsibility` (mit dem LIVE-Stand der Fachabteilungen) – ohne sie
+ *     lässt sich „wartet auf MEINE Abteilung" nicht beantworten, und genau das
+ *     ist die Frage, für die es lib/processDepartments.ts gibt.
  *
- * Alle Aufrufe sind unabhängig abgesichert: fällt einer aus, bleibt der Rest
- * nutzbar; fehlende Namen zeigen den Rohwert.
- *
- * WAS DER SERVER FILTERT UND WAS NICHT, entscheidet lib/overviewQuery.ts. Sobald
- * die Oberfläche mitfiltern muss (mehrere Status, eine Arbeitsliste, eine andere
- * Sortierung), ist die Liste nur noch das geladene FENSTER – und sagt das auch
- * (Ehrlichkeits-Hinweis unter der Tabelle).
- *
- * KEINE Priorität: nicht als Spalte, nicht als Filter, nicht in der Sortierung –
- * sie ist überall ausgeblendet, bis geklärt ist, wie sie sinnvoll genutzt wird.
- * Feld, API und Typen bleiben unverändert.
- *
- * KEINE Sammel-Aktionen (früher „Archivieren"/„Löschen" über Kästchen): dafür
- * gibt es keinen Sammel-Endpunkt mehr, und der Zwangs-Abschluss verlangt je
- * Auftrag eine Begründung. Beide Notfall-Eingriffe stehen in der Detailansicht.
+ * Beide Aufrufe sind voneinander unabhängig abgesichert: fällt einer aus, bleiben
+ * die Listen des anderen sichtbar. Der Server filtert in beiden Fällen selbst,
+ * wer was sehen darf – hier wird nichts nachgebaut.
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import AppLayout from '@/components/AppLayout.vue'
-import OverviewScopeTiles from '@/components/overview/OverviewScopeTiles.vue'
-import OverviewTable from '@/components/overview/OverviewTable.vue'
-import { client } from '@/api/client'
-import { listTickets } from '@/api/processTickets'
-import { listProcesses } from '@/api/processes'
 import { useAuthStore } from '@/stores/authStore'
-import { BASIS_TICKET_PATH } from '@/lib/basisTicket'
-import { isDepartmentPending } from '@/lib/processDepartments'
+import { client } from '@/api/client'
+import AppLayout from '@/components/AppLayout.vue'
+import { listTickets } from '@/api/processTickets'
 import { errorMessage } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
-import { emptySources, loadOptionSources } from '@/lib/processSources'
-import { buildLookup, toOverviewRows } from '@/lib/overviewRow'
 import {
-  applyScope, CLIENT_SIDE_LABEL, defaultStatuses, filterByStatus, isWindowTruncated,
-  OVERVIEW_STATUSES, pageCount, pageSlice, parseTicketRef, planQuery, SCOPE_EMPTY,
-  SCOPE_LABEL, SERVER_SORT_DIR, SERVER_SORT_KEY, sortTickets,
-  type OverviewScope, type OverviewSortKey, type ScopeContext, type SortDir,
-} from '@/lib/overviewQuery'
-import type { OptionSources, ProcessOut, ProcessTicketOut } from '@/types/process'
+  blockingDepartments, departmentProgress, isTicketTerminal,
+  ticketsAwaitingAnyDepartment,
+} from '@/lib/processDepartments'
+import type { ProcessTicketOut } from '@/types/process'
 
 const router = useRouter()
-const auth = useAuthStore()
+const auth   = useAuthStore()
 
-/** Zeilen je Seite (wie in der Übersicht vor dem Umbau). */
-const PAGE_SIZE = 25
-/** Obergrenze des Endpunkts (limit ≤ 200) – mehr gibt es nicht in einem Rutsch. */
-const SCAN_LIMIT = 200
+// ── Antwort-Formen (nur das, was hier gelesen wird) ───────────────────────────
 
-// ── Filter- und Sortier-Zustand ───────────────────────────────────────────────
+/** Zeile des Prozess-Blocks (`ProcessDashboardTicket` im Backend). */
+interface ProcessOrder {
+  id: number
+  process_key: string
+  process_version: number
+  title: string
+  status: string
+  priority: string
+  phase: string | null
+  phase_label: string | null
+  /** true = von mir angelegt (sonst: ich bin beteiligt/zuständig). */
+  is_owner: boolean
+  created_at: string
+  updated_at: string
+}
+interface ProcessBlock {
+  my: ProcessOrder[]
+  involved: ProcessOrder[]
+  /** Anzahl je Status – nur über die für mich sichtbaren Aufträge. */
+  counts: Record<string, number>
+}
+interface DepartmentRef { id: string; name: string }
 
-const scope = ref<OverviewScope>('all')
-const statuses = ref<string[]>(defaultStatuses())
-/** Eingabe der Suche; an den Server geht der entprellte Wert. */
-const sucheEingabe = ref('')
-const suche = ref('')
-const processKey = ref('')
-const sortKey = ref<OverviewSortKey>(SERVER_SORT_KEY)
-const sortDir = ref<SortDir>(SERVER_SORT_DIR)
-const page = ref(1)
+// ── Zustand ───────────────────────────────────────────────────────────────────
 
-const plan = computed(() => planQuery(
-  {
-    scope: scope.value, statuses: statuses.value, q: suche.value,
-    processKey: processKey.value, sortKey: sortKey.value, sortDir: sortDir.value,
-  },
-  { page: page.value, pageSize: PAGE_SIZE, scanLimit: SCAN_LIMIT },
-))
+const loading = ref(true)
+const block = ref<ProcessBlock>({ my: [], involved: [], counts: {} })
+const myDepartments = ref<DepartmentRef[]>([])
+const blockError = ref<string | null>(null)
 
-const istServerModus = computed(() => plan.value.mode === 'server')
+const rows = ref<ProcessTicketOut[]>([])
+const rowsLoading = ref(true)
+const rowsError = ref<string | null>(null)
+/** Obergrenze des Endpunkts – mehr gibt es nicht in einem Rutsch. */
+const ROWS_LIMIT = 200
+const rowsTotal = ref(0)
 
-// ── Zustand der Ladevorgänge ──────────────────────────────────────────────────
+// ── Reiter ────────────────────────────────────────────────────────────────────
 
-const liste = ref<ProcessTicketOut[]>([])
-const listeTotal = ref(0)
-const listeLoading = ref(true)
-const listeError = ref<string | null>(null)
+type Tab = 'assigned' | 'departments' | 'involved'
+const activeTab = ref<Tab>('assigned')
 
-/**
- * Arbeitsfenster für die Kachel-Zähler: die neuesten Aufträge OHNE Filter.
- * Eigenes Fenster, weil die Frage „wartet etwas auf mich?" sich nicht ändern
- * darf, nur weil unten ein Status abgewählt oder ein Prozess gewählt ist.
- */
-const fenster = ref<ProcessTicketOut[]>([])
-const fensterTotal = ref(0)
-const fensterLoading = ref(true)
-const fensterError = ref<string | null>(null)
+function selectTab(tab: Tab) {
+  activeTab.value = tab
+}
 
-const meineFachabteilungen = ref<{ id: string; name: string }[]>([])
-const abteilungenError = ref<string | null>(null)
+// ── Beschriftungen ────────────────────────────────────────────────────────────
+// Status- und Prioritäts-Whitelist kommen aus lib/processSchema.ts (Spiegel des
+// Backends). Unbekannte Werte werden ROH gezeigt – eine erfundene Beschriftung
+// wäre eine Falschaussage über den echten Stand.
 
-const katalog = ref<ProcessOut[]>([])
-const quellen = ref<OptionSources>(emptySources())
+const STATUS_CLASS: Record<string, string> = {
+  in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  in_request:  'bg-[#3EAAB8]/10 text-[#3EAAB8] dark:bg-[#3EAAB8]/20',
+  waiting_contract: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+  archived:    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
+  rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+}
+const DOT_CLASS: Record<string, string> = {
+  in_progress: 'bg-amber-400', in_request: 'bg-[#3EAAB8]',
+  waiting_contract: 'bg-violet-400', archived: 'bg-gray-400', rejected: 'bg-red-500',
+}
 
-/**
- * Ist das Listen-Fenster selbst das ungefilterte Arbeitsfenster? Dann sind die
- * Kachel-Zähler daraus zu holen und der zweite Aufruf entfällt – das ist der
- * Normalfall beim Aufruf der Startseite.
- */
-const listeIstArbeitsfenster = computed(() => {
-  const p = plan.value
-  return p.mode === 'scan' && !p.params.status && !p.params.process_key && !p.params.q
-})
-const arbeitsZeilen = computed(() => (
-  listeIstArbeitsfenster.value ? liste.value : fenster.value))
-const arbeitsTotal = computed(() => (
-  listeIstArbeitsfenster.value ? listeTotal.value : fensterTotal.value))
-const arbeitsLoading = computed(() => (
-  listeIstArbeitsfenster.value ? listeLoading.value : fensterLoading.value))
-/** Das Arbeitsfenster reicht nicht über alle sichtbaren Aufträge → Zähler sind Untergrenzen. */
-const arbeitsAbgeschnitten = computed(() => arbeitsTotal.value > arbeitsZeilen.value.length)
+function statusLabel(s: string) { return STATUS_LABEL[s] ?? s }
+function statusClass(s: string) {
+  return STATUS_CLASS[s] ?? 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400'
+}
+// Die Priorität wird derzeit ÜBERALL ausgeblendet (Feld, API und Zeilen-Daten
+// bleiben – nur die Anzeige ruht, bis geklärt ist, wie sie sinnvoll eingesetzt
+// wird). Deshalb gibt es hier keine Prioritäts-Beschriftungen mehr.
+function dotClass(s: string) { return DOT_CLASS[s] ?? 'bg-gray-300' }
 
-// ── Wer fragt? ────────────────────────────────────────────────────────────────
+/** ISO-Datum (JJJJ-MM-TT) deutsch – ohne Zeitzonen-Umrechnung, der Wert ist ein
+ *  Kalendertag. Ein längerer Zeitstempel wird vorne abgeschnitten. */
+function fmtDay(iso: string | null) {
+  const p = (iso || '').slice(0, 10).split('-')
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : (iso || '—')
+}
 
-const ctx = computed<ScopeContext>(() => ({
-  userId: auth.user?.id ?? null,
-  groupIds: meineFachabteilungen.value.map((d) => d.id),
-}))
+// ── Gemeinsame Zeilen-Form für die Darstellung ────────────────────────────────
+// Die zwei Quellen haben verschiedene Formen; die Liste zeigt beide gleich.
 
-// ── Zähler der Kacheln ────────────────────────────────────────────────────────
+interface Zeile {
+  id: number
+  title: string
+  process_key: string
+  status: string
+  priority: string
+  phase_label: string | null
+  created_at: string | null
+  /** Zusatz-Plakette rechts (z. B. „Ersteller"), optional. */
+  badge?: { text: string; class: string }
+  /** Fachabteilungs-Fortschritt, nur im Abteilungs-Reiter gefüllt. */
+  depts?: { text: string; mine: string[] }
+}
 
-const counts = computed<Record<OverviewScope, number>>(() => {
-  const rows = arbeitsZeilen.value
+function zeileAusBlock(o: ProcessOrder): Zeile {
   return {
-    // „Alle": bei vollständigem Fenster die Serverzahl, sonst das Geladene –
-    // die Kachel schreibt dann ein „+" dahinter, statt Vollständigkeit zu behaupten.
-    all: arbeitsAbgeschnitten.value ? rows.length : arbeitsTotal.value,
-    assigned: applyScope(rows, 'assigned', ctx.value).length,
-    departments: applyScope(rows, 'departments', ctx.value).length,
-    created: applyScope(rows, 'created', ctx.value).length,
-    involved: applyScope(rows, 'involved', ctx.value).length,
+    id: o.id, title: o.title, process_key: o.process_key,
+    status: o.status, priority: o.priority,
+    phase_label: o.phase_label, created_at: o.created_at,
+  }
+}
+
+function zeileAusRow(t: ProcessTicketOut): Zeile {
+  return {
+    id: t.id, title: t.title, process_key: t.process_key,
+    status: t.status, priority: t.priority,
+    phase_label: t.current_phase_label, created_at: t.created_at,
+  }
+}
+
+// ── Arbeitslisten ─────────────────────────────────────────────────────────────
+
+const meineId = computed(() => auth.user?.id ?? null)
+const meineGruppen = computed(() => myDepartments.value.map((d) => d.id))
+
+/** Aktive Aufträge – terminale (abgelehnt/archiviert) gehören in keine Arbeitsliste. */
+const aktiveRows = computed(() => rows.value.filter((t) => !isTicketTerminal(t)))
+
+/**
+ * Mir PERSÖNLICH zugewiesen: die aufgelöste Zuständigkeit nennt genau mich.
+ * `assignable` löst der Server zu kind='user' auf, deshalb genügt dieser Fall.
+ * Aufträge, in denen ich als Ersteller:in am Zug bin (kind='owner'), zählen mit –
+ * auch das ist Arbeit, die auf mich wartet.
+ */
+const mirZugewiesen = computed<ProcessTicketOut[]>(() => {
+  const uid = meineId.value
+  if (!uid) return []
+  return aktiveRows.value.filter((t) => {
+    const r = t.responsibility
+    if (!r) return false
+    if (r.kind === 'user') return r.user === uid
+    if (r.kind === 'owner') return t.owner_id === uid
+    return false
+  })
+})
+
+/** Wartet auf eine Fachabteilung, in der ich Mitglied bin (Logik: processDepartments). */
+const meineAbteilungen = computed(() =>
+  ticketsAwaitingAnyDepartment(aktiveRows.value, meineGruppen.value))
+
+/** Abteilungs-Namen für die Anzeige (IDs sind für Menschen nicht lesbar). */
+const gruppenName = computed(() => {
+  const map = new Map(myDepartments.value.map((d) => [d.id, d.name]))
+  return (id: string) => map.get(id) || id
+})
+
+/** Nur MEINE noch offenen Abteilungen eines Auftrags – nicht die aller anderen. */
+function meineOffenenAbteilungen(t: ProcessTicketOut): string[] {
+  const meine = new Set(meineGruppen.value)
+  const r = t.responsibility
+  if (!r || r.kind !== 'departments') return []
+  return (r.departments ?? [])
+    .filter((d) => d && meine.has(d.group) && d.status !== 'done'
+      && d.status !== 'skipped' && d.status !== 'rejected')
+    .map((d) => gruppenName.value(d.group))
+}
+
+// ── Arbeitslisten ─────────────────────────────────────────────────────────────
+// Bewusst OHNE Filterleiste: das Dashboard beantwortet „was liegt bei mir an?".
+// Suchen und Filtern über alle Aufträge ist die Aufgabe der Übersicht
+// (views/OverviewView.vue) – zwei Ansichten mit derselben Filterleiste hatten sich
+// gegenseitig die Aussage genommen.
+
+const zeilenAssigned = computed(() => mirZugewiesen.value.map(zeileAusRow))
+
+const zeilenDepartments = computed(() =>
+  meineAbteilungen.value.map((t) => {
+    const r = t.responsibility
+    const depts = r && r.kind === 'departments' ? r.departments ?? [] : []
+    return {
+      ...zeileAusRow(t),
+      depts: {
+        text: departmentProgress(depts).text,
+        mine: meineOffenenAbteilungen(t),
+      },
+    }
+  }))
+
+const zeilenInvolved = computed(() =>
+  block.value.involved.map((o) => ({
+    ...zeileAusBlock(o),
+    badge: { text: 'Beteiligt', class: 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20' },
+  })))
+
+const zeilen = computed<Zeile[]>(() => {
+  switch (activeTab.value) {
+    case 'assigned':    return zeilenAssigned.value
+    case 'departments': return zeilenDepartments.value
+    default:            return zeilenInvolved.value
   }
 })
 
-const offeneAufgaben = computed(() => counts.value.assigned + counts.value.departments)
+// ── Zähler für die Kacheln (ungefiltert) ──────────────────────────────────────
+
+const countAssigned    = computed(() => mirZugewiesen.value.length)
+const countDepartments = computed(() => meineAbteilungen.value.length)
+const countInvolved    = computed(() => block.value.involved.length)
+const offeneAufgaben   = computed(() => countAssigned.value + countDepartments.value)
+
+/** Status-Plaketten im Kopf – vom Server gezählt, nur über Sichtbares. */
+const statusCounts = computed(() =>
+  Object.entries(block.value.counts).filter(([, n]) => n > 0))
 
 /**
- * Meine Fachabteilungen, für die gerade nichts vorliegt. „Nichts zu tun" ist
- * eine andere Aussage als „ich bin nicht zuständig" – nur die erste beruhigt.
- *
- * Gezählt wird je ABTEILUNG, nicht je Auftrag: dass ein Auftrag noch offen ist,
- * heißt nicht, dass MEINE Abteilung dort noch etwas zu quittieren hat – sie kann
- * längst abgeschlossen haben, während eine andere noch fehlt. Deshalb derselbe
- * Maßstab wie in der Sicht „Meine Abteilungen" (`isDepartmentPending`).
+ * Abteilungen, in denen ich Mitglied bin, für die aber gerade nichts vorliegt.
+ * Dezent anzeigen: „nichts zu tun" ist eine andere Aussage als „ich bin nicht
+ * zuständig", und nur die erste ist beruhigend.
  */
 const leereAbteilungen = computed(() => {
-  const wartend = new Set(
-    applyScope(arbeitsZeilen.value, 'departments', ctx.value).flatMap((t) => {
+  const mitArbeit = new Set(
+    meineAbteilungen.value.flatMap((t) => {
       const r = t.responsibility
       if (!r || r.kind !== 'departments') return []
-      return (r.departments ?? []).filter(isDepartmentPending).map((d) => d.group)
+      return blockingDepartments(r.departments).map((d) => d.group)
     }),
   )
-  return meineFachabteilungen.value.filter((d) => !wartend.has(d.id))
+  return myDepartments.value.filter((d) => !mitArbeit.has(d.id))
 })
 
-// ── Anzeige-Zeilen ────────────────────────────────────────────────────────────
+/** Die Zeilen-Obergrenze ist erreicht – dann ist die Arbeitsliste unvollständig. */
+const listeAbgeschnitten = computed(() => rowsTotal.value > rows.value.length)
 
-const lookup = computed(() => buildLookup({
-  catalog: katalog.value, groups: quellen.value.groups, users: quellen.value.users,
-}))
+// ── Aktionen ──────────────────────────────────────────────────────────────────
 
-/** Sicht + Status clientseitig nachziehen, dann sortieren (siehe lib/overviewQuery). */
-const gefiltert = computed(() => {
-  let rows: ProcessTicketOut[] = liste.value
-  if (scope.value !== 'all') rows = applyScope(rows, scope.value, ctx.value)
-  rows = filterByStatus(rows, statuses.value)
-  return sortTickets(rows, sortKey.value, sortDir.value)
-})
-
-/** Im Server-Modus ist die Antwort schon die Seite; im Scan-Modus blättert der Client. */
-const seitenZeilen = computed(() => (
-  istServerModus.value ? gefiltert.value : pageSlice(gefiltert.value, page.value, PAGE_SIZE)))
-const zeilen = computed(() => toOverviewRows(seitenZeilen.value, lookup.value))
-
-/**
- * Im Server-Modus ist `meta.total` die Zahl des Servers. Ohne Aufsichtsrechte ist
- * sie eine OBERGRENZE: der Server zieht nur die Zeilen ab, die er auf der
- * geladenen Seite wegen fehlender Sichtbarkeit entfernt hat. Die letzte Seite
- * kann deshalb leer bleiben – besser als eine erfundene, zu kleine Zahl.
- */
-const ergebnisAnzahl = computed(() => (
-  istServerModus.value ? listeTotal.value : gefiltert.value.length))
-const seitenAnzahl = computed(() => pageCount(ergebnisAnzahl.value, PAGE_SIZE))
-
-/** Die Liste zeigt NICHT das Gesamtergebnis – das muss dranstehen. */
-const abgeschnitten = computed(() => isWindowTruncated(plan.value, listeTotal.value, liste.value.length))
-const clientGruende = computed(() => plan.value.clientSide.map((r) => CLIENT_SIDE_LABEL[r]))
-
-const idTreffer = computed(() => parseTicketRef(sucheEingabe.value))
-
-const statusOptionen = computed(() => OVERVIEW_STATUSES.map(
-  (s) => ({ key: s, label: STATUS_LABEL[s] ?? s })))
-
-// ── Bedienung ─────────────────────────────────────────────────────────────────
-
-function toggleStatus(s: string) {
-  statuses.value = statuses.value.includes(s)
-    ? statuses.value.filter((x) => x !== s)
-    : [...statuses.value, s]
-}
-
-function setSort(key: OverviewSortKey) {
-  if (sortKey.value === key) {
-    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortKey.value = key
-    // Datum und ID zuerst absteigend (das Neueste oben), Text aufsteigend.
-    sortDir.value = key === 'title' || key === 'owner' ? 'asc' : 'desc'
-  }
-}
-
-function zuruecksetzen() {
-  statuses.value = defaultStatuses()
-  sucheEingabe.value = ''
-  suche.value = ''
-  processKey.value = ''
-  sortKey.value = SERVER_SORT_KEY
-  sortDir.value = SERVER_SORT_DIR
-}
-
-/**
- * Zurück in den Server-Modus: alle Status, Sicht „Alle", Server-Sortierung.
- * Danach blättert der Server – die Liste ist vollständig.
- */
-function vollstaendigBlaettern() {
-  scope.value = 'all'
-  statuses.value = [...OVERVIEW_STATUSES]
-  sortKey.value = SERVER_SORT_KEY
-  sortDir.value = SERVER_SORT_DIR
-}
-
-function oeffnen(id: number) {
-  router.push(`/prozess-auftraege/${id}`)
-}
+function open(z: Zeile) { router.push(`/prozess-auftraege/${z.id}`) }
 
 // ── Laden ─────────────────────────────────────────────────────────────────────
 
-let listeReq = 0
-async function ladeListe() {
-  const meine = ++listeReq
-  listeLoading.value = true
-  listeError.value = null
+async function ladeDashboard() {
   try {
-    const res = await listTickets(plan.value.params)
-    if (meine !== listeReq) return      // überholte Antwort verwerfen
-    liste.value = res.items
-    listeTotal.value = res.total
+    const res = await client.get<{
+      data: { process?: ProcessBlock; my_departments?: DepartmentRef[] }
+    }>('/dashboard')
+    const d = res.data.data
+    block.value = {
+      my:       d.process?.my ?? [],
+      involved: d.process?.involved ?? [],
+      counts:   d.process?.counts ?? {},
+    }
+    myDepartments.value = d.my_departments ?? []
   } catch (e) {
-    if (meine !== listeReq) return
-    listeError.value = errorMessage(e, 'Aufträge konnten nicht geladen werden')
-    liste.value = []
-    listeTotal.value = 0
+    blockError.value = errorMessage(e, 'Übersicht konnte nicht geladen werden')
   } finally {
-    if (meine === listeReq) listeLoading.value = false
+    loading.value = false
   }
 }
 
-let arbeitsfensterGeladen = false
-/** Nur laden, wenn das Listen-Fenster die Zähler nicht mit trägt. */
-async function ladeArbeitsfenster() {
-  if (listeIstArbeitsfenster.value || arbeitsfensterGeladen) return
-  arbeitsfensterGeladen = true
-  fensterLoading.value = true
-  fensterError.value = null
+async function ladeAuftraege() {
   try {
-    const res = await listTickets({ limit: SCAN_LIMIT })
-    fenster.value = res.items
-    fensterTotal.value = res.total
+    const res = await listTickets({ limit: ROWS_LIMIT })
+    rows.value = res.items
+    rowsTotal.value = res.total
   } catch (e) {
-    arbeitsfensterGeladen = false
-    fensterError.value = errorMessage(e, 'Arbeitslisten konnten nicht geladen werden')
+    rowsError.value = errorMessage(e, 'Arbeitslisten konnten nicht geladen werden')
   } finally {
-    fensterLoading.value = false
+    rowsLoading.value = false
   }
 }
-
-async function ladeFachabteilungen() {
-  abteilungenError.value = null
-  try {
-    const res = await client.get<{ data: { my_departments?: { id: string; name: string }[] } }>(
-      '/dashboard')
-    meineFachabteilungen.value = res.data.data.my_departments ?? []
-  } catch (e) {
-    abteilungenError.value = errorMessage(e, 'Fachabteilungen konnten nicht geladen werden')
-  }
-}
-
-/** Namen zu den IDs. Fehlschläge sind nicht fatal – dann steht der Rohwert da. */
-async function ladeNamen() {
-  try {
-    katalog.value = await listProcesses()
-  } catch {
-    /* Prozess-Filter bleibt leer, die Liste zeigt den Key */
-  }
-  // Fachabteilungen und Personen für die Spalte „Zuständig". Ohne Adminrechte
-  // ist /settings/groups gesperrt – dann der öffentliche Endpunkt.
-  quellen.value = await loadOptionSources(auth.isAdmin)
-}
-
-async function allesNeuLaden() {
-  arbeitsfensterGeladen = false
-  await Promise.all([ladeListe(), ladeArbeitsfenster(), ladeFachabteilungen()])
-}
-
-// REIHENFOLGE BEACHTEN: dieser Beobachter wird VOR dem Anfrage-Beobachter
-// angelegt und läuft deshalb zuerst. Sonst lädt ein Filterwechsel zweimal –
-// einmal mit der alten Seitenzahl und gleich danach mit der zurückgesetzten.
-watch([scope, statuses, suche, processKey, sortKey, sortDir], () => { page.value = 1 })
-
-// Nur wenn sich die ANFRAGE ändert, wird geladen. Im Scan-Modus blättert und
-// sortiert der Client im geladenen Fenster – das braucht keinen neuen Aufruf.
-watch(() => JSON.stringify(plan.value.params), ladeListe)
-watch(listeIstArbeitsfenster, () => { ladeArbeitsfenster() })
-
-// Entprellte Suche: sonst je Tastendruck ein Aufruf.
-let tippTimer: ReturnType<typeof setTimeout> | null = null
-watch(sucheEingabe, (v) => {
-  if (tippTimer) clearTimeout(tippTimer)
-  tippTimer = setTimeout(() => { suche.value = v }, 250)
-})
-
-// Nach dem Laden kann die Seite hinter dem Ergebnis liegen (z. B. weniger Treffer).
-watch(seitenAnzahl, (n) => { if (page.value > n) page.value = n })
 
 onMounted(async () => {
-  await Promise.all([ladeListe(), ladeFachabteilungen(), ladeNamen()])
-  // Erst danach: ob ein eigenes Arbeitsfenster nötig ist, hängt am Plan.
-  await ladeArbeitsfenster()
+  // Parallel: die beiden Quellen hängen nicht voneinander ab.
+  await Promise.all([ladeDashboard(), ladeAuftraege()])
+  // Auf den Reiter springen, in dem tatsächlich Arbeit liegt.
+  if (countAssigned.value > 0) activeTab.value = 'assigned'
+  else if (countDepartments.value > 0) activeTab.value = 'departments'
+  else if (countInvolved.value > 0) activeTab.value = 'involved'
 })
 </script>
 
 <template>
   <AppLayout title="Übersicht">
-    <div class="space-y-5">
+
+    <div v-if="loading && rowsLoading" class="flex items-center justify-center py-24">
+      <div class="w-8 h-8 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin"/>
+    </div>
+
+    <div v-else class="space-y-6">
 
       <!-- ── Kopf ── -->
       <div class="flex items-start justify-between gap-4 flex-wrap">
@@ -361,176 +326,167 @@ onMounted(async () => {
             <span class="text-[#3EAAB8]">{{ auth.user?.displayName }}</span> 👋
           </h1>
           <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">
-            <template v-if="arbeitsLoading">Aufträge werden geladen…</template>
-            <template v-else-if="offeneAufgaben > 0">
+            <template v-if="offeneAufgaben > 0">
               Du hast <strong class="text-gray-700 dark:text-gray-200">{{ offeneAufgaben }}</strong>
-              offene {{ offeneAufgaben === 1 ? 'Aufgabe' : 'Aufgaben' }}.
+              offene Aufgaben.
             </template>
             <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
           </p>
         </div>
-        <div class="flex items-center gap-2">
-          <button @click="router.push('/prozess-auftraege/neu')"
-                  class="px-4 py-2 rounded-xl text-sm font-medium text-white
-                         bg-[#3EAAB8] hover:bg-[#2B7D89] transition">
-            + Neues Prozess-Ticket
-          </button>
-          <button @click="router.push(BASIS_TICKET_PATH)"
-                  class="px-4 py-2 rounded-xl text-sm font-medium
-                         border border-gray-200 dark:border-white/10
-                         text-gray-600 dark:text-gray-300
-                         hover:bg-gray-50 dark:hover:bg-white/5 transition">
-            + Neues Ticket
-          </button>
-        </div>
+        <button @click="router.push('/prozess-auftraege/neu')"
+                class="px-4 py-2 rounded-xl text-sm font-medium text-white
+                       bg-[#3EAAB8] hover:bg-[#2B7D89] transition">
+          + Neuer Auftrag
+        </button>
       </div>
 
-      <!-- Ladefehler getrennt melden: fällt eine Quelle aus, bleibt der Rest nutzbar -->
-      <div v-if="listeError || fensterError || abteilungenError" class="space-y-2">
-        <p v-if="listeError" class="warnbox">{{ listeError }}</p>
-        <p v-if="fensterError" class="warnbox">
-          {{ fensterError }} – die Zähler der Kacheln fehlen.
+      <!-- Ladefehler getrennt melden: fällt eine Quelle aus, bleibt die andere nutzbar -->
+      <div v-if="blockError || rowsError" class="space-y-2">
+        <p v-if="rowsError"
+           class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50
+                  dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          {{ rowsError }} – „Mir zugewiesen“ und „Meine Abteilungen“ sind unvollständig.
         </p>
-        <p v-if="abteilungenError" class="warnbox">
-          {{ abteilungenError }} – „Meine Abteilungen" bleibt leer.
+        <p v-if="blockError"
+           class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50
+                  dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          {{ blockError }} – „Von mir angelegt“ und „Beteiligt“ sind unvollständig.
         </p>
       </div>
 
-      <!-- ── Sichten ── -->
-      <OverviewScopeTiles :active="scope" :counts="counts" :loading="arbeitsLoading"
-                          :truncated="arbeitsAbgeschnitten"
-                          @select="scope = $event" />
-
-      <!-- ── Filter ── -->
-      <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                  rounded-2xl shadow-sm p-3.5 space-y-3">
-        <!-- Status als Mehrfachauswahl (kein „Alle"-Knopf): aktive sind
-             hervorgehoben, abwählen blendet aus. Sind alle aktiv, ist alles
-             sichtbar – genau EIN aktiver Status filtert der Server selbst. -->
-        <div class="flex flex-wrap items-center gap-2">
-          <button v-for="s in statusOptionen" :key="s.key" @click="toggleStatus(s.key)"
-                  class="px-3 py-1.5 rounded-xl text-sm font-medium border transition"
-                  :class="statuses.includes(s.key)
-                    ? 'bg-[#3EAAB8] text-white border-[#3EAAB8]'
-                    : 'bg-white dark:bg-[#263040] border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:border-[#3EAAB8]/40'">
-            {{ s.label }}
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
-          <div class="relative">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
-                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-            </svg>
-            <!-- Der Server sucht ausschließlich im TITEL. Das steht so im
-                 Platzhalter, statt einen unvollständigen Client-Filter über
-                 Ersteller/Zuständig zu bauen, der nur das Fenster durchsucht. -->
-            <input v-model="sucheEingabe" placeholder="Im Titel suchen…" class="fi !pl-10 w-full" />
+      <!-- ── Kacheln ── -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <button @click="selectTab('assigned')" class="stat" :class="activeTab === 'assigned' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            </span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countAssigned }}</span>
           </div>
-          <select v-model="processKey" class="fi">
-            <option value="">Alle Prozesse</option>
-            <option v-for="p in katalog" :key="p.key" :value="p.key">
-              {{ p.icon ? p.icon + ' ' : '' }}{{ p.name }}
-            </option>
-          </select>
-          <button @click="zuruecksetzen"
-                  class="px-3 py-2 rounded-xl text-sm text-gray-500 dark:text-gray-400
-                         border border-gray-200 dark:border-white/10
-                         hover:bg-gray-50 dark:hover:bg-white/5 transition">
-            Zurücksetzen
-          </button>
-          <button @click="allesNeuLaden" title="Neu laden"
-                  class="px-3 py-2 rounded-xl text-sm text-gray-500 dark:text-gray-400
-                         border border-gray-200 dark:border-white/10
-                         hover:bg-gray-50 dark:hover:bg-white/5 transition">
-            ↻
-          </button>
-        </div>
+          <p class="stat-label inline-flex items-center gap-1">
+            Mir zugewiesen
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Aufträge, deren aktuelle Phase dich persönlich als zuständig nennt.</span>
+            </span>
+          </p>
+        </button>
 
-        <!-- Nummern-Suche kann der Server nicht (er sucht im Titel) – deshalb
-             der direkte Weg zum Auftrag, statt eines Filters, der nichts findet. -->
-        <p v-if="idTreffer" class="text-sm text-gray-500 dark:text-gray-400">
-          <button @click="oeffnen(idTreffer)" class="text-[#3EAAB8] hover:underline font-medium">
-            Auftrag #{{ idTreffer }} öffnen
-          </button>
-          <span class="text-gray-400"> · die Suche selbst durchsucht nur Titel</span>
-        </p>
+        <button @click="selectTab('departments')" class="stat" :class="activeTab === 'departments' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countDepartments }}</span>
+          </div>
+          <p class="stat-label inline-flex items-center gap-1">
+            Meine Abteilungen
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Aufträge, die auf eine Quittierung durch eine deiner Fachabteilungen warten.</span>
+            </span>
+          </p>
+        </button>
 
-        <p v-if="!statuses.length" class="text-sm text-amber-700 dark:text-amber-300">
-          Kein Status ausgewählt – es wird nichts angezeigt. Wähle mindestens einen Status.
-        </p>
+        <button @click="selectTab('involved')" class="stat" :class="activeTab === 'involved' ? 'stat-on' : ''">
+          <div class="flex items-center justify-between">
+            <span class="stat-icon bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            </span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countInvolved }}</span>
+          </div>
+          <p class="stat-label inline-flex items-center gap-1">
+            Beteiligt
+            <span class="hint" @click.stop>
+              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
+              <span class="bubble">Aufträge anderer, die du sehen darfst – als Zuständige:r, Beobachter:in oder mit Aufsichtsrecht.</span>
+            </span>
+          </p>
+        </button>
       </div>
 
-      <!-- ── Ergebnis-Zeile ── -->
-      <div class="flex items-center justify-between gap-3 flex-wrap text-sm text-gray-400">
-        <span>
-          {{ SCOPE_LABEL[scope] }}:
-          <strong class="text-gray-600 dark:text-gray-300">{{ ergebnisAnzahl }}</strong>
-          {{ ergebnisAnzahl === 1 ? 'Auftrag' : 'Aufträge' }}
-          <template v-if="seitenAnzahl > 1"> · Seite {{ page }} von {{ seitenAnzahl }}</template>
-        </span>
-        <!-- Nur wenn das geladene Fenster wirklich alles enthält (im Server-Modus
-             immer, im Scan-Modus solange es nicht abgeschnitten ist). -->
-        <span v-if="!abgeschnitten && !listeLoading" class="text-xs">Vollständiges Ergebnis</span>
-      </div>
+      <!-- ── Liste ── -->
+      <div>
+        <!-- Ergebnisse -->
+        <div class="bg-gray-50 dark:bg-[#1A2130] border border-gray-200/80 dark:border-white/[0.09]
+                    rounded-2xl overflow-hidden">
 
-      <!-- ── Tabelle ── -->
-      <OverviewTable :rows="zeilen" :sort-key="sortKey" :sort-dir="sortDir"
-                     :loading="listeLoading && !liste.length"
-                     :empty-text="SCOPE_EMPTY[scope]"
-                     @open="oeffnen" @sort="setSort" />
+          <div class="px-5 py-2 flex items-center justify-between gap-3 flex-wrap
+                      text-xs text-gray-400 border-b border-gray-100 dark:border-white/[0.04]">
+            <span>{{ zeilen.length }} {{ zeilen.length === 1 ? 'Ergebnis' : 'Ergebnisse' }}</span>
+            <!-- Status-Verteilung über ALLE für mich sichtbaren Aufträge -->
+            <div v-if="statusCounts.length" class="flex flex-wrap items-center gap-1.5">
+              <span v-for="[st, n] in statusCounts" :key="st"
+                    class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(st)">
+                {{ statusLabel(st) }} · {{ n }}
+              </span>
+            </div>
+          </div>
 
-      <!-- ── Ehrlichkeits-Hinweis: das ist NICHT das Gesamtergebnis ── -->
-      <div v-if="abgeschnitten"
-           class="rounded-2xl border border-amber-200 dark:border-amber-500/30
-                  bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm
-                  text-amber-800 dark:text-amber-200 space-y-1">
-        <p>
-          Es gibt mehr sichtbare Aufträge ({{ listeTotal }}) als hier geladen
-          ({{ liste.length }}). Diese Liste zeigt die zuletzt geänderten –
-          Filter und Sortierung wirken nur darauf.
-        </p>
-        <p class="text-xs">
-          Grund: {{ clientGruende.join(', ') }} kann der Server nicht filtern.
-          <button @click="vollstaendigBlaettern" class="underline font-medium">
-            Vollständig blättern
-          </button>
-          (alle Status, Sicht „Alle Aufträge", Sortierung nach Änderung).
-        </p>
-      </div>
+          <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[560px] overflow-auto">
+            <li v-for="z in zeilen" :key="`${activeTab}-${z.id}`" @click="open(z)" class="row group">
+              <div class="flex items-start gap-3.5 min-w-0">
+                <div class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" :class="dotClass(z.status)" />
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">
+                    {{ z.title }} <span class="text-gray-400 font-normal text-xs">#{{ z.id }}</span>
+                  </p>
+                  <p class="text-xs text-gray-400 mt-0.5">
+                    {{ z.process_key }} · {{ fmtDay(z.created_at) }}
+                    <template v-if="z.phase_label"> · {{ z.phase_label }}</template>
+                  </p>
+                  <!-- Abteilungs-Reiter: was warte MEINE Abteilung noch ab? -->
+                  <p v-if="z.depts" class="text-xs mt-1">
+                    <span class="text-purple-600 dark:text-purple-300 font-medium">
+                      {{ z.depts.mine.length ? z.depts.mine.join(', ') : 'Meine Abteilung' }}
+                    </span>
+                    <span class="text-gray-400"> · {{ z.depts.text }}</span>
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
+                <span v-if="z.badge"
+                      class="hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                      :class="z.badge.class">{{ z.badge.text }}</span>
+                <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(z.status)">
+                  {{ statusLabel(z.status) }}
+                </span>
+                <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </li>
 
-      <!-- Mitgliedschafts-Info: Abteilungen ohne aktuelle Aufgabe -->
-      <div v-if="scope === 'departments' && leereAbteilungen.length"
-           class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                  rounded-2xl px-5 py-3.5">
-        <p class="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
-          Mitglied · derzeit nichts zu quittieren
-        </p>
-        <div class="flex flex-wrap gap-1.5">
-          <span v-for="d in leereAbteilungen" :key="d.id"
-                class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full
-                       bg-gray-100/70 dark:bg-white/[0.05] text-gray-500 dark:text-gray-400">
-            <span class="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-white/20" />
-            {{ d.name }}
-          </span>
-        </div>
-      </div>
+            <li v-if="zeilen.length === 0" class="empty">
+              <template v-if="activeTab === 'assigned'">Keine dir persönlich zugewiesenen Aufträge.</template>
+              <template v-else-if="activeTab === 'departments'">Keine Aufträge für deine Fachabteilungen.</template>
+              <template v-else>Keine Aufträge, an denen du beteiligt bist.</template>
+            </li>
+          </ul>
 
-      <!-- ── Blättern ── -->
-      <div v-if="seitenAnzahl > 1" class="flex items-center justify-between text-sm text-gray-400">
-        <span>Seite {{ page }} von {{ seitenAnzahl }}</span>
-        <div class="flex gap-2">
-          <button @click="page = Math.max(1, page - 1)" :disabled="page <= 1"
-                  class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/10
-                         hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40 transition">
-            ← Zurück
-          </button>
-          <button @click="page = Math.min(seitenAnzahl, page + 1)" :disabled="page >= seitenAnzahl"
-                  class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/10
-                         hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40 transition">
-            Weiter →
-          </button>
+          <!-- Mitgliedschafts-Info: Abteilungen ohne aktuelle Aufgabe -->
+          <div v-if="activeTab === 'departments' && leereAbteilungen.length"
+               class="px-5 py-3.5 border-t border-gray-100 dark:border-white/[0.04]">
+            <p class="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
+              Mitglied · derzeit nichts zu quittieren
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <span v-for="d in leereAbteilungen" :key="d.id"
+                    class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full
+                           bg-gray-100/70 dark:bg-white/[0.05] text-gray-500 dark:text-gray-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-white/20" />
+                {{ d.name }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Ehrlichkeits-Hinweis: die Arbeitslisten lesen nur die erste Seite -->
+          <div v-if="listeAbgeschnitten && (activeTab === 'assigned' || activeTab === 'departments')"
+               class="px-5 py-3 border-t border-gray-100 dark:border-white/[0.04]
+                      text-xs text-gray-500 dark:text-gray-400">
+            Es gibt mehr als {{ rows.length }} sichtbare Aufträge ({{ rowsTotal }}).
+            Diese Liste zeigt nur die neuesten – die vollständige Suche steht unter
+            <button @click="router.push('/prozess-auftraege')" class="text-[#3EAAB8] hover:underline">
+              Prozess-Aufträge</button>.
+          </div>
         </div>
       </div>
     </div>
@@ -540,6 +496,20 @@ onMounted(async () => {
 <style scoped>
 @reference "../style.css";
 
+.stat {
+  @apply relative bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+         rounded-2xl p-4 text-left transition-all duration-200
+         hover:z-30 hover:shadow-md hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-white/20;
+}
+.stat-on {
+  @apply ring-2 ring-[#3EAAB8]/50 border-[#3EAAB8]/40 shadow-sm
+         bg-[#3EAAB8]/[0.05] dark:bg-[#3EAAB8]/[0.08];
+}
+.stat-icon { @apply w-8 h-8 rounded-xl flex items-center justify-center; }
+/* kräftigere Icon-Striche */
+.stat-icon svg { stroke-width: 2.3px; }
+.stat-label { @apply text-[13px] font-semibold text-gray-700 dark:text-gray-200 mt-2.5; }
+
 .fi {
   @apply w-full rounded-xl border border-gray-200 dark:border-white/10
          bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
@@ -547,9 +517,23 @@ onMounted(async () => {
          focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition;
 }
 
-.warnbox {
-  @apply rounded-xl border border-amber-200 dark:border-amber-500/30
-         bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm
-         text-amber-800 dark:text-amber-200;
+.row {
+  @apply flex items-start justify-between px-5 py-4 cursor-pointer
+         hover:bg-white/60 dark:hover:bg-[#263040] transition;
 }
+
+.empty { @apply px-5 py-14 text-center text-sm text-gray-400 italic; }
+
+/* Info-Icon mit Hover-Tooltip auf den Kacheln.
+   Die Bubble wird relativ zur Karte (.stat = relative) zentriert und darunter
+   gelegt – so läuft sie auch bei der rechten Karte nicht über den Rand. */
+.hint { @apply inline-flex items-center cursor-help; }
+.hint-icon { @apply w-[18px] h-[18px] text-gray-300 dark:text-gray-600 transition-colors; }
+.hint:hover .hint-icon { @apply text-gray-500 dark:text-gray-300; }
+.bubble {
+  @apply pointer-events-none absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 w-44 sm:w-56
+         rounded-lg bg-gray-900 text-gray-100 text-[11px] leading-snug px-3 py-2
+         opacity-0 transition-opacity duration-150 normal-case font-normal text-left shadow-lg;
+}
+.hint:hover .bubble { @apply opacity-100; }
 </style>
