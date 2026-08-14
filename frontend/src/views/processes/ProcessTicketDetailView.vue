@@ -24,6 +24,8 @@ import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
 import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
 import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
 import ProcessDepartments from '@/components/process/ProcessDepartments.vue'
+import BasisTicketDetail from '@/components/process/BasisTicketDetail.vue'
+import { isBasisTicket } from '@/lib/basisTicket'
 import SchemaExportView from '@/components/process/form/SchemaExportView.vue'
 
 const route = useRoute()
@@ -60,6 +62,10 @@ const viewer = computed<SimViewer>(() => ({
   visibleKeys: new Set(ticket.value?.visible_fields ?? []),
   editableKeys: new Set(ticket.value?.editable_fields ?? []),
 }))
+
+/** Das Basis-Ticket hat eine EIGENE, feste Ansicht im Layout des Alt-Systems –
+ *  alle übrigen Prozesse rendern generisch aus der Definition. */
+const istBasis = computed(() => isBasisTicket(ticket.value?.process_key))
 
 const phase = computed(() => {
   if (!definition.value || !ticket.value) return null
@@ -257,6 +263,9 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
       </div>
 
       <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
+
+      <BasisTicketDetail v-else-if="istBasis && ticket && definition"
+                         :ticket="ticket" :definition="definition" :sources="sources" />
 
       <template v-else-if="ticket && definition">
         <!-- Kopf -->

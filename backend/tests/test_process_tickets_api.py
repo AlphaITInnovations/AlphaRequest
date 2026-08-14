@@ -311,3 +311,23 @@ def test_gepinnte_definition_haengt_am_ticket_zugriff(client):
 
 def test_definition_unbekanntes_ticket(client):
     assert client.get("/process-tickets/999/definition").status_code == 404
+
+
+def test_prioritaet_laesst_sich_nachtraeglich_aendern(client):
+    """Das Details-Panel bietet die Priorität wie im Alt-System zur Bearbeitung an –
+    bisher war sie nach dem Anlegen unveränderlich (PATCH kannte nur title/values)."""
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.patch(f"/process-tickets/{tid}", json={"priority": "high"})
+    assert r.status_code == 200
+    assert r.json()["data"]["priority"] == "high"
+
+
+def test_unbekannte_prioritaet_wird_abgelehnt(client):
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.patch(f"/process-tickets/{tid}", json={"priority": "mega"})
+    assert r.status_code == 422
+    assert r.json()["error"]["fields"][0]["path"] == "priority"
+    # Der Auftrag ist unverändert.
+    assert client.get(f"/process-tickets/{tid}").json()["data"]["priority"] == "normal"

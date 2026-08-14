@@ -64,6 +64,10 @@ class CreateTicketRequest(BaseModel):
 class PatchTicketRequest(BaseModel):
     title: Optional[str] = None
     values: Optional[dict] = None
+    #: Priorität nachträglich ändern (Whitelist ALLOWED_PRIORITY). Bisher war sie
+    #: nach dem Anlegen unveränderlich – das Details-Panel des Basis-Tickets
+    #: bietet sie aber wie im Alt-System zur Bearbeitung an.
+    priority: Optional[str] = None
 
 
 class TicketAbilities(BaseModel):
@@ -502,6 +506,21 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
                                   title=body.title, expected_rev=row.get("rev"))
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
+    # Priorität: eigener Pfad neben den Feldwerten (sie ist Ticket-Metadatum,
+    # kein Prozessfeld). Gate ist dasselbe may_edit wie für den ganzen PATCH.
+    if body.priority is not None and body.priority != row.get("priority"):
+        from backend.schemas.process_definition import ALLOWED_PRIORITY
+        if body.priority not in ALLOWED_PRIORITY:
+            raise api_error(422, ErrorCode.VALIDATION_FAILED, "Unbekannte Priorität",
+                            fields=[{"path": "priority", "code": "INVALID",
+                                     "message": f"Erlaubt: {', '.join(sorted(ALLOWED_PRIORITY))}"}])
+        alt_prio = row.get("priority")
+        store.set_priority(ticket_id, body.priority)
+        row["priority"] = body.priority
+        events.record(row, events.PRIORITY_CHANGED, actor_id=user.get("id"),
+                      actor_name=_actor_name(user),
+                      details={"from": alt_prio, "to": body.priority})
+
     if to_apply:
         # Verlauf: NUR die Feld-Schlüssel, nie die Werte. Wer ein Feld nicht sehen
         # darf, sieht den Eintrag auch nicht (Redaktion in process_events.redact).
