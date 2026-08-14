@@ -387,6 +387,9 @@ export interface TicketAbilities {
   edit: boolean
   internal_comment: boolean
   manage_watchers: boolean
+  /** Dateien hochladen – weiter gefasst als edit: auch die Ersteller:in darf
+   *  Unterlagen nachreichen, solange der Auftrag läuft. */
+  attach: boolean
   reopen: boolean
   /** Notfalleingriffe (Admin): hängenden Auftrag zwangsweise abschließen bzw. löschen. */
   archive: boolean

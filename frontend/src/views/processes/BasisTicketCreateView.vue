@@ -20,6 +20,8 @@
  *   Fachabteilung→ `ticket.fachabteilung` (dorthin schaltet der Auftrag direkt)
  *   Beobachter   → nach dem Anlegen über die Beobachter-API (die Ersteller:in
  *                  trägt der Server automatisch ein)
+ *   Anhänge      → nach dem Anlegen über die Anhang-API (ein Anhang braucht die
+ *                  Ticket-ID; die Ersteller:in darf laut Server nachreichen)
  */
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -32,6 +34,7 @@ import { BASIS_TICKET_KEY } from '@/lib/basisTicket'
 import * as processesApi from '@/api/processes'
 import { createTicket } from '@/api/processTickets'
 import { addWatcher, removeWatcher } from '@/api/processEvents'
+import { uploadAttachment } from '@/api/processAttachments'
 
 const router = useRouter()
 const { showToast } = useToast()
@@ -71,6 +74,31 @@ function beobachterWeg(id: string) {
 }
 
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
+
+// ── Anhänge ───────────────────────────────────────────────────────────────────
+// Dateien werden bis zum Anlegen nur GESAMMELT: ein Anhang hängt an einer
+// Ticket-ID, und die gibt es erst nach dem Erstellen.
+const dateien = ref<File[]>([])
+const dateiInput = ref<HTMLInputElement | null>(null)
+
+function dateienGewaehlt(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  for (const f of Array.from(input.files ?? [])) {
+    if (!dateien.value.some((d) => d.name === f.name && d.size === f.size)) {
+      dateien.value.push(f)
+    }
+  }
+  // Input leeren: sonst löst dieselbe Datei beim zweiten Mal kein Event aus.
+  input.value = ''
+}
+
+function dateiWeg(index: number) {
+  dateien.value = dateien.value.filter((_, i) => i !== index)
+}
+
+const groesse = (b: number) => (b < 1024 * 1024
+  ? `${Math.max(1, Math.round(b / 1024))} KB`
+  : `${(b / (1024 * 1024)).toFixed(1)} MB`)
 
 // ── Laden ─────────────────────────────────────────────────────────────────────
 onMounted(async () => {
@@ -128,6 +156,21 @@ async function erstellen() {
     } catch (e) {
       showToast(errorMessage(e, 'Auftrag angelegt, aber die Beobachter konnten '
         + 'nicht vollständig übernommen werden'), false)
+    }
+
+    // Anhänge NACH dem Anlegen – gleiche best-effort-Logik: melden, nicht
+    // verschlucken (die Datei kann in der Ticket-Ansicht nachgereicht werden).
+    const fehlgeschlagen: string[] = []
+    for (const f of dateien.value) {
+      try {
+        await uploadAttachment(t.id, f)
+      } catch {
+        fehlgeschlagen.push(f.name)
+      }
+    }
+    if (fehlgeschlagen.length) {
+      showToast('Auftrag angelegt, aber diese Dateien konnten nicht hochgeladen '
+        + `werden: ${fehlgeschlagen.join(', ')}`, false)
     }
 
     showToast('Auftrag angelegt')
@@ -246,6 +289,33 @@ async function erstellen() {
                         placeholder="Beschreibe dein Anliegen ausführlich…" />
               <p v-if="feldFehler.beschreibung" class="text-xs text-red-500 mt-1">
                 {{ feldFehler.beschreibung }}
+              </p>
+            </div>
+
+            <div class="card-section">
+              <label class="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1.5">
+                Anhänge
+              </label>
+              <ul v-if="dateien.length"
+                  class="divide-y divide-gray-100 dark:divide-white/[0.06] rounded-xl
+                         border border-gray-200 dark:border-white/10 overflow-hidden mb-2">
+                <li v-for="(f, i) in dateien" :key="f.name + f.size"
+                    class="flex items-center gap-3 px-3 py-2">
+                  <span class="truncate text-sm text-gray-700 dark:text-gray-200"
+                        :title="f.name">{{ f.name }}</span>
+                  <span class="text-xs text-gray-400 whitespace-nowrap">{{ groesse(f.size) }}</span>
+                  <button type="button" @click="dateiWeg(i)"
+                          class="ml-auto text-gray-300 hover:text-red-500 transition"
+                          :aria-label="`${f.name} entfernen`">✕</button>
+                </li>
+              </ul>
+              <input ref="dateiInput" type="file" multiple class="hidden"
+                     @change="dateienGewaehlt" />
+              <button type="button" class="btn-secondary text-sm" @click="dateiInput?.click()">
+                Datei hinzufügen
+              </button>
+              <p class="text-xs text-gray-400 mt-2">
+                Die Dateien werden beim Erstellen des Auftrags hochgeladen.
               </p>
             </div>
           </div>

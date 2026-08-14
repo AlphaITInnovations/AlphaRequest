@@ -21,6 +21,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import UserSelect from '@/components/UserSelect.vue'
+import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
@@ -64,8 +65,8 @@ const neuerEintrag = ref('')
 
 // ── Abgeleitetes ──────────────────────────────────────────────────────────────
 const abilities = computed(() => ticket.value.abilities ?? {
-  edit: false, internal_comment: false, manage_watchers: false, reopen: false,
-  archive: false, delete: false,
+  edit: false, internal_comment: false, manage_watchers: false, attach: false,
+  reopen: false, archive: false, delete: false,
 })
 const terminal = computed(() => {
   const t = ticket.value
@@ -321,6 +322,14 @@ async function abschliessen() {
               Noch keine Einträge.
             </li>
           </ul>
+        </div>
+
+        <!-- Anhänge: hochladen darf die zuständige Stelle UND die Ersteller:in
+             (Unterlagen nachreichen) – das entscheidet der Server (abilities). -->
+        <div class="card-section">
+          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
+                              :can-attach="abilities.attach"
+                              :current-user-id="auth.user?.id ?? null" />
         </div>
 
         <div v-if="darfEintragen" class="card-section">

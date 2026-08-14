@@ -9,13 +9,18 @@
  *   - OHNE `fieldKey`: alle Dateien des Auftrags; Uploads landen als allgemeiner
  *     Anhang (field_key = NULL).
  *
- * `canEdit` steuert nur die OBERFLÄCHE. Verbindlich ist der Server: Upload und
- * Löschen setzen dort die Zuständigkeit für die aktuelle Phase voraus.
+ * `canEdit`/`canAttach` steuern nur die OBERFLÄCHE. Verbindlich ist der Server:
+ *   - canEdit  (zuständige Stelle): darf alles – hochladen, versionieren,
+ *     löschen, auch fremde Dateien.
+ *   - canAttach (z. B. die Ersteller:in, abilities.attach): darf Dateien
+ *     NACHREICHEN und nur die EIGENEN versionieren/löschen – dafür braucht die
+ *     Komponente `currentUserId`.
  *
- * Eingehängt in `views/processes/ProcessTicketDetailView.vue` (ohne `fieldKey`,
+ * Eingehängt in `views/processes/ProcessTicketDetailView.vue` und
+ * `components/process/BasisTicketDetail.vue` (jeweils ohne `fieldKey`,
  * also als allgemeine Ablage des Auftrags).
  */
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import {
   listAttachments, uploadAttachment, deleteAttachment, downloadUrl,
   type ProcessAttachment,
@@ -26,7 +31,19 @@ const props = withDefaults(defineProps<{
   ticketId: number
   fieldKey?: string | null
   canEdit?: boolean
-}>(), { fieldKey: null, canEdit: false })
+  canAttach?: boolean
+  currentUserId?: string | null
+}>(), { fieldKey: null, canEdit: false, canAttach: false, currentUserId: null })
+
+/** Darf überhaupt hochladen (Button „Datei hochladen"). */
+const darfHochladen = computed(() => props.canEdit || props.canAttach)
+
+/** Darf DIESE Datei versionieren/löschen. */
+function darfAendern(a: ProcessAttachment): boolean {
+  if (props.canEdit) return true
+  return props.canAttach && !!props.currentUserId
+    && a.uploaded_by_id === props.currentUserId
+}
 
 const { showToast } = useToast()
 
@@ -137,7 +154,7 @@ function formatDate(ts: string | null) {
       <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Dateien</h3>
       <span v-if="items.length" class="text-xs text-gray-400">({{ items.length }})</span>
       <button
-        v-if="canEdit"
+        v-if="darfHochladen"
         type="button"
         class="ml-auto btn-secondary !py-1.5 !text-sm"
         :disabled="uploading"
@@ -194,7 +211,7 @@ function formatDate(ts: string | null) {
             title="Herunterladen"
           >⬇</a>
           <button
-            v-if="canEdit"
+            v-if="darfAendern(a)"
             type="button"
             class="text-xs text-gray-500 dark:text-gray-400 hover:underline disabled:opacity-40"
             :disabled="uploading"
@@ -202,7 +219,7 @@ function formatDate(ts: string | null) {
             @click="pickFile(a.family_id)"
           >Neue Version</button>
           <button
-            v-if="canEdit"
+            v-if="darfAendern(a)"
             type="button"
             class="text-red-500 hover:text-red-600 disabled:opacity-40"
             :disabled="deleting === a.id"

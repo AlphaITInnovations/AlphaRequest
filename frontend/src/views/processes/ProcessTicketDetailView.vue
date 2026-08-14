@@ -79,8 +79,8 @@ const phase = computed(() => {
  * Schaltfläche als eine, die mit 403 endet.
  */
 const abilities = computed(() => ticket.value?.abilities ?? {
-  edit: false, internal_comment: false, manage_watchers: false, reopen: false,
-  archive: false, delete: false,
+  edit: false, internal_comment: false, manage_watchers: false, attach: false,
+  reopen: false, archive: false, delete: false,
 })
 
 /** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
@@ -402,7 +402,9 @@ onMounted(async () => { sources.value = await loadOptionSources(true); await loa
 
         <!-- Allgemeine Anhänge des Auftrags (Feld-Anhänge stehen im Formular) -->
         <div class="mt-4">
-          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit" />
+          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
+                              :can-attach="abilities.attach"
+                              :current-user-id="auth.user?.id ?? null" />
         </div>
 
         <div class="grid gap-4 mt-4 lg:grid-cols-[2fr_1fr] items-start">

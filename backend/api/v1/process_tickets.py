@@ -80,6 +80,9 @@ class TicketAbilities(BaseModel):
     edit: bool = False
     internal_comment: bool = False
     manage_watchers: bool = False
+    #: Dateien hochladen – weiter gefasst als edit: auch die Ersteller:in darf
+    #: Unterlagen nachreichen, solange der Auftrag läuft (api/v1/attachments.py).
+    attach: bool = False
     reopen: bool = False
     #: Notfalleingriffe (Admin): hängenden Auftrag zwangsweise abschließen bzw. löschen.
     archive: bool = False
@@ -143,10 +146,14 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
         return TicketAbilities()
     gids = set(group_ids or ())
     darf_bearbeiten = acc.may_edit(defn, row, user, gids) and not _is_terminal(row)
+    ist_owner = bool(user.get("id")) and row.get("owner_id") == user.get("id")
     return TicketAbilities(
         edit=darf_bearbeiten,
         internal_comment=acc.is_process_staff(defn, user, gids),
         manage_watchers=acc.may_edit(defn, row, user, gids),
+        # Muss die Regel in attachments._assert_process_attach spiegeln.
+        attach=(acc.may_edit(defn, row, user, gids)
+                or (ist_owner and not _is_terminal(row))),
         # Wiederaufnahme greift in einen FERTIGEN Auftrag ein – nur Admin.
         reopen=acc.is_admin(user) and _is_terminal(row),
         archive=acc.is_admin(user) and not _is_terminal(row),

@@ -209,17 +209,31 @@ class FakeVis:
         return set(user.get("groups") or [])
 
 
+class FakeWatchers:
+    """Beobachter-Store ohne DB (nur watcher_ids)."""
+
+    def __init__(self):
+        self.ids: dict[int, set] = {}
+
+    def watcher_ids(self, tid):
+        return set(self.ids.get(tid, set()))
+
+
 @pytest.fixture
 def ctx(monkeypatch):
     fake_att = FakeAttDb()
+    fake_store = FakeStore()
+    fake_watchers = FakeWatchers()
     audits: list[dict] = []
     monkeypatch.setattr(att_api, "att_db", fake_att)
-    monkeypatch.setattr(att_api, "pstore", FakeStore())
+    monkeypatch.setattr(att_api, "pstore", fake_store)
     monkeypatch.setattr(att_api, "defstore", FakeDefs())
     monkeypatch.setattr(att_api, "storage", FakeStorage())
     monkeypatch.setattr(att_api, "vis", FakeVis())
+    monkeypatch.setattr(att_api, "watchers", fake_watchers)
     monkeypatch.setattr(att_api, "record_audit", lambda **kw: audits.append(kw))
-    return {"att": fake_att, "audits": audits}
+    return {"att": fake_att, "audits": audits, "store": fake_store,
+            "watchers": fake_watchers}
 
 
 def make_client(user: dict) -> TestClient:
@@ -386,3 +400,88 @@ def test_zustaendige_stelle_darf_loeschen_auch_fremde_datei(ctx, owner_client):
     assert any(a["action"] == "file_deleted" for a in ctx["audits"])
     # danach ist der Anhang weg (Soft-Delete)
     assert admin.delete("/attachments/1").status_code == 404
+
+
+# ── Ersteller:in darf Dateien nachreichen ─────────────────────────────────────
+# Beim Basis-Ticket wandert die Bearbeitung schon beim Anlegen zur Fachabteilung
+# (auto-advance) – die antragstellende Person ist danach NICHT mehr may_edit,
+# muss aber Unterlagen (Screenshot, Vertrag) nachreichen können.
+
+IT_USER = {"id": "u_it", "displayName": "IT", "permissions": [], "groups": ["g_it"]}
+
+
+def _zur_fachabteilung(ctx):
+    """Phase 'review' aktiv: zuständig ist g_it, nicht mehr die Ersteller:in."""
+    rt = ctx["store"].rows[7]["runtime"]
+    rt["phases"][0]["status"] = "done"
+    rt["phases"][1]["status"] = "open"
+    rt["current_index"] = 1
+
+
+def _abgeschlossen(ctx):
+    """Alle Phasen durch – Auftrag archiviert."""
+    rt = ctx["store"].rows[7]["runtime"]
+    for p in rt["phases"]:
+        p["status"] = "done"
+    rt["current_index"] = len(rt["phases"])
+    ctx["store"].rows[7]["status"] = "archived"
+
+
+def test_ersteller_darf_nach_weitergabe_hochladen(ctx, owner_client):
+    _zur_fachabteilung(ctx)
+    r = upload(owner_client)
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["phase_key"] == "review"
+
+
+def test_ersteller_darf_nur_eigene_dateien_loeschen(ctx, owner_client):
+    _zur_fachabteilung(ctx)
+    it = make_client(IT_USER)
+    upload(it)                                   # id 1: Datei der Fachabteilung
+    upload(owner_client)                         # id 2: eigene Datei
+    r = owner_client.delete("/attachments/1")
+    assert r.status_code == 403
+    assert ctx["att"].rows[0]["deleted_at"] is None
+    assert owner_client.delete("/attachments/2").status_code == 200
+    assert ctx["att"].rows[1]["deleted_at"] is not None
+
+
+def test_ersteller_darf_fremde_datei_nicht_ueberschreiben(ctx, owner_client):
+    """Neue Version = die aktuelle Datei verdrängen – für die Ersteller:in nur
+    bei EIGENEN Dateien (dieselbe Grenze wie beim Löschen)."""
+    _zur_fachabteilung(ctx)
+    it = make_client(IT_USER)
+    fremd = upload(it).json()["data"]
+    assert upload(owner_client, family_id=fremd["family_id"]).status_code == 403
+    eigene = upload(owner_client).json()["data"]
+    r = upload(owner_client, family_id=eigene["family_id"])
+    assert r.status_code == 200 and r.json()["data"]["version"] == 2
+
+
+def test_ersteller_kommt_nach_abschluss_nicht_mehr_heran(ctx, owner_client):
+    """Abgeschlossen: nichts mehr nachreichen und nichts mehr löschen – der
+    Nachreich-Weg gilt nur für LAUFENDE Aufträge. Lesen bleibt erlaubt."""
+    upload(owner_client)                         # noch in Phase 'start'
+    _abgeschlossen(ctx)
+    assert upload(owner_client).status_code == 403
+    assert owner_client.delete("/attachments/1").status_code == 403
+    assert owner_client.get("/process-tickets/7/attachments").status_code == 200
+
+
+def test_zustaendige_fachabteilung_darf_weiterhin_alles(ctx, owner_client):
+    _zur_fachabteilung(ctx)
+    upload(owner_client)                         # Datei der Ersteller:in
+    it = make_client(IT_USER)
+    assert upload(it).status_code == 200
+    assert it.delete("/attachments/1").status_code == 200
+
+
+def test_beobachter_liest_dateien_aber_ruehrt_nichts_an(ctx, owner_client):
+    """Beobachten heißt mitlesen: Liste und Download ja – Upload/Löschen nein."""
+    upload(owner_client)
+    ctx["watchers"].ids[7] = {"u_watch"}
+    beob = make_client({"id": "u_watch", "displayName": "Beobachter", "permissions": []})
+    assert beob.get("/process-tickets/7/attachments").status_code == 200
+    r = upload(beob)
+    assert r.status_code == 403                  # sehen ja, anfassen nein
+    assert beob.delete("/attachments/1").status_code == 403

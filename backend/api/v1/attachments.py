@@ -21,6 +21,7 @@ from backend.core.dependencies import get_current_user
 from backend.database import attachments as att_db
 from backend.database import process_definitions as defstore
 from backend.database import process_tickets as pstore
+from backend.database import process_ticket_watchers as watchers
 from backend.database.audit_log import record_audit
 from backend.database.users import PERM_ADMIN
 from backend.services import attachment_storage as storage
@@ -112,19 +113,56 @@ def _current_phase_key(row: dict, defn: Optional[ProcessDefinition]) -> Optional
     return cur.key if cur else None
 
 
+def _watcher_ids(ticket_id) -> set:
+    """Beobachter-IDs – fail-closed (Spiegel von process_tickets._watcher_ids):
+    nicht ladbar heißt „keine Beobachter", also kein Zugriff über diesen Weg.
+    Ohne sie sähen Beobachter:innen zwar den Auftrag, aber nicht seine Dateien."""
+    try:
+        return watchers.watcher_ids(int(ticket_id))
+    except Exception:
+        logger.warning("Beobachter für Ticket #%s nicht ladbar – fail-closed", ticket_id)
+        return set()
+
+
+def _may_view(row: dict, defn: Optional[ProcessDefinition], user: dict) -> bool:
+    return acc.may_view(defn, row, user, vis.user_group_ids(user), _watcher_ids(row["id"]))
+
+
 def _assert_process_view(row: dict, defn: Optional[ProcessDefinition], user: dict) -> None:
-    if not acc.may_view(defn, row, user, vis.user_group_ids(user)):
+    if not _may_view(row, defn, user):
         # Bewusst 404 (wie in process_tickets.py): nicht verraten, dass es den Auftrag gibt.
         raise api_error(404, ErrorCode.TICKET_NOT_FOUND, "Ticket nicht gefunden")
 
 
-def _assert_process_edit(row: dict, defn: Optional[ProcessDefinition], user: dict) -> None:
-    gids = vis.user_group_ids(user)
-    if not acc.may_view(defn, row, user, gids):
+def _terminal(row: dict) -> bool:
+    """Abgeschlossen/abgelehnt – Spiegel von process_tickets._is_terminal."""
+    return (row.get("status") in ("archived", "rejected")
+            or bool((row.get("runtime") or {}).get("rejected")))
+
+
+def _is_owner(row: dict, user: dict) -> bool:
+    uid = user.get("id")
+    return bool(uid) and row.get("owner_id") == uid
+
+
+def _assert_process_attach(row: dict, defn: Optional[ProcessDefinition], user: dict) -> None:
+    """Darf diese Person dem Auftrag Dateien HINZUFÜGEN?
+
+    Zuständige Stelle – ODER die Ersteller:in, solange der Auftrag läuft. Der
+    Upload ist bewusst weiter gefasst als may_edit: beim Basis-Ticket wandert
+    die Bearbeitung schon beim Anlegen zur Fachabteilung (auto-advance), aber
+    Unterlagen nachreichen (Screenshot, Dokument) muss die antragstellende
+    Person trotzdem können.
+    """
+    if not _may_view(row, defn, user):
         raise api_error(404, ErrorCode.TICKET_NOT_FOUND, "Ticket nicht gefunden")
-    if not acc.may_edit(defn, row, user, gids):
-        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
-                        "Nur die aktuell zuständige Stelle kann Dateien dieses Auftrags ändern")
+    if acc.may_edit(defn, row, user, vis.user_group_ids(user)):
+        return
+    if _is_owner(row, user) and not _terminal(row):
+        return
+    raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                    "Nur die aktuell zuständige Stelle oder die Ersteller:in kann "
+                    "Dateien zu diesem Auftrag hinzufügen")
 
 
 def _assert_attachment_field(defn: Optional[ProcessDefinition], field_key: Optional[str]) -> None:
@@ -154,9 +192,23 @@ async def upload_process_attachment(
     user: dict = Depends(get_current_user),
 ):
     row, defn = _process_ticket_or_404(ticket_id)
-    _assert_process_edit(row, defn, user)
+    _assert_process_attach(row, defn, user)
     field_key = field_key or None
     _assert_attachment_field(defn, field_key)
+
+    family_id = family_id or None
+    if family_id is not None and not acc.may_edit(defn, row, user, vis.user_group_ids(user)):
+        # Ersteller:innen-Pfad: eine neue VERSION überschreibt die aktuelle Datei –
+        # das darf die Ersteller:in nur bei EIGENEN Dateien (dieselbe Grenze wie
+        # beim Löschen). Nebenbei stellt der Ticket-Filter sicher, dass die
+        # family überhaupt zu DIESEM Auftrag gehört.
+        fam = [a for a in att_db.list_for_ticket(ticket_id,
+                                                 entity_type=att_db.ENTITY_PROCESS_TICKET)
+               if a["family_id"] == family_id]
+        if not fam or fam[0].get("uploaded_by_id") != user.get("id"):
+            raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                            "Neue Versionen fremder Dateien kann nur die aktuell "
+                            "zuständige Stelle hochladen")
 
     max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
     try:
@@ -173,7 +225,7 @@ async def upload_process_attachment(
         field_key=field_key,
         # phase_key dokumentiert, in WELCHER Phase die Datei entstand (reine Historie).
         phase_key=_current_phase_key(row, defn),
-        family_id=(family_id or None),
+        family_id=family_id,
         original_filename=safe_filename(file.filename),
         stored_path=stored_path,
         content_type=file.content_type,
@@ -235,7 +287,9 @@ def _entity_label(att: dict) -> str:
 
 def _assert_attachment_access(att: dict, user: dict, *, write: bool) -> None:
     """Zugriff auf einen Anhang über services.process_access (may_view zum Lesen,
-    may_edit zum Ändern).
+    may_edit zum Ändern – die Ersteller:in darf zusätzlich EIGENE Dateien
+    löschen, solange der Auftrag läuft: wer nachreichen darf, muss eine
+    Fehl-Datei auch selbst wieder wegräumen können).
 
     Alt-Anhänge: nur Admins. Das Alt-Ticket, an dem die Sichtbarkeit hing
     (vertrauliche Beschreibungsteile je Fachabteilung), gibt es nicht mehr – es
@@ -244,11 +298,20 @@ def _assert_attachment_access(att: dict, user: dict, *, write: bool) -> None:
     aufgeräumt werden kann."""
     if att.get("entity_type") == att_db.ENTITY_PROCESS_TICKET:
         row, defn = _process_ticket_or_404(att["ticket_id"])
-        if write:
-            _assert_process_edit(row, defn, user)
-        else:
+        if not write:
             _assert_process_view(row, defn, user)
-        return
+            return
+        if not _may_view(row, defn, user):
+            # Bewusst 404: nicht verraten, dass es den Auftrag gibt.
+            raise api_error(404, ErrorCode.TICKET_NOT_FOUND, "Ticket nicht gefunden")
+        if acc.may_edit(defn, row, user, vis.user_group_ids(user)):
+            return
+        if (_is_owner(row, user) and not _terminal(row)
+                and att.get("uploaded_by_id") == user.get("id")):
+            return
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        "Nur die aktuell zuständige Stelle kann Dateien dieses "
+                        "Auftrags ändern (die Ersteller:in nur die eigenen)")
     _require_admin(user)
 
 
