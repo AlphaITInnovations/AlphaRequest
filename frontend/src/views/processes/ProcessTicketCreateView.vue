@@ -166,19 +166,19 @@ onMounted(async () => {
           <!-- Für Admins der konkrete nächste Schritt: die Definitionen liegen im
                Paket (backend/seeds/processes/), müssen aber je Installation
                eingespielt werden. Ohne diesen Hinweis sucht man den Fehler in der
-               Oberfläche, obwohl nur die Datenbank leer ist. -->
+               Oberfläche, obwohl nur die Datenbank leer ist. Eingespielt wird in
+               den Einstellungen – ein Server-Zugang ist dafür nicht nötig. -->
           <p v-if="nichtVeroeffentlicht && auth.isAdmin"
              class="text-xs text-amber-800 dark:text-amber-300/90 mt-2">
-            Die mitgelieferten Prozess-Definitionen sind noch nicht eingespielt.
-            Einspielen mit
-            <code class="font-mono">python -m backend.scripts.seed_processes --commit</code>
-            (ohne <code class="font-mono">--commit</code> läuft es als Trockenlauf).
-            Vorhandene Prozesse werden dabei übersprungen.
+            Die mitgelieferten Prozess-Definitionen sind noch nicht eingespielt. Das geht in den
+            Einstellungen unter „Prozesse“ mit „Mitgelieferte Prozesse einspielen“: erst ein
+            Trockenlauf, der nichts schreibt, dann das Einspielen nach Bestätigung. Vorhandene
+            Prozesse werden dabei übersprungen.
           </p>
           <div class="flex items-center gap-3 mt-3">
             <button @click="router.push('/prozess-auftraege/neu')"
                     class="text-sm text-[#3EAAB8] hover:underline">Zur Auswahl</button>
-            <button v-if="auth.isAdmin" @click="router.push('/settings')"
+            <button v-if="auth.isAdmin" @click="router.push('/settings?section=processes')"
                     class="text-sm text-[#3EAAB8] hover:underline">Zu den Prozessen</button>
           </div>
         </div>

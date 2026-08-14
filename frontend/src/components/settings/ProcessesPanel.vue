@@ -13,9 +13,13 @@ import {
   requestProcessDelete,
 } from '@/api/processes'
 import { errorCode, errorMessage } from '@/lib/processErrors'
+import {
+  SYSTEM_PROCESS_BLOCKED, SYSTEM_PROCESS_HINT, isSystemProcess, isSystemReadonlyError,
+} from '@/lib/processSystem'
 import { forgetKey, loadKnownKeys, rememberKey } from '@/components/process/processRegistry'
 import NewProcessModal from '@/components/process/NewProcessModal.vue'
 import ImportProcessModal from '@/components/process/ImportProcessModal.vue'
+import SeedProcessesModal from '@/components/process/SeedProcessesModal.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import type { ProcessOut } from '@/types/process'
@@ -36,6 +40,18 @@ const newOpen    = ref(false)
 const newMode    = ref<'create' | 'duplicate'>('create')
 const newSource  = ref<string | null>(null)
 const importOpen = ref(false)
+const seedOpen   = ref(false)
+
+/**
+ * System-Prozess: das Merkmal kommt vom Server (`is_system`), nicht aus einer
+ * Schlüssel-Liste hier. Die Zeile bietet dann keine schreibenden Aktionen an –
+ * abgewiesen würden sie ohnehin (403 SYSTEM_PROCESS_READONLY), aber ein Knopf,
+ * der nur Fehler produziert, ist eine Falle. Kopieren und Exportieren bleiben.
+ */
+function isSystem(p: ProcessOut): boolean { return isSystemProcess(p) }
+
+/** Der Server hat wegen eines System-Prozesses abgewiesen – verständlich sagen. */
+function reportSystemBlock(): void { showToast(SYSTEM_PROCESS_BLOCKED, false) }
 
 const STATUS_TEXT: Record<string, string> = {
   draft: 'Entwurf', published: 'Veröffentlicht', archived: 'Archiviert',
@@ -177,7 +193,8 @@ async function edit(row: ProcessOut) {
     warnForeignDraft(out)
     goEditor(out.key, out.version)
   } catch (e) {
-    showToast(errorMessage(e, 'Entwurf konnte nicht geöffnet werden'), false)
+    if (isSystemReadonlyError(e)) reportSystemBlock()
+    else showToast(errorMessage(e, 'Entwurf konnte nicht geöffnet werden'), false)
   } finally {
     busy.value = null
   }
@@ -195,7 +212,8 @@ async function publish(p: ProcessOut) {
     showToast(`„${p.name || p.key}“ v${p.version} veröffentlicht`)
     await reload()
   } catch (e) {
-    showToast(errorMessage(e, 'Veröffentlichen fehlgeschlagen'), false)
+    if (isSystemReadonlyError(e)) reportSystemBlock()
+    else showToast(errorMessage(e, 'Veröffentlichen fehlgeschlagen'), false)
   } finally {
     busy.value = null
   }
@@ -234,7 +252,9 @@ Mit den Aufträgen löschen?`)) return
       + (res.tickets ? ` – betrifft ${res.tickets} Auftrag/Aufträge` : ''))
   } catch (e) {
     const code = errorCode(e)
-    if (code === 'PROCESS_DELETE_NO_RECIPIENT') {
+    if (isSystemReadonlyError(e)) {
+      reportSystemBlock()
+    } else if (code === 'PROCESS_DELETE_NO_RECIPIENT') {
       showToast('Es ist keine Admin-Adresse hinterlegt (ADMIN_MAIL). Ohne sie kann '
         + 'kein Prozess gelöscht werden.', false)
     } else if (code === 'PROCESS_DELETE_MAIL_FAILED') {
@@ -265,7 +285,9 @@ async function remove(p: ProcessOut) {
     await reload()
   } catch (e) {
     const code = errorCode(e)
-    if (code === 'PROCESS_VERSION_IN_USE') {
+    if (isSystemReadonlyError(e)) {
+      reportSystemBlock()
+    } else if (code === 'PROCESS_VERSION_IN_USE') {
       showToast('Diese Version wird von bestehenden Aufträgen verwendet und kann nicht gelöscht werden.', false)
     } else if (code === 'PROCESS_INVALID_STATE') {
       showToast('Nur Entwürfe können gelöscht werden – veröffentlichte oder archivierte Versionen bleiben bestehen.', false)
@@ -331,6 +353,15 @@ function onImported(payload: { key: string; version: number }) {
   goEditor(payload.key, payload.version)
 }
 
+/**
+ * Der Seed-Lauf hat geschrieben. Das Modal bleibt offen (der Bericht ist die
+ * Rückmeldung), die Liste dahinter wird aber sofort nachgezogen – sonst steht
+ * dort weiter „Keine Prozesse gefunden“, obwohl neun angelegt wurden.
+ */
+async function onSeeded() {
+  await reload()
+}
+
 onMounted(load)
 </script>
 
@@ -346,12 +377,20 @@ onMounted(load)
       <span class="text-xs">
         Hinweis: Noch nie veröffentlichte Entwürfe sind nur in dem Browser sichtbar, in dem sie
         angelegt wurden – der Server stellt dafür keine Liste bereit.
+        Prozesse mit der Plakette „System“ gehören zum Produkt: sie werden automatisch aktuell
+        gehalten und lassen sich kopieren, aber nicht ändern.
       </span>
     </div>
 
     <!-- Suche + Aktionen -->
     <div class="flex flex-wrap gap-2 items-center mb-3">
       <input v-model="search" placeholder="Suche (Name, Schlüssel…)" class="afi flex-1 min-w-[14rem]" />
+      <!-- Ersetzt den früheren Hinweis auf den Server-Shell-Befehl: die
+           mitgelieferten Definitionen lassen sich hier einspielen – mit
+           Trockenlauf vorweg. -->
+      <button @click="seedOpen = true" class="btn-secondary">
+        Mitgelieferte Prozesse einspielen
+      </button>
       <button @click="importOpen = true" class="btn-secondary">Importieren</button>
       <button @click="openNew()" class="btn-primary">Neuer Prozess</button>
     </div>
@@ -395,6 +434,14 @@ onMounted(load)
                                bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                     Entwurf offen
                   </span>
+                  <!-- Plakette statt fehlender Knöpfe ohne Erklärung: der Tooltip
+                       sagt, WARUM hier nichts zu ändern ist (ausführlich noch
+                       einmal in der aufgeklappten Zeile). -->
+                  <span v-if="isSystem(r)" :title="SYSTEM_PROCESS_HINT"
+                        class="ml-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full cursor-help
+                               bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                    System
+                  </span>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-gray-300">v{{ r.version }}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-gray-400">
@@ -402,7 +449,7 @@ onMounted(load)
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-right">
                   <div class="flex items-center justify-end gap-2">
-                    <button @click.stop="edit(r)" :disabled="busy === `e:${r.key}`"
+                    <button v-if="!isSystem(r)" @click.stop="edit(r)" :disabled="busy === `e:${r.key}`"
                             class="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/10
                                    text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5
                                    disabled:opacity-40 transition">
@@ -417,7 +464,8 @@ onMounted(load)
                     <!-- Ganzen Prozess löschen: fordert nur an, die Bestätigung
                          läuft über die Admin-Adresse. Optisch zurückhaltend –
                          es ist der schärfste Eingriff in dieser Liste. -->
-                    <button @click.stop="requestDelete(r)" :disabled="busy === `rm:${r.key}`"
+                    <button v-if="!isSystem(r)" @click.stop="requestDelete(r)"
+                            :disabled="busy === `rm:${r.key}`"
                             title="Ganzen Prozess löschen (mit Mail-Bestätigung)"
                             class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-red-600
                                    disabled:opacity-40 transition">
@@ -437,6 +485,15 @@ onMounted(load)
               <!-- Versionen -->
               <tr v-if="expanded === r.key" class="bg-gray-50 dark:bg-[#1A2130]">
                 <td colspan="6" class="px-4 py-3">
+                  <!-- Warum an diesem Prozess keine Aktionen stehen. Gehört sichtbar
+                       hierher, nicht nur in einen Tooltip. -->
+                  <p v-if="isSystem(r)"
+                     class="rounded-xl border border-purple-200 dark:border-purple-500/30
+                            bg-purple-50 dark:bg-purple-900/20 px-4 py-3 mb-2
+                            text-xs text-purple-900 dark:text-purple-200">
+                    <span class="font-medium">System-Prozess.</span>
+                    {{ SYSTEM_PROCESS_HINT }}
+                  </p>
                   <div v-if="busy === `v:${r.key}` && !versions[r.key]" class="flex items-center justify-center py-6">
                     <div class="w-6 h-6 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
                   </div>
@@ -462,13 +519,14 @@ onMounted(load)
                       </span>
 
                       <div class="flex items-center gap-2 ml-auto">
-                        <button v-if="v.status === 'draft'" @click="goEditor(v.key, v.version)"
+                        <button v-if="v.status === 'draft' && !isSystem(r)"
+                                @click="goEditor(v.key, v.version)"
                                 class="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/10
                                        text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5
                                        transition">
                           Bearbeiten
                         </button>
-                        <button v-if="v.status === 'draft'" @click="publish(v)"
+                        <button v-if="v.status === 'draft' && !isSystem(r)" @click="publish(v)"
                                 :disabled="busy === `p:${v.key}:${v.version}`"
                                 class="px-2.5 py-1 rounded-lg bg-[#3EAAB8] hover:bg-[#2B7D89] text-white
                                        disabled:opacity-40 transition">
@@ -481,7 +539,7 @@ onMounted(load)
                                        disabled:opacity-40 transition">
                           Exportieren
                         </button>
-                        <button v-if="v.status === 'draft'" @click="remove(v)"
+                        <button v-if="v.status === 'draft' && !isSystem(r)" @click="remove(v)"
                                 :disabled="busy === `d:${v.key}:${v.version}`"
                                 class="px-2.5 py-1 rounded-lg text-red-500 hover:text-red-600
                                        hover:bg-red-50 dark:hover:bg-red-900/20
@@ -496,8 +554,15 @@ onMounted(load)
             </template>
 
             <tr v-if="filtered.length === 0 && !loading">
-              <td colspan="6" class="px-4 py-12 text-center text-sm text-gray-400 italic">
-                Keine Prozesse gefunden
+              <td colspan="6" class="px-4 py-12 text-center text-sm">
+                <p class="text-gray-400 italic">Keine Prozesse gefunden</p>
+                <!-- Leerer Katalog ist meist eine frische Installation: die
+                     mitgelieferten Definitionen sind noch nicht eingespielt.
+                     Der nächste Schritt gehört hierher, nicht in eine Server-Shell. -->
+                <p v-if="!search.trim() && rows.length === 0" class="text-gray-400 mt-2 max-w-lg mx-auto">
+                  Mit „Mitgelieferte Prozesse einspielen“ lassen sich die ausgelieferten
+                  Definitionen anlegen – erst als Trockenlauf, dann nach Bestätigung.
+                </p>
               </td>
             </tr>
           </tbody>
@@ -513,6 +578,8 @@ onMounted(load)
                      @close="newOpen = false" @created="onCreated" />
     <ImportProcessModal :open="importOpen"
                         @close="importOpen = false" @imported="onImported" />
+    <SeedProcessesModal :open="seedOpen"
+                        @close="seedOpen = false" @seeded="onSeeded" />
   </section>
 </template>
 

@@ -21,6 +21,12 @@ Zwei Regeln, die den Rest erklären:
 * **Nichts überschreiben.** Existiert der Schlüssel schon – auch nur als
   Entwurf –, wird übersprungen. Eine vom Admin angepasste Definition darf ein
   Seeder nie zurücksetzen.
+
+Daneben steht in diesem Modul die Pflege der **System-Prozesse**
+(`ensure_system_processes`): die gehören zum Produkt, nicht zur Konfiguration
+einer Installation, entstehen beim Start automatisch und sind in der Oberfläche
+nicht änderbar. Der Seeder-Lauf oben lässt sie deshalb aus – es gibt genau einen
+Weg, wie sie in die Datenbank kommen.
 """
 from __future__ import annotations
 
@@ -68,6 +74,21 @@ PLACEHOLDER_GROUP_NAMES: dict[str, str] = {
 #: Alt-Systems – nur bei NEUANLAGE gesetzt, ein Admin kann es ändern.
 AUTO_ASSIGNED_GROUP_NAMES: list[str] = ["Sekretariat GL", "FreigabeHerrLutz", "Reisestelle"]
 
+#: Prozesse, die zum PRODUKT gehören und nicht zur Konfiguration einer
+#: Installation. Folgen (beide serverseitig erzwungen, nicht nur in der
+#: Oberfläche): sie entstehen beim Start automatisch (ensure_system_processes)
+#: und sind nicht änderbar – die API antwortet auf jede Mutation mit
+#: SYSTEM_PROCESS_READONLY. Aufnahme ist eine Produkt-Entscheidung: ein Prozess
+#: darf nur hier stehen, wenn er selbsttragend ist (siehe
+#: ensure_system_processes).
+SYSTEM_PROCESS_KEYS = frozenset({"basis-ticket"})
+
+#: Wer die automatisch gepflegten Versionen angelegt hat. Steht so in
+#: created_by/created_by_name – in der Versionsliste soll erkennbar sein, dass
+#: hier niemand von Hand gearbeitet hat.
+SYSTEM_ACTOR = "system"
+SYSTEM_ACTOR_NAME = "System (Auslieferung)"
+
 #: Erkennt einen Platzhalter, der (noch) nicht aufgelöst ist.
 _PLACEHOLDER_RE = re.compile(r"HIER_[A-Z0-9_]*_EINSETZEN")
 
@@ -75,6 +96,16 @@ _PLACEHOLDER_RE = re.compile(r"HIER_[A-Z0-9_]*_EINSETZEN")
 #: echte ID sein – im Trockenlauf wird nichts geschrieben, geprüft wird nur die
 #: Struktur.
 _DRY_RUN_ID_PREFIX = "DRYRUN-NEUE-GRUPPE:"
+
+
+def is_system_process(key: Optional[str]) -> bool:
+    """Gehört dieser Schlüssel zu einem System-Prozess?
+
+    Aus dem Schlüssel abgeleitet und NICHT in der Datenbank vermerkt: welche
+    Prozesse zum Produkt gehören, entscheidet der Code. Ein DB-Feld könnte man
+    umsetzen und hätte damit einen änderbaren „unveränderlichen" Prozess.
+    """
+    return bool(key) and key in SYSTEM_PROCESS_KEYS
 
 
 def required_group_names() -> list[str]:
@@ -334,6 +365,15 @@ def _seed_one(pfad: Path, *, mapping: dict[str, str], bekannte_ids: set[str],
     if not key:
         return SeedOutcome(datei, None, "error", "Definition hat keinen `key`")
 
+    if is_system_process(key):
+        # System-Prozesse pflegt `ensure_system_processes` bei jedem Start. Ein
+        # zweiter Weg in die DB könnte nur abweichen – und weil dieser Lauf
+        # vorhandene Schlüssel überspringt, wäre er ohnehin wirkungslos. Also
+        # ausdrücklich sagen, dass hier nichts zu tun ist.
+        return SeedOutcome(datei, key, "skipped",
+                           "System-Prozess – wird beim Start automatisch angelegt und "
+                           "aktuell gehalten, dieser Lauf fasst ihn nicht an")
+
     defn_dict = replace_placeholders(roh, mapping)
 
     outcome = SeedOutcome(datei, key, "error")
@@ -395,3 +435,154 @@ def _seed_one(pfad: Path, *, mapping: dict[str, str], bekannte_ids: set[str],
     outcome.meldung = "angelegt" + (" und veröffentlicht" if publish else " (Entwurf v1)")
     logger.info("Seed %s: %s", key, outcome.meldung)
     return outcome
+
+
+# ── System-Prozesse: beim Start sicherstellen ────────────────────────────────
+
+@dataclass
+class SystemProcessOutcome:
+    """Was mit EINEM System-Prozess beim Start passiert ist."""
+    key: str
+    aktion: str                    # created | updated | unchanged | error
+    meldung: str = ""
+    version: Optional[int] = None
+
+
+def system_seed_path(key: str) -> Optional[Path]:
+    """Die ausgelieferte JSON eines System-Prozesses.
+
+    Erst über die Namenskonvention (`prozess-<key>.json`), dann über den Inhalt.
+    Die Konvention zuerst, weil die Inhaltssuche jede Seed-Datei parsen muss: eine
+    kaputte Nachbardatei würde sonst die Datei verdecken, um die es geht, und der
+    Startlauf meldete „keine ausgelieferte Definition" statt „nicht lesbar".
+    """
+    dateien = process_seed_files()
+    for pfad in dateien:
+        if pfad.stem == f"prozess-{key}":
+            return pfad
+    for pfad in dateien:
+        try:
+            if json.loads(pfad.read_text(encoding="utf-8")).get("key") == key:
+                return pfad
+        except Exception:
+            continue        # kaputte Datei verdeckt die Suche nicht
+    return None
+
+
+def _vergleichsform(defn: Any) -> str:
+    """Kanonische Vergleichsform einer Definition.
+
+    Sortierte Schlüssel und keine Formatierung: verglichen wird der INHALT.
+    Sonst legte jeder Start eine neue Version an, sobald jemand die
+    ausgelieferte JSON umformatiert oder ein Feld verschiebt.
+
+    Vor dem Vergleich läuft die Definition durch das Schema, damit Standardwerte
+    gefüllt sind – die Fassung in der DB kann von einer Schema-Version stammen,
+    die ein heute optionales Feld noch nicht kannte. Validiert sie nicht, wird sie
+    unverändert verglichen (dann weicht sie ab und wird ersetzt, was richtig ist).
+    """
+    if not isinstance(defn, dict):
+        return ""
+    try:
+        defn = ProcessDefinition.model_validate(defn).model_dump(by_alias=True)
+    except Exception:
+        pass
+    return json.dumps(defn, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def ensure_system_processes(*, keys: Optional[Iterable[str]] = None) -> list[SystemProcessOutcome]:
+    """System-Prozesse beim Start anlegen bzw. aktuell halten.
+
+    WARUM das hier automatisch geht und für die übrigen neun Prozesse NICHT –
+    bitte vor dem Erweitern von SYSTEM_PROCESS_KEYS lesen:
+
+    Das Basis-Ticket ist SELBSTTRAGEND. Es enthält keinen `HIER_`-Platzhalter und
+    keine Gruppe in einer Phase (die Zuständigkeit steht in einem Feld mit
+    `widget=group` und wird beim Anlegen gewählt), und
+    `createPermissions.everyone` ist wahr. Es braucht damit weder eine
+    Gruppen-Auflösung noch Alt-Daten und ist ab dem ersten Start für jede:n
+    anlegbar. Die anderen neun sind es nicht: sie brauchen Fachabteilungen mit
+    Verteiler-Adressen und die Übernahme der Erstellrechte. Automatisch
+    veröffentlicht sähen sie fertig aus, wären aber nur für Admins anlegbar und
+    schickten Mails an leere Verteiler. Deshalb bleiben sie beim Admin-Knopf
+    (`POST /processes:seed`), und hier steht nur, was ohne Konfiguration
+    funktioniert.
+
+    Ein Update ist eine NEUE VERSION, kein Überschreiben: Definitionen sind
+    unveränderlich und Aufträge pinnen ihre Version – die alte muss lesbar
+    bleiben, sonst verlieren laufende Aufträge ihre Definition.
+
+    Wirft nicht: je Prozess wird der Fehlschlag als Warnung protokolliert und im
+    Ergebnis vermerkt. Der Start darf daran nicht scheitern.
+    """
+    ergebnisse: list[SystemProcessOutcome] = []
+    for key in sorted(keys if keys is not None else SYSTEM_PROCESS_KEYS):
+        try:
+            ergebnisse.append(_ensure_system_process(key))
+        except Exception as e:
+            logger.warning("System-Prozess %s nicht sichergestellt: %s: %s",
+                           key, type(e).__name__, e)
+            ergebnisse.append(SystemProcessOutcome(key, "error", f"{type(e).__name__}: {e}"))
+    return ergebnisse
+
+
+def _ensure_system_process(key: str) -> SystemProcessOutcome:
+    pfad = system_seed_path(key)
+    if pfad is None:
+        raise SeedError(f"keine ausgelieferte Definition für „{key}“ gefunden")
+    roh = _lade_seed(pfad)          # kaputte JSON → Ausnahme → Warnung, kein Abbruch
+
+    # Fail-closed wie im Seeder-Lauf, nur strenger: ein System-Prozess muss OHNE
+    # Gruppen-Auflösung einspielbar sein. Steht doch eine Gruppen-ID oder ein
+    # Platzhalter darin, ist er nicht mehr selbsttragend (die IDs sind pro
+    # Installation verschieden) – dann lieber nichts einspielen als etwas
+    # dauerhaft Kaputtes. Die leere Menge bekannter IDs ist genau diese Aussage.
+    probleme = check_group_refs(roh, set())
+    if probleme:
+        raise SeedError("verweist auf Gruppen und ist damit nicht selbsttragend – "
+                        "gehört nicht in SYSTEM_PROCESS_KEYS: " + "; ".join(probleme))
+
+    defn = ProcessDefinition.model_validate(roh)
+    # Exakt wie Seeder und Import-Endpunkt serialisieren, damit die Definitionen
+    # in der DB auf jedem Weg identisch aussehen.
+    definition_json = json.dumps(defn.model_dump(by_alias=True), ensure_ascii=False)
+    soll = _vergleichsform(defn.model_dump(by_alias=True))
+
+    versionen = defstore.list_versions(key)
+    if not versionen:
+        defstore.create_process(key, defn.name, definition_json,
+                                SYSTEM_ACTOR, SYSTEM_ACTOR_NAME)
+        defstore.publish(key, 1)
+        logger.info("System-Prozess %s angelegt und veröffentlicht (v1)", key)
+        return SystemProcessOutcome(key, "created", "angelegt und veröffentlicht", 1)
+
+    veroeffentlicht = defstore.get_published(key)
+    if veroeffentlicht and _vergleichsform(veroeffentlicht.get("definition")) == soll:
+        return SystemProcessOutcome(key, "unchanged", "unverändert",
+                                    int(veroeffentlicht["version"]))
+
+    # Ziel ist ein Entwurf: ein offener wird benutzt (den kann nur ein
+    # abgebrochener Lauf hinterlassen – über die API ist der Prozess nicht
+    # änderbar), sonst wird die veröffentlichte Version als neue Version geklont.
+    entwurf = next((v for v in versionen if v.get("status") == "draft"), None)
+    if entwurf is None:
+        if not veroeffentlicht:
+            raise SeedError(
+                f"„{key}“ hat Versionen, aber keine veröffentlichte und keinen Entwurf "
+                f"({', '.join('v%s/%s' % (v['version'], v['status']) for v in versionen)}) "
+                "– das muss von Hand geprüft werden")
+        entwurf = defstore.create_or_get_draft(key, SYSTEM_ACTOR, SYSTEM_ACTOR_NAME)
+    ziel = int(entwurf["version"])
+
+    defstore.update_draft(key, ziel, defn.name, definition_json)
+    defstore.publish(key, ziel)
+
+    if veroeffentlicht:
+        meldung = (f"ausgelieferte Definition weicht von v{veroeffentlicht['version']} ab "
+                   f"– v{ziel} veröffentlicht (alte Version bleibt für laufende Aufträge)")
+        aktion = "updated"
+    else:
+        meldung = f"keine veröffentlichte Version vorhanden – v{ziel} veröffentlicht"
+        aktion = "created"
+    logger.info("System-Prozess %s: %s", key, meldung)
+    return SystemProcessOutcome(key, aktion, meldung, ziel)

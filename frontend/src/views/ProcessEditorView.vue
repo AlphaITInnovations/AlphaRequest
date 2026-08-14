@@ -14,6 +14,9 @@ import { useToast } from '@/composables/useToast'
 import { useProcessEditor } from '@/composables/useProcessEditor'
 import type { FieldDef, PhaseDef, ProcessDefinition } from '@/types/process'
 import { normalizeDefinition } from '@/lib/processNormalize'
+import {
+  SYSTEM_PROCESS_BLOCKED, SYSTEM_PROCESS_HINT, hasSystemReadonlyIssue, isSystemProcess,
+} from '@/lib/processSystem'
 import PhaseChain from '@/components/process/editor/PhaseChain.vue'
 import PhaseInspector from '@/components/process/editor/PhaseInspector.vue'
 import FieldCatalogPanel from '@/components/process/editor/FieldCatalogPanel.vue'
@@ -66,16 +69,30 @@ function setPhase(next: PhaseDef) {
 function onFieldsChanged(fields: FieldDef[]) { setDefinition({ fields }) }
 function onFieldRenamed(p: { from: string; to: string }) { ed.renameFieldKey(p.from, p.to) }
 
+/**
+ * System-Prozess: gehört zum Produkt und ist nicht änderbar. Der Server weist
+ * jede Mutation mit 403 ab – hier wird trotzdem gesperrt und erklärt, damit man
+ * nicht erst nach dem Speichern erfährt, dass die Arbeit umsonst war.
+ */
+const systemReadonly = computed(() => isSystemProcess(ed.meta.value))
+
 async function save() {
   const ok = await ed.save()
   if (ok) showToast('Entwurf gespeichert')
   else if (ed.conflict.value) showToast('Konflikt: der Entwurf wurde zwischenzeitlich geändert', false)
+  // Kann trotz gesperrter Knöpfe auftreten: das Merkmal fehlt bei einem älteren
+  // Backend, die Ablehnung kommt dann erst als Antwort.
+  else if (hasSystemReadonlyIssue(ed.serverIssues.value)) showToast(SYSTEM_PROCESS_BLOCKED, false)
   else showToast('Speichern fehlgeschlagen – bitte Fehlerliste prüfen', false)
 }
 
 async function publish() {
   if (!confirm('Diese Version veröffentlichen? Neue Aufträge verwenden ab sofort diesen Stand.')) return
   const ok = await ed.publish()
+  if (!ok && hasSystemReadonlyIssue(ed.serverIssues.value)) {
+    showToast(SYSTEM_PROCESS_BLOCKED, false)
+    return
+  }
   showToast(ok ? 'Version veröffentlicht' : 'Veröffentlichen fehlgeschlagen', ok)
 }
 
@@ -161,17 +178,26 @@ onUnmounted(() => {
 
         <div class="flex items-center gap-2">
           <button v-if="ed.dirty.value" @click="revert" class="btn-secondary text-sm">Verwerfen</button>
-          <button @click="save" :disabled="!ed.canSave.value"
+          <button @click="save" :disabled="!ed.canSave.value || systemReadonly"
                   class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
                          disabled:opacity-40 transition">
             {{ ed.saving.value ? 'Speichern…' : 'Speichern' }}
           </button>
-          <button @click="publish" :disabled="!ed.canPublish.value"
+          <button @click="publish" :disabled="!ed.canPublish.value || systemReadonly"
                   class="px-4 py-2 rounded-xl text-sm border border-[#3EAAB8] text-[#3EAAB8]
                          hover:bg-[#3EAAB8]/10 disabled:opacity-40 transition">
             Veröffentlichen
           </button>
         </div>
+      </div>
+
+      <!-- System-Prozess: steht VOR dem Unveränderlich-Hinweis, weil der Grund
+           hier ein anderer ist (Produkt statt Version). -->
+      <div v-if="systemReadonly && !ed.loading.value"
+           class="rounded-xl border border-purple-200 dark:border-purple-500/30
+                  bg-purple-50 dark:bg-purple-900/20 px-4 py-3 text-sm
+                  text-purple-900 dark:text-purple-200 mb-4">
+        <span class="font-medium">System-Prozess.</span> {{ SYSTEM_PROCESS_HINT }}
       </div>
 
       <div v-if="ed.readonly.value && !ed.loading.value"

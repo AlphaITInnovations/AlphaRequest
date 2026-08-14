@@ -13,6 +13,10 @@
  * Deshalb genau EINE Stelle mit dem Schlüssel, statt ihn über Sidebar, Katalog
  * und Router zu verstreuen.
  * Quelle: backend/seeds/processes/prozess-basis-ticket.json → "key": "basis-ticket".
+ * (Seit dem System-Prozess-Merkmal trägt `GET /processes` zwar `is_system`, das
+ * aber sagt „gehört zum Produkt und ist nicht änderbar“ – nicht „das ist DER
+ * Basis-Prozess“. Für den eigenen Navigations-Einstieg taugt es deshalb nicht:
+ * käme ein zweiter System-Prozess dazu, verschwände er still aus dem Katalog.)
  *
  * Ist der Prozess nicht veröffentlicht, greift der Katalog-Filter ins Leere
  * (kein Schaden) und der Knopf landet auf der ehrlichen Meldung des Formulars

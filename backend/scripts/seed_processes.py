@@ -2,15 +2,22 @@
 """
 Spielt die ausgelieferten Prozess-Definitionen (backend/seeds/processes/) ein.
 
-Warum ein Skript und kein Automatismus:
+Warum für DIESE Prozesse kein Automatismus:
   * NICHT in `init_db`: das läuft bei jedem Containerstart. Ein Seeder, der bei
     jedem Start über alle Definitionen geht, macht Gruppen-Auflösung und
     Rechte-Migration zu einer Startbedingung – und ein Fehlschlag zu einem
-    Startproblem. Einmalig ist einmalig.
+    Startproblem. Einmalig ist einmalig. (Die System-Prozesse laufen dort
+    trotzdem mit: sie brauchen weder Gruppen noch Alt-Rechte, siehe unten.)
   * NICHT im Import-Endpunkt: der nimmt genau EINE Definition entgegen und
     kennt weder Platzhalter noch Alt-Rechte.
-Die Fachlogik liegt in `backend/services/seed_definitions.py` – ein
-Admin-Endpunkt kann sie später unverändert benutzen.
+Die Fachlogik liegt in `backend/services/seed_definitions.py`; derselbe Lauf
+steckt hinter `POST /processes:seed` – dieses Skript ist der Weg über die Shell,
+nicht mehr der einzige.
+
+Die System-Prozesse (heute das Basis-Ticket) lässt der Lauf AUS und sagt das je
+Zeile: die pflegt der Anwendungsstart selbst
+(`seed_definitions.ensure_system_processes`), weil die Anwendung ohne sie
+unbenutzbar wäre.
 
 Ablauf (Trockenlauf ist der Standard):
     python backend/scripts/seed_processes.py

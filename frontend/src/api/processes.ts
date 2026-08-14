@@ -129,3 +129,23 @@ export async function confirmProcessDelete(
 export async function deleteVersion(key: string, version: number): Promise<void> {
   await client.delete(`/processes/${encodeURIComponent(key)}/versions/${version}`)
 }
+
+/**
+ * Mitgelieferte Definitionen einspielen (nur Admin, auditiert).
+ *
+ * `commit: false` ist der TROCKENLAUF und schreibt nichts – er ist der Sinn der
+ * Sache und wird immer zuerst gefahren. Die Antwort ist der Bericht des Laufs;
+ * er wird absichtlich untypisiert zurückgegeben und in
+ * `lib/processSeedReport.normalizeSeedReport` ausgewertet: der Bericht ist die
+ * einzige Rückmeldung, und ein fehlendes Feld darf dort nicht zu einer leeren
+ * Tabelle führen.
+ */
+export async function seedProcesses(
+  opts: { commit: boolean; skipPermissions?: boolean },
+): Promise<unknown> {
+  const { data } = await client.post('/processes:seed', {
+    commit: opts.commit,
+    skipPermissions: !!opts.skipPermissions,
+  })
+  return data?.data ?? data
+}

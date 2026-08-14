@@ -299,6 +299,13 @@ export interface ProcessOut {
   published_at: string | null
   /** String(rev), ohne Anführungszeichen – für If-Match. */
   etag: string | null
+  /**
+   * System-Prozess: gehört zum Produkt, entsteht beim Start automatisch und ist
+   * nicht änderbar (Server: 403 `SYSTEM_PROCESS_READONLY`). Der Server leitet
+   * das aus dem Schlüssel ab, es gibt kein DB-Feld dafür. Optional, weil ein
+   * älteres Backend das Merkmal nicht mitschickt – siehe lib/processSystem.ts.
+   */
+  is_system?: boolean | null
   /** Nur im Katalog (GET /processes): darf DIESE Person hier anlegen? */
   may_create?: boolean | null
   /** Nur im Katalog: Symbol aus der Definition (die selbst nicht mitkommt). */

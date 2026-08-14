@@ -3,6 +3,10 @@
 Die echten Seeds unter `backend/seeds/processes/` werden mitgeprüft – sie sind
 der kritische Pfad: ohne sie gibt es nach dem Cutover keinen anlegbaren Prozess.
 Gruppen-DB und Definitions-Store sind durch In-Memory-Attrappen ersetzt.
+
+Der System-Prozess Basis-Ticket gehört NICHT in diesen Lauf (er entsteht beim
+Start, siehe test_system_processes.py) – dass er hier übersprungen wird, ist Teil
+des Vertrags und steht in `test_system_prozess_wird_uebersprungen`.
 """
 import json
 
@@ -240,9 +244,11 @@ def test_trockenlauf_schreibt_nichts(umgebung):
     report = sd.seed_processes(commit=False, with_permissions=False)
     assert store.created == [] and store.published == []
     assert groups.ensure_aufrufe == []
-    assert report.erstellt == 10     # inklusive Basis-Ticket, ohne jede Konfiguration
-    assert report.uebersprungen == 0
-    assert all(o.aktion == "would_create" for o in report.outcomes)
+    # Neun ohne jede Konfiguration; das Basis-Ticket ist System-Prozess.
+    assert report.erstellt == 9
+    assert report.uebersprungen == 1
+    fach = [o for o in report.outcomes if o.key != "basis-ticket"]
+    assert all(o.aktion == "would_create" for o in fach)
 
 
 def test_trockenlauf_meldet_fehlende_gruppen_ohne_sie_anzulegen(monkeypatch):
@@ -259,14 +265,14 @@ def test_trockenlauf_meldet_fehlende_gruppen_ohne_sie_anzulegen(monkeypatch):
 
 # ── Commit ───────────────────────────────────────────────────────────────────
 
-def test_commit_legt_alle_zehn_an_und_veroeffentlicht(umgebung):
+def test_commit_legt_die_neun_fachprozesse_an_und_veroeffentlicht(umgebung):
     _, store = umgebung
     report = sd.seed_processes(commit=True, with_permissions=False)
 
     assert report.fehler == 0
-    assert len(store.created) == 10 and len(store.published) == 10
+    assert len(store.created) == 9 and len(store.published) == 9
     assert {k for k, *_ in store.created} == {
-        "basis-ticket", "einstellung", "hardware", "hotelbuchung",
+        "einstellung", "hardware", "hotelbuchung",
         "marketing-stellenanzeige", "niederlassung-anmelden",
         "niederlassung-schliessen", "niederlassung-umzug",
         "zugang-beantragen", "zugang-sperren"}
@@ -275,22 +281,17 @@ def test_commit_legt_alle_zehn_an_und_veroeffentlicht(umgebung):
         assert "HIER_GRUPPEN_ID" not in definition_json
 
 
-def test_basis_ticket_braucht_keine_konfiguration_mehr(umgebung):
-    """Früher übersprungen (--basis-group / SEED_BASIS_TICKET_GROUP), heute nicht:
-    die zuständige Fachabteilung steht in einem FELD des Auftrags, nicht in der
-    Definition – es gibt also keinen Platzhalter mehr aufzulösen."""
+def test_system_prozess_wird_uebersprungen(umgebung):
+    """Das Basis-Ticket pflegt der Start (ensure_system_processes). Zwei Wege in
+    dieselbe Definition könnten nur auseinanderlaufen – also fasst dieser Lauf
+    ihn nicht an und sagt das auch."""
     _, store = umgebung
     report = sd.seed_processes(commit=True, with_permissions=False, only={"basis-ticket"})
 
     (o,) = report.outcomes
-    assert o.aktion == "created" and report.fehler == 0
-    defn = json.loads(store.created[0][2])
-    assert "HIER_" not in store.created[0][2]
-    # Jede:r durfte Basis-Tickets anlegen – das muss der Seed mitbringen.
-    assert defn["createPermissions"]["everyone"] is True
-    bearbeitung = defn["phases"][1]
-    assert bearbeitung["responsibility"]["kind"] == "group_from_field"
-    assert bearbeitung["responsibility"]["fromField"] == "ticket.fachabteilung"
+    assert o.key == "basis-ticket" and o.aktion == "skipped"
+    assert "System-Prozess" in o.meldung
+    assert store.created == [] and store.published == []
 
 
 def test_commit_legt_fehlende_pflichtgruppen_versteckt_an(monkeypatch):
@@ -303,7 +304,7 @@ def test_commit_legt_fehlende_pflichtgruppen_versteckt_an(monkeypatch):
     assert sorted(report.angelegte_gruppen) == sorted(sd.required_group_names())
     (_, hidden), = groups.ensure_aufrufe
     assert hidden == sd.AUTO_ASSIGNED_GROUP_NAMES
-    assert report.fehler == 0 and len(store.created) == 10
+    assert report.fehler == 0 and len(store.created) == 9
 
 
 def test_nur_ein_prozess_mit_only(umgebung):

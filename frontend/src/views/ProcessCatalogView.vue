@@ -183,12 +183,19 @@ onMounted(async () => {
         </p>
         <!-- Admins bekommen den konkreten Schritt: die Definitionen liegen im
              Paket, müssen aber je Installation eingespielt werden. Ohne den
-             Hinweis sucht man den Fehler in der Oberfläche. -->
-        <p v-if="auth.isAdmin" class="text-xs text-gray-400 mt-2 max-w-xl mx-auto">
-          Die mitgelieferten Definitionen sind noch nicht eingespielt. Einspielen mit
-          <code class="font-mono">python -m backend.scripts.seed_processes --commit</code>
-          (ohne <code class="font-mono">--commit</code> als Trockenlauf).
-        </p>
+             Hinweis sucht man den Fehler in der Oberfläche. Das geht in den
+             Einstellungen – ein Server-Zugang ist dafür nicht nötig. -->
+        <template v-if="auth.isAdmin">
+          <p class="text-xs text-gray-400 mt-2 max-w-xl mx-auto">
+            Die mitgelieferten Definitionen sind noch nicht eingespielt. Das geht in den
+            Einstellungen unter „Prozesse“ mit „Mitgelieferte Prozesse einspielen“ –
+            erst als Trockenlauf, dann nach Bestätigung.
+          </p>
+          <button @click="router.push('/settings?section=processes')"
+                  class="text-sm text-[#3EAAB8] hover:underline mt-2">
+            Zu den Prozess-Einstellungen
+          </button>
+        </template>
       </div>
       <p v-else-if="!kacheln.length" class="text-center text-sm text-gray-400 italic py-8">
         Kein passender Prozess gefunden.

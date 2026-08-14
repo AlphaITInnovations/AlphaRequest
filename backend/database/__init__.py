@@ -78,3 +78,23 @@ def init_db():
             logger.info("Fehlende Pflichtgruppen angelegt: %s", ", ".join(created))
     except Exception as e:
         logger.warning(f"Pflichtgruppen-Check übersprungen: {e}")
+
+    # System-Prozesse (heute das Basis-Ticket) sicherstellen. NACH dem DDL oben,
+    # weil hier in `process_definitions` geschrieben wird.
+    #
+    # Das gehört in den Start, weil die Anwendung ohne veröffentlichte Definition
+    # unbenutzbar ist: „Neues Ticket" endete in „Dieser Prozess ist nicht (mehr)
+    # verfügbar", bis jemand von Hand ein Skript auf dem Server ausführte. Ein
+    # Prozess, der zum PRODUKT gehört, darf keinen Shell-Zugang brauchen.
+    #
+    # Nur die selbsttragenden Prozesse laufen hier mit (Begründung im Docstring
+    # von ensure_system_processes); die übrigen neun bleiben beim Admin-Knopf
+    # `POST /processes:seed`. Fehlschlag = Warnung, kein Startabbruch: eine
+    # laufende Installation soll nicht daran hängen.
+    try:
+        from backend.services.seed_definitions import ensure_system_processes
+        for o in ensure_system_processes():
+            if o.aktion == "error":
+                logger.warning("System-Prozess %s: %s", o.key, o.meldung)
+    except Exception as e:
+        logger.warning(f"System-Prozesse übersprungen: {e}")

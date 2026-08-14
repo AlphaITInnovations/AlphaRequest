@@ -30,6 +30,7 @@ from backend.services import process_delete as pdel
 from backend.services import process_permissions as perms
 from backend.services import process_runtime as pr
 from backend.services import process_visibility as vis
+from backend.services import seed_definitions as seeds
 from backend.utils.config import config
 from backend.utils.logger import logger
 from backend.utils.timeutil import utcnow_iso
@@ -48,6 +49,24 @@ def _require_manage(user: dict) -> None:
     perms = user.get("permissions", []) or []
     if PERM_ADMIN not in perms and PERM_MANAGE not in perms:
         raise api_error(403, ErrorCode.PERMISSION_DENIED, "Verwaltungsrechte erforderlich")
+
+
+def _require_editable(key: Optional[str]) -> None:
+    """Sperrt jede Änderung an einem System-Prozess – auch für Admins.
+
+    System-Prozesse gehören zum Produkt und werden beim Start aus der
+    Auslieferung gepflegt (services/seed_definitions.ensure_system_processes).
+    Wäre die Sperre nur in der Oberfläche, käme der nächste Start und legte die
+    Änderung als neue Version wieder um – ein Bearbeiten, das man verliert, ist
+    schlimmer als eines, das man nicht anfangen kann. Wer eine eigene Variante
+    braucht, macht mit `:duplicate` einen ganz normalen, änderbaren Prozess
+    daraus; Lesen und Exportieren bleiben erlaubt.
+    """
+    if seeds.is_system_process(key):
+        raise api_error(403, ErrorCode.SYSTEM_PROCESS_READONLY,
+                        f"„{key}“ ist ein System-Prozess und nicht änderbar. Er wird mit der "
+                        "Anwendung ausgeliefert und beim Start aktuell gehalten. Für eine "
+                        "eigene Fassung: duplizieren.")
 
 
 def _audit(user: dict, action: str, key: str, **details) -> None:
@@ -81,6 +100,10 @@ class ProcessOut(BaseModel):
     #: Kacheln der Anlage-Seite brauchen sie, damit erkennbar bleibt, wofür ein
     #: Prozess da ist (die Alt-Seite hatte diesen Satz je Kachel hartcodiert).
     description: Optional[str] = None
+    #: Zum Produkt gehörender Prozess: nicht änderbar (jede Mutation antwortet mit
+    #: SYSTEM_PROCESS_READONLY). Die Oberfläche soll die Knöpfe deshalb gar nicht
+    #: erst anbieten – abgeleitet aus dem Key, kein DB-Feld.
+    is_system: bool = False
     base_version: Optional[int] = None
     created_by: Optional[str] = None
     created_by_name: Optional[str] = None
@@ -91,7 +114,13 @@ class ProcessOut(BaseModel):
 
 
 def _out(row: dict) -> ProcessOut:
-    return ProcessOut(**{k: row.get(k) for k in ProcessOut.model_fields})
+    """DB-Zeile → Antwort. EINZIGE Stelle, die ProcessOut baut – jeder
+    Rückgabe-Pfad (Katalog, Versionsliste, Detail, Mutationen) läuft hier durch,
+    damit `is_system` nirgends fehlt."""
+    daten = {k: row.get(k) for k in ProcessOut.model_fields}
+    # Aus dem Key abgeleitet: die Zeile führt kein solches Feld (und soll keins).
+    daten["is_system"] = seeds.is_system_process(row.get("key"))
+    return ProcessOut(**daten)
 
 
 def _set_etag(resp: Response, row: dict) -> None:
@@ -238,6 +267,9 @@ def get_create_field_access(key: str, user: dict = Depends(get_current_user)):
 def create_process(defn: ProcessDefinition, user: dict = Depends(get_current_user)):
     """Neuen Prozess als Draft v1 anlegen (key aus der Definition)."""
     _require_admin(user)
+    # Auch das Anlegen: sonst wäre ein System-Key von Hand belegbar, bevor der
+    # Start ihn pflegt – und der Startlauf schriebe dann in einen fremden Prozess.
+    _require_editable(defn.key)
     try:
         row = db.create_process(defn.key, defn.name, _dump(defn), user.get("id"),
                                 user.get("displayName") or user.get("email"))
@@ -254,6 +286,7 @@ def create_process(defn: ProcessDefinition, user: dict = Depends(get_current_use
 def create_draft_version(key: str, user: dict = Depends(get_current_user)):
     """Neuen Bearbeitungs-Draft holen/anlegen (klont die published-Version)."""
     _require_admin(user)
+    _require_editable(key)
     try:
         row = db.create_or_get_draft(key, user.get("id"),
                                      user.get("displayName") or user.get("email"))
@@ -271,6 +304,7 @@ def update_process_draft(key: str, version: int, defn: ProcessDefinition, respon
                          if_match: Optional[str] = Header(None, alias="If-Match"),
                          user: dict = Depends(get_current_user)):
     _require_admin(user)
+    _require_editable(key)
     if defn.key != key:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "key im Body weicht vom Pfad ab",
                         fields=[{"path": "key", "code": "MISMATCH",
@@ -290,6 +324,7 @@ def update_process_draft(key: str, version: int, defn: ProcessDefinition, respon
 @router.post("/processes/{key}/versions/{version:int}:publish", response_model=DataResponse[ProcessOut])
 def publish_process_version(key: str, version: int, user: dict = Depends(get_current_user)):
     _require_admin(user)
+    _require_editable(key)
     try:
         row = db.publish(key, version)
     except Exception as exc:
@@ -308,6 +343,10 @@ class DuplicateRequest(BaseModel):
 @router.post("/processes/{key}:duplicate", response_model=DataResponse[ProcessOut])
 def duplicate_process(key: str, body: DuplicateRequest, user: dict = Depends(get_current_user)):
     _require_admin(user)
+    # Die QUELLE darf ein System-Prozess sein – aus dem Basis-Ticket eine eigene,
+    # änderbare Fassung zu machen ist der vorgesehene Weg. Nur das ZIEL nicht,
+    # sonst legte man einen System-Key über die Kopie an.
+    _require_editable(body.newKey)
     # Quelle = published, sonst höchste Version
     src = db.get_published(key)
     if not src:
@@ -344,6 +383,7 @@ class ImportRequest(BaseModel):
 def import_process(body: ImportRequest, user: dict = Depends(get_current_user)):
     """Import: der Ziel-key muss bestätigt werden (nie allein aus dem JSON)."""
     _require_admin(user)
+    _require_editable(body.targetKey)
     raw = body.definition.model_dump(by_alias=True)
     raw["key"] = body.targetKey
     try:
@@ -363,9 +403,120 @@ def import_process(body: ImportRequest, user: dict = Depends(get_current_user)):
     return DataResponse(data=_out(row))
 
 
+# ── Ausgelieferte Prozesse einspielen (Admin) ────────────────────────────────
+
+class SeedRequest(BaseModel):
+    #: Trockenlauf ist der STANDARD: erst ansehen, was passieren würde, dann
+    #: schreiben. Ein Knopf, der beim ersten Druck neun Prozesse veröffentlicht,
+    #: wäre in der Oberfläche eine Falle.
+    commit: bool = False
+    #: Erstellrechte NICHT aus dem Alt-System übernehmen.
+    skipPermissions: bool = False
+
+
+class SeedOutcomeOut(BaseModel):
+    """Was mit EINEM ausgelieferten Prozess passiert (ist)."""
+    file: str
+    key: Optional[str] = None
+    #: created | would_create | skipped | error
+    action: str
+    message: str = ""
+    warnings: list[str] = []
+    #: System-Prozess: dieser Lauf fasst ihn nicht an (der Start pflegt ihn). Als
+    #: eigenes Merkmal und nicht nur als Satz in `message`, damit die Oberfläche
+    #: die Zeile kennzeichnen kann, ohne Text zu durchsuchen.
+    is_system: bool = False
+    #: Übernommene Erstellrechte – nur gefüllt, wenn der Prozess (auch) angelegt
+    #: wird; an einem übersprungenen wird nichts gesetzt.
+    create_permissions: Optional[dict] = None
+    #: Alt-Gruppen, die `may_create` nie sieht (AD-Gruppen) – NICHT übernommen.
+    ineffective_groups: list[str] = []
+
+
+class SeedReportOut(BaseModel):
+    """Derselbe Bericht, den das CLI-Skript ausgibt – als JSON."""
+    commit: bool
+    created: int
+    skipped: int
+    errors: int
+    required_groups: list[str] = []
+    created_groups: list[str] = []
+    missing_groups: list[str] = []
+    outcomes: list[SeedOutcomeOut] = []
+
+
+def _seed_report_out(report) -> SeedReportOut:
+    return SeedReportOut(
+        commit=report.commit,
+        created=report.erstellt,
+        skipped=report.uebersprungen,
+        errors=report.fehler,
+        required_groups=seeds.required_group_names(),
+        created_groups=list(report.angelegte_gruppen),
+        missing_groups=list(report.fehlende_gruppen),
+        outcomes=[SeedOutcomeOut(
+            file=o.datei, key=o.key, action=o.aktion, message=o.meldung,
+            warnings=list(o.warnungen), is_system=seeds.is_system_process(o.key),
+            create_permissions=o.create_permissions,
+            ineffective_groups=list(o.wirkungslose_gruppen),
+        ) for o in report.outcomes],
+    )
+
+
+@router.post("/processes:seed", response_model=DataResponse[SeedReportOut])
+def seed_shipped_processes(body: Optional[SeedRequest] = None,
+                           user: dict = Depends(get_current_user)):
+    """Die mitgelieferten Prozess-Definitionen einspielen (Admin, auditiert).
+
+    Warum es diesen Endpunkt gibt: `python -m backend.scripts.seed_processes
+    --commit` war der EINZIGE Weg, die ausgelieferten Prozesse in eine
+    Installation zu bekommen. Ein Shell-Zugang auf dem Server darf nicht die
+    Bedingung dafür sein, dass die Anwendung benutzbar wird.
+
+    Warum es trotzdem ein Knopf und kein Automatismus ist: die neun
+    Fach-Prozesse brauchen Fachabteilungen mit Verteiler-Adressen und die
+    Übernahme der Erstellrechte. Automatisch veröffentlicht sähen sie fertig aus,
+    wären aber nur für Admins anlegbar und schickten Mails an leere Verteiler.
+    Deshalb entscheidet ein Mensch – nach einem Trockenlauf (`commit: false`,
+    Standard), der nichts schreibt.
+
+    Der System-Prozess Basis-Ticket wird übersprungen und sagt das: ihn pflegt
+    der Start (services/seed_definitions.ensure_system_processes).
+    """
+    _require_admin(user)
+    req = body or SeedRequest()
+    try:
+        report = seeds.seed_processes(
+            commit=req.commit,
+            with_permissions=not req.skipPermissions,
+            actor=str(user.get("id") or "admin"),
+            actor_name=user.get("displayName") or user.get("email") or "Admin",
+        )
+    except seeds.SeedError as exc:
+        # Der Lauf konnte nicht sinnvoll starten (z.B. mehrdeutige Gruppennamen) –
+        # das ist ein Zustand der Installation, kein Serverfehler.
+        raise api_error(409, ErrorCode.PROCESS_SEED_FAILED, str(exc))
+    out = _seed_report_out(report)
+    record_audit(
+        action="processes_seeded",
+        actor_id=user.get("id"),
+        actor_name=user.get("displayName") or user.get("email") or "",
+        entity_type="process_definition",
+        entity_id="*",
+        summary=("Ausgelieferte Prozesse eingespielt" if req.commit
+                 else "Ausgelieferte Prozesse: Trockenlauf (nichts geschrieben)"),
+        details={"commit": req.commit, "with_permissions": not req.skipPermissions,
+                 "created": out.created, "skipped": out.skipped, "errors": out.errors,
+                 "created_groups": out.created_groups,
+                 "keys": [o.key for o in out.outcomes if o.action in ("created", "would_create")]},
+    )
+    return DataResponse(data=out)
+
+
 @router.delete("/processes/{key}/versions/{version:int}")
 def delete_process_version(key: str, version: int, user: dict = Depends(get_current_user)):
     _require_admin(user)
+    _require_editable(key)
     try:
         db.delete_version(key, version)
     except Exception as exc:
@@ -465,6 +616,9 @@ def request_process_delete(key: str, body: Optional[DeleteRequest] = None,
     (`:confirm-delete`) entfernt Definition und Aufträge.
     """
     _require_admin(user)
+    # Löschen ginge zwar, wäre aber sinnlos: der nächste Start legt den Prozess
+    # wieder an. Nur die Aufträge blieben gelöscht.
+    _require_editable(key)
     overview = db.process_overview(key)
     if overview is None:
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Prozess nicht gefunden: {key}")
@@ -520,6 +674,13 @@ def confirm_process_delete(body: ConfirmDeleteRequest,
     try:
         data = pdel.load_token(body.token)
         key = str(data["key"])
+    except pdel.DeleteError as exc:
+        raise _delete_error(exc)
+    # Der Key steht im Token, nicht im Pfad: die Sperre muss hier ein zweites Mal
+    # greifen, sonst genügte ein Token aus der Zeit vor der Aufnahme in
+    # SYSTEM_PROCESS_KEYS.
+    _require_editable(key)
+    try:
         overview = db.process_overview(key)
         pdel.assert_matches(data, overview)
         pdel.assert_tickets_acknowledged(overview, bool(data.get("with_tickets")))

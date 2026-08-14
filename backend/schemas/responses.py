@@ -75,3 +75,8 @@ class ErrorCode:
     PROCESS_INVALID_STATE     = "PROCESS_INVALID_STATE"
     PROCESS_VERSION_CONFLICT  = "PROCESS_VERSION_CONFLICT"
     PROCESS_VERSION_IN_USE    = "PROCESS_VERSION_IN_USE"
+    #: Prozess gehört zum Produkt (services/seed_definitions.SYSTEM_PROCESS_KEYS)
+    #: und ist deshalb nicht änderbar – gilt auch für Admins.
+    SYSTEM_PROCESS_READONLY   = "SYSTEM_PROCESS_READONLY"
+    #: Ein Lauf von `POST /processes:seed` konnte nicht sinnvoll starten.
+    PROCESS_SEED_FAILED       = "PROCESS_SEED_FAILED"

@@ -10,6 +10,7 @@ import { computed, nextTick, ref, watch, onUnmounted } from 'vue'
 import { createProcess, duplicateProcess } from '@/api/processes'
 import { blankDefinition, isValidProcessKey, suggestProcessKey } from '@/lib/processSchema'
 import { errorCode, errorMessage } from '@/lib/processErrors'
+import { isSystemReadonlyError } from '@/lib/processSystem'
 import { rememberKey } from '@/components/process/processRegistry'
 import { useToast } from '@/composables/useToast'
 
@@ -110,6 +111,11 @@ async function submit() {
   } catch (e: any) {
     if (errorCode(e) === 'PROCESS_KEY_EXISTS') {
       keyError.value = 'Dieser Schlüssel ist bereits vergeben. Bitte einen anderen wählen.'
+    } else if (isSystemReadonlyError(e)) {
+      // Ziel-Schlüssel eines System-Prozesses: der ist gesperrt, die QUELLE darf
+      // aber kopiert werden – deshalb steht der Hinweis am Schlüssel-Feld.
+      keyError.value = 'Dieser Schlüssel gehört zu einem System-Prozess und ist gesperrt. '
+        + 'Bitte einen anderen wählen.'
     } else {
       showToast(errorMessage(e, isDuplicate.value ? 'Kopieren fehlgeschlagen' : 'Anlegen fehlgeschlagen'), false)
     }

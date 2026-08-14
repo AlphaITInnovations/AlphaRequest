@@ -12,6 +12,7 @@ import { importProcess } from '@/api/processes'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { isValidProcessKey, suggestProcessKey } from '@/lib/processSchema'
 import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
+import { isSystemReadonlyError } from '@/lib/processSystem'
 import { rememberKey } from '@/components/process/processRegistry'
 import { useToast } from '@/composables/useToast'
 import type { ProcessDefinition, ProcessIssue } from '@/types/process'
@@ -162,6 +163,11 @@ async function submit() {
   } catch (e: any) {
     if (errorCode(e) === 'PROCESS_KEY_EXISTS') {
       keyError.value = 'Dieser Schlüssel ist bereits vergeben. Bitte einen anderen wählen.'
+    } else if (isSystemReadonlyError(e)) {
+      // Der Server nimmt einen System-Schlüssel als Ziel nicht an – am Feld
+      // erklären, nicht als Toast: geändert werden muss der Ziel-Schlüssel.
+      keyError.value = 'Dieser Schlüssel gehört zu einem System-Prozess und ist gesperrt. '
+        + 'Bitte einen anderen wählen.'
     } else {
       const list = issuesFromError(e)
       if (list.length) issues.value = list
