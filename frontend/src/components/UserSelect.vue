@@ -43,6 +43,11 @@ const loading = ref(false)
 const open    = ref(false)
 const search  = ref(props.modelValue?.name ?? '')
 const activeIndex = ref(-1)
+/** Erst FILTERN, wenn seit dem Aufklappen wirklich getippt wurde: das Feld ist
+ *  mit dem gewählten Namen vorbefüllt, und der würde sonst beim bloßen
+ *  Draufklicken alle anderen Einträge wegfiltern – man müsste erst löschen,
+ *  um überhaupt eine Auswahl zu sehen. */
+const hatGetippt = ref(false)
 let debounce: ReturnType<typeof setTimeout> | null = null
 
 // Programmatische Wertänderung von außen (z. B. nach dem Speichern) muss das
@@ -54,7 +59,7 @@ watch(() => props.modelValue, (v) => {
 // Filtered groups (only when showGroups is true)
 const filteredGroups = computed(() => {
   if (!props.showGroups) return []
-  const q = search.value.toLowerCase().trim()
+  const q = hatGetippt.value ? search.value.toLowerCase().trim() : ''
   return q
     ? alleGroups.value.filter(g => g.name.toLowerCase().includes(q))
     : alleGroups.value
@@ -63,7 +68,7 @@ const filteredGroups = computed(() => {
 // Filtered users (only when showUsers is true)
 const filteredUsers = computed(() => {
   if (!props.showUsers) return []
-  const q = search.value.toLowerCase().trim()
+  const q = hatGetippt.value ? search.value.toLowerCase().trim() : ''
   return q
     ? alleUsers.value.filter(u => u.displayName.toLowerCase().includes(q))
     : alleUsers.value
@@ -104,6 +109,7 @@ function openDropdown() {
   if (props.disabled) return
   open.value = true
   activeIndex.value = -1
+  hatGetippt.value = false      // Aufklappen zeigt IMMER die volle Liste
 }
 
 function close() {
@@ -117,6 +123,7 @@ function close() {
 function onInput() {
   if (props.disabled) return
   open.value = true
+  hatGetippt.value = true
   if (debounce) clearTimeout(debounce)
   debounce = setTimeout(() => { activeIndex.value = -1 }, 150)
 }
