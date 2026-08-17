@@ -370,11 +370,7 @@ onMounted(async () => {
             <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
           </p>
         </div>
-        <button @click="router.push('/prozess-auftraege/neu')"
-                class="px-4 py-2 rounded-xl text-sm font-medium text-white
-                       bg-[#3EAAB8] hover:bg-[#2B7D89] transition">
-          + Neuer Auftrag
-        </button>
+        <!-- Kein Anlege-Knopf hier: Neues anlegen läuft über die Sidebar. -->
       </div>
 
       <!-- Ladefehler getrennt melden: fällt eine Quelle aus, bleibt die andere nutzbar -->

@@ -39,7 +39,6 @@ import { archiveTicket, listTickets } from '@/api/processTickets'
 import { useToast } from '@/composables/useToast'
 import { listProcesses } from '@/api/processes'
 import { useAuthStore } from '@/stores/authStore'
-import { BASIS_TICKET_PATH } from '@/lib/basisTicket'
 import { errorMessage } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
@@ -265,20 +264,7 @@ onMounted(async () => {
             Sämtliche Aufträge im System – durchsuchen, filtern, blättern.
           </p>
         </div>
-        <div class="flex items-center gap-2">
-          <button @click="router.push('/prozess-auftraege/neu')"
-                  class="px-4 py-2 rounded-xl text-sm font-medium text-white
-                         bg-[#3EAAB8] hover:bg-[#2B7D89] transition">
-            + Neues Prozess-Ticket
-          </button>
-          <button @click="router.push(BASIS_TICKET_PATH)"
-                  class="px-4 py-2 rounded-xl text-sm font-medium
-                         border border-gray-200 dark:border-white/10
-                         text-gray-600 dark:text-gray-300
-                         hover:bg-gray-50 dark:hover:bg-white/5 transition">
-            + Neues Ticket
-          </button>
-        </div>
+        <!-- Keine Anlege-Knöpfe hier: Neues anlegen läuft über die Sidebar. -->
       </div>
 
       <div v-if="listeError" class="space-y-2">
