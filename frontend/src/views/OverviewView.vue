@@ -2,21 +2,17 @@
 /**
  * Übersicht – die Startseite. EINE Liste für ALLE Aufträge.
  *
- * Zusammengelegt aus zwei Ansichten: der Arbeitslisten-Startseite (vier Kacheln)
- * und der eigenen Liste unter /prozess-auftraege. Die Arbeitslisten sind nicht
- * verschwunden, sie sind jetzt die SICHTEN dieser Liste (Kacheln oben, siehe
- * components/overview/OverviewScopeTiles.vue).
+ * Aufsichts-Liste über ALLE Aufträge (Route nur für viewer/manager/admin – der
+ * Server liefert diesen Rollen die ungefilterte Liste). Die persönlichen
+ * Arbeitslisten-Sichten (Kacheln) sind bewusst WEG: „was liegt bei MIR an?"
+ * beantwortet die Startseite (/dashboard), hier geht es um alles.
  *
- * DREI QUELLEN, jede mit einem Grund:
+ * ZWEI QUELLEN, jede mit einem Grund:
  *
- *  1. `GET /process-tickets` – die Aufträge selbst. Nur diese Zeilen tragen
- *     `responsibility` mit dem LIVE-Stand der Fachabteilungen; ohne sie lässt
- *     sich „wartet auf MEINE Abteilung" nicht beantworten (lib/processDepartments).
- *     Der Server filtert selbst, wer was sehen darf – hier wird nichts nachgebaut.
- *  2. `GET /dashboard` – NUR `my_departments`: in welchen Fachabteilungen bin
- *     ich? Das steht in keiner Auftragszeile und lässt sich hier nicht herleiten
- *     (das Frontend kennt die Gruppen-Mitgliedschaft nicht).
- *  3. `GET /processes` + Auswahl-Quellen – Namen und Symbole zu den IDs, die die
+ *  1. `GET /process-tickets` – die Aufträge selbst (mit `responsibility` für
+ *     die Spalte „Zuständig"). Der Server filtert selbst, wer was sehen darf –
+ *     hier wird nichts nachgebaut.
+ *  2. `GET /processes` + Auswahl-Quellen – Namen und Symbole zu den IDs, die die
  *     Liste liefert (Prozess-Key, Gruppen-/Personen-IDs).
  *
  * Alle Aufrufe sind unabhängig abgesichert: fällt einer aus, bleibt der Rest
@@ -38,24 +34,21 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
-import OverviewScopeTiles from '@/components/overview/OverviewScopeTiles.vue'
 import OverviewTable from '@/components/overview/OverviewTable.vue'
-import { client } from '@/api/client'
 import { archiveTicket, listTickets } from '@/api/processTickets'
 import { useToast } from '@/composables/useToast'
 import { listProcesses } from '@/api/processes'
 import { useAuthStore } from '@/stores/authStore'
 import { BASIS_TICKET_PATH } from '@/lib/basisTicket'
-import { isDepartmentPending } from '@/lib/processDepartments'
 import { errorMessage } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { buildLookup, toOverviewRows } from '@/lib/overviewRow'
 import {
-  applyScope, CLIENT_SIDE_LABEL, defaultStatuses, filterByStatus, isWindowTruncated,
+  CLIENT_SIDE_LABEL, defaultStatuses, filterByStatus, isWindowTruncated,
   OVERVIEW_STATUSES, pageCount, pageSlice, parseTicketRef, planQuery, SCOPE_EMPTY,
-  SCOPE_LABEL, SERVER_SORT_DIR, SERVER_SORT_KEY, sortTickets,
-  type OverviewScope, type OverviewSortKey, type ScopeContext, type SortDir,
+  SERVER_SORT_DIR, SERVER_SORT_KEY, sortTickets,
+  type OverviewSortKey, type SortDir,
 } from '@/lib/overviewQuery'
 import type { OptionSources, ProcessOut, ProcessTicketOut } from '@/types/process'
 
@@ -68,8 +61,9 @@ const PAGE_SIZE = 25
 const SCAN_LIMIT = 200
 
 // ── Filter- und Sortier-Zustand ───────────────────────────────────────────────
+// Keine Sichten-Kacheln mehr: die Seite zeigt IMMER alle Aufträge („scope all"),
+// die persönlichen Arbeitslisten wohnen auf der Startseite.
 
-const scope = ref<OverviewScope>('all')
 const statuses = ref<string[]>(defaultStatuses())
 /** Eingabe der Suche; an den Server geht der entprellte Wert. */
 const sucheEingabe = ref('')
@@ -81,7 +75,7 @@ const page = ref(1)
 
 const plan = computed(() => planQuery(
   {
-    scope: scope.value, statuses: statuses.value, q: suche.value,
+    scope: 'all', statuses: statuses.value, q: suche.value,
     processKey: processKey.value, sortKey: sortKey.value, sortDir: sortDir.value,
   },
   { page: page.value, pageSize: PAGE_SIZE, scanLimit: SCAN_LIMIT },
@@ -96,83 +90,8 @@ const listeTotal = ref(0)
 const listeLoading = ref(true)
 const listeError = ref<string | null>(null)
 
-/**
- * Arbeitsfenster für die Kachel-Zähler: die neuesten Aufträge OHNE Filter.
- * Eigenes Fenster, weil die Frage „wartet etwas auf mich?" sich nicht ändern
- * darf, nur weil unten ein Status abgewählt oder ein Prozess gewählt ist.
- */
-const fenster = ref<ProcessTicketOut[]>([])
-const fensterTotal = ref(0)
-const fensterLoading = ref(true)
-const fensterError = ref<string | null>(null)
-
-const meineFachabteilungen = ref<{ id: string; name: string }[]>([])
-const abteilungenError = ref<string | null>(null)
-
 const katalog = ref<ProcessOut[]>([])
 const quellen = ref<OptionSources>(emptySources())
-
-/**
- * Ist das Listen-Fenster selbst das ungefilterte Arbeitsfenster? Dann sind die
- * Kachel-Zähler daraus zu holen und der zweite Aufruf entfällt – das ist der
- * Normalfall beim Aufruf der Startseite.
- */
-const listeIstArbeitsfenster = computed(() => {
-  const p = plan.value
-  return p.mode === 'scan' && !p.params.status && !p.params.process_key && !p.params.q
-})
-const arbeitsZeilen = computed(() => (
-  listeIstArbeitsfenster.value ? liste.value : fenster.value))
-const arbeitsTotal = computed(() => (
-  listeIstArbeitsfenster.value ? listeTotal.value : fensterTotal.value))
-const arbeitsLoading = computed(() => (
-  listeIstArbeitsfenster.value ? listeLoading.value : fensterLoading.value))
-/** Das Arbeitsfenster reicht nicht über alle sichtbaren Aufträge → Zähler sind Untergrenzen. */
-const arbeitsAbgeschnitten = computed(() => arbeitsTotal.value > arbeitsZeilen.value.length)
-
-// ── Wer fragt? ────────────────────────────────────────────────────────────────
-
-const ctx = computed<ScopeContext>(() => ({
-  userId: auth.user?.id ?? null,
-  groupIds: meineFachabteilungen.value.map((d) => d.id),
-}))
-
-// ── Zähler der Kacheln ────────────────────────────────────────────────────────
-
-const counts = computed<Record<OverviewScope, number>>(() => {
-  const rows = arbeitsZeilen.value
-  return {
-    // „Alle": bei vollständigem Fenster die Serverzahl, sonst das Geladene –
-    // die Kachel schreibt dann ein „+" dahinter, statt Vollständigkeit zu behaupten.
-    all: arbeitsAbgeschnitten.value ? rows.length : arbeitsTotal.value,
-    assigned: applyScope(rows, 'assigned', ctx.value).length,
-    departments: applyScope(rows, 'departments', ctx.value).length,
-    created: applyScope(rows, 'created', ctx.value).length,
-    involved: applyScope(rows, 'involved', ctx.value).length,
-  }
-})
-
-const offeneAufgaben = computed(() => counts.value.assigned + counts.value.departments)
-
-/**
- * Meine Fachabteilungen, für die gerade nichts vorliegt. „Nichts zu tun" ist
- * eine andere Aussage als „ich bin nicht zuständig" – nur die erste beruhigt.
- *
- * Gezählt wird je ABTEILUNG, nicht je Auftrag: dass ein Auftrag noch offen ist,
- * heißt nicht, dass MEINE Abteilung dort noch etwas zu quittieren hat – sie kann
- * längst abgeschlossen haben, während eine andere noch fehlt. Deshalb derselbe
- * Maßstab wie in der Sicht „Meine Abteilungen" (`isDepartmentPending`).
- */
-const leereAbteilungen = computed(() => {
-  const wartend = new Set(
-    applyScope(arbeitsZeilen.value, 'departments', ctx.value).flatMap((t) => {
-      const r = t.responsibility
-      if (!r || r.kind !== 'departments') return []
-      return (r.departments ?? []).filter(isDepartmentPending).map((d) => d.group)
-    }),
-  )
-  return meineFachabteilungen.value.filter((d) => !wartend.has(d.id))
-})
 
 // ── Anzeige-Zeilen ────────────────────────────────────────────────────────────
 
@@ -180,11 +99,9 @@ const lookup = computed(() => buildLookup({
   catalog: katalog.value, groups: quellen.value.groups, users: quellen.value.users,
 }))
 
-/** Sicht + Status clientseitig nachziehen, dann sortieren (siehe lib/overviewQuery). */
+/** Status clientseitig nachziehen, dann sortieren (siehe lib/overviewQuery). */
 const gefiltert = computed(() => {
-  let rows: ProcessTicketOut[] = liste.value
-  if (scope.value !== 'all') rows = applyScope(rows, scope.value, ctx.value)
-  rows = filterByStatus(rows, statuses.value)
+  const rows = filterByStatus(liste.value, statuses.value)
   return sortTickets(rows, sortKey.value, sortDir.value)
 })
 
@@ -240,11 +157,10 @@ function zuruecksetzen() {
 }
 
 /**
- * Zurück in den Server-Modus: alle Status, Sicht „Alle", Server-Sortierung.
+ * Zurück in den Server-Modus: alle Status, Server-Sortierung.
  * Danach blättert der Server – die Liste ist vollständig.
  */
 function vollstaendigBlaettern() {
-  scope.value = 'all'
   statuses.value = [...OVERVIEW_STATUSES]
   sortKey.value = SERVER_SORT_KEY
   sortDir.value = SERVER_SORT_DIR
@@ -301,36 +217,6 @@ async function ladeListe() {
   }
 }
 
-let arbeitsfensterGeladen = false
-/** Nur laden, wenn das Listen-Fenster die Zähler nicht mit trägt. */
-async function ladeArbeitsfenster() {
-  if (listeIstArbeitsfenster.value || arbeitsfensterGeladen) return
-  arbeitsfensterGeladen = true
-  fensterLoading.value = true
-  fensterError.value = null
-  try {
-    const res = await listTickets({ limit: SCAN_LIMIT })
-    fenster.value = res.items
-    fensterTotal.value = res.total
-  } catch (e) {
-    arbeitsfensterGeladen = false
-    fensterError.value = errorMessage(e, 'Arbeitslisten konnten nicht geladen werden')
-  } finally {
-    fensterLoading.value = false
-  }
-}
-
-async function ladeFachabteilungen() {
-  abteilungenError.value = null
-  try {
-    const res = await client.get<{ data: { my_departments?: { id: string; name: string }[] } }>(
-      '/dashboard')
-    meineFachabteilungen.value = res.data.data.my_departments ?? []
-  } catch (e) {
-    abteilungenError.value = errorMessage(e, 'Fachabteilungen konnten nicht geladen werden')
-  }
-}
-
 /** Namen zu den IDs. Fehlschläge sind nicht fatal – dann steht der Rohwert da. */
 async function ladeNamen() {
   try {
@@ -343,20 +229,14 @@ async function ladeNamen() {
   quellen.value = await loadOptionSources(auth.isAdmin)
 }
 
-async function allesNeuLaden() {
-  arbeitsfensterGeladen = false
-  await Promise.all([ladeListe(), ladeArbeitsfenster(), ladeFachabteilungen()])
-}
-
 // REIHENFOLGE BEACHTEN: dieser Beobachter wird VOR dem Anfrage-Beobachter
 // angelegt und läuft deshalb zuerst. Sonst lädt ein Filterwechsel zweimal –
 // einmal mit der alten Seitenzahl und gleich danach mit der zurückgesetzten.
-watch([scope, statuses, suche, processKey, sortKey, sortDir], () => { page.value = 1 })
+watch([statuses, suche, processKey, sortKey, sortDir], () => { page.value = 1 })
 
 // Nur wenn sich die ANFRAGE ändert, wird geladen. Im Scan-Modus blättert und
 // sortiert der Client im geladenen Fenster – das braucht keinen neuen Aufruf.
 watch(() => JSON.stringify(plan.value.params), ladeListe)
-watch(listeIstArbeitsfenster, () => { ladeArbeitsfenster() })
 
 // Entprellte Suche: sonst je Tastendruck ein Aufruf.
 let tippTimer: ReturnType<typeof setTimeout> | null = null
@@ -369,9 +249,7 @@ watch(sucheEingabe, (v) => {
 watch(seitenAnzahl, (n) => { if (page.value > n) page.value = n })
 
 onMounted(async () => {
-  await Promise.all([ladeListe(), ladeFachabteilungen(), ladeNamen()])
-  // Erst danach: ob ein eigenes Arbeitsfenster nötig ist, hängt am Plan.
-  await ladeArbeitsfenster()
+  await Promise.all([ladeListe(), ladeNamen()])
 })
 </script>
 
@@ -382,17 +260,9 @@ onMounted(async () => {
       <!-- ── Kopf ── -->
       <div class="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
-            Willkommen zurück,
-            <span class="text-[#3EAAB8]">{{ auth.user?.displayName }}</span> 👋
-          </h1>
+          <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Alle Aufträge</h1>
           <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">
-            <template v-if="arbeitsLoading">Aufträge werden geladen…</template>
-            <template v-else-if="offeneAufgaben > 0">
-              Du hast <strong class="text-gray-700 dark:text-gray-200">{{ offeneAufgaben }}</strong>
-              offene {{ offeneAufgaben === 1 ? 'Aufgabe' : 'Aufgaben' }}.
-            </template>
-            <template v-else>Alles erledigt – keine offenen Aufgaben.</template>
+            Sämtliche Aufträge im System – durchsuchen, filtern, blättern.
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -411,21 +281,9 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Ladefehler getrennt melden: fällt eine Quelle aus, bleibt der Rest nutzbar -->
-      <div v-if="listeError || fensterError || abteilungenError" class="space-y-2">
-        <p v-if="listeError" class="warnbox">{{ listeError }}</p>
-        <p v-if="fensterError" class="warnbox">
-          {{ fensterError }} – die Zähler der Kacheln fehlen.
-        </p>
-        <p v-if="abteilungenError" class="warnbox">
-          {{ abteilungenError }} – „Meine Abteilungen" bleibt leer.
-        </p>
+      <div v-if="listeError" class="space-y-2">
+        <p class="warnbox">{{ listeError }}</p>
       </div>
-
-      <!-- ── Sichten ── -->
-      <OverviewScopeTiles :active="scope" :counts="counts" :loading="arbeitsLoading"
-                          :truncated="arbeitsAbgeschnitten"
-                          @select="scope = $event" />
 
       <!-- ── Filter ── -->
       <div class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
@@ -466,7 +324,7 @@ onMounted(async () => {
                          hover:bg-gray-50 dark:hover:bg-white/5 transition">
             Zurücksetzen
           </button>
-          <button @click="allesNeuLaden" title="Neu laden"
+          <button @click="ladeListe" title="Neu laden"
                   class="px-3 py-2 rounded-xl text-sm text-gray-500 dark:text-gray-400
                          border border-gray-200 dark:border-white/10
                          hover:bg-gray-50 dark:hover:bg-white/5 transition">
@@ -491,7 +349,6 @@ onMounted(async () => {
       <!-- ── Ergebnis-Zeile ── -->
       <div class="flex items-center justify-between gap-3 flex-wrap text-sm text-gray-400">
         <span>
-          {{ SCOPE_LABEL[scope] }}:
           <strong class="text-gray-600 dark:text-gray-300">{{ ergebnisAnzahl }}</strong>
           {{ ergebnisAnzahl === 1 ? 'Auftrag' : 'Aufträge' }}
           <template v-if="seitenAnzahl > 1"> · Seite {{ page }} von {{ seitenAnzahl }}</template>
@@ -504,7 +361,7 @@ onMounted(async () => {
       <!-- ── Tabelle ── -->
       <OverviewTable :rows="zeilen" :sort-key="sortKey" :sort-dir="sortDir"
                      :loading="listeLoading && !liste.length"
-                     :empty-text="SCOPE_EMPTY[scope]"
+                     :empty-text="SCOPE_EMPTY.all"
                      :can-archive="darfArchivieren"
                      @open="oeffnen" @sort="setSort" @archive="archivieren" />
 
@@ -525,23 +382,6 @@ onMounted(async () => {
           </button>
           (alle Status, Sicht „Alle Aufträge", Sortierung nach Änderung).
         </p>
-      </div>
-
-      <!-- Mitgliedschafts-Info: Abteilungen ohne aktuelle Aufgabe -->
-      <div v-if="scope === 'departments' && leereAbteilungen.length"
-           class="bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                  rounded-2xl px-5 py-3.5">
-        <p class="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
-          Mitglied · derzeit nichts zu quittieren
-        </p>
-        <div class="flex flex-wrap gap-1.5">
-          <span v-for="d in leereAbteilungen" :key="d.id"
-                class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full
-                       bg-gray-100/70 dark:bg-white/[0.05] text-gray-500 dark:text-gray-400">
-            <span class="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-white/20" />
-            {{ d.name }}
-          </span>
-        </div>
       </div>
 
       <!-- ── Blättern ── -->
