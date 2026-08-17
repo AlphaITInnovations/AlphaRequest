@@ -411,53 +411,18 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                            :readonly="leseModus" />
 
         <template v-else-if="ticket && definition">
-        <!-- Kopf -->
-        <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
-          <div class="min-w-0">
-            <button @click="router.push('/dashboard')"
-                    class="text-xs text-gray-400 hover:text-[#3EAAB8] mb-1 transition">← Übersicht</button>
-            <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100 truncate">
-              {{ ticket.title }}
-            </h1>
-            <div class="text-xs text-gray-400 flex items-center gap-2 flex-wrap">
-              <span>#{{ ticket.id }}</span><span>·</span>
-              <span class="font-mono">{{ ticket.process_key }} v{{ ticket.process_version }}</span>
-              <span>·</span>
-              <span>{{ STATUS_LABEL[ticket.status] || ticket.status }}</span>
-              <span v-if="ticket.current_phase_label">· Phase: {{ ticket.current_phase_label }}</span>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <button v-if="abilities.edit" @click="saveValues" :disabled="busy || !dirty"
-                    class="btn-secondary text-sm">Speichern</button>
-            <button v-if="abilities.edit" @click="advance" :disabled="busy"
-                    class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
-                           disabled:opacity-40 transition">Phase abschließen</button>
-            <button v-if="abilities.edit" @click="reject" :disabled="busy"
-                    class="px-3 py-2 rounded-xl text-sm border border-red-300 text-red-600
-                           hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 transition">
-              Ablehnen
-            </button>
-            <button v-if="abilities.reopen" @click="reopen" :disabled="busy"
-                    class="px-3 py-2 rounded-xl text-sm border border-amber-300 text-amber-700
-                           dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20
-                           disabled:opacity-40 transition">
-              Wieder aufnehmen
-            </button>
-            <!-- Notfalleingriffe: nur Admin, bewusst optisch zurückhaltend -->
-            <button v-if="abilities.archive" @click="forceArchive" :disabled="busy"
-                    title="Auftrag zwangsweise abschließen (rückholbar)"
-                    class="px-3 py-2 rounded-xl text-sm border border-gray-300 dark:border-white/20
-                           text-gray-600 dark:text-gray-300 hover:bg-gray-50
-                           dark:hover:bg-white/5 disabled:opacity-40 transition">
-              Zwangsabschluss
-            </button>
-            <button v-if="abilities.delete" @click="destroy" :disabled="busy"
-                    title="Endgültig löschen"
-                    class="px-3 py-2 rounded-xl text-sm text-gray-400 hover:text-red-600
-                           disabled:opacity-40 transition">
-              Löschen
-            </button>
+        <!-- Kopf (Aktionen stehen in der sticky Aktionsleiste unten – wie beim
+             Basis-Ticket: ein UI-Design für alle Aufträge) -->
+        <div class="mb-4 min-w-0">
+          <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100 truncate">
+            {{ ticket.title }}
+          </h1>
+          <div class="text-xs text-gray-400 flex items-center gap-2 flex-wrap">
+            <span>#{{ ticket.id }}</span><span>·</span>
+            <span class="font-mono">{{ ticket.process_key }} v{{ ticket.process_version }}</span>
+            <span>·</span>
+            <span>{{ STATUS_LABEL[ticket.status] || ticket.status }}</span>
+            <span v-if="ticket.current_phase_label">· Phase: {{ ticket.current_phase_label }}</span>
           </div>
         </div>
 
@@ -616,6 +581,44 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
           <ProcessWatchers :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
                            :can-manage="abilities.manage_watchers"
                            :users="sources.users" />
+        </div>
+
+        <!-- Aktionsleiste – sticky und in JEDER Ansicht da (lesend wie
+             bearbeitend), identisch zum Basis-Ticket: „Abbrechen" führt immer
+             zurück; alles Weitere hängt an den Server-Rechten (abilities). -->
+        <div class="card-section sticky bottom-4 z-20 shadow-lg mt-4
+                    flex items-center justify-end gap-2 flex-wrap">
+          <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
+          <button v-if="abilities.edit" @click="saveValues" :disabled="busy || !dirty"
+                  class="btn-secondary text-sm">Speichern</button>
+          <button v-if="abilities.edit" @click="advance" :disabled="busy"
+                  class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
+                         disabled:opacity-40 transition">Phase abschließen</button>
+          <button v-if="abilities.edit" @click="reject" :disabled="busy"
+                  class="px-3 py-2 rounded-xl text-sm border border-red-300 text-red-600
+                         hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 transition">
+            Ablehnen
+          </button>
+          <button v-if="abilities.reopen" @click="reopen" :disabled="busy"
+                  class="px-3 py-2 rounded-xl text-sm border border-amber-300 text-amber-700
+                         dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20
+                         disabled:opacity-40 transition">
+            Wieder aufnehmen
+          </button>
+          <!-- Notfalleingriffe: nur Admin, bewusst optisch zurückhaltend -->
+          <button v-if="abilities.archive" @click="forceArchive" :disabled="busy"
+                  title="Auftrag zwangsweise abschließen (rückholbar)"
+                  class="px-3 py-2 rounded-xl text-sm border border-gray-300 dark:border-white/20
+                         text-gray-600 dark:text-gray-300 hover:bg-gray-50
+                         dark:hover:bg-white/5 disabled:opacity-40 transition">
+            Zwangsabschluss
+          </button>
+          <button v-if="abilities.delete" @click="destroy" :disabled="busy"
+                  title="Endgültig löschen"
+                  class="px-3 py-2 rounded-xl text-sm text-gray-400 hover:text-red-600
+                         disabled:opacity-40 transition">
+            Löschen
+          </button>
         </div>
         </template>
       </template>

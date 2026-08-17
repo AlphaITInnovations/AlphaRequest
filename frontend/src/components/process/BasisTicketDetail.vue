@@ -244,9 +244,7 @@ async function abschliessen() {
 
 <template>
   <div>
-    <!-- Kopf (Zurück-Pfeil identisch zur generischen Ansicht – ein UI-Design) -->
-    <button @click="router.push('/dashboard')"
-            class="text-xs text-gray-400 hover:text-[#3EAAB8] mb-1 transition">← Übersicht</button>
+    <!-- Kopf -->
     <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
       {{ ticket.title }} – {{ formatiert(ticket.created_at) }}
     </h1>
@@ -366,22 +364,24 @@ async function abschliessen() {
       </div>
     </div>
 
-    <!-- Aktionsleiste – sticky: bleibt beim Scrollen immer im Bild (der lange
-         Verlauf darf die Knöpfe nicht aus dem Fenster schieben). -->
-    <div v-if="!terminal && abilities.edit"
-         class="card-section sticky bottom-4 z-20 shadow-lg mt-4
+    <!-- Aktionsleiste – sticky und in JEDER Ansicht da (lesend wie bearbeitend):
+         „Abbrechen" führt immer zurück; die Schreib-Knöpfe kommen nur dazu,
+         wenn bearbeitet werden darf. Ein UI-Design für alle Aufträge. -->
+    <div class="card-section sticky bottom-4 z-20 shadow-lg mt-4
                 flex items-center justify-end gap-2">
       <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
-      <button @click="speichern()" :disabled="busy || !dirty"
-              class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
-                     disabled:opacity-40 transition">
-        Speichern &amp; später weiterbearbeiten
-      </button>
-      <button @click="abschliessen" :disabled="busy"
-              class="px-4 py-2 rounded-xl text-sm text-white bg-green-600 hover:bg-green-700
-                     disabled:opacity-40 transition">
-        Abschließen
-      </button>
+      <template v-if="!terminal && abilities.edit">
+        <button @click="speichern()" :disabled="busy || !dirty"
+                class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
+                       disabled:opacity-40 transition">
+          Speichern &amp; später weiterbearbeiten
+        </button>
+        <button @click="abschliessen" :disabled="busy"
+                class="px-4 py-2 rounded-xl text-sm text-white bg-green-600 hover:bg-green-700
+                       disabled:opacity-40 transition">
+          Abschließen
+        </button>
+      </template>
     </div>
   </div>
 </template>
