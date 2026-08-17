@@ -19,7 +19,7 @@ import * as ticketsApi from '@/api/processTickets'
 import { reopenTicket } from '@/api/processEvents'
 import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
-import AdminTicketDetail from '@/components/process/AdminTicketDetail.vue'
+import AdminActionsPanel from '@/components/process/AdminActionsPanel.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
 import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
 import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
@@ -155,6 +155,12 @@ const generalErrors = computed(() => {
   const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
   return errors.value.filter((e) => !fieldKeys.has(e.path))
 })
+
+/** Nach Admin-Eingriffen: Auftrag UND Verlauf nachziehen. */
+async function reloadAll() {
+  await load()
+  timeline.value?.reload()
+}
 
 async function load() {
   loading.value = true
@@ -295,13 +301,18 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
       <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
 
       <template v-else>
-        <!-- Admin-Ansicht: eigene Formation (Alt-System) – gilt auch für das
-             Basis-Ticket, die Werkzeuge brauchen die technische Sicht. -->
-        <AdminTicketDetail v-if="adminModus && ticket && definition"
+        <!-- Admin-Ansicht = normale LESEANSICHT als Basis, die Aktionen-Leiste
+             legt sich nur darüber. So haben alle Aufträge überall dieselbe
+             Struktur; die Rechte prüft jeder Endpunkt selbst. -->
+        <AdminActionsPanel v-if="adminModus && ticket && definition"
+                           class="mb-4"
                            :ticket="ticket" :definition="definition" :sources="sources"
-                           @reload="load" />
+                           @reload="reloadAll" />
 
-        <BasisTicketDetail v-else-if="istBasis && ticket && definition"
+        <!-- :key remountet die Basis-Ansicht nach Admin-Eingriffen (sie hält
+             eine eigene Kopie des Auftrags und würde sonst den alten Stand zeigen). -->
+        <BasisTicketDetail v-if="istBasis && ticket && definition"
+                           :key="`${ticket.id}:${ticket.updated_at || ''}`"
                            :ticket="ticket" :definition="definition" :sources="sources"
                            :readonly="leseModus" />
 
@@ -361,14 +372,15 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
              `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst AUSSERHALB von
              abilities.edit: quittieren muss auch, wer den Auftrag nicht bearbeiten darf. -->
         <!-- `terminal` unterdrückt die Quittier-Knöpfe – in der Leseansicht
-             genauso gewollt wie bei abgeschlossenen Aufträgen. -->
+             genauso gewollt wie bei abgeschlossenen Aufträgen. In der
+             ADMIN-Ansicht bleiben sie bedienbar (Notfall-Quittierung). -->
         <ProcessDepartments
           v-if="ticket.responsibility?.kind === 'departments'"
           class="mb-4"
           :ticket-id="ticket.id"
           :departments="ticket.responsibility.departments"
           :group-name="groupName"
-          :terminal="terminal || leseModus"
+          :terminal="terminal || (leseModus && !adminModus)"
           @updated="onDepartmentsUpdated" />
 
         <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
