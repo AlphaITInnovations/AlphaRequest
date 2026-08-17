@@ -28,8 +28,8 @@ import { listTickets } from '@/api/processTickets'
 import { errorMessage } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import {
-  blockingDepartments, departmentProgress, isTicketTerminal,
-  ticketsAwaitingAnyDepartment,
+  departmentProgress, isTicketTerminal,
+  ticketsAwaitingAnyDepartment, ticketsAwaitingDepartment,
 } from '@/lib/processDepartments'
 import type { ProcessTicketOut } from '@/types/process'
 
@@ -132,8 +132,8 @@ interface Zeile {
   created_at: string | null
   /** Zusatz-Plakette rechts (z. B. „Ersteller"), optional. */
   badge?: { text: string; class: string }
-  /** Fachabteilungs-Fortschritt, nur im Abteilungs-Reiter gefüllt. */
-  depts?: { text: string; mine: string[] }
+  /** Quittier-Fortschritt („2 von 3 erledigt"), nur im Abteilungs-Reiter. */
+  depts?: { text: string }
 }
 
 function zeileAusBlock(o: ProcessOrder): Zeile {
@@ -184,28 +184,34 @@ const mirZugewiesen = computed<ProcessTicketOut[]>(() => {
 const meineAbteilungen = computed(() =>
   ticketsAwaitingAnyDepartment(aktiveRows.value, meineGruppen.value))
 
-/** Abteilungs-Namen für die Anzeige (IDs sind für Menschen nicht lesbar). */
-const gruppenName = computed(() => {
-  const map = new Map(myDepartments.value.map((d) => [d.id, d.name]))
-  return (id: string) => map.get(id) || id
-})
-
-/** Nur MEINE noch offenen Abteilungen eines Auftrags – nicht die aller anderen. */
-function meineOffenenAbteilungen(t: ProcessTicketOut): string[] {
-  const meine = new Set(meineGruppen.value)
+/** Zeile für den Abteilungs-Reiter: der Quittier-Fortschritt kommt nur bei
+ *  echten Quittier-Phasen dazu – bei einfacher Gruppen-Zuständigkeit (z. B.
+ *  Basis-Ticket) sagt schon der Abschnitts-Kopf, wo der Auftrag liegt. */
+function zeileFuerAbteilung(t: ProcessTicketOut): Zeile {
   const r = t.responsibility
-  if (!r) return []
-  // Einfache Gruppen-Zuständigkeit (z. B. Basis-Ticket): der Auftrag liegt bei
-  // genau einer Abteilung – meiner, sonst stünde er nicht in dieser Liste.
-  if (r.kind === 'group') {
-    return r.group && meine.has(r.group) ? [gruppenName.value(r.group)] : []
+  const z = zeileAusRow(t)
+  if (r && r.kind === 'departments') {
+    z.depts = { text: departmentProgress(r.departments ?? []).text }
   }
-  if (r.kind !== 'departments') return []
-  return (r.departments ?? [])
-    .filter((d) => d && meine.has(d.group) && d.status !== 'done'
-      && d.status !== 'skipped' && d.status !== 'rejected')
-    .map((d) => gruppenName.value(d.group))
+  return z
 }
+
+/**
+ * Reiter „Meine Abteilungen": nach Fachabteilung GRUPPIERT – dieselbe
+ * Warte-Logik wie die Kachel (awaitsDepartment, inkl. einfacher
+ * Gruppen-Zuständigkeit). Ein Auftrag, der auf MEHRERE meiner Abteilungen
+ * wartet, erscheint in jedem betroffenen Abschnitt: jede Abteilung sieht
+ * ihre Arbeitsliste vollständig.
+ */
+const abteilungsGruppen = computed(() =>
+  myDepartments.value.map((d) => ({
+    id: d.id,
+    name: d.name,
+    zeilen: ticketsAwaitingDepartment(aktiveRows.value, d.id).map(zeileFuerAbteilung),
+  })))
+
+const abteilungenMitAufgaben = computed(() =>
+  abteilungsGruppen.value.filter((g) => g.zeilen.length))
 
 // ── Arbeitslisten ─────────────────────────────────────────────────────────────
 // Bewusst OHNE Filterleiste: das Dashboard beantwortet „was liegt bei mir an?".
@@ -214,22 +220,6 @@ function meineOffenenAbteilungen(t: ProcessTicketOut): string[] {
 // gegenseitig die Aussage genommen.
 
 const zeilenAssigned = computed(() => mirZugewiesen.value.map(zeileAusRow))
-
-const zeilenDepartments = computed(() =>
-  meineAbteilungen.value.map((t) => {
-    const r = t.responsibility
-    const depts = r && r.kind === 'departments' ? r.departments ?? [] : []
-    return {
-      ...zeileAusRow(t),
-      depts: {
-        // Einfache Gruppen-Zuständigkeit hat keinen Quittier-Fortschritt – dort
-        // wäre „Keine Fachabteilungen beteiligt" schlicht falsch.
-        text: r?.kind === 'group' ? 'Liegt bei der Abteilung'
-                                  : departmentProgress(depts).text,
-        mine: meineOffenenAbteilungen(t),
-      },
-    }
-  }))
 
 const zeilenInvolved = computed(() =>
   block.value.involved.map((o) => ({
@@ -246,11 +236,34 @@ const zeilenWatched = computed(() =>
 const zeilen = computed<Zeile[]>(() => {
   switch (activeTab.value) {
     case 'assigned':    return zeilenAssigned.value
-    case 'departments': return zeilenDepartments.value
     case 'watched':     return zeilenWatched.value
     default:            return zeilenInvolved.value
   }
 })
+
+/**
+ * EINE Render-Liste für alle Reiter, damit die Zeilen überall dasselbe Markup
+ * haben: der Abteilungs-Reiter streut Abschnitts-Köpfe je Fachabteilung ein,
+ * alle anderen liefern nur Zeilen.
+ */
+type AnzeigeElement =
+  | { art: 'kopf'; key: string; name: string; anzahl: number }
+  | { art: 'zeile'; key: string; z: Zeile }
+
+const anzeige = computed<AnzeigeElement[]>(() => {
+  if (activeTab.value !== 'departments') {
+    return zeilen.value.map((z) => ({ art: 'zeile', key: `${activeTab.value}-${z.id}`, z }))
+  }
+  return abteilungenMitAufgaben.value.flatMap((g): AnzeigeElement[] => [
+    { art: 'kopf', key: `kopf-${g.id}`, name: g.name, anzahl: g.zeilen.length },
+    ...g.zeilen.map((z): AnzeigeElement => ({ art: 'zeile', key: `${g.id}-${z.id}`, z })),
+  ])
+})
+
+/** Kopfzeile „N Ergebnisse": im Abteilungs-Reiter zählen AUFTRÄGE, nicht
+ *  Abschnitts-Einträge (ein Auftrag kann in mehreren Abschnitten stehen). */
+const ergebnisAnzahl = computed(() => (activeTab.value === 'departments'
+  ? meineAbteilungen.value.length : zeilen.value.length))
 
 // ── Zähler für die Kacheln (ungefiltert) ──────────────────────────────────────
 
@@ -267,18 +280,12 @@ const statusCounts = computed(() =>
 /**
  * Abteilungen, in denen ich Mitglied bin, für die aber gerade nichts vorliegt.
  * Dezent anzeigen: „nichts zu tun" ist eine andere Aussage als „ich bin nicht
- * zuständig", und nur die erste ist beruhigend.
+ * zuständig", und nur die erste ist beruhigend. BEWUSST dieselbe Quelle wie
+ * die Abschnitte (abteilungsGruppen) – eine eigene Zähl-Logik hatte hier
+ * „nichts zu tun" behauptet, während derselbe Auftrag oben in der Liste stand.
  */
-const leereAbteilungen = computed(() => {
-  const mitArbeit = new Set(
-    meineAbteilungen.value.flatMap((t) => {
-      const r = t.responsibility
-      if (!r || r.kind !== 'departments') return []
-      return blockingDepartments(r.departments).map((d) => d.group)
-    }),
-  )
-  return myDepartments.value.filter((d) => !mitArbeit.has(d.id))
-})
+const leereAbteilungen = computed(() =>
+  abteilungsGruppen.value.filter((g) => !g.zeilen.length))
 
 /** Die Zeilen-Obergrenze ist erreicht – dann ist die Arbeitsliste unvollständig. */
 const listeAbgeschnitten = computed(() => rowsTotal.value > rows.value.length)
@@ -459,7 +466,7 @@ onMounted(async () => {
 
           <div class="px-5 py-2 flex items-center justify-between gap-3 flex-wrap
                       text-xs text-gray-400 border-b border-gray-100 dark:border-white/[0.04]">
-            <span>{{ zeilen.length }} {{ zeilen.length === 1 ? 'Ergebnis' : 'Ergebnisse' }}</span>
+            <span>{{ ergebnisAnzahl }} {{ ergebnisAnzahl === 1 ? 'Ergebnis' : 'Ergebnisse' }}</span>
             <!-- Status-Verteilung über ALLE für mich sichtbaren Aufträge -->
             <div v-if="statusCounts.length" class="flex flex-wrap items-center gap-1.5">
               <span v-for="[st, n] in statusCounts" :key="st"
@@ -470,38 +477,47 @@ onMounted(async () => {
           </div>
 
           <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[560px] overflow-auto">
-            <li v-for="z in zeilen" :key="`${activeTab}-${z.id}`" @click="open(z)" class="row group">
-              <div class="flex items-start gap-3.5 min-w-0">
-                <div class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" :class="dotClass(z.status)" />
-                <div class="min-w-0">
-                  <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">
-                    {{ z.title }} <span class="text-gray-400 font-normal text-xs">#{{ z.id }}</span>
-                  </p>
-                  <p class="text-xs text-gray-400 mt-0.5">
-                    {{ z.process_key }} · {{ fmtDay(z.created_at) }}
-                    <template v-if="z.phase_label"> · {{ z.phase_label }}</template>
-                  </p>
-                  <!-- Abteilungs-Reiter: was warte MEINE Abteilung noch ab? -->
-                  <p v-if="z.depts" class="text-xs mt-1">
-                    <span class="text-purple-600 dark:text-purple-300 font-medium">
-                      {{ z.depts.mine.length ? z.depts.mine.join(', ') : 'Meine Abteilung' }}
-                    </span>
-                    <span class="text-gray-400"> · {{ z.depts.text }}</span>
-                  </p>
-                </div>
-              </div>
-              <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
-                <span v-if="z.badge"
-                      class="hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                      :class="z.badge.class">{{ z.badge.text }}</span>
-                <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(z.status)">
-                  {{ statusLabel(z.status) }}
+            <!-- EIN Zeilen-Markup für alle Reiter; der Abteilungs-Reiter streut
+                 Abschnitts-Köpfe ein. Die Köpfe kleben beim Scrollen oben – bei
+                 hunderten Aufträgen bleibt so erkennbar, in welcher Abteilung
+                 man gerade liest. -->
+            <template v-for="el in anzeige" :key="el.key">
+              <li v-if="el.art === 'kopf'"
+                  class="sticky top-0 z-10 px-5 py-2 bg-gray-50 dark:bg-[#1A2130]
+                         border-b border-gray-100 dark:border-white/[0.04]">
+                <span class="text-[11px] font-semibold uppercase tracking-wider
+                             text-purple-600 dark:text-purple-300">{{ el.name }}</span>
+                <span class="text-[11px] text-gray-400">
+                  · {{ el.anzahl }} {{ el.anzahl === 1 ? 'Auftrag' : 'Aufträge' }}
                 </span>
-                <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </div>
-            </li>
+              </li>
+              <li v-else @click="open(el.z)" class="row group">
+                <div class="flex items-start gap-3.5 min-w-0">
+                  <div class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" :class="dotClass(el.z.status)" />
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-[#3EAAB8] transition-colors">
+                      {{ el.z.title }} <span class="text-gray-400 font-normal text-xs">#{{ el.z.id }}</span>
+                    </p>
+                    <p class="text-xs text-gray-400 mt-0.5">
+                      {{ el.z.process_key }} · {{ fmtDay(el.z.created_at) }}
+                      <template v-if="el.z.phase_label"> · {{ el.z.phase_label }}</template>
+                      <template v-if="el.z.depts"> · {{ el.z.depts.text }}</template>
+                    </p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2.5 flex-shrink-0 ml-4">
+                  <span v-if="el.z.badge"
+                        class="hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                        :class="el.z.badge.class">{{ el.z.badge.text }}</span>
+                  <span class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(el.z.status)">
+                    {{ statusLabel(el.z.status) }}
+                  </span>
+                  <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-[#3EAAB8] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </li>
+            </template>
 
-            <li v-if="zeilen.length === 0" class="empty">
+            <li v-if="anzeige.length === 0" class="empty">
               <template v-if="activeTab === 'assigned'">Keine dir persönlich zugewiesenen Aufträge.</template>
               <template v-else-if="activeTab === 'departments'">Keine Aufträge für deine Fachabteilungen.</template>
               <template v-else-if="activeTab === 'watched'">Du beobachtest gerade keinen Auftrag.</template>
@@ -513,7 +529,7 @@ onMounted(async () => {
           <div v-if="activeTab === 'departments' && leereAbteilungen.length"
                class="px-5 py-3.5 border-t border-gray-100 dark:border-white/[0.04]">
             <p class="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
-              Mitglied · derzeit nichts zu quittieren
+              Mitglied · derzeit keine offenen Aufträge
             </p>
             <div class="flex flex-wrap gap-1.5">
               <span v-for="d in leereAbteilungen" :key="d.id"
