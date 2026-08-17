@@ -62,6 +62,11 @@ def _audit_fired(row: dict, phase: PhaseDef, automation, occurrence: Optional[in
     details = {"automation": automation.id, "occurrence": occurrence,
                "trigger": automation.trigger.type.value,
                "action": automation.action.type.value}
+    # Der frei gewählte Anlass-Text der Automation wandert mit in den Verlauf –
+    # das pauschale Etikett „Erinnerung" war für eine ERSTMALIGE Benachrichtigung
+    # (z. B. Weiterreichen des Basis-Tickets) schlicht falsch.
+    if getattr(automation.action, "template", None):
+        details["template"] = automation.action.template
     record_audit(
         action="process_automation_fired", actor_id=None, actor_name="System",
         actor_type="system", entity_type="process_ticket", entity_id=str(row["id"]),

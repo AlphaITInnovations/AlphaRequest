@@ -72,7 +72,10 @@ function gruppe(ev: ProcessEvent, ctx: LabelCtx): string {
 }
 
 const AUTOMATION_LABEL: Record<string, string> = {
-  notify: 'Erinnerung',
+  // „Benachrichtigung", nicht „Erinnerung": notify verschickt auch ERSTMALIGE
+  // Mails (z. B. beim Weiterreichen des Basis-Tickets) – eine „Erinnerung" an
+  // etwas, das man zum ersten Mal sieht, wäre eine Falschaussage.
+  notify: 'Benachrichtigung',
   escalate: 'Eskalation',
   set_field: 'Feld gesetzt',
   set_priority: 'Priorität',
@@ -111,9 +114,12 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
     case 'watcher_removed':
       return `Beobachtung beendet: ${str(ev.details?.watcher) || '—'}`
     case 'automation_fired': {
+      // Der Anlass-Text der Automation (template) ist die ehrlichste
+      // Beschriftung – erst ohne ihn fällt die Anzeige auf den Aktions-Typ zurück.
       const art = str(ev.details?.action)
+      const anlass = str(ev.details?.template) || (art ? AUTOMATION_LABEL[art] || art : '')
       const id = str(ev.details?.automation)
-      return `Automation ausgeführt${id ? `: ${id}` : ''}${art ? ` (${AUTOMATION_LABEL[art] || art})` : ''}`
+      return `Automation ausgeführt${id ? `: ${id}` : ''}${anlass ? ` (${anlass})` : ''}`
     }
     case 'approval_decided': {
       const act = str(ev.details?.act)

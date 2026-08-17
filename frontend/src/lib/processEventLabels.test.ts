@@ -76,6 +76,27 @@ describe('eventSummary', () => {
     expect(s).toContain('Eskalation')
   })
 
+  it('bevorzugt den Anlass-Text (template) der Automation', () => {
+    const s = eventSummary(ev({
+      action: 'automation_fired',
+      details: { automation: 'weitergabe_melden', action: 'notify',
+                 template: 'Neue Aufgabe für Ihre Fachabteilung' },
+    }), ctx)
+    expect(s).toContain('weitergabe_melden')
+    expect(s).toContain('Neue Aufgabe für Ihre Fachabteilung')
+    expect(s).not.toContain('Erinnerung')
+  })
+
+  it('nennt notify ohne template „Benachrichtigung", nie „Erinnerung"', () => {
+    // Alt-Einträge tragen kein template – auch dort ist „Erinnerung" für eine
+    // womöglich erstmalige Mail eine Falschaussage.
+    const s = eventSummary(ev({
+      action: 'automation_fired', details: { automation: 'a1', action: 'notify' },
+    }), ctx)
+    expect(s).toContain('Benachrichtigung')
+    expect(s).not.toContain('Erinnerung')
+  })
+
   it('nennt bei der Wiederaufnahme die Phase', () => {
     expect(eventSummary(ev({ action: 'reopened', details: { phase: 'pruefung' } }), ctx))
       .toContain('Prüfung')
