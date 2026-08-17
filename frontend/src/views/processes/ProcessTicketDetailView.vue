@@ -19,7 +19,7 @@ import * as ticketsApi from '@/api/processTickets'
 import { reopenTicket } from '@/api/processEvents'
 import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
-import UserSelect from '@/components/UserSelect.vue'
+import AdminTicketDetail from '@/components/process/AdminTicketDetail.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
 import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
 import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
@@ -98,124 +98,16 @@ const leseModus = computed(() => route.query.ansicht !== 'bearbeiten')
  *  Admin-Endpunkt prüft die Rechte selbst und antwortet sonst mit 403. */
 const adminModus = computed(() => route.query.ansicht === 'admin' && auth.isAdmin)
 
-const abilities = computed(() => {
-  const a = serverAbilities.value
-  if (adminModus.value) {
-    // Lesend – aber die Admin-Notfallaktionen (Wiederaufnahme, Zwangsabschluss,
-    // Löschen) bleiben sichtbar; sie sind ohnehin nur für Admins wahr.
-    return { ...a, edit: false, internal_comment: false,
-             manage_watchers: false, attach: false }
-  }
-  if (leseModus.value) {
-    return { ...a, edit: false, internal_comment: false, manage_watchers: false,
-             attach: false, reopen: false, archive: false, delete: false }
-  }
-  return a
-})
+// Die Admin-Ansicht rendert eine EIGENE Komponente (AdminTicketDetail) – die
+// abilities hier steuern nur noch die Lese-/Bearbeitungsansicht.
+const abilities = computed(() => (leseModus.value
+  ? { ...serverAbilities.value, edit: false, internal_comment: false,
+      manage_watchers: false, attach: false, reopen: false, archive: false, delete: false }
+  : serverAbilities.value))
 
 // BEWUSST kein Wechsel-Knopf in der Leseansicht: in die Bearbeitung kommt man
 // nur über die richtigen Einstiege (Arbeits-Reiter der Übersicht, Mail-Link).
-
-// ── Admin-Werkzeuge (nur in der Admin-Ansicht sichtbar) ──────────────────────
-
-const adminPhase = ref('')
-const adminRaw = ref('')
-/** Erzwingt nach jeder Auswahl einen frischen Zuständigkeits-Picker. */
-const adminPickerKey = ref(0)
-
-/** Zuständigkeits-Feld der aktuellen Phase – nur wenn sie aus einem FELD kommt
- *  (group_from_field/assignable); feste Gruppen stehen in der Definition und
- *  sind nicht pro Auftrag umstellbar. */
-const adminZustFeld = computed(() => {
-  const r = ticket.value?.responsibility as
-    { kind?: string; from_field?: string | null } | null
-  if (!r?.from_field) return null
-  if (r.kind !== 'group' && r.kind !== 'user') return null
-  return { feld: r.from_field, art: r.kind as 'group' | 'user' }
-})
-
-async function adminLaden() {
-  if (!adminModus.value || !ticket.value) return
-  adminPhase.value = ticket.value.current_phase ?? ''
-  try {
-    // Roh-Werte UNGEFILTERT laden – ein Editor auf der gefilterten Sicht würde
-    // unsichtbare Alt-Schlüssel beim nächsten Speichern zerstören.
-    adminRaw.value = JSON.stringify(await ticketsApi.getRawValues(id.value), null, 2)
-  } catch (e) {
-    adminRaw.value = ''
-    showToast(errorMessage(e, 'Roh-Werte konnten nicht geladen werden'), false)
-  }
-}
-
-/** Frischen Auftrag holen und alle Admin-Anzeigen nachziehen. */
-async function adminNachziehen() {
-  ticket.value = await ticketsApi.getTicket(id.value)
-  values.value = { ...(ticket.value.values || {}) }
-  timeline.value?.reload()
-  await adminLaden()
-}
-
-function adminGrund(frage: string): string | null {
-  const grund = prompt(`${frage} (Pflicht – steht im Verlauf)`)
-  if (grund === null) return null
-  if (!grund.trim()) { showToast('Ohne Begründung keine Admin-Aktion', false); return null }
-  return grund.trim()
-}
-
-async function adminPhaseSetzen() {
-  if (!adminPhase.value) return
-  const label = definition.value?.phases.find((p) => p.key === adminPhase.value)?.label
-    || adminPhase.value
-  const grund = adminGrund(`Auftrag auf Phase „${label}“ stellen – warum?`)
-  if (!grund) return
-  busy.value = true
-  try {
-    await ticketsApi.setTicketPhase(id.value, adminPhase.value, grund)
-    await adminNachziehen()
-    showToast('Phase umgestellt')
-  } catch (e) {
-    showToast(errorMessage(e, 'Phase konnte nicht umgestellt werden'), false)
-  } finally { busy.value = false }
-}
-
-async function adminRawSpeichern() {
-  let parsed: unknown
-  try { parsed = JSON.parse(adminRaw.value) } catch {
-    showToast('Kein gültiges JSON', false); return
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    showToast('Roh-Werte müssen ein JSON-Objekt sein', false); return
-  }
-  const grund = adminGrund('Roh-Werte ersetzen – warum?')
-  if (!grund) return
-  busy.value = true
-  try {
-    await ticketsApi.setRawValues(id.value, parsed as Record<string, unknown>, grund)
-    await adminNachziehen()
-    showToast('Roh-Werte gespeichert')
-  } catch (e) {
-    showToast(errorMessage(e, 'Roh-Werte konnten nicht gespeichert werden'), false)
-  } finally { busy.value = false }
-}
-
-async function adminZustaendigkeit(sel: { id: string; name: string } | null) {
-  adminPickerKey.value++
-  const ziel = adminZustFeld.value
-  if (!sel || !ziel) return
-  const grund = adminGrund(`Zuständigkeit auf „${sel.name}“ umstellen – warum?`)
-  if (!grund) return
-  busy.value = true
-  try {
-    // Über den Roh-Endpunkt: das Feld ist in der aktuellen Phase nicht zwingend
-    // editierbar – der normale PATCH würde die Änderung still verwerfen.
-    const roh = await ticketsApi.getRawValues(id.value)
-    await ticketsApi.setRawValues(id.value, { ...roh, [ziel.feld]: sel.id }, grund)
-    await adminNachziehen()
-    showToast('Zuständigkeit umgestellt')
-  } catch (e) {
-    showToast(errorMessage(e, 'Zuständigkeit konnte nicht umgestellt werden'), false)
-  } finally { busy.value = false }
-}
+// Die Admin-Werkzeuge leben in components/process/AdminTicketDetail.vue.
 
 /** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
 const fieldLabels = computed<Record<string, string>>(() => {
@@ -275,7 +167,6 @@ async function load() {
     // /processes/{key}/versions/{v} verlangt `manage` und würde für normale
     // Beteiligte mit 403 antworten – das Formular bliebe leer.
     definition.value = normalizeDefinition(await ticketsApi.getPinnedDefinition(id.value))
-    await adminLaden()      // no-op außerhalb der Admin-Ansicht
   } catch (e) {
     loadError.value = errorMessage(e, 'Auftrag konnte nicht geladen werden')
   } finally {
@@ -404,9 +295,13 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
       <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
 
       <template v-else>
-        <!-- In der Admin-Ansicht rendert auch das Basis-Ticket GENERISCH:
-             die Werkzeuge brauchen die technische Sicht (Phasen, Roh-Werte). -->
-        <BasisTicketDetail v-if="istBasis && ticket && definition && !adminModus"
+        <!-- Admin-Ansicht: eigene Formation (Alt-System) – gilt auch für das
+             Basis-Ticket, die Werkzeuge brauchen die technische Sicht. -->
+        <AdminTicketDetail v-if="adminModus && ticket && definition"
+                           :ticket="ticket" :definition="definition" :sources="sources"
+                           @reload="load" />
+
+        <BasisTicketDetail v-else-if="istBasis && ticket && definition"
                            :ticket="ticket" :definition="definition" :sources="sources"
                            :readonly="leseModus" />
 
@@ -465,62 +360,6 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
         <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen blockiert
              `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst AUSSERHALB von
              abilities.edit: quittieren muss auch, wer den Auftrag nicht bearbeiten darf. -->
-        <!-- Admin-Werkzeuge: NUR in der Admin-Ansicht sichtbar. Das v-if ist
-             reine Anzeige – jeden Endpunkt prüft der Server (ADMIN_REQUIRED). -->
-        <div v-if="adminModus" class="card-section mb-4">
-          <div class="flex items-center gap-2 mb-3">
-            <h3 class="section-title mb-0">Admin-Werkzeuge</h3>
-            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded
-                         bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-              nur Admins
-            </span>
-          </div>
-
-          <div class="grid gap-4 md:grid-cols-2">
-            <div>
-              <label class="lbl">Phase umstellen (vor oder zurück)</label>
-              <select v-model="adminPhase" class="afi w-full" :disabled="busy || terminal">
-                <option v-for="p in definition.phases" :key="p.key" :value="p.key">
-                  {{ p.label || p.key }}
-                </option>
-              </select>
-              <button class="btn-secondary text-sm mt-2" :disabled="busy || terminal"
-                      @click="adminPhaseSetzen">Phase setzen…</button>
-              <p v-if="terminal" class="text-xs text-gray-400 mt-1">
-                Der Auftrag ist abgeschlossen/abgelehnt – zuerst „Wieder aufnehmen“.
-              </p>
-              <p v-else class="text-xs text-gray-400 mt-1">
-                Zielphase wird neu betreten: Zuständigkeits-Mail und Automationen laufen erneut.
-              </p>
-            </div>
-
-            <div v-if="adminZustFeld">
-              <label class="lbl">
-                Zuständigkeit umstellen ({{ fieldLabels[adminZustFeld.feld] || adminZustFeld.feld }})
-              </label>
-              <UserSelect :key="adminPickerKey" :model-value="null" label=""
-                          :placeholder="adminZustFeld.art === 'group'
-                            ? 'Fachabteilung auswählen…' : 'Person auswählen…'"
-                          :show-groups="adminZustFeld.art === 'group'"
-                          :show-users="adminZustFeld.art === 'user'"
-                          :groups="sources.groups" :users="sources.users"
-                          :disabled="busy" @update:model-value="adminZustaendigkeit" />
-              <p class="text-xs text-gray-400 mt-1">
-                Schreibt direkt in das Zuständigkeits-Feld – auch wenn die aktuelle
-                Phase es nicht zur Bearbeitung freigibt.
-              </p>
-            </div>
-          </div>
-
-          <div class="mt-4">
-            <label class="lbl">Roh-Werte (JSON, ungefiltert – Speichern ersetzt ALLES)</label>
-            <textarea v-model="adminRaw" rows="12" spellcheck="false"
-                      class="afi w-full font-mono text-xs resize-y" :disabled="busy" />
-            <button class="btn-secondary text-sm mt-2" :disabled="busy"
-                    @click="adminRawSpeichern">Roh-Werte speichern…</button>
-          </div>
-        </div>
-
         <!-- `terminal` unterdrückt die Quittier-Knöpfe – in der Leseansicht
              genauso gewollt wie bei abgeschlossenen Aufträgen. -->
         <ProcessDepartments
