@@ -1,5 +1,6 @@
 /**
- * Tests der reinen Logik hinter LayoutEditor/LayoutSectionEditor/LayoutItemRow.
+ * Tests der reinen Layout-Bearbeitungs-Logik (lib/processLayoutEdit) – genutzt
+ * vom Formular-Baukasten (FormBuilder.vue).
  *
  * Es gibt in diesem Projekt bewusst keine Komponenten-Tests (kein
  * @vue/test-utils, kein jsdom) – geprüft wird deshalb das ausgelagerte

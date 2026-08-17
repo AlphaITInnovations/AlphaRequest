@@ -1,9 +1,17 @@
 <script setup lang="ts">
 /**
- * Visueller Prozess-Editor.
+ * Visueller Prozess-Editor – EIN Weg je Absicht.
  *
- * Tabs: Ablauf (Phasenkette + Inspector), Feld-Katalog, Automationen (prozessweit),
- * Vorschau (reine Client-Simulation, kein Wegwerf-Ticket) und JSON (Rohform).
+ * Tabs:
+ *   Ablauf   – Phasenkette links, daneben je Phase der Formular-Baukasten
+ *              (Felder + Darstellung in EINER Fläche) und darunter die
+ *              Phasen-Einstellungen. Einen separaten Feld-Katalog gibt es
+ *              nicht mehr: Felder entstehen im Formular und werden über
+ *              „vorhandenes Feld" in weitere Phasen übernommen.
+ *   Prozess  – Stammdaten, Erstellrechte und prozessweite Automationen.
+ *   Vorschau – reine Client-Simulation (kein Wegwerf-Ticket).
+ *   JSON     – Rohform für Import/Export-Fälle.
+ *
  * Gespeichert wird nur mit fehlerfreier Prüfung; veröffentlichte Versionen sind
  * schreibgeschützt.
  */
@@ -12,14 +20,14 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import { useProcessEditor } from '@/composables/useProcessEditor'
-import type { FieldDef, PhaseDef, ProcessDefinition } from '@/types/process'
+import type { PhaseDef, ProcessDefinition } from '@/types/process'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import {
   SYSTEM_PROCESS_BLOCKED, SYSTEM_PROCESS_HINT, hasSystemReadonlyIssue, isSystemProcess,
 } from '@/lib/processSystem'
 import PhaseChain from '@/components/process/editor/PhaseChain.vue'
 import PhaseInspector from '@/components/process/editor/PhaseInspector.vue'
-import FieldCatalogPanel from '@/components/process/editor/FieldCatalogPanel.vue'
+import FormBuilder from '@/components/process/editor/FormBuilder.vue'
 import AutomationList from '@/components/process/editor/AutomationList.vue'
 import IssueList from '@/components/process/editor/IssueList.vue'
 import CreatePermissionsEditor from '@/components/process/editor/CreatePermissionsEditor.vue'
@@ -30,7 +38,7 @@ const router = useRouter()
 const { showToast } = useToast()
 const ed = useProcessEditor()
 
-const tab = ref<'flow' | 'fields' | 'rechte' | 'automations' | 'preview' | 'json'>('flow')
+const tab = ref<'flow' | 'prozess' | 'preview' | 'json'>('flow')
 const selectedPhase = ref(0)
 const jsonText = ref('')
 const jsonError = ref<string | null>(null)
@@ -66,7 +74,6 @@ function setPhase(next: PhaseDef) {
   setDefinition({ phases: d.phases.map((p, j) => (j === i ? next : p)) })
 }
 
-function onFieldsChanged(fields: FieldDef[]) { setDefinition({ fields }) }
 function onFieldRenamed(p: { from: string; to: string }) { ed.renameFieldKey(p.from, p.to) }
 
 /**
@@ -223,10 +230,11 @@ onUnmounted(() => {
       <template v-else-if="ed.draft.value">
         <IssueList :issues="ed.issues.value" class="mb-4" />
 
-        <!-- Tabs -->
+        <!-- Tabs: EIN Ort je Absicht – Formulare baut man im Ablauf, alles
+             Prozessweite steht unter „Prozess". -->
         <div class="flex gap-1 border-b border-gray-200 dark:border-white/10 mb-4 overflow-x-auto">
           <button v-for="t in ([
-                    ['flow', 'Ablauf'], ['fields', 'Felder'], ['rechte', 'Rechte'], ['automations', 'Automationen'],
+                    ['flow', 'Ablauf & Formulare'], ['prozess', 'Prozess'],
                     ['preview', 'Vorschau'], ['json', 'JSON'],
                   ] as const)" :key="t[0]"
                   @click="tab = t[0]"
@@ -238,8 +246,8 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- Kopfdaten -->
-        <section v-if="tab === 'flow' || tab === 'fields'" id="pe-top" class="card-section mb-4">
+        <!-- Kopfdaten (Teil des Prozess-Tabs) -->
+        <section v-if="tab === 'prozess'" id="pe-top" class="card-section mb-4">
           <div class="grid md:grid-cols-3 gap-3">
             <div class="md:col-span-2">
               <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Name</label>
@@ -276,7 +284,7 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Ablauf -->
+        <!-- Ablauf & Formulare -->
         <div v-if="tab === 'flow'" class="grid lg:grid-cols-[280px_1fr] gap-4 items-start">
           <div class="card-section lg:sticky lg:top-4">
             <PhaseChain :model-value="ed.draft.value.phases" :selected="selectedPhase"
@@ -284,51 +292,52 @@ onUnmounted(() => {
                         @update:model-value="setDefinition({ phases: $event })"
                         @select="selectedPhase = $event" />
           </div>
-          <div>
+          <div class="space-y-5">
             <fieldset :disabled="ed.readonly.value" class="contents">
-              <PhaseInspector v-if="currentPhase" :model-value="currentPhase" :index="selectedPhase"
-                              :catalog="ed.draft.value.fields" :groups="ed.sources.groups"
-                              :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
-                              :field-labels="ed.fieldLabels.value" :taken-ids="ed.automationIds.value"
-                              :readonly="ed.readonly.value"
-                              @update:model-value="setPhase" />
+              <template v-if="currentPhase">
+                <!-- Das Formular zuerst: DER Arbeitsbereich der Phase. -->
+                <FormBuilder :definition="ed.draft.value" :phase-index="selectedPhase"
+                             :groups="ed.sources.groups" :field-keys="ed.fieldKeys.value"
+                             :field-labels="ed.fieldLabels.value" :readonly="ed.readonly.value"
+                             @update:definition="ed.update" @renamed="onFieldRenamed" />
+                <!-- Darunter die Einstellungen der Phase (ohne Felder/Darstellung –
+                     die leben oben im Baukasten). `phases` ermöglicht der Freigabe
+                     den Rücksprung auf frühere Phasen. -->
+                <PhaseInspector :model-value="currentPhase" :index="selectedPhase"
+                                :catalog="ed.draft.value.fields" :groups="ed.sources.groups"
+                                :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
+                                :field-labels="ed.fieldLabels.value" :taken-ids="ed.automationIds.value"
+                                :phases="ed.draft.value.phases"
+                                :readonly="ed.readonly.value"
+                                @update:model-value="setPhase" />
+              </template>
               <p v-else class="text-sm text-gray-400 italic">Keine Phase ausgewählt.</p>
             </fieldset>
           </div>
         </div>
 
-        <!-- Felder -->
-        <div v-else-if="tab === 'fields'">
-          <!-- fieldset deaktiviert nativ ALLE Bedienelemente darin – so kann kein
-               Unter-Editor den Schreibschutz vergessen. -->
-          <fieldset :disabled="ed.readonly.value" class="contents">
-            <FieldCatalogPanel :model-value="ed.draft.value.fields" :groups="ed.sources.groups"
-                               @update:model-value="onFieldsChanged" @renamed="onFieldRenamed" />
-          </fieldset>
-        </div>
-
-        <!-- Erstellrechte -->
-        <div v-else-if="tab === 'rechte'">
-          <fieldset :disabled="ed.readonly.value" class="contents">
-            <CreatePermissionsEditor :model-value="ed.draft.value.createPermissions"
-                                     :groups="ed.sources.groups" :users="ed.sources.users"
-                                     @update:model-value="setDefinition({ createPermissions: $event })" />
-          </fieldset>
-        </div>
-
-        <!-- Prozessweite Automationen -->
-        <div v-else-if="tab === 'automations'" class="card-section">
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
-            Diese Automationen gelten in <b>jeder</b> Phase des Prozesses – z. B. eine
-            Erinnerung, die überall greift.
-          </p>
-          <fieldset :disabled="ed.readonly.value" class="contents">
-            <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
-                            :field-labels="ed.fieldLabels.value" :groups="ed.sources.groups"
-                            title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
-                            @update:model-value="setDefinition({ automations: $event })" />
-          </fieldset>
-        </div>
+        <!-- Prozess: Erstellrechte + prozessweite Automationen (Kopfdaten oben) -->
+        <template v-else-if="tab === 'prozess'">
+          <div class="card-section mb-4">
+            <fieldset :disabled="ed.readonly.value" class="contents">
+              <CreatePermissionsEditor :model-value="ed.draft.value.createPermissions"
+                                       :groups="ed.sources.groups" :users="ed.sources.users"
+                                       @update:model-value="setDefinition({ createPermissions: $event })" />
+            </fieldset>
+          </div>
+          <div class="card-section">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+              Diese Automationen gelten in <b>jeder</b> Phase des Prozesses – z. B. eine
+              Erinnerung, die überall greift.
+            </p>
+            <fieldset :disabled="ed.readonly.value" class="contents">
+              <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
+                              :field-labels="ed.fieldLabels.value" :groups="ed.sources.groups"
+                              title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
+                              @update:model-value="setDefinition({ automations: $event })" />
+            </fieldset>
+          </div>
+        </template>
 
         <!-- Vorschau -->
         <div v-else-if="tab === 'preview'">
