@@ -361,6 +361,86 @@ def test_prioritaet_laesst_sich_nachtraeglich_aendern(client):
     assert r.json()["data"]["priority"] == "high"
 
 
+# ── Admin-Werkzeuge (set-phase / raw-values) ─────────────────────────────────
+
+def _client_ohne_admin():
+    """Zweiter Client über dieselben (bereits gemonkeypatchten) Fakes –
+    angemeldet als Person OHNE Admin-Rechte."""
+    app = FastAPI()
+    _install_error_handlers(app)
+    app.include_router(pt.router)
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u9", "displayName": "Normalo", "permissions": []}
+    return TestClient(app)
+
+
+def test_set_phase_stellt_aktiven_auftrag_um(client):
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}:set-phase",
+                    json={"phase": "review", "reason": "Freigabe-Mail verloren"})
+    assert r.status_code == 200, r.text
+    d = r.json()["data"]
+    assert d["current_phase"] == "review"
+    # Epoch-Bump: sonst blieben Timer stumm, die im ersten Durchlauf schon feuerten.
+    assert d["runtime"]["epoch"] == 1
+    # Auch ZURÜCK muss gehen (das ist der Reparatur-Fall schlechthin).
+    r2 = client.post(f"/process-tickets/{tid}:set-phase",
+                     json={"phase": "start", "reason": "versehentlich weitergeschaltet"})
+    assert r2.json()["data"]["current_phase"] == "start"
+    assert r2.json()["data"]["runtime"]["epoch"] == 2
+
+
+def test_set_phase_verlangt_admin_und_grund(client):
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}:set-phase", json={"phase": "review", "reason": " "})
+    assert r.status_code == 422                       # Grund ist Pflicht
+    r = client.post(f"/process-tickets/{tid}:set-phase",
+                    json={"phase": "gibtsnicht", "reason": "x"})
+    assert r.status_code == 422                       # unbekannte Phase
+    fremd = _client_ohne_admin()
+    r = fremd.post(f"/process-tickets/{tid}:set-phase", json={"phase": "review", "reason": "x"})
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "ADMIN_REQUIRED"
+
+
+def test_set_phase_nicht_fuer_terminale(client):
+    """Fertige Aufträge nehmen den benannten Weg über :reopen."""
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    client.post(f"/process-tickets/{tid}:reject", json={"reason": "Budget"})
+    r = client.post(f"/process-tickets/{tid}:set-phase", json={"phase": "start", "reason": "x"})
+    assert r.status_code == 409
+
+
+def test_raw_values_ersetzt_verbatim_und_nur_fuer_admins(client):
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    # Roh-Reparatur darf Dinge, die der normale PATCH nicht darf (Feld entfernen,
+    # unbekannte Schlüssel stehen lassen) – genau dafür ist sie da.
+    r = client.put(f"/process-tickets/{tid}/raw-values",
+                   json={"values": {"base.age": 33, "alt.rest": "x"},
+                         "reason": "kaputten Zustand repariert"})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["values"] == {"base.age": 33, "alt.rest": "x"}
+    # Der Roh-LESE-Endpunkt liefert denselben ungefilterten Bestand – die
+    # normale Ticket-Antwort filtert auf Katalog-Felder (alt.rest fehlt dort).
+    roh = client.get(f"/process-tickets/{tid}/raw-values").json()["data"]["values"]
+    assert roh == {"base.age": 33, "alt.rest": "x"}
+    normal = client.get(f"/process-tickets/{tid}").json()["data"]["values"]
+    assert "alt.rest" not in normal
+    fremd = _client_ohne_admin()
+    r = fremd.put(f"/process-tickets/{tid}/raw-values",
+                  json={"values": {}, "reason": "x"})
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "ADMIN_REQUIRED"
+    assert fremd.get(f"/process-tickets/{tid}/raw-values").status_code == 403
+    # Grund bleibt Pflicht – ein Roh-Eingriff ohne Erklärung wäre im Verlauf blind.
+    r = client.put(f"/process-tickets/{tid}/raw-values", json={"values": {}})
+    assert r.status_code == 422
+
+
 def test_unbekannte_prioritaet_wird_abgelehnt(client):
     tid = client.post("/process-tickets", json={"processKey": "demo",
                                                 "values": {"base.name": "Max"}}).json()["data"]["id"]

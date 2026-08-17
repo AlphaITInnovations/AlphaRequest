@@ -849,6 +849,23 @@ class ReopenRequest(BaseModel):
     phase: Optional[str] = None
 
 
+class SetPhaseRequest(BaseModel):
+    phase: str
+    reason: str = ""
+
+
+class RawValuesRequest(BaseModel):
+    values: dict
+    reason: str = ""
+
+
+class RawValuesOut(BaseModel):
+    """UNGEFILTERTE Feldwerte – nur für den Admin-Roh-Editor. Die normale
+    Ticket-Antwort filtert auf Katalog-Felder; ein Editor auf der gefilterten
+    Sicht würde unsichtbare Alt-Schlüssel beim nächsten Speichern zerstören."""
+    values: dict
+
+
 @router.post("/process-tickets/{ticket_id}:archive", response_model=DataResponse[ProcessTicketOut])
 def archive_process_ticket(ticket_id: int, body: RejectRequest,
                            user: dict = Depends(get_current_user)):
@@ -969,6 +986,120 @@ def reopen_process_ticket(ticket_id: int, body: ReopenRequest,
     return DataResponse(data=_out(row, defn,
                                   vis.build_viewer_ctx(user, row, defn, group_ids=gids),
                                   user, gids))
+
+
+# ── Admin-Werkzeuge (Reparatur laufender Aufträge) ───────────────────────────
+# Beide Endpunkte sind HART auf Admins beschränkt – sie umgehen absichtlich die
+# normalen Schreibregeln (Phasen-Rechte, Feld-Sichtbarkeit, Validierung), denn
+# genau die verhindern in einem kaputten Zustand die Reparatur.
+
+@router.post("/process-tickets/{ticket_id}:set-phase",
+             response_model=DataResponse[ProcessTicketOut])
+def set_process_ticket_phase(ticket_id: int, body: SetPhaseRequest,
+                             user: dict = Depends(get_current_user)):
+    """AKTIVEN Auftrag auf eine beliebige Phase stellen (vor oder zurück).
+
+    Für hängende Aufträge: verlorene Freigabe-Mail, versehentlich
+    abgeschlossene Phase, leerlaufende Zuständigkeit. Nutzt dieselbe Mechanik
+    wie die Wiederaufnahme: Epoch-Bump (sonst blieben Timer stumm, die im
+    ersten Durchlauf schon gefeuert haben), Abteilungs-Stand der Zielphase wird
+    neu aufgebaut, on_enter-Automationen und Zuständigkeits-Mail laufen erneut.
+    Terminale Aufträge nehmen den benannten Weg über :reopen (mit Zielphase).
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    if not acc.is_admin(user):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED,
+                        "Nur Admins können die Phase eines Auftrags umstellen")
+    if _is_terminal(row):
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag ist abgeschlossen/abgelehnt – bitte über "
+                        "„Wieder aufnehmen“ (dort lässt sich die Zielphase wählen)")
+    defn = _load_pinned_defn(row)
+    grund = _pflicht_begruendung(body.reason)
+    von = pr.current_phase(defn, row["runtime"])
+    try:
+        runtime, status = pr.reopen(defn, row["runtime"], utcnow_iso(),
+                                    phase_key=body.phase, values=row.get("values") or {})
+    except ValueError as exc:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, str(exc),
+                        fields=[{"path": "phase", "code": "UNKNOWN_REF", "message": str(exc)}])
+    try:
+        row = store.update_runtime(ticket_id, runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                   status=status, expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+    phase = pr.current_phase(defn, row["runtime"])
+    # record (best-effort) wie bei den übrigen Phasenwechseln: ein kaputter
+    # Verlauf darf die Reparatur nicht verhindern – er wird geloggt.
+    events.record(row, events.ADVANCED, actor_id=user.get("id"), actor_name=_actor_name(user),
+                  body=grund, details={"from_phase": von.key if von else None,
+                                       "to_phase": phase.key if phase else None,
+                                       "forced": True, "epoch": runtime.get("epoch")})
+    # Wie bei der Wiederaufnahme: die Zielphase wird BETRETEN. Ein etwaiges
+    # auto_advance wird bewusst NICHT ausgeführt – die Phase ist hier eine
+    # ausdrückliche Admin-Entscheidung, keine Durchgangsstation.
+    engine.run_inline(row, defn, phase, {TriggerType.on_enter})
+    try:
+        pactions.notify_phase_entry(row, defn, phase)
+    except Exception:
+        logger.exception("Benachrichtigung nach Phasen-Umstellung von #%s fehlgeschlagen", ticket_id)
+    _safe_restamp(row, defn)
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn,
+                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  user, gids))
+
+
+def _admin_row_or_error(ticket_id: int, user: dict, aktion: str) -> dict:
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    if not acc.is_admin(user):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED, f"Nur Admins können {aktion}")
+    return row
+
+
+# Slash-Pfad statt `:aktion`-Suffix: Roh-Werte sind eine UNTER-RESSOURCE (wie
+# /definition und /watchers), keine Aktion – und ein GET auf `{id}:raw-values`
+# würde von der früher registrierten Route GET /process-tickets/{ticket_id}
+# verschluckt (Starlette matcht Pfad-Parameter über alles außer „/").
+@router.get("/process-tickets/{ticket_id}/raw-values",
+            response_model=DataResponse[RawValuesOut])
+def get_process_ticket_raw_values(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Die GESPEICHERTEN Feldwerte, ungefiltert (nur Admin, für den Roh-Editor)."""
+    row = _admin_row_or_error(ticket_id, user, "Roh-Werte lesen")
+    return DataResponse(data=RawValuesOut(values=row.get("values") or {}))
+
+
+@router.put("/process-tickets/{ticket_id}/raw-values",
+            response_model=DataResponse[RawValuesOut])
+def set_process_ticket_raw_values(ticket_id: int, body: RawValuesRequest,
+                                  user: dict = Depends(get_current_user)):
+    """Feldwerte eines Auftrags ROH ersetzen (Admin-Reparatur, auch archivierte).
+
+    BEWUSST ohne Phasen-Schreibrechte, Sichtbarkeits-Filter und Feld-Validierung:
+    repariert wird genau der Zustand, den die normalen Pfade nicht mehr zulassen
+    (z. B. eine leergelaufene Zuständigkeit). Zwei Zugeständnisse: abgeleitete
+    Felder werden nachgezogen (sonst widersprächen sie ihren Quellfeldern beim
+    nächsten normalen Speichern), und der Grund ist Pflicht. Im Verlauf stehen
+    NUR die geänderten Feld-Schlüssel, nie die Werte.
+    """
+    row = _admin_row_or_error(ticket_id, user, "Roh-Werte eines Auftrags ersetzen")
+    defn = _load_pinned_defn(row)
+    grund = _pflicht_begruendung(body.reason)
+    alt = row.get("values") or {}
+    neu = compute.apply_computed(defn, dict(body.values))
+    geaendert = sorted(k for k in set(alt) | set(neu) if alt.get(k) != neu.get(k))
+    try:
+        row = store.update_values(ticket_id, json.dumps(neu, ensure_ascii=False),
+                                  expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+    events.record(row, events.UPDATED, actor_id=user.get("id"), actor_name=_actor_name(user),
+                  body=grund, details={"fields": geaendert, "raw": True})
+    return DataResponse(data=RawValuesOut(values=row.get("values") or {}))
 
 
 # ── Beobachter:innen ─────────────────────────────────────────────────────────

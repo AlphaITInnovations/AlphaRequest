@@ -80,6 +80,34 @@ export async function getPinnedDefinition(id: number): Promise<unknown> {
   return data.data
 }
 
+// ── Admin-Werkzeuge (Reparatur) ───────────────────────────────────────────────
+// Alle drei sind HART auf Admins beschränkt – der Server antwortet sonst mit
+// 403 ADMIN_REQUIRED, egal was die Oberfläche anzeigt.
+
+/** Aktiven Auftrag auf eine beliebige Phase stellen (vor/zurück; Grund Pflicht). */
+export async function setTicketPhase(
+  id: number, phase: string, reason: string,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:set-phase`, { phase, reason })
+  return data.data
+}
+
+/** UNGEFILTERTE Roh-Werte für den Admin-Editor – die normale Ticket-Antwort
+ *  filtert auf Katalog-Felder, ein Editor darauf würde unsichtbare
+ *  Alt-Schlüssel beim nächsten Speichern zerstören. */
+export async function getRawValues(id: number): Promise<Record<string, unknown>> {
+  const { data } = await client.get(`/process-tickets/${id}/raw-values`)
+  return data.data.values
+}
+
+/** Roh-Werte VERBATIM ersetzen (Grund Pflicht). Liefert den neuen Bestand. */
+export async function setRawValues(
+  id: number, values: Record<string, unknown>, reason: string,
+): Promise<Record<string, unknown>> {
+  const { data } = await client.put(`/process-tickets/${id}/raw-values`, { values, reason })
+  return data.data.values
+}
+
 // ── Fachabteilungen einzeln quittieren ───────────────────────────────────────
 //
 // Eine Fachabteilungs-Phase ist erst fertig, wenn jede PFLICHT-Abteilung

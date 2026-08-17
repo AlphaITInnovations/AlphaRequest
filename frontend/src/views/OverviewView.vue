@@ -250,7 +250,11 @@ function vollstaendigBlaettern() {
 }
 
 function oeffnen(id: number) {
-  router.push(`/prozess-auftraege/${id}`)
+  // Admins öffnen aus der Auftragsliste die Admin-Ansicht (Leseansicht plus
+  // Reparatur-Werkzeuge); alle anderen die normale Leseansicht. Der Parameter
+  // vergibt KEINE Rechte – jeden Admin-Endpunkt prüft der Server selbst.
+  router.push(auth.isAdmin ? `/prozess-auftraege/${id}?ansicht=admin`
+                           : `/prozess-auftraege/${id}`)
 }
 
 // ── Laden ─────────────────────────────────────────────────────────────────────
