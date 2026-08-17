@@ -1245,7 +1245,26 @@
         }
       ],
       "constraints": [],
-      "automations": [],
+      "automations": [
+        {
+          "id": "erstellung_abgeschlossen",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null
+          },
+          "guard": null,
+          "action": {
+            "type": "auto_advance",
+            "to": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null
+          }
+        }
+      ],
       "layout": [
         {
           "type": "section",

@@ -132,3 +132,10 @@ def test_onboarding_seed_nutzt_die_neue_laufzeit():
     # Signatur-Titel: vorbefüllt aus base.title, manuell übersteuerbar.
     sig = felder["it.signature.title"]
     assert sig["computed"] == {"from": "base.title"} and sig["overridable"] is True
+    # Start-Phase = reine Erfassung: nach dem Anlegen schaltet der Auftrag ohne
+    # liegenzubleiben direkt in Phase 2 (on_enter + auto_advance), statt mit dem
+    # /der Ersteller:in als Bearbeiter:in in der Start-Phase zu warten.
+    start = next(p for p in defn["phases"] if p["kind"] == "start")
+    assert any(a["trigger"]["type"] == "on_enter"
+               and a["action"]["type"] == "auto_advance"
+               for a in start["automations"]), "Start-Phase muss direkt weiterschalten"
