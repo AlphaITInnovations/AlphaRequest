@@ -247,23 +247,29 @@ const zeilen = computed<Zeile[]>(() => {
  * alle anderen liefern nur Zeilen.
  */
 type AnzeigeElement =
-  | { art: 'kopf'; key: string; name: string; anzahl: number }
+  | { art: 'kopf'; key: string; id: string; name: string; anzahl: number; zu: boolean }
   | { art: 'zeile'; key: string; z: Zeile }
+
+/** Zugeklappte Abteilungs-Abschnitte – reiner Anzeige-Zustand dieses Besuchs. */
+const zugeklappt = ref<Record<string, boolean>>({})
+function abschnittUmklappen(id: string) {
+  zugeklappt.value = { ...zugeklappt.value, [id]: !zugeklappt.value[id] }
+}
 
 const anzeige = computed<AnzeigeElement[]>(() => {
   if (activeTab.value !== 'departments') {
     return zeilen.value.map((z) => ({ art: 'zeile', key: `${activeTab.value}-${z.id}`, z }))
   }
-  return abteilungenMitAufgaben.value.flatMap((g): AnzeigeElement[] => [
-    { art: 'kopf', key: `kopf-${g.id}`, name: g.name, anzahl: g.zeilen.length },
-    ...g.zeilen.map((z): AnzeigeElement => ({ art: 'zeile', key: `${g.id}-${z.id}`, z })),
-  ])
+  return abteilungenMitAufgaben.value.flatMap((g): AnzeigeElement[] => {
+    const zu = !!zugeklappt.value[g.id]
+    return [
+      { art: 'kopf', key: `kopf-${g.id}`, id: g.id, name: g.name,
+        anzahl: g.zeilen.length, zu },
+      ...(zu ? [] : g.zeilen.map((z): AnzeigeElement => (
+        { art: 'zeile', key: `${g.id}-${z.id}`, z }))),
+    ]
+  })
 })
-
-/** Kopfzeile „N Ergebnisse": im Abteilungs-Reiter zählen AUFTRÄGE, nicht
- *  Abschnitts-Einträge (ein Auftrag kann in mehreren Abschnitten stehen). */
-const ergebnisAnzahl = computed(() => (activeTab.value === 'departments'
-  ? meineAbteilungen.value.length : zeilen.value.length))
 
 // ── Zähler für die Kacheln (ungefiltert) ──────────────────────────────────────
 
@@ -460,16 +466,15 @@ onMounted(async () => {
         <div class="bg-gray-50 dark:bg-[#1A2130] border border-gray-200/80 dark:border-white/[0.09]
                     rounded-2xl overflow-hidden">
 
-          <div class="px-5 py-2 flex items-center justify-between gap-3 flex-wrap
-                      text-xs text-gray-400 border-b border-gray-100 dark:border-white/[0.04]">
-            <span>{{ ergebnisAnzahl }} {{ ergebnisAnzahl === 1 ? 'Ergebnis' : 'Ergebnisse' }}</span>
-            <!-- Status-Verteilung über ALLE für mich sichtbaren Aufträge -->
-            <div v-if="statusCounts.length" class="flex flex-wrap items-center gap-1.5">
-              <span v-for="[st, n] in statusCounts" :key="st"
-                    class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(st)">
-                {{ statusLabel(st) }} · {{ n }}
-              </span>
-            </div>
+          <!-- Keine Ergebnis-Zahl: die steht schon groß in den Kacheln. Nur die
+               Status-Verteilung über ALLE für mich sichtbaren Aufträge. -->
+          <div v-if="statusCounts.length"
+               class="px-5 py-2 flex items-center justify-end gap-1.5 flex-wrap
+                      border-b border-gray-100 dark:border-white/[0.04]">
+            <span v-for="[st, n] in statusCounts" :key="st"
+                  class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(st)">
+              {{ statusLabel(st) }} · {{ n }}
+            </span>
           </div>
 
           <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[560px] overflow-auto">
@@ -479,8 +484,16 @@ onMounted(async () => {
                  man gerade liest. -->
             <template v-for="el in anzeige" :key="el.key">
               <li v-if="el.art === 'kopf'"
+                  @click="abschnittUmklappen(el.id)"
                   class="sticky top-0 z-10 px-5 py-2 bg-gray-50 dark:bg-[#1A2130]
-                         border-b border-gray-100 dark:border-white/[0.04]">
+                         border-b border-gray-100 dark:border-white/[0.04]
+                         flex items-center gap-2 cursor-pointer select-none
+                         hover:bg-gray-100/70 dark:hover:bg-white/[0.04] transition">
+                <svg class="w-3.5 h-3.5 text-gray-400 transition-transform"
+                     :class="el.zu ? '-rotate-90' : ''"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
                 <span class="text-[11px] font-semibold uppercase tracking-wider
                              text-purple-600 dark:text-purple-300">{{ el.name }}</span>
                 <span class="text-[11px] text-gray-400">
