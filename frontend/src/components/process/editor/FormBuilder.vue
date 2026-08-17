@@ -182,6 +182,26 @@ const drag = ref<BuilderPos | null>(null)
 /** Ziel-Markierung: „<section>:<item>" bzw. „<section>:end". */
 const over = ref<string | null>(null)
 
+/**
+ * Einfüge-Linie am OBEREN Rand des Ziel-Elements – als Inset-Box-Shadow, damit
+ * sie KEINEN Platz einnimmt. Frühere Marker-Divs (h-1 -my-1, nur `v-if=drag`)
+ * erschienen erst beim Drag-Start und schoben mit `space-y` jedes Feld nach
+ * unten (kumuliert je Feld) – ab dem 4./5. Feld lag das Drop-Ziel dann nicht
+ * mehr unter dem Cursor. Ein Box-Shadow verschiebt nichts.
+ */
+const DROP_LINE = 'box-shadow: inset 0 3px 0 0 #3EAAB8'
+const DROP_BELOW = 'box-shadow: inset 0 -3px 0 0 #3EAAB8'
+
+function dropStyle(section: number, item: number | 'end') {
+  if (!drag.value) return undefined
+  if (over.value === marke(section, item)) return item === 'end' ? DROP_BELOW : DROP_LINE
+  return undefined
+}
+/** Wird gerade GENAU dieses Element gezogen? (halbtransparent darstellen). */
+function isDragged(section: number, item: number) {
+  return !!drag.value && drag.value.section === section && drag.value.item === item
+}
+
 function dragStart(pos: BuilderPos, e: DragEvent) {
   if (props.readonly) { e.preventDefault(); return }
   drag.value = pos
@@ -192,7 +212,10 @@ function dragEnd() { drag.value = null; over.value = null }
 
 function dropAt(target: BuilderPos) {
   if (!drag.value) return
-  commit(moveBuilderItem(props.definition, props.phaseIndex, drag.value, target))
+  // Drop auf die eigene Position ist kein Verschieben – sonst entstünde eine
+  // neue (inhaltsgleiche) Definition und der Editor gälte grundlos als geändert.
+  const same = drag.value.section === target.section && drag.value.item === target.item
+  if (!same) commit(moveBuilderItem(props.definition, props.phaseIndex, drag.value, target))
   dragEnd()
 }
 
@@ -242,17 +265,13 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
 
       <!-- Elemente -->
       <div class="p-2.5 space-y-1.5">
-        <template v-for="(it, ii) in sec.items" :key="`${si}-${ii}`">
-          <!-- Einfüge-Markierung -->
-          <div v-if="drag" class="h-1 -my-1 rounded transition-colors"
-               :class="over === marke(si, ii) ? 'bg-[#3EAAB8]' : ''"
-               @dragover.prevent="over = marke(si, ii)"
-               @drop.prevent="dropAt({ section: si, item: ii })" />
-
+        <template v-for="(it, ii) in sec.items"
+                  :key="it.type === 'field' ? `f-${it.ref}` : `k-${si}-${ii}`">
           <!-- Feld -->
           <div v-if="it.type === 'field'"
-               class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#212B3A]"
-               :class="drag ? 'pointer-events-auto' : ''"
+               class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#212B3A] transition-shadow"
+               :style="dropStyle(si, ii)"
+               :class="isDragged(si, ii) ? 'opacity-40' : ''"
                :draggable="!readonly && offenKey !== it.ref"
                @dragstart="dragStart({ section: si, item: ii }, $event)" @dragend="dragEnd"
                @dragover.prevent="over = marke(si, ii)"
@@ -352,7 +371,8 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
           <!-- Überschrift -->
           <div v-else-if="it.type === 'heading'"
                class="flex items-center gap-2 rounded-xl border border-dashed border-gray-200
-                      dark:border-white/10 px-2.5 py-1.5"
+                      dark:border-white/10 px-2.5 py-1.5 transition-shadow"
+               :style="dropStyle(si, ii)" :class="isDragged(si, ii) ? 'opacity-40' : ''"
                :draggable="!readonly" @dragstart="dragStart({ section: si, item: ii }, $event)"
                @dragend="dragEnd" @dragover.prevent="over = marke(si, ii)"
                @drop.prevent="dropAt({ section: si, item: ii })">
@@ -366,7 +386,9 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
 
           <!-- Hinweisbox -->
           <div v-else-if="it.type === 'note'"
-               class="rounded-xl border px-2.5 py-2 space-y-1.5" :class="NOTE_STYLE[it.tone as NoteTone].box"
+               class="rounded-xl border px-2.5 py-2 space-y-1.5 transition-shadow"
+               :class="[NOTE_STYLE[it.tone as NoteTone].box, isDragged(si, ii) ? 'opacity-40' : '']"
+               :style="dropStyle(si, ii)"
                :draggable="!readonly" @dragstart="dragStart({ section: si, item: ii }, $event)"
                @dragend="dragEnd" @dragover.prevent="over = marke(si, ii)"
                @drop.prevent="dropAt({ section: si, item: ii })">
@@ -385,7 +407,8 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
           </div>
 
           <!-- Trenner / Abstand -->
-          <div v-else class="flex items-center gap-2 px-2.5 py-1 text-[11px] text-gray-400"
+          <div v-else class="flex items-center gap-2 px-2.5 py-1 text-[11px] text-gray-400 transition-shadow"
+               :style="dropStyle(si, ii)" :class="isDragged(si, ii) ? 'opacity-40' : ''"
                :draggable="!readonly" @dragstart="dragStart({ section: si, item: ii }, $event)"
                @dragend="dragEnd" @dragover.prevent="over = marke(si, ii)"
                @drop.prevent="dropAt({ section: si, item: ii })">
@@ -476,11 +499,9 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
       </div>
       <div class="p-2.5 space-y-1.5">
         <template v-for="(key, ri) in rest" :key="key">
-          <div v-if="drag" class="h-1 -my-1 rounded transition-colors"
-               :class="over === marke(REST_SECTION, ri) ? 'bg-[#3EAAB8]' : ''"
-               @dragover.prevent="over = marke(REST_SECTION, ri)"
-               @drop.prevent="dropAt({ section: REST_SECTION, item: ri })" />
-          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#212B3A]"
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#212B3A] transition-shadow"
+               :style="dropStyle(REST_SECTION, ri)"
+               :class="isDragged(REST_SECTION, ri) ? 'opacity-40' : ''"
                :draggable="!readonly && offenKey !== key"
                @dragstart="dragStart({ section: REST_SECTION, item: ri }, $event)" @dragend="dragEnd"
                @dragover.prevent="over = marke(REST_SECTION, ri)"

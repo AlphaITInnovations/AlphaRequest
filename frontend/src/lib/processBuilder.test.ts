@@ -130,6 +130,44 @@ describe('moveBuilderItem', () => {
                               { section: REST_SECTION, item: 0 })
     expect(d.phases[0].fields.map((f) => f.ref)).toEqual(['b', 'a'])
   })
+
+  // Der vom Nutzer gemeldete Fall: viele Felder in EINEM Abschnitt. Die
+  // Index-Mathematik muss auch für die späteren (4./5./6.) Positionen stimmen –
+  // sowohl nach vorn als auch nach hinten.
+  describe('viele Felder in einem Abschnitt', () => {
+    const sechs = () => normalizeDefinition({
+      key: 'p', name: 'P',
+      fields: ['a', 'b', 'c', 'd', 'e', 'f'].map((k) => ({ key: k, widget: 'text' })),
+      phases: [{
+        key: 'eins', kind: 'start', responsibility: { kind: 'owner' },
+        fields: ['a', 'b', 'c', 'd', 'e', 'f'].map((ref) => ({ ref })),
+        layout: [{ type: 'section', title: 'S',
+                   items: ['a', 'b', 'c', 'd', 'e', 'f'].map((ref) => ({ type: 'field', ref })) }],
+      }],
+    })
+    const order = (d: ProcessDefinition) =>
+      d.phases[0].layout[0].items.map((it) => (it.type === 'field' ? it.ref : '?'))
+
+    it('das 6. Feld an den Anfang ziehen', () => {
+      const d = moveBuilderItem(sechs(), 0, { section: 0, item: 5 }, { section: 0, item: 0 })
+      expect(order(d)).toEqual(['f', 'a', 'b', 'c', 'd', 'e'])
+    })
+
+    it('das 5. Feld vor das 2. ziehen', () => {
+      const d = moveBuilderItem(sechs(), 0, { section: 0, item: 4 }, { section: 0, item: 1 })
+      expect(order(d)).toEqual(['a', 'e', 'b', 'c', 'd', 'f'])
+    })
+
+    it('das 2. Feld ans Ende ziehen (Index-Korrektur bei Vorwärts-Move)', () => {
+      const d = moveBuilderItem(sechs(), 0, { section: 0, item: 1 }, { section: 0, item: 6 })
+      expect(order(d)).toEqual(['a', 'c', 'd', 'e', 'f', 'b'])
+    })
+
+    it('das 4. Feld eine Position nach unten ziehen', () => {
+      const d = moveBuilderItem(sechs(), 0, { section: 0, item: 3 }, { section: 0, item: 5 })
+      expect(order(d)).toEqual(['a', 'b', 'c', 'e', 'd', 'f'])
+    })
+  })
 })
 
 describe('patchRef / pruneOrphans', () => {
