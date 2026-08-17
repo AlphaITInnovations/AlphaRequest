@@ -36,9 +36,10 @@ const search = ref('')
 
 /** Fällt `may_create` weg (älteres Backend), gilt der Prozess als anlegbar –
  *  der Server weist es notfalls mit 403 ab, aber wir sperren nichts vorsorglich
- *  aus, was erlaubt sein könnte. */
+ *  aus, was erlaubt sein könnte. Ein deaktivierter Prozess ist für niemanden
+ *  anlegbar. */
 function darfAnlegen(p: ProcessOut): boolean {
-  return p.may_create !== false
+  return p.may_create !== false && !p.disabled
 }
 
 /** Alles außer dem Basis-Ticket – das hat seinen eigenen Einstieg. */
@@ -159,7 +160,11 @@ onMounted(async () => {
                                       : 'text-gray-400 dark:text-gray-600'">
               {{ p.description }}
             </p>
-            <p v-if="!darfAnlegen(p)"
+            <p v-if="p.disabled"
+               class="text-[10px] text-red-400 dark:text-red-400/70 mt-1.5 uppercase tracking-wider font-medium">
+              Deaktiviert
+            </p>
+            <p v-else-if="!darfAnlegen(p)"
                class="text-[10px] text-gray-400 dark:text-gray-600 mt-1.5 uppercase tracking-wider font-medium">
               Keine Berechtigung
             </p>

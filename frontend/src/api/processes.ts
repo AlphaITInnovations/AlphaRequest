@@ -84,6 +84,16 @@ export async function publishVersion(key: string, version: number): Promise<Proc
   return data.data
 }
 
+/**
+ * Prozess global (de)aktivieren. Deaktiviert = niemand kann neue Aufträge
+ * anlegen, bis er wieder freigegeben wird. Laufende Aufträge bleiben unberührt.
+ */
+export async function setProcessActive(key: string, disabled: boolean): Promise<ProcessOut> {
+  const { data } = await client.post(
+    `/processes/${encodeURIComponent(key)}:set-active`, { disabled })
+  return data.data
+}
+
 /** Unter neuem Key kopieren (Quelle: veröffentlichte Version, sonst höchste). */
 export async function duplicateProcess(key: string, newKey: string): Promise<ProcessOut> {
   const { data } = await client.post(

@@ -287,6 +287,9 @@ class FakeDefs:
     def get_definition(self, key, ver):
         return {"version": ver, "definition": SEED_ROH} if key == DEFN.key else None
 
+    def is_disabled(self, key):
+        return False
+
 
 class FakeFires:
     def fired_map(self, tid, pk, ep):

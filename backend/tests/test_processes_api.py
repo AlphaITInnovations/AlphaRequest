@@ -8,6 +8,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from backend.api.v1 import processes as papi
+from backend.core.dependencies import get_current_user
 from backend.main import _install_error_handlers
 from backend.schemas.responses import api_error, ErrorCode
 from backend.api.v1.processes import router as processes_router
@@ -79,6 +81,7 @@ def test_process_routes_registered():
         "/processes/{key}/versions/{version:int}:publish",
         "/processes/{key}/versions/{version:int}:export",
         "/processes/{key}:duplicate",
+        "/processes/{key}:set-active",
         "/processes:import",
         # Ersetzt den Shell-Zugang (backend/scripts/seed_processes.py): ohne
         # diese Route ist eine frische Installation nur über den Server
@@ -86,3 +89,71 @@ def test_process_routes_registered():
         "/processes:seed",
     }
     assert expected.issubset(paths), expected - paths
+
+
+# ── Prozess global (de)aktivieren ──────────────────────────────────────────────
+
+class _FakeDefs:
+    """Nur, was der set-active-Endpunkt anfasst."""
+
+    def __init__(self):
+        self.state: dict[str, bool] = {}
+
+    def get_published(self, key):
+        return {"id": 1, "key": key, "version": 1, "status": "published",
+                "name": key, "definition": None} if key != "ghost" else None
+
+    def set_disabled(self, key, disabled, by_id=None, by_name=None):
+        self.state[key] = disabled
+        return {"key": key, "disabled": disabled}
+
+    def is_disabled(self, key):
+        return self.state.get(key, False)
+
+
+def _app(user, monkeypatch):
+    fake = _FakeDefs()
+    monkeypatch.setattr(papi, "db", fake)
+    monkeypatch.setattr(papi, "record_audit", lambda **kw: None)
+    app = FastAPI()
+    _install_error_handlers(app)
+    app.include_router(papi.router)
+    app.dependency_overrides[get_current_user] = lambda: user
+    return TestClient(app), fake
+
+
+ADMIN = {"id": "a", "displayName": "Admin", "permissions": ["admin"]}
+VIEWER = {"id": "v", "displayName": "Viewer", "permissions": ["view"]}
+
+
+def test_set_active_admin_toggles(monkeypatch):
+    client, fake = _app(ADMIN, monkeypatch)
+    r = client.post("/processes/onboarding:set-active", json={"disabled": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["disabled"] is True
+    assert fake.state["onboarding"] is True
+    # Wieder freigeben.
+    r = client.post("/processes/onboarding:set-active", json={"disabled": False})
+    assert r.json()["data"]["disabled"] is False
+
+
+def test_set_active_requires_admin(monkeypatch):
+    client, _ = _app(VIEWER, monkeypatch)
+    r = client.post("/processes/onboarding:set-active", json={"disabled": True})
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "ADMIN_REQUIRED"
+
+
+def test_set_active_blocks_system_process(monkeypatch):
+    client, _ = _app(ADMIN, monkeypatch)
+    # basis-ticket ist ein System-Prozess (seeds.SYSTEM_PROCESS_KEYS) – unantastbar.
+    r = client.post("/processes/basis-ticket:set-active", json={"disabled": True})
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "SYSTEM_PROCESS_READONLY"
+
+
+def test_set_active_unknown_process(monkeypatch):
+    client, _ = _app(ADMIN, monkeypatch)
+    r = client.post("/processes/ghost:set-active", json={"disabled": True})
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "PROCESS_NOT_FOUND"

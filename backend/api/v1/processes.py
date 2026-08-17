@@ -104,6 +104,10 @@ class ProcessOut(BaseModel):
     #: SYSTEM_PROCESS_READONLY). Die Oberfläche soll die Knöpfe deshalb gar nicht
     #: erst anbieten – abgeleitet aus dem Key, kein DB-Feld.
     is_system: bool = False
+    #: Global deaktiviert? Dann lassen sich keine neuen Aufträge anlegen. Eine
+    #: key-weite Eigenschaft (process_state), unabhängig von der Version – im
+    #: Katalog und in der veröffentlichten Ansicht gefüllt.
+    disabled: bool = False
     base_version: Optional[int] = None
     created_by: Optional[str] = None
     created_by_name: Optional[str] = None
@@ -120,6 +124,9 @@ def _out(row: dict) -> ProcessOut:
     daten = {k: row.get(k) for k in ProcessOut.model_fields}
     # Aus dem Key abgeleitet: die Zeile führt kein solches Feld (und soll keins).
     daten["is_system"] = seeds.is_system_process(row.get("key"))
+    # Nicht-optionales Bool: die meisten Zeilen führen die Spalte nicht (nur der
+    # Katalog/die veröffentlichte Ansicht setzen sie danach explizit).
+    daten["disabled"] = bool(row.get("disabled"))
     return ProcessOut(**daten)
 
 
@@ -158,6 +165,7 @@ def list_processes(user: dict = Depends(get_current_user)):
     dafür gelesen, aber NICHT mitgesendet – sie gehört nicht in eine Liste.
     """
     rows = db.list_published_catalog(include_definition=True)
+    gesperrt = db.disabled_keys()
     try:
         # Fachabteilungen (interne Gruppen) UND AD-Gruppen aus dem Login-Token:
         # das Alt-System berechtigte über beides. Katalog und Anlegen müssen
@@ -173,6 +181,7 @@ def list_processes(user: dict = Depends(get_current_user)):
     for r in rows:
         item = _out(r)
         item.definition = None          # Blob nicht in der Liste ausliefern
+        item.disabled = r.get("key") in gesperrt
         raw = r.get("definition") or {}
         item.icon = raw.get("icon")
         item.description = raw.get("description")
@@ -223,7 +232,9 @@ def get_published_process(key: str, user: dict = Depends(get_current_user)):
     row = db.get_published(key)
     if not row:
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {key}")
-    return DataResponse(data=_out(row))
+    item = _out(row)
+    item.disabled = db.is_disabled(key)
+    return DataResponse(data=item)
 
 
 class FieldAccessOut(BaseModel):
@@ -334,6 +345,38 @@ def publish_process_version(key: str, version: int, user: dict = Depends(get_cur
         raise
     _audit(user, "process_published", key, version=version)
     return DataResponse(data=_out(row))
+
+
+class SetActiveRequest(BaseModel):
+    #: True = deaktivieren (keine neuen Aufträge), False = wieder freigeben.
+    disabled: bool
+
+
+@router.post("/processes/{key}:set-active", response_model=DataResponse[ProcessOut])
+def set_process_active(key: str, body: SetActiveRequest,
+                       user: dict = Depends(get_current_user)):
+    """Prozess global (de)aktivieren.
+
+    Deaktiviert blockiert NUR das Anlegen neuer Aufträge – laufende Aufträge und
+    ihre Phasen bleiben unberührt. Der Zustand gilt key-weit über alle Versionen
+    und überlebt eine Neuveröffentlichung. System-Prozesse sind ausgenommen
+    (`_require_editable`): das Produkt garantiert ihre Verfügbarkeit.
+    """
+    _require_admin(user)
+    _require_editable(key)
+    row = db.get_published(key)
+    if not row:
+        # Nur veröffentlichte Prozesse sind überhaupt anlegbar – nur die lassen
+        # sich sinnvoll (de)aktivieren. So bleibt kein verwaister Zustand zurück.
+        raise api_error(404, ErrorCode.PROCESS_NOT_FOUND,
+                        f"Kein veröffentlichter Prozess: {key}")
+    db.set_disabled(key, body.disabled, user.get("id"),
+                    user.get("displayName") or user.get("email"))
+    _audit(user, "process_disabled" if body.disabled else "process_enabled",
+           key, disabled=body.disabled)
+    item = _out(row)
+    item.disabled = body.disabled
+    return DataResponse(data=item)
 
 
 class DuplicateRequest(BaseModel):

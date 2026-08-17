@@ -58,14 +58,18 @@ const viewer = computed<SimViewer>(() => ({
 }))
 
 const startPhase = computed(() => definition.value?.phases?.[0] ?? null)
+/** Prozess global deaktiviert? Dann kein Formular, sondern ein Hinweis. */
+const deaktiviert = ref(false)
 
 async function loadProcess(key: string) {
   if (!key) { definition.value = null; return }
+  deaktiviert.value = false
   try {
     const [row, access] = await Promise.all([
       processesApi.getPublished(key),
       processesApi.getFieldAccess(key),
     ])
+    deaktiviert.value = row.disabled === true
     definition.value = normalizeDefinition(row.definition)
     zugriff.value = {
       visible: new Set(access.visible_fields),
@@ -186,7 +190,22 @@ onMounted(async () => {
           </div>
         </div>
 
-        <template v-if="definition && startPhase">
+        <!-- Global deaktiviert: gar kein Formular anbieten. Der Server würde das
+             Anlegen ohnehin mit 409 abweisen; ein ausgefülltes Formular, das beim
+             Absenden scheitert, wäre nur frustrierend. -->
+        <div v-if="definition && deaktiviert"
+             class="rounded-2xl border border-amber-200 dark:border-amber-500/30
+                    bg-amber-50 dark:bg-amber-900/20 px-5 py-4">
+          <p class="text-sm text-amber-900 dark:text-amber-200">
+            Der Prozess <span class="font-medium">{{ title || selectedKey }}</span> ist derzeit
+            deaktiviert – es lassen sich keine neuen Aufträge anlegen. Bitte wende dich an die
+            Administration, wenn du ihn brauchst.
+          </p>
+          <button @click="router.push('/prozess-auftraege/neu')"
+                  class="text-sm text-[#3EAAB8] hover:underline mt-3">Zur Auswahl</button>
+        </div>
+
+        <template v-if="definition && startPhase && !deaktiviert">
           <!-- Kein Prioritäts-Feld: die Priorität ist überall ausgeblendet, bis
                geklärt ist, wie sie genutzt wird (Feld bleibt in DB und API). -->
           <section class="card-section mb-4">

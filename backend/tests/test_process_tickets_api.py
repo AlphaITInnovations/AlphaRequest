@@ -98,6 +98,10 @@ DEFN_FIXED = {**DEFN, "key": "fix", "titleEditable": False}
 class FakeDefs:
     def __init__(self):
         self.definition_loads = 0
+        self.disabled: set[str] = set()
+
+    def is_disabled(self, key):
+        return key in self.disabled
 
     def get_published(self, key):
         if key == "demo":
@@ -159,6 +163,19 @@ def test_create_rejects_unknown_process(client):
     r = client.post("/process-tickets", json={"processKey": "ghost"})
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "PROCESS_NOT_FOUND"
+
+
+def test_create_blocked_when_process_disabled(client, defs):
+    """Ein global deaktivierter Prozess lässt kein Anlegen zu – auch nicht für
+    Admins mit Erstellrecht (die Sperre gilt bis zur Freigabe)."""
+    defs.disabled.add("demo")
+    r = client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": "Max"}})
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "PROCESS_DISABLED"
+    # Nach Freigabe geht es wieder.
+    defs.disabled.discard("demo")
+    assert client.post("/process-tickets",
+                       json={"processKey": "demo", "values": {"base.name": "Max"}}).status_code == 200
 
 
 def test_create_ok(client):

@@ -4,7 +4,7 @@ from backend.database.users import USERS_DDL, USERS_MIGRATIONS
 from backend.database.audit_log import AUDIT_LOG_DDL
 from backend.database.attachments import ATTACHMENTS_DDL, ATTACHMENTS_MIGRATIONS
 from backend.database.process_definitions import (
-    PROCESS_DEFINITIONS_DDL, PROCESS_DEFINITIONS_MIGRATIONS,
+    PROCESS_DEFINITIONS_DDL, PROCESS_DEFINITIONS_MIGRATIONS, PROCESS_STATE_DDL,
 )
 from backend.database.process_tickets import PROCESS_TICKETS_DDL, PROCESS_TICKETS_MIGRATIONS
 from backend.database.process_ticket_events import (
@@ -29,6 +29,7 @@ def init_db():
         _exec(conn, AUDIT_LOG_DDL)
         _exec(conn, ATTACHMENTS_DDL)
         _exec(conn, PROCESS_DEFINITIONS_DDL)
+        _exec(conn, PROCESS_STATE_DDL)
         _exec(conn, PROCESS_TICKETS_DDL)
         _exec(conn, PROCESS_TICKET_EVENTS_DDL)
         _exec(conn, PROCESS_TICKET_WATCHERS_DDL)

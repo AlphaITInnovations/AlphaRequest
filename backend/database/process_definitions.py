@@ -74,6 +74,22 @@ PROCESS_DEFINITIONS_MIGRATIONS = [
     "ALTER TABLE process_definitions ADD INDEX IF NOT EXISTS idx_status (status)",
 ]
 
+# Globale Verfügbarkeit JE PROZESS-SCHLÜSSEL – bewusst eine eigene Tabelle und
+# keine Spalte an process_definitions: „deaktiviert" ist eine Eigenschaft des
+# ganzen Prozesses (aller Versionen), nicht einer einzelnen Version. Ein
+# deaktivierter Prozess bleibt deaktiviert, auch wenn eine neue Version
+# veröffentlicht wird. Fehlt eine Zeile, gilt der Prozess als aktiv.
+PROCESS_STATE_DDL = """
+CREATE TABLE IF NOT EXISTS process_state (
+    `key`            VARCHAR(150) PRIMARY KEY,
+    disabled         TINYINT(1) NOT NULL DEFAULT 0,
+    disabled_at      DATETIME NULL,
+    disabled_by      VARCHAR(255) NULL,
+    disabled_by_name VARCHAR(255) NULL,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
 _COLS = ("id, `key`, version, status, name, definition_json, base_version, rev, "
          "created_by, created_by_name, created_at, updated_at, published_at")
 
@@ -208,6 +224,84 @@ def list_published_catalog(include_definition: bool = False) -> list[dict]:
     finally:
         conn.close()
     return [_row_to_dict(r) for r in rows]
+
+
+# ── Globale Verfügbarkeit (deaktivieren/freigeben) ────────────────────────────
+
+def is_disabled(key: str) -> bool:
+    """Ist der Prozess global deaktiviert? Fehlende Zeile ⇒ aktiv (False)."""
+    conn = get_connection()
+    try:
+        row = _fetchone(conn, "SELECT disabled FROM process_state WHERE `key`=%s", (key,))
+    finally:
+        conn.close()
+    return bool(row and row["disabled"])
+
+
+def disabled_keys() -> set:
+    """Alle deaktivierten Schlüssel auf einmal – für den Katalog (kein N+1)."""
+    conn = get_connection()
+    try:
+        rows = _fetchall(conn, "SELECT `key` FROM process_state WHERE disabled=1")
+    finally:
+        conn.close()
+    return {r["key"] for r in rows}
+
+
+def get_state(key: str) -> dict:
+    """Verfügbarkeits-Zustand eines Prozesses (immer vollständig, auch ohne Zeile)."""
+    conn = get_connection()
+    try:
+        row = _fetchone(
+            conn,
+            "SELECT disabled, disabled_at, disabled_by, disabled_by_name "
+            "FROM process_state WHERE `key`=%s",
+            (key,),
+        )
+    finally:
+        conn.close()
+    out = {"key": key, "disabled": False, "disabled_at": None,
+           "disabled_by": None, "disabled_by_name": None}
+    if row:
+        out["disabled"] = bool(row["disabled"])
+        at = row.get("disabled_at")
+        out["disabled_at"] = at.isoformat() if hasattr(at, "isoformat") else at
+        out["disabled_by"] = row.get("disabled_by")
+        out["disabled_by_name"] = row.get("disabled_by_name")
+    return out
+
+
+def set_disabled(key: str, disabled: bool,
+                 by_id: Optional[str] = None, by_name: Optional[str] = None) -> dict:
+    """Prozess (de)aktivieren. Upsert je Schlüssel; gibt den neuen Zustand zurück."""
+    conn = get_connection()
+    try:
+        conn.begin()
+        if disabled:
+            _exec(
+                conn,
+                "INSERT INTO process_state (`key`, disabled, disabled_at, disabled_by, disabled_by_name) "
+                "VALUES (%s, 1, NOW(), %s, %s) "
+                "ON DUPLICATE KEY UPDATE disabled=1, disabled_at=NOW(), "
+                "disabled_by=VALUES(disabled_by), disabled_by_name=VALUES(disabled_by_name)",
+                (key, by_id, by_name),
+            )
+        else:
+            _exec(
+                conn,
+                "INSERT INTO process_state (`key`, disabled, disabled_at, disabled_by, disabled_by_name) "
+                "VALUES (%s, 0, NULL, %s, %s) "
+                "ON DUPLICATE KEY UPDATE disabled=0, disabled_at=NULL, "
+                "disabled_by=VALUES(disabled_by), disabled_by_name=VALUES(disabled_by_name)",
+                (key, by_id, by_name),
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return get_state(key)
 
 
 # ── Write ────────────────────────────────────────────────────────────────────
@@ -502,6 +596,9 @@ def delete_process(key: str) -> int:
                 f"{key} wird noch von {offen} Auftrag/Aufträgen referenziert")
         cur = _exec(conn, "DELETE FROM process_definitions WHERE `key`=%s", (key,))
         n = cur.rowcount or 0
+        # Verfügbarkeits-Zustand mitnehmen – sonst bliebe eine verwaiste Zeile
+        # zurück, die einen später gleichnamigen Prozess sofort deaktiviert zeigte.
+        _exec(conn, "DELETE FROM process_state WHERE `key`=%s", (key,))
         conn.commit()
     except Exception:
         conn.rollback()

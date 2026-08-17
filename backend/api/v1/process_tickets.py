@@ -323,6 +323,13 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {body.processKey}")
     defn = ProcessDefinition.model_validate(pub["definition"])
 
+    # Global deaktiviert? Dann lässt sich kein neuer Auftrag anlegen – unabhängig
+    # von den Erstellrechten (die Sperre gilt für alle bis zur Freigabe).
+    if defstore.is_disabled(defn.key):
+        raise api_error(409, ErrorCode.PROCESS_DISABLED,
+                        f"Der Prozess „{defn.name}“ ist derzeit deaktiviert – es können keine "
+                        "neuen Aufträge angelegt werden.")
+
     # Erstellrechte kommen aus der Definition (createPermissions). Admins dürfen
     # immer; für alle anderen greift das erst, wenn die Endpunkte über Admin
     # hinaus geöffnet werden – die Prüfung sitzt schon an der richtigen Stelle.

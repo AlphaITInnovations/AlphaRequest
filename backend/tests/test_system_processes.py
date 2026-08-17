@@ -367,6 +367,12 @@ class FakeDefs:
     def list_published_catalog(self, include_definition=False):
         return [self._row(SYSTEM_KEY), self._row("hardware")]
 
+    def is_disabled(self, key):
+        return False
+
+    def disabled_keys(self):
+        return set()
+
 
 @pytest.fixture
 def api(monkeypatch):

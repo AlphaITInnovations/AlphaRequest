@@ -314,6 +314,10 @@ export interface ProcessOut {
    * älteres Backend das Merkmal nicht mitschickt – siehe lib/processSystem.ts.
    */
   is_system?: boolean | null
+  /** Global deaktiviert? Dann lassen sich keine neuen Aufträge anlegen. Key-weit
+   *  (unabhängig von der Version); im Katalog und in der veröffentlichten Ansicht
+   *  gefüllt. Fehlt das Feld (älteres Backend), gilt der Prozess als aktiv. */
+  disabled?: boolean | null
   /** Nur im Katalog (GET /processes): darf DIESE Person hier anlegen? */
   may_create?: boolean | null
   /** Nur im Katalog: Symbol aus der Definition (die selbst nicht mitkommt). */

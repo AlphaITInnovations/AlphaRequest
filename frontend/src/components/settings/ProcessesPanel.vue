@@ -10,7 +10,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   createDraft, deleteVersion, exportVersion, listProcesses, listVersions, publishVersion,
-  requestProcessDelete,
+  requestProcessDelete, setProcessActive,
 } from '@/api/processes'
 import { errorCode, errorMessage } from '@/lib/processErrors'
 import {
@@ -266,6 +266,36 @@ Mit den Aufträgen löschen?`)) return
   }
 }
 
+/**
+ * Prozess global (de)aktivieren. Nur bei veröffentlichten, nicht-System-Prozessen
+ * sinnvoll: nur die sind anlegbar, und System-Prozesse sind ohnehin unantastbar.
+ * Deaktiviert = niemand kann neue Aufträge anlegen; laufende bleiben unberührt.
+ */
+function canToggleActive(p: ProcessOut): boolean {
+  return !isSystem(p) && p.status === 'published'
+}
+
+async function toggleActive(p: ProcessOut) {
+  const willDisable = !p.disabled
+  if (willDisable && !confirm(
+    `„${p.name || p.key}“ deaktivieren?\n\n`
+    + 'Es können danach keine neuen Aufträge dieses Prozesses mehr angelegt werden, '
+    + 'bis er wieder freigegeben wird. Laufende Aufträge sind nicht betroffen.')) return
+  busy.value = `a:${p.key}`
+  try {
+    await setProcessActive(p.key, willDisable)
+    showToast(willDisable
+      ? `„${p.name || p.key}“ deaktiviert – keine neuen Aufträge mehr möglich`
+      : `„${p.name || p.key}“ wieder freigegeben`)
+    await reload()
+  } catch (e) {
+    if (isSystemReadonlyError(e)) reportSystemBlock()
+    else showToast(errorMessage(e, 'Statusänderung fehlgeschlagen'), false)
+  } finally {
+    busy.value = null
+  }
+}
+
 async function remove(p: ProcessOut) {
   if (!confirm(
     `Entwurf v${p.version} von „${p.name || p.key}“ wirklich löschen?\n\n`
@@ -427,6 +457,12 @@ onMounted(load)
                                bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
                     System
                   </span>
+                  <span v-if="r.disabled"
+                        title="Deaktiviert – es lassen sich keine neuen Aufträge anlegen"
+                        class="ml-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full
+                               bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                    Deaktiviert
+                  </span>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-gray-300">v{{ r.version }}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-gray-400">
@@ -439,6 +475,16 @@ onMounted(load)
                                    text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5
                                    disabled:opacity-40 transition">
                       Bearbeiten
+                    </button>
+                    <!-- Global (de)aktivieren: sperrt/erlaubt das Anlegen neuer
+                         Aufträge. Freigeben grün, Deaktivieren zurückhaltend. -->
+                    <button v-if="canToggleActive(r)" @click.stop="toggleActive(r)"
+                            :disabled="busy === `a:${r.key}`"
+                            :class="['px-2.5 py-1 rounded-lg border transition disabled:opacity-40',
+                                     r.disabled
+                                       ? 'border-green-300 dark:border-green-500/40 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20'
+                                       : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-700']">
+                      {{ r.disabled ? 'Freigeben' : 'Deaktivieren' }}
                     </button>
                     <button @click.stop="openDuplicate(r)"
                             class="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/10
