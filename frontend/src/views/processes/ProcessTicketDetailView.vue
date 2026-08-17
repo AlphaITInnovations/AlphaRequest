@@ -97,15 +97,8 @@ const abilities = computed(() => (leseModus.value
       manage_watchers: false, attach: false, reopen: false, archive: false, delete: false }
   : serverAbilities.value))
 
-/** Gäbe es in der Bearbeitungsansicht überhaupt etwas zu tun? */
-const koennteBearbeiten = computed(() => {
-  const a = serverAbilities.value
-  return a.edit || a.attach || a.manage_watchers || a.reopen || a.archive || a.delete
-})
-
-function zurBearbeitung() {
-  router.replace({ query: { ...route.query, ansicht: 'bearbeiten' } })
-}
+// BEWUSST kein Wechsel-Knopf in der Leseansicht: in die Bearbeitung kommt man
+// nur über die richtigen Einstiege (Arbeits-Reiter der Übersicht, Mail-Link).
 
 /** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
 const fieldLabels = computed<Record<string, string>>(() => {
@@ -293,14 +286,6 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
       <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
 
       <template v-else>
-        <!-- Leseansicht: nur der bewusste Wechsel zur Bearbeitung (für alle, die
-             laut Server etwas dürfen) – ohne erklärenden Hinweis-Banner. -->
-        <div v-if="leseModus && ticket && koennteBearbeiten" class="mb-4 flex justify-end">
-          <button @click="zurBearbeitung" class="btn-secondary text-sm">
-            Zur Bearbeitungsansicht
-          </button>
-        </div>
-
         <BasisTicketDetail v-if="istBasis && ticket && definition"
                            :ticket="ticket" :definition="definition" :sources="sources"
                            :readonly="leseModus" />
