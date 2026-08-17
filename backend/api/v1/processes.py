@@ -381,11 +381,45 @@ class ImportRequest(BaseModel):
 
 @router.post("/processes:import", response_model=DataResponse[ProcessOut])
 def import_process(body: ImportRequest, user: dict = Depends(get_current_user)):
-    """Import: der Ziel-key muss bestätigt werden (nie allein aus dem JSON)."""
+    """Import: der Ziel-key muss bestätigt werden (nie allein aus dem JSON).
+
+    Gruppen-Platzhalter der ausgelieferten JSONs (`HIER_GRUPPEN_ID_*`) werden
+    gegen die Gruppen DIESER Installation aufgelöst – seit dem Wegfall des
+    Seed-Dialogs ist der manuelle Import DER Weg, Repo-Definitionen
+    einzuspielen. Fail-closed wie beim Seeder: ein stehen gebliebener
+    Platzhalter würde still einen dauerhaft kaputten Prozess anlegen (niemand
+    zuständig, vertrauliche Felder für niemanden sichtbar). Unbekannte ECHTE
+    Gruppen-IDs sind dagegen erlaubt: der Import erzeugt einen Entwurf, dessen
+    Fehler der Editor anzeigt und reparieren lässt.
+    """
     _require_admin(user)
     _require_editable(body.targetKey)
     raw = body.definition.model_dump(by_alias=True)
     raw["key"] = body.targetKey
+
+    try:
+        from backend.database.groups import get_groups
+        index = seeds.build_group_index(get_groups())
+    except seeds.SeedError as exc:
+        # Mehrdeutige Gruppennamen: Auflösung wäre Raterei – lieber ablehnen.
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, str(exc))
+    except Exception:
+        logger.warning("Gruppen für die Platzhalter-Auflösung nicht ladbar – "
+                       "Import prüft nur auf verbliebene Platzhalter")
+        index = {}
+    raw = seeds.replace_placeholders(raw, seeds.build_placeholder_mapping(index))
+
+    reste = seeds.unresolved_placeholders(raw)
+    if reste:
+        fehlende = sorted({seeds.PLACEHOLDER_GROUP_NAMES.get(wert, wert)
+                           for _pfad, wert in reste})
+        raise api_error(
+            422, ErrorCode.VALIDATION_FAILED,
+            "Gruppen-Platzhalter nicht auflösbar – bitte zuerst diese "
+            f"Fachabteilungen anlegen: {', '.join(fehlende)}",
+            fields=[{"path": pfad, "code": "UNRESOLVED_PLACEHOLDER", "message": wert}
+                    for pfad, wert in reste])
+
     try:
         defn = ProcessDefinition.model_validate(raw)
     except Exception:

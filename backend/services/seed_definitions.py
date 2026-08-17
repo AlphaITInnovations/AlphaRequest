@@ -237,6 +237,14 @@ def check_group_refs(defn: dict, known_group_ids: set[str]) -> list[str]:
     return probleme
 
 
+def unresolved_placeholders(defn: dict) -> list[tuple[str, str]]:
+    """NUR die unaufgelösten Platzhalter (Pfad, Platzhalter) – für den manuellen
+    Import: unbekannte echte Gruppen-IDs sind dort erlaubt (der Entwurf wird im
+    Editor repariert), ein stehen gebliebener Platzhalter aber nie."""
+    return [(pfad, wert) for pfad, wert in collect_group_refs(defn)
+            if _PLACEHOLDER_RE.fullmatch(wert)]
+
+
 # ── Ergebnis-Berichte ────────────────────────────────────────────────────────
 
 @dataclass

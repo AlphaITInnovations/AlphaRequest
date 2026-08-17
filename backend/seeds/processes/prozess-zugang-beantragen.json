@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "key": "zugang-beantragen",
   "name": "Zugang beantragen (Onboarding nach Vertragsrücklauf)",
-  "description": "Onboarding-Prozess 2: Erfassung aller Personal-, IT- und Fuhrpark-Daten einer neuen Mitarbeiterin / eines neuen Mitarbeiters und anschließende Umsetzung durch die Fachabteilungen. Ablauf: Erstellung (Basisdaten) → Bearbeitung durch Sekretariat GL → Bearbeitung durch Vorgesetzte:n (IT/Signatur) → Durchführung durch die Fachabteilungen (IT, Personalabteilung, Fuhrpark nur bei Dienstwagen).\n\nAbweichungen zum Alt-System:\n• Der automatische Start aus Prozess 1 „Einstellung Mitarbeiter:in“ (Spawn beim Vertragsrücklauf, inkl. Datenübernahme) wird von der Laufzeit noch nicht unterstützt (Action spawn_process fehlt). Dieser Prozess muss nach dem Vertragsrücklauf MANUELL gestartet und mit den Basisdaten aus P1 gefüllt werden.\n• Die Personalnummer (personal.personal_number) wurde bisher serverseitig aus dem Nummernkreis der Vertragsfirma vergeben; die Action assign_sequence bzw. das Widget server_generated fehlt noch → Feld ist überall nur lesend.\n• Die Phase „Bearbeitung durch Vorgesetzten“ war im Alt-System an eine vom Sekretariat GL frei gewählte Person zugewiesen (Feld „Nächster Bearbeiter“ / _next_assignee). Eine solche dynamische Auswahl kennt das neue Format nicht – die Phase liegt daher bei der Erstellerin / dem Ersteller des Prozesses.\n• Bundesland-Ableitung aus der PLZ, Vorbefüllung des Signatur-Titels und die Vorbelegung „Infopostfach = an“ entfallen (keine Berechnungs-/Default-Logik).\n• Die Fachabteilungs-Auswahl speichert jetzt Gruppen-IDs statt Gruppennamen; „Sonstige“ wird über die Freitext-Option des Feldes erfasst.\n• Feld-Sichtbarkeit wie bisher: Basisdaten für alle Beteiligten, personal.* nur Personalabteilung, it.* nur IT, fuhrpark.* nur Fuhrpark (Voll-Sicht der bearbeitenden Stellen bleibt über grantsFullView erhalten).",
+  "description": "Onboarding: Erfassung aller Personal-, IT- und Fuhrpark-Daten einer neuen Mitarbeiterin / eines neuen Mitarbeiters und anschließende Umsetzung durch die Fachabteilungen. Ablauf: Erstellung (Basisdaten) → Bearbeitung durch Sekretariat GL (vergibt beim Abschluss automatisch die Personalnummer aus dem Nummernkreis der Vertragsfirma und wählt die nächste bearbeitende Person) → Bearbeitung durch Vorgesetzte:n (IT/Signatur) → Durchführung durch die Fachabteilungen (IT, Personalabteilung, Fuhrpark nur bei Dienstwagen).\n\nAbweichungen zum Alt-System:\n• Der automatische Start aus „Einstellung Mitarbeiter:in“ (Spawn beim Vertragsrücklauf inkl. Datenübernahme) existiert bewusst nicht mehr – dieser Prozess wird nach dem Vertragsrücklauf manuell gestartet.\n• Bundesland-Ableitung aus der PLZ (OpenPLZ-API) und die Vorbelegung „Infopostfach = an“ entfallen.\n• Die Fachabteilungs-Auswahl speichert Gruppen-IDs statt Gruppennamen; „Sonstige“ wird über die Freitext-Option des Feldes erfasst.\n• Feld-Sichtbarkeit wie bisher: Basisdaten für alle Beteiligten, personal.* nur Personalabteilung, it.* nur IT, fuhrpark.* nur Fuhrpark (Voll-Sicht der bearbeitenden Stellen über grantsFullView).",
   "icon": "🧑‍💼",
   "createPermissions": {
     "everyone": false,
@@ -456,8 +456,8 @@
     {
       "key": "personal.personal_number",
       "label": "Personalnummer",
-      "widget": "text",
-      "help": "Wird im Alt-System beim „Weitergeben“ durch das Sekretariat GL automatisch aus dem Nummernkreis der Firma lt. Arbeitsvertrag vergeben. Die dafür nötige Action (assign_sequence) und das Widget server_generated gibt es in der Laufzeit noch nicht – das Feld ist daher überall nur lesend und muss bis dahin außerhalb des Prozesses vergeben und nachgetragen werden.",
+      "widget": "server_generated",
+      "help": "Wird beim Abschluss der Phase „Bearbeitung durch Sekretariat GL“ automatisch aus dem Nummernkreis der Firma lt. Arbeitsvertrag vergeben (wie im Alt-System beim „Weitergeben“).",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -470,6 +470,28 @@
           "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
         ]
       },
+      "computed": null,
+      "overridable": false,
+      "assign": {
+        "action": "assign_sequence",
+        "counter": "personalnummer",
+        "companyRef": "base.contract_company"
+      },
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "ablauf.naechster_bearbeiter",
+      "label": "Nächste:r Bearbeiter:in (Vorgesetzte:r)",
+      "widget": "user",
+      "help": "Das Sekretariat GL wählt hier, wer die Phase „Bearbeitung durch Vorgesetzten“ übernimmt (im Alt-System das Feld „Nächster Bearbeiter“).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -549,7 +571,7 @@
       "key": "it.signature.title",
       "label": "Titel (Signatur)",
       "widget": "text",
-      "help": "Im Alt-Formular aus „Titel“ (base.title) vorbefüllt und danach frei änderbar – diese Vorbefüllung gibt es im neuen Format nicht.",
+      "help": "Aus „Titel“ (Basisdaten) vorbefüllt und danach frei änderbar – ein manuell gesetzter Wert bleibt erhalten.",
       "placeholder": "Wird automatisch aus Basisdaten übernommen",
       "options": [],
       "optionsSource": null,
@@ -562,8 +584,10 @@
           "HIER_GRUPPEN_ID_IT_EINSETZEN"
         ]
       },
-      "computed": null,
-      "overridable": false,
+      "computed": {
+        "from": "base.title"
+      },
+      "overridable": true,
       "assign": null,
       "mode": null,
       "item": []
@@ -1382,6 +1406,13 @@
           "visibleWhen": null
         },
         {
+          "ref": "ablauf.naechster_bearbeiter",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "it.timebutler.vacation_year",
           "mode": "editable",
           "required": true,
@@ -1448,9 +1479,10 @@
       "enterStatus": null,
       "grantsFullView": true,
       "responsibility": {
-        "kind": "owner",
+        "kind": "assignable",
         "group": null,
         "user": null,
+        "fromField": "ablauf.naechster_bearbeiter",
         "rule": [],
         "resetOnDescriptionChange": false
       },
