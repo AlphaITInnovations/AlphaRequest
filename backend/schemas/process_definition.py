@@ -828,8 +828,27 @@ class ProcessDefinition(_Base):
             # ohne dass es jemandem auffällt.
             if p.approval.emailBody:
                 from backend.services import mail_template as _mt
+                feld_je_key = {f.key: f for f in self.fields}
                 for ref in _mt.field_refs(p.approval.emailBody):
                     _need(ref, f"Phase „{p.key}“.approval.emailBody (Variable «{ref}»)")
+                    f = feld_je_key.get(ref)
+                    # Nicht-skalare Felder lassen sich nicht als Text einsetzen –
+                    # sie stünden sonst als roher Datensatz in der Mail.
+                    if f and f.widget in (Widget.collection, Widget.attachment):
+                        raise ValueError(
+                            f"Phase „{p.key}“.approval.emailBody: Variable «{ref}» verweist auf ein "
+                            f"Feld vom Typ „{f.widget.value}“ – das lässt sich nicht als Text in die "
+                            f"Mail einsetzen. Bitte ein einfaches Feld verwenden.")
+                # Kollision Spezial-Variable ↔ Feld-Key: sonst gewänne still die
+                # Spezial-Variable und in der Mail stünde der Auftragstitel/-id statt
+                # des Feldwerts, ohne Warnung.
+                for sv in _mt.variables(p.approval.emailBody):
+                    if sv in _mt.SPECIAL_VARS and sv in feld_je_key:
+                        gemeint = "den Auftragstitel" if sv == "title" else "die Auftragsnummer"
+                        raise ValueError(
+                            f"Phase „{p.key}“.approval.emailBody: «{sv}» ist als Mail-Variable für "
+                            f"{gemeint} reserviert, es gibt aber ein Feld mit diesem Schlüssel. "
+                            f"Bitte das Feld umbenennen.")
             m = _BACK_TO_RE.match(p.approval.onReject)
             if m:
                 ziel = m.group(1)

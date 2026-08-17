@@ -30,6 +30,9 @@ def test_format_value():
     assert mt.format_value(["a", "b"]) == "a, b"
     assert mt.format_value([]) == "—"
     assert mt.format_value("Max") == "Max"
+    # Kein roher Python-Repr für verschachtelte Strukturen (Sicherheitsnetz).
+    assert mt.format_value({"a": 1}) == "—"
+    assert mt.format_value([{"nr": "DL-1"}, {"nr": "DL-2"}]) == "—"
 
 
 def test_substitute_ersetzt_nur_die_vorlage_nicht_die_werte():
@@ -62,6 +65,28 @@ def test_bekannte_variable_validiert():
 def test_unbekannte_variable_blockiert():
     with pytest.raises(ValidationError, match="emailBody"):
         ProcessDefinition.model_validate(_defn_with_body("Firma: {{base.firma}}"))
+
+
+def _defn_mit_feld(feld: dict, body: str) -> dict:
+    d = _defn_with_body(body)
+    d["fields"].append(feld)
+    d["phases"][0]["fields"].append({"ref": feld["key"]})
+    return d
+
+
+def test_nicht_skalares_feld_blockiert():
+    # Eine Wiederholgruppe (collection) darf nicht als Mail-Variable stehen.
+    coll = {"key": "geraete", "widget": "collection",
+            "item": [{"key": "nr", "widget": "text"}]}
+    with pytest.raises(ValidationError, match="collection|einsetzen"):
+        ProcessDefinition.model_validate(_defn_mit_feld(coll, "Geräte: {{geraete}}"))
+
+
+def test_feldkey_kollision_mit_spezialvariable_blockiert():
+    # Ein Feld namens „title" würde die Mail-Variable {{title}} still verdrängen.
+    feld = {"key": "title", "widget": "text"}
+    with pytest.raises(ValidationError, match="reserviert"):
+        ProcessDefinition.model_validate(_defn_mit_feld(feld, "Titel: {{title}}"))
 
 
 # ── gerendertes Mail-Fragment ────────────────────────────────────────────────

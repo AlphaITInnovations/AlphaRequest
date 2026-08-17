@@ -15,7 +15,7 @@ import {
   isValidFieldKey, isValidOnReject, isValidPhaseKey, isValidProcessKey,
 } from '@/lib/processSchema'
 import { isValidDuration } from '@/lib/isoDuration'
-import { mailFieldRefs } from '@/lib/mailTemplate'
+import { SPECIAL_MAIL_VARS, mailFieldRefs, mailVariables } from '@/lib/mailTemplate'
 
 const DSL_OPS = ['==', '!=', 'in', 'truthy', 'and', 'or', 'not']
 
@@ -299,6 +299,23 @@ export function validateDefinition(
         if (!catalog.has(ref)) {
           out.push(err(`${p}.approval.emailBody`, anchor, 'UNKNOWN_REF',
             `Mail-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
+          continue
+        }
+        // Nicht-skalare Felder lassen sich nicht als Text in die Mail setzen.
+        const wf = d.fields.find((f) => f.key === ref)?.widget
+        if (wf === 'collection' || wf === 'attachment') {
+          out.push(err(`${p}.approval.emailBody`, anchor, 'INVALID',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld vom Typ `
+            + `„${WIDGET_LABEL[wf] ?? wf}", das sich nicht als Text einsetzen lässt.`))
+        }
+      }
+      // Kollision Spezial-Variable ↔ Feld-Key (sonst gewänne still die Spezial-Var).
+      for (const sv of mailVariables(ap.emailBody)) {
+        if ((SPECIAL_MAIL_VARS as readonly string[]).includes(sv) && catalog.has(sv)) {
+          out.push(err(`${p}.approval.emailBody`, anchor, 'INVALID',
+            `„{{${sv}}}" ist als Mail-Variable reserviert `
+            + `(${sv === 'title' ? 'Auftragstitel' : 'Auftragsnummer'}), es gibt aber ein Feld `
+            + `mit diesem Schlüssel. Bitte das Feld umbenennen.`))
         }
       }
       if (!isValidOnReject(ap.onReject)) {

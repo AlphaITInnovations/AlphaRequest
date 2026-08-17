@@ -48,7 +48,13 @@ def format_value(value: Any) -> str:
     if isinstance(value, bool):
         return "Ja" if value else "Nein"
     if isinstance(value, (list, tuple)):
-        return ", ".join(format_value(v) for v in value) if value else "—"
+        # Skalare Liste (multiselect) → kommagetrennt. Verschachtelte Strukturen
+        # (z. B. Wiederholgruppen) haben in einer Mail nichts zu suchen – die
+        # Vorlagen-Validierung verbietet solche Felder; hier nur als Sicherheitsnetz.
+        teile = [format_value(v) for v in value if not isinstance(v, (dict, list, tuple))]
+        return ", ".join(teile) if teile else "—"
+    if isinstance(value, dict):
+        return "—"
     return str(value)
 
 
