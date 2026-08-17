@@ -24,6 +24,7 @@ GRUPPEN = [
     {"id": "gid-hr", "name": "Personalabteilung"},
     {"id": "gid-fp", "name": "Fuhrpark"},
     {"id": "gid-sgl", "name": "Sekretariat GL"},
+    {"id": "gid-lutz", "name": "FreigabeHerrLutz"},
 ]
 
 
@@ -100,6 +101,7 @@ def test_import_erlaubt_unbekannte_echte_ids(ctx):
         "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN": "fremd-2",
         "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN": "fremd-3",
         "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN": "fremd-4",
+        "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN": "fremd-5",
     }.items():
         text = text.replace(ph, ersatz)
     r = ctx["client"].post("/processes:import",
@@ -139,3 +141,12 @@ def test_onboarding_seed_nutzt_die_neue_laufzeit():
     assert any(a["trigger"]["type"] == "on_enter"
                and a["action"]["type"] == "auto_advance"
                for a in start["automations"]), "Start-Phase muss direkt weiterschalten"
+    # Freigabe durch Herrn Lutz liegt zwischen Erstellung und Sekretariat GL,
+    # entscheidet per Mail-Link und trägt die Basisdaten über Variablen in die Mail.
+    keys = [p["key"] for p in defn["phases"]]
+    assert keys.index("freigabe") == keys.index("erstellung") + 1
+    assert keys.index("freigabe") < keys.index("bearbeitung_sgl")
+    frei = next(p for p in defn["phases"] if p["key"] == "freigabe")
+    assert frei["kind"] == "approval" and frei["approval"]["externalLink"] is True
+    assert frei["responsibility"]["group"] == "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN"
+    assert "{{base.first_name}}" in frei["approval"]["emailBody"]

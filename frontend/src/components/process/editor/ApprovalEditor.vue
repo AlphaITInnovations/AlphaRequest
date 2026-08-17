@@ -9,10 +9,11 @@
  * Es wird immer eine VOLLSTÄNDIGE ApprovalSpec nach oben gemeldet (Spread +
  * Änderung), damit der Dirty-Vergleich des Elternteils verlässlich bleibt.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { ApprovalOnReject, ApprovalSpec } from '@/types/process'
 import { backToTarget } from '@/lib/processSchema'
 import { isValidDuration } from '@/lib/isoDuration'
+import { SPECIAL_MAIL_VARS, mailFieldRefs } from '@/lib/mailTemplate'
 import DurationInput from './DurationInput.vue'
 
 const props = defineProps<{
@@ -37,6 +38,53 @@ const toStr = (v: string): string | null => (v.trim() === '' ? null : v)
 function fieldText(k: string): string {
   const l = props.fieldLabels?.[k]
   return l ? `${l} · ${k}` : k
+}
+
+// ── Mail-Text mit Ticket-Variablen ─────────────────────────────────────────────
+
+const bodyArea = ref<HTMLTextAreaElement | null>(null)
+
+/** Wählbare Variablen: Katalog-Felder + Spezial-Variablen. `display` trägt den
+ *  literalen `{{token}}`-Text (im Template selbst würde er den Vue-Parser stören). */
+const varChips = computed(() => [
+  ...SPECIAL_MAIL_VARS.map((v) => ({
+    token: v, label: v === 'title' ? 'Titel' : 'Auftrags-Nr.', display: `{{${v}}}` })),
+  ...props.fieldKeys.map((k) => ({
+    token: k, label: props.fieldLabels?.[k] || k, display: `{{${k}}}` })),
+])
+
+/** Variablen in der Vorlage, die es nicht (mehr) als Feld gibt. */
+const unknownVars = computed(() =>
+  mailFieldRefs(props.modelValue.emailBody).filter((v) => !props.fieldKeys.includes(v)))
+
+/** Als fertiger String (literale {{…}} im Template stören den Vue-Parser). */
+const unknownVarsText = computed(() =>
+  unknownVars.value.map((v) => `{{${v}}}`).join(', '))
+
+/** Als gebundener String, damit die {{…}}-Beispiele den Vue-Parser nicht stören. */
+const bodyPlaceholder =
+  'Steht über den Ja/Nein-Knöpfen in der Mail. Platzhalter unten einfügen, '
+  + 'um Angaben aus dem Auftrag einzusetzen (z. B. {{base.first_name}}).'
+
+/** `{{token}}` an der Cursor-Position einfügen (oder anhängen). */
+function insertVar(token: string) {
+  if (props.readonly) return
+  const snippet = `{{${token}}}`
+  const cur = props.modelValue.emailBody ?? ''
+  const el = bodyArea.value
+  if (el && el.selectionStart != null) {
+    const a = el.selectionStart
+    const b = el.selectionEnd ?? a
+    patch({ emailBody: cur.slice(0, a) + snippet + cur.slice(b) })
+    // Cursor hinter das Eingefügte setzen (nach dem Re-Render).
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = a + snippet.length
+      el.setSelectionRange(pos, pos)
+    })
+  } else {
+    patch({ emailBody: cur + snippet })
+  }
 }
 
 // ── Verhalten bei „Nein" ──────────────────────────────────────────────────────
@@ -118,6 +166,33 @@ const unknownField = (k: string | null) => !!k && !props.fieldKeys.includes(k)
                        @update:model-value="patch({ linkMaxAge: $event ?? '' })" />
         <p v-if="ageInvalid" class="text-xs text-red-500 mt-1">
           Bitte eine gültige Dauer größer als null angeben (z.&nbsp;B. P7D).
+        </p>
+      </div>
+
+      <!-- Mail-Text mit Ticket-Variablen -->
+      <div>
+        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+          Text in der Mail <span class="text-gray-400">(optional)</span>
+        </label>
+        <textarea ref="bodyArea" :value="modelValue.emailBody ?? ''" :disabled="readonly" rows="6"
+                  class="afi w-full resize-y font-mono text-xs"
+                  :class="unknownVars.length ? 'ring-1 ring-red-400' : ''"
+                  :placeholder="bodyPlaceholder"
+                  @input="patch({ emailBody: toStr(($event.target as HTMLTextAreaElement).value) })" />
+        <p class="text-[11px] text-gray-400 mt-1">
+          Platzhalter einfügen (wird beim Versand durch den Auftragswert ersetzt):
+        </p>
+        <div class="flex flex-wrap gap-1 mt-1">
+          <button v-for="c in varChips" :key="c.token" type="button" :disabled="readonly"
+                  class="px-2 py-0.5 rounded-md text-[11px] font-mono bg-gray-100 dark:bg-white/10
+                         text-gray-600 dark:text-gray-300 hover:bg-[#3EAAB8]/15 hover:text-[#2B7D89]
+                         disabled:opacity-50 transition"
+                  :title="c.label" @click="insertVar(c.token)">
+            {{ c.display }}
+          </button>
+        </div>
+        <p v-if="unknownVars.length" class="text-xs text-red-500 mt-1">
+          Unbekannte Variable(n): {{ unknownVarsText }} – dafür gibt es kein Feld.
         </p>
       </div>
     </div>

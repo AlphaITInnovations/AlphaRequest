@@ -15,6 +15,7 @@ import {
   isValidFieldKey, isValidOnReject, isValidPhaseKey, isValidProcessKey,
 } from '@/lib/processSchema'
 import { isValidDuration } from '@/lib/isoDuration'
+import { mailFieldRefs } from '@/lib/mailTemplate'
 
 const DSL_OPS = ['==', '!=', 'in', 'truthy', 'and', 'or', 'not']
 
@@ -290,6 +291,14 @@ export function validateDefinition(
         if (feld && !catalog.has(feld)) {
           out.push(err(`${p}.approval`, anchor, 'UNKNOWN_REF',
             `${lbl} „${feld}" ist nicht im Katalog.`))
+        }
+      }
+      // Mail-Vorlage: jede {{variable}} muss ein Katalog-Feld sein (Spezial-Vars
+      // title/id sind immer erlaubt). Sonst bliebe in der Mail eine leere Stelle.
+      for (const ref of mailFieldRefs(ap.emailBody)) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${p}.approval.emailBody`, anchor, 'UNKNOWN_REF',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
         }
       }
       if (!isValidOnReject(ap.onReject)) {

@@ -561,6 +561,10 @@ class ApprovalSpec(_Base):
     rejectLabel: str = "Ablehnen"
     #: Mail mit Entscheidungs-Link versenden? Ohne das läuft die Freigabe nur in der App.
     externalLink: bool = True
+    #: Freitext-Vorlage für den Mail-Text der Freigabe. Platzhalter `{{feld.key}}`
+    #: werden durch die Auftragswerte ersetzt (zusätzlich {{title}}, {{id}}). Leer
+    #: = nur die Frage steht in der Mail. Reiner Text – HTML wird escaped.
+    emailBody: Optional[str] = None
     #: Gültigkeit des Links (ISO-8601-Dauer).
     linkMaxAge: str = "P7D"
     #: Begründung bei Ablehnung verlangen.
@@ -819,6 +823,13 @@ class ProcessDefinition(_Base):
                               (p.approval.reasonField, "reasonField")):
                 if feld:
                     _need(feld, f"Phase „{p.key}“.approval.{lbl}")
+            # Mail-Vorlage: jede {{variable}} muss ein Katalog-Feld sein (oder eine
+            # Spezial-Variable). Sonst stünde in der Freigabe-Mail eine leere Stelle,
+            # ohne dass es jemandem auffällt.
+            if p.approval.emailBody:
+                from backend.services import mail_template as _mt
+                for ref in _mt.field_refs(p.approval.emailBody):
+                    _need(ref, f"Phase „{p.key}“.approval.emailBody (Variable «{ref}»)")
             m = _BACK_TO_RE.match(p.approval.onReject)
             if m:
                 ziel = m.group(1)

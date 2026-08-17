@@ -220,6 +220,10 @@ export interface ApprovalSpec {
   rejectLabel: string
   /** Mail mit Entscheidungs-Link versenden? Ohne das läuft die Freigabe nur in der App. */
   externalLink: boolean
+  /** Freitext-Vorlage für den Mail-Text. Platzhalter `{{feld.key}}` (plus
+   *  {{title}}, {{id}}) werden aus den Auftragswerten ersetzt. `null` = nur die
+   *  Frage steht in der Mail. */
+  emailBody: string | null
   /** Gültigkeit des Links als ISO-8601-Dauer (Default 'P7D'). */
   linkMaxAge: string
   /** Begründung bei Ablehnung verlangen. */

@@ -61,7 +61,7 @@ describe('normalizeDefinition', () => {
         approval: { question: 'Freigeben?' } }] })
     expect(d.phases[0].approval).toEqual({
       question: 'Freigeben?', approveLabel: 'Freigeben', rejectLabel: 'Ablehnen',
-      externalLink: true, linkMaxAge: 'P7D', requireReason: true,
+      externalLink: true, emailBody: null, linkMaxAge: 'P7D', requireReason: true,
       decisionField: null, reasonField: null, onReject: 'reject',
     })
   })

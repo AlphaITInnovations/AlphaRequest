@@ -261,6 +261,33 @@ def _approval_buttons_html(approve_url: str, reject_url: str,
     """
 
 
+def _approval_info_html(row: dict, spec) -> str:
+    """Aus der Vorlage `approval.emailBody` den Info-Block der Freigabe-Mail bauen.
+
+    `{{feld.key}}` wird durch den Auftragswert ersetzt, zusätzlich {{title}} und
+    {{id}}. Erst NACH dem Einsetzen wird der ganze Text escaped (Werte stammen aus
+    Nutzereingaben) und Zeilenumbrüche werden zu <br>.
+    """
+    from backend.services import mail_template as mt
+    if not spec.emailBody:
+        return ""
+    values = row.get("values") or {}
+    title = str(row.get("title") or "")
+
+    def resolve(token: str) -> str:
+        if token == "title":
+            return title
+        if token == "id":
+            return str(row.get("id") or "")
+        return mt.format_value(values.get(token))
+
+    plain = mt.substitute(spec.emailBody, resolve)
+    if not plain.strip():
+        return ""
+    return (f"<div style=\"margin:12px 0;padding:12px 14px;background:#F3F4F6;"
+            f"border-radius:8px;font-size:14px;color:#111827;\">{_rich_text(plain)}</div>")
+
+
 def _approval_message(row: dict, phase: PhaseDef, title: str) -> tuple[str, str]:
     from backend.services.iso_duration import parse_duration
     spec = phase.approval
@@ -273,7 +300,8 @@ def _approval_message(row: dict, phase: PhaseDef, title: str) -> tuple[str, str]
     body = (
         f"<p>Für den Auftrag „{html.escape(title)}“ (#{row.get('id')}) wird Ihre "
         f"Entscheidung gebraucht.</p>"
-        f"<p><b>{html.escape(spec.question)}</b></p>"
+        + _approval_info_html(row, spec)
+        + f"<p><b>{html.escape(spec.question)}</b></p>"
         + _approval_buttons_html(approve_url, reject_url,
                                  spec.approveLabel, spec.rejectLabel)
         + f"<p style=\"font-size:12px;color:#4B5563;\">Der Link öffnet eine "

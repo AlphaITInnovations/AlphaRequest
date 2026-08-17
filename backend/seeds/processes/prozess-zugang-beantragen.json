@@ -1319,6 +1319,145 @@
       ]
     },
     {
+      "key": "freigabe",
+      "label": "Freigabe durch Herrn Lutz",
+      "kind": "approval",
+      "view": "approval",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "approval": {
+        "question": "Soll die Einstellung freigegeben werden?",
+        "approveLabel": "Einstellung freigeben",
+        "rejectLabel": "Ablehnen",
+        "externalLink": true,
+        "emailBody": "Es liegt eine neue Einstellung zur Freigabe vor:\n\nAnrede: {{base.salutation}}\nName: {{base.first_name}} {{base.last_name}}\nTitel: {{base.title}}\nFirma lt. Arbeitsvertrag: {{base.contract_company}}\nNiederlassung: {{base.location}}\nKostenstelle: {{base.cost_center}}\nArbeitsbeginn: {{base.start_date}}",
+        "linkMaxAge": "P7D",
+        "requireReason": true,
+        "decisionField": null,
+        "reasonField": null,
+        "onReject": "reject"
+      },
+      "fields": [
+        {
+          "ref": "base.salutation",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.contract_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Basisdaten",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.salutation",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.contract_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.start_date",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
       "key": "bearbeitung_sgl",
       "label": "Bearbeitung durch Sekretariat GL",
       "kind": "task",
