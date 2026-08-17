@@ -19,7 +19,6 @@ import {
 import { forgetKey, loadKnownKeys, rememberKey } from '@/components/process/processRegistry'
 import NewProcessModal from '@/components/process/NewProcessModal.vue'
 import ImportProcessModal from '@/components/process/ImportProcessModal.vue'
-import SeedProcessesModal from '@/components/process/SeedProcessesModal.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import type { ProcessOut } from '@/types/process'
@@ -40,7 +39,6 @@ const newOpen    = ref(false)
 const newMode    = ref<'create' | 'duplicate'>('create')
 const newSource  = ref<string | null>(null)
 const importOpen = ref(false)
-const seedOpen   = ref(false)
 
 /**
  * System-Prozess: das Merkmal kommt vom Server (`is_system`), nicht aus einer
@@ -353,15 +351,6 @@ function onImported(payload: { key: string; version: number }) {
   goEditor(payload.key, payload.version)
 }
 
-/**
- * Der Seed-Lauf hat geschrieben. Das Modal bleibt offen (der Bericht ist die
- * Rückmeldung), die Liste dahinter wird aber sofort nachgezogen – sonst steht
- * dort weiter „Keine Prozesse gefunden“, obwohl neun angelegt wurden.
- */
-async function onSeeded() {
-  await reload()
-}
-
 onMounted(load)
 </script>
 
@@ -385,12 +374,8 @@ onMounted(load)
     <!-- Suche + Aktionen -->
     <div class="flex flex-wrap gap-2 items-center mb-3">
       <input v-model="search" placeholder="Suche (Name, Schlüssel…)" class="afi flex-1 min-w-[14rem]" />
-      <!-- Ersetzt den früheren Hinweis auf den Server-Shell-Befehl: die
-           mitgelieferten Definitionen lassen sich hier einspielen – mit
-           Trockenlauf vorweg. -->
-      <button @click="seedOpen = true" class="btn-secondary">
-        Mitgelieferte Prozesse einspielen
-      </button>
+      <!-- BEWUSST kein Seed-Knopf mehr: Prozesse kommen manuell über
+           „Importieren" (JSON aus dem Repo) oder werden hier neu gebaut. -->
       <button @click="importOpen = true" class="btn-secondary">Importieren</button>
       <button @click="openNew()" class="btn-primary">Neuer Prozess</button>
     </div>
@@ -578,8 +563,6 @@ onMounted(load)
                      @close="newOpen = false" @created="onCreated" />
     <ImportProcessModal :open="importOpen"
                         @close="importOpen = false" @imported="onImported" />
-    <SeedProcessesModal :open="seedOpen"
-                        @close="seedOpen = false" @seeded="onSeeded" />
   </section>
 </template>
 

@@ -134,11 +134,11 @@ export async function deleteVersion(key: string, version: number): Promise<void>
  * Mitgelieferte Definitionen einspielen (nur Admin, auditiert).
  *
  * `commit: false` ist der TROCKENLAUF und schreibt nichts – er ist der Sinn der
- * Sache und wird immer zuerst gefahren. Die Antwort ist der Bericht des Laufs;
- * er wird absichtlich untypisiert zurückgegeben und in
- * `lib/processSeedReport.normalizeSeedReport` ausgewertet: der Bericht ist die
- * einzige Rückmeldung, und ein fehlendes Feld darf dort nicht zu einer leeren
- * Tabelle führen.
+ * Sache und wird immer zuerst gefahren. Die Antwort ist der Bericht des Laufs.
+ *
+ * OHNE Oberfläche: der Seed-Dialog in den Einstellungen ist bewusst entfernt –
+ * Prozesse kommen manuell über „Importieren" (JSON aus dem Repo). Der Endpunkt
+ * bleibt für Notfälle per API erreichbar.
  */
 export async function seedProcesses(
   opts: { commit: boolean; skipPermissions?: boolean },
