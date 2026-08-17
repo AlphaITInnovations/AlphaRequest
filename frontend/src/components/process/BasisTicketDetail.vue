@@ -244,7 +244,9 @@ async function abschliessen() {
 
 <template>
   <div>
-    <!-- Kopf -->
+    <!-- Kopf (Zurück-Pfeil identisch zur generischen Ansicht – ein UI-Design) -->
+    <button @click="router.push('/dashboard')"
+            class="text-xs text-gray-400 hover:text-[#3EAAB8] mb-1 transition">← Übersicht</button>
     <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
       {{ ticket.title }} – {{ formatiert(ticket.created_at) }}
     </h1>

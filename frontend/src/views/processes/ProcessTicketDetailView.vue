@@ -294,8 +294,8 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
         <!-- Kopf -->
         <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
           <div class="min-w-0">
-            <button @click="router.push('/auftraege')"
-                    class="text-xs text-gray-400 hover:text-[#3EAAB8] mb-1">← Aufträge</button>
+            <button @click="router.push('/dashboard')"
+                    class="text-xs text-gray-400 hover:text-[#3EAAB8] mb-1 transition">← Übersicht</button>
             <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100 truncate">
               {{ ticket.title }}
             </h1>
