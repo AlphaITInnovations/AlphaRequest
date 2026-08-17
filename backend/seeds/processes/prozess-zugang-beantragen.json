@@ -1245,7 +1245,59 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Basisdaten",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.salutation",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.contract_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.start_date",
+              "width": "half"
+            }
+          ]
+        }
+      ]
     },
     {
       "key": "bearbeitung_sgl",
@@ -1469,7 +1521,184 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Basisdaten",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.salutation",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.contract_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.start_date",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Personaldaten",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "personal.private_street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.homeoffice",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.weekly_hours",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.federal_state",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department_other",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contact_person_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.personal_number",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Urlaub (TimeButler)",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.timebutler.vacation_year",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.supervisor_id",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "fuhrpark.car",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_from",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Weitergabe",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "ablauf.naechster_bearbeiter",
+              "width": "half"
+            }
+          ]
+        }
+      ]
     },
     {
       "key": "bearbeitung",
@@ -1856,7 +2085,274 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Basisdaten",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.salutation",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.contract_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.start_date",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Personaldaten",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "personal.private_street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.homeoffice",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.weekly_hours",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.federal_state",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department_other",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contact_person_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.personal_number",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Urlaub (TimeButler)",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.timebutler.vacation_year",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.supervisor_id",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Zugänge",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.appearance_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.other_systems",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.info_mailbox",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.additional",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.notes",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers_needed",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "fuhrpark.car",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_from",
+              "width": "half"
+            }
+          ]
+        }
+      ]
     },
     {
       "key": "durchfuehrung",
@@ -2197,7 +2693,274 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Basisdaten",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.salutation",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.contract_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.start_date",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Personaldaten",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "personal.private_street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.homeoffice",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.weekly_hours",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.federal_state",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department_other",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.personal_number",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contact_person_id",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Urlaub (TimeButler)",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.timebutler.vacation_year",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.supervisor_id",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Zugänge",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.appearance_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.other_systems",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.info_mailbox",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.additional",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.notes",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers_needed",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "fuhrpark.car",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_from",
+              "width": "half"
+            }
+          ]
+        }
+      ]
     }
   ],
   "automations": []
