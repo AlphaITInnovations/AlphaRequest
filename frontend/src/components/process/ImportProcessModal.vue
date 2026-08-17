@@ -6,6 +6,11 @@
  * übernommen: Das Backend legt unter `targetKey` an, und ein versehentlich
  * mitgeschleppter Fremd-Schlüssel würde sonst unbemerkt einen anderen Prozess
  * betreffen.
+ *
+ * Fremde Fachabteilungs-Referenzen (Platzhalter aus den Vorlagen, IDs aus
+ * anderen Installationen) werden VOR dem Import per Dropdown den hiesigen
+ * Fachabteilungen zugeordnet – sonst entstünde ein Entwurf voller
+ * „Unbekannte Fachabteilung"-Fehler, die man einzeln reparieren müsste.
  */
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { importProcess } from '@/api/processes'
@@ -13,9 +18,11 @@ import { normalizeDefinition } from '@/lib/processNormalize'
 import { isValidProcessKey, suggestProcessKey } from '@/lib/processSchema'
 import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
 import { isSystemReadonlyError } from '@/lib/processSystem'
+import { replaceGroupRefs, unknownGroupRefs } from '@/lib/processGroupRefs'
+import { loadGroupOptions } from '@/lib/processSources'
 import { rememberKey } from '@/components/process/processRegistry'
 import { useToast } from '@/composables/useToast'
-import type { ProcessDefinition, ProcessIssue } from '@/types/process'
+import type { OptionSources, ProcessDefinition, ProcessIssue } from '@/types/process'
 
 const props = defineProps<{ open: boolean }>()
 
@@ -40,8 +47,52 @@ const submitting = ref(false)
 
 const textArea = ref<HTMLTextAreaElement | null>(null)
 
+// ── Fremde Fachabteilungen zuordnen ──────────────────────────────────────────
+
+/** Dropdown-Wert für „unverändert übernehmen" (nur echte IDs, nie Platzhalter). */
+const KEEP = '__unveraendert__'
+
+const gruppen = ref<OptionSources['groups']>([])
+const gruppenLaden = ref(false)
+/** Nur das JÜNGSTE Öffnen darf `gruppen` schreiben – eine späte Antwort eines
+ *  früheren Öffnens (403-Fallback braucht zwei Requests) überschriebe sonst
+ *  die frische Liste. */
+let ladeGeneration = 0
+
+/** Je fremdem Wert die gewählte Gruppen-ID, '' = noch offen, KEEP = belassen. */
+const zuordnung = ref<Record<string, string>>({})
+
+const unbekannte = computed(() =>
+  parsed.value && gruppen.value.length ? unknownGroupRefs(parsed.value, gruppen.value) : [])
+
+// BEWUSST keine Vorbelegung: die Gruppen-IDs sind je Umgebung (Dev/Prod)
+// verschieden, deshalb muss jede Fachabteilung selbst gewählt werden – der
+// Namenstreffer steht im Dropdown nur als Empfehlung. Neue Zeilen starten
+// „noch offen" ('' → blockiert den Import); bereits getroffene Auswahl bleibt
+// erhalten (beim Nachbessern im Textfeld ist das JSON zwischendurch unparsebar,
+// dann ist rows=[] und wir fassen nichts an).
+watch(unbekannte, (rows) => {
+  if (!rows.length) return
+  const next = { ...zuordnung.value }
+  for (const r of rows) {
+    if (!(r.value in next)) next[r.value] = ''
+  }
+  zuordnung.value = next
+})
+
+/** Jede fremde Referenz MUSS zugeordnet werden (Platzhalter wie fremde ID) –
+ *  KEEP zählt als getroffene Wahl. */
+const offeneZuordnungen = computed(() =>
+  unbekannte.value.filter((r) => !zuordnung.value[r.value]).length)
+
+const gruppenSortiert = computed(() =>
+  [...gruppen.value].sort((a, b) => a.name.localeCompare(b.name, 'de')))
+
 const keyValid  = computed(() => isValidProcessKey(targetKey.value))
-const canSubmit = computed(() => !submitting.value && !!parsed.value && keyValid.value)
+// Solange die Fachabteilungen laden, ist der Import gesperrt – sonst rutschte
+// eine schnell eingefügte Vorlage am Zuordnungs-Schritt vorbei.
+const canSubmit = computed(() => !submitting.value && !!parsed.value && keyValid.value
+  && !gruppenLaden.value && offeneZuordnungen.value === 0)
 
 /** Warnung, wenn die Definition offensichtlich unvollständig ist. */
 const structureHint = computed(() => {
@@ -133,11 +184,25 @@ function reset() {
   keyError.value = null
   issues.value = []
   submitting.value = false
+  zuordnung.value = {}
 }
 
 watch(() => props.open, (open) => {
   if (open) {
     reset()
+    // Fachabteilungen für die Zuordnung bei jedem Öffnen frisch laden (der
+    // Hinweistext schickt Nutzer:innen raus, um fehlende Fachabteilungen
+    // anzulegen – beim Wiederkommen muss die neue auftauchen). Schlägt das
+    // Laden fehl (leere Liste), erscheint keine Zuordnung und der Server löst
+    // Platzhalter über den Namen auf bzw. lehnt mit einer klaren Meldung ab.
+    const generation = ++ladeGeneration
+    gruppen.value = []
+    gruppenLaden.value = true
+    loadGroupOptions().then((g) => {
+      if (generation !== ladeGeneration) return
+      gruppen.value = g
+      gruppenLaden.value = false
+    })
     window.addEventListener('keydown', onWindowKey)
     nextTick(() => textArea.value?.focus())
   } else {
@@ -155,8 +220,18 @@ async function submit() {
   keyError.value = null
   issues.value = []
   try {
+    // Gewählte Zuordnungen anwenden ('' und KEEP lassen den Wert stehen).
+    // Quelle sind die AKTUELLEN Zeilen, nicht `zuordnung` selbst – dort können
+    // nach JSON-Nachbesserungen Einträge zu Werten liegen, die es nicht mehr
+    // gibt (oder die inzwischen eine bekannte Gruppe sind).
+    const mapping: Record<string, string> = {}
+    for (const r of unbekannte.value) {
+      const gid = zuordnung.value[r.value]
+      if (gid && gid !== KEEP) mapping[r.value] = gid
+    }
+    const defn = replaceGroupRefs(parsed.value, mapping)
     // Schlüssel in der Definition angleichen – maßgeblich ist ohnehin targetKey.
-    const out = await importProcess(targetKey.value, { ...parsed.value, key: targetKey.value })
+    const out = await importProcess(targetKey.value, { ...defn, key: targetKey.value })
     rememberKey(out.key)
     showToast(`Prozess „${out.name || out.key}“ importiert`)
     emit('imported', { key: out.key, version: out.version })
@@ -237,6 +312,51 @@ async function submit() {
             </p>
           </div>
 
+          <!-- Fremde Fachabteilungen zuordnen -->
+          <div v-if="unbekannte.length"
+               class="rounded-xl border border-amber-300 dark:border-amber-500/30
+                      bg-amber-50 dark:bg-amber-900/15 px-4 py-3 space-y-3">
+            <div>
+              <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                Fachabteilungen zuordnen
+              </p>
+              <p class="text-xs text-amber-800 dark:text-amber-300/80 mt-0.5">
+                Die Vorlage verweist auf Fachabteilungen, die es hier nicht als ID gibt.
+                Bitte jede einer Fachabteilung <span class="font-medium">dieser Umgebung</span>
+                zuordnen – die IDs sind in Dev und Prod verschieden. Die Wahl wird beim
+                Import an allen Stellen übernommen.
+              </p>
+            </div>
+            <div v-for="r in unbekannte" :key="r.value"
+                 class="flex items-center gap-3">
+              <div class="flex-1 min-w-0">
+                <p :class="['truncate text-amber-900 dark:text-amber-100',
+                            r.placeholder ? 'text-sm font-medium' : 'font-mono text-xs']">
+                  {{ r.label }}
+                </p>
+                <p class="text-[11px] text-amber-700/70 dark:text-amber-300/60">
+                  {{ r.placeholder ? 'Platzhalter aus der Vorlage' : 'Unbekannte Gruppen-ID' }}
+                  · {{ r.sites }} {{ r.sites === 1 ? 'Stelle' : 'Stellen' }}
+                </p>
+              </div>
+              <select v-model="zuordnung[r.value]"
+                      :class="['set-input w-52 shrink-0 text-sm',
+                               zuordnung[r.value] ? '' : 'border-amber-400 dark:border-amber-500/50']">
+                <option value="" disabled>Bitte wählen…</option>
+                <option v-if="!r.placeholder" :value="KEEP">Unverändert übernehmen</option>
+                <option v-for="g in gruppenSortiert" :key="g.id" :value="g.id">
+                  {{ g.name }}{{ g.id === r.suggestion ? ' (empfohlen)' : '' }}
+                </option>
+              </select>
+            </div>
+            <p v-if="offeneZuordnungen" class="text-xs text-amber-800 dark:text-amber-300">
+              Noch {{ offeneZuordnungen }}
+              {{ offeneZuordnungen === 1 ? 'Zuordnung offen' : 'Zuordnungen offen' }}. Fehlt eine
+              Fachabteilung ganz, bitte zuerst unter „Fachabteilungen" anlegen und den Import
+              erneut öffnen.
+            </p>
+          </div>
+
           <!-- Ziel-Schlüssel -->
           <div v-if="parsed">
             <label class="lbl">Ziel-Schlüssel</label>
@@ -265,6 +385,10 @@ async function submit() {
               </li>
             </ul>
           </div>
+
+          <p v-if="parsed && gruppenLaden" class="text-xs text-gray-400">
+            Fachabteilungen werden geladen, einen Moment…
+          </p>
 
           <div class="flex justify-end gap-3 pt-2">
             <button @click="close()" :disabled="submitting"

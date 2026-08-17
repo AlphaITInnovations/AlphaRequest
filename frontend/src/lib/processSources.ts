@@ -23,6 +23,28 @@ async function fetchGroups(pfad: '/settings/groups' | '/groups') {
 }
 
 /**
+ * NUR die Fachabteilungen (für Dialoge, die Personen/Firmen nicht brauchen).
+ * Gleiche Ausweich-Logik wie `loadOptionSources`; Fehlschläge liefern eine
+ * leere Liste statt zu werfen – der Aufrufer zeigt dann schlicht keine Auswahl.
+ */
+export async function loadGroupOptions(adminGroups = true): Promise<OptionSources['groups']> {
+  try {
+    return await fetchGroups(adminGroups ? '/settings/groups' : '/groups')
+  } catch (e) {
+    if (adminGroups) {
+      try {
+        return await fetchGroups('/groups')
+      } catch (e2) {
+        console.warn('Fachabteilungen konnten nicht geladen werden', e2)
+        return []
+      }
+    }
+    console.warn('Fachabteilungen konnten nicht geladen werden', e)
+    return []
+  }
+}
+
+/**
  * Lädt alle Quellen. Einzelne Fehlschläge sind nicht fatal (dann fehlen nur
  * Namen), werden aber protokolliert – nie stumm verschluckt.
  * `adminGroups`: /settings/groups liefert auch versteckte Gruppen (nur Admin).
@@ -33,19 +55,7 @@ async function fetchGroups(pfad: '/settings/groups' | '/groups') {
 export async function loadOptionSources(adminGroups = true): Promise<OptionSources> {
   const out = emptySources()
 
-  try {
-    out.groups = await fetchGroups(adminGroups ? '/settings/groups' : '/groups')
-  } catch (e) {
-    if (adminGroups) {
-      try {
-        out.groups = await fetchGroups('/groups')
-      } catch (e2) {
-        console.warn('Fachabteilungen konnten nicht geladen werden', e2)
-      }
-    } else {
-      console.warn('Fachabteilungen konnten nicht geladen werden', e)
-    }
-  }
+  out.groups = await loadGroupOptions(adminGroups)
 
   try {
     const { data } = await client.get('/users')
