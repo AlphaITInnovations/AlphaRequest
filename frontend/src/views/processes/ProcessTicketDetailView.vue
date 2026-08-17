@@ -293,7 +293,8 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
 
 <template>
   <AppLayout>
-    <div class="max-w-5xl mx-auto px-4 py-6">
+    <!-- Admin-Modus breiter: rechts kommt die Verlauf-Spalte dazu. -->
+    <div class="mx-auto px-4 py-6" :class="adminModus ? 'max-w-7xl' : 'max-w-5xl'">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
       </div>
@@ -309,6 +310,10 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                            :ticket="ticket" :definition="definition" :sources="sources"
                            @reload="reloadAll" />
 
+        <!-- Im Admin-Modus rückt der Verlauf als EIGENE Spalte rechts neben das
+             normale Layout – die Reparatur braucht ihn ständig im Blick. -->
+        <div :class="adminModus ? 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px] items-start' : ''">
+        <div class="min-w-0">
         <!-- :key remountet die Basis-Ansicht nach Admin-Eingriffen (sie hält
              eine eigene Kopie des Auftrags und würde sonst den alten Stand zeigen). -->
         <BasisTicketDetail v-if="istBasis && ticket && definition"
@@ -424,8 +429,12 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                               :current-user-id="auth.user?.id ?? null" />
         </div>
 
-        <div class="grid gap-4 mt-4 lg:grid-cols-[2fr_1fr] items-start">
-          <ProcessTimeline ref="timeline" :ticket-id="ticket.id"
+        <!-- Im Admin-Modus steht der Verlauf in der rechten Spalte – hier unten
+             bleibt dann nur die Beobachter-Karte (volle Breite). -->
+        <div class="grid gap-4 mt-4 items-start"
+             :class="adminModus ? '' : 'lg:grid-cols-[2fr_1fr]'">
+          <ProcessTimeline v-if="!adminModus"
+                           ref="timeline" :ticket-id="ticket.id"
                            :field-labels="fieldLabels" :phase-labels="phaseLabels"
                            :group-name="groupName"
                            :can-be-internal="abilities.internal_comment" />
@@ -472,6 +481,16 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
           </button>
         </div>
         </template>
+        </div>
+
+        <!-- Rechte Verlauf-Spalte der Admin-Ansicht (klebt beim Scrollen,
+             scrollt bei langem Verlauf in sich selbst). -->
+        <ProcessTimeline v-if="adminModus && ticket && definition"
+                         ref="timeline" :ticket-id="ticket.id"
+                         :field-labels="fieldLabels" :phase-labels="phaseLabels"
+                         :group-name="groupName" :can-be-internal="true"
+                         class="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" />
+        </div>
       </template>
     </div>
   </AppLayout>
