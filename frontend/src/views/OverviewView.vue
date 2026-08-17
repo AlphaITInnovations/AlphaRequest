@@ -41,7 +41,8 @@ import AppLayout from '@/components/AppLayout.vue'
 import OverviewScopeTiles from '@/components/overview/OverviewScopeTiles.vue'
 import OverviewTable from '@/components/overview/OverviewTable.vue'
 import { client } from '@/api/client'
-import { listTickets } from '@/api/processTickets'
+import { archiveTicket, listTickets } from '@/api/processTickets'
+import { useToast } from '@/composables/useToast'
 import { listProcesses } from '@/api/processes'
 import { useAuthStore } from '@/stores/authStore'
 import { BASIS_TICKET_PATH } from '@/lib/basisTicket'
@@ -251,10 +252,31 @@ function vollstaendigBlaettern() {
 
 function oeffnen(id: number) {
   // Admins öffnen aus der Auftragsliste die Admin-Ansicht (Leseansicht plus
-  // Reparatur-Werkzeuge); alle anderen die normale Leseansicht. Der Parameter
-  // vergibt KEINE Rechte – jeden Admin-Endpunkt prüft der Server selbst.
+  // Reparatur-Werkzeuge); viewer und manager die normale Leseansicht. Der
+  // Parameter vergibt KEINE Rechte – jeden Admin-Endpunkt prüft der Server.
   router.push(auth.isAdmin ? `/prozess-auftraege/${id}?ansicht=admin`
                            : `/prozess-auftraege/${id}`)
+}
+
+// ── Archivieren aus der Liste (Manager + Admin) ───────────────────────────────
+// Die einzige Schreibaktion der Manager-Rolle (Alt-System-Regel). Verbindlich
+// prüft der Server (:archive erlaubt manage/admin, sonst 403).
+
+const { showToast } = useToast()
+const darfArchivieren = computed(() => auth.canManage || auth.isAdmin)
+
+async function archivieren(id: number) {
+  const grund = prompt(`Auftrag #${id} zwangsweise abschließen – warum? `
+    + '(Pflicht, steht im Verlauf)')
+  if (grund === null) return
+  if (!grund.trim()) { showToast('Ohne Begründung kein Zwangsabschluss', false); return }
+  try {
+    await archiveTicket(id, grund.trim())
+    showToast('Auftrag archiviert')
+    await ladeListe()
+  } catch (e) {
+    showToast(errorMessage(e, 'Archivieren fehlgeschlagen'), false)
+  }
 }
 
 // ── Laden ─────────────────────────────────────────────────────────────────────
@@ -483,7 +505,8 @@ onMounted(async () => {
       <OverviewTable :rows="zeilen" :sort-key="sortKey" :sort-dir="sortDir"
                      :loading="listeLoading && !liste.length"
                      :empty-text="SCOPE_EMPTY[scope]"
-                     @open="oeffnen" @sort="setSort" />
+                     :can-archive="darfArchivieren"
+                     @open="oeffnen" @sort="setSort" @archive="archivieren" />
 
       <!-- ── Ehrlichkeits-Hinweis: das ist NICHT das Gesamtergebnis ── -->
       <div v-if="abgeschnitten"

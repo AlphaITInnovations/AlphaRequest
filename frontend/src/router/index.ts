@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import type { Permission } from '@/types/api'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -23,10 +24,15 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      // Übersicht: alle Aufträge mit Suche, Filtern und Blätterung.
+      // Übersicht: alle Aufträge mit Suche, Filtern und Blätterung. NUR für die
+      // Aufsichts-Rollen (Alt-System-Regel): viewer liest, manager darf
+      // zusätzlich archivieren, admin alles. Alle anderen arbeiten über die
+      // Startseite (/dashboard). Das Gate hier ist Komfort – die Daten schützt
+      // der Server ohnehin pro Auftrag (may_view), die Liste zeigte einem
+      // normalen User nie mehr als seine eigenen.
       path: '/auftraege',
       component: () => import('@/views/OverviewView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresPermission: ['view', 'manage', 'admin'] },
     },
 
     // ── Settings ───────────────────────────────────────────────────────────────
@@ -124,9 +130,13 @@ router.beforeEach(async (to) => {
     return { path: '/login' }
   }
 
-  const requiredPerm = to.meta.requiresPermission as string | undefined
-  if (requiredPerm && !auth.hasPermission(requiredPerm)) {
-    return { path: '/dashboard' }
+  // Einzelne Berechtigung ODER Liste („eine davon genügt").
+  const requiredPerm = to.meta.requiresPermission as Permission | Permission[] | undefined
+  if (requiredPerm) {
+    const erlaubt = Array.isArray(requiredPerm)
+      ? requiredPerm.some((p) => auth.hasPermission(p))
+      : auth.hasPermission(requiredPerm)
+    if (!erlaubt) return { path: '/dashboard' }
   }
 
   return true

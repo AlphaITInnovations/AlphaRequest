@@ -363,15 +363,41 @@ def test_prioritaet_laesst_sich_nachtraeglich_aendern(client):
 
 # ── Admin-Werkzeuge (set-phase / raw-values) ─────────────────────────────────
 
-def _client_ohne_admin():
+def _client_mit(permissions: list[str]):
     """Zweiter Client über dieselben (bereits gemonkeypatchten) Fakes –
-    angemeldet als Person OHNE Admin-Rechte."""
+    angemeldet als Person mit genau diesen Berechtigungen."""
     app = FastAPI()
     _install_error_handlers(app)
     app.include_router(pt.router)
     app.dependency_overrides[get_current_user] = lambda: {
-        "id": "u9", "displayName": "Normalo", "permissions": []}
+        "id": "u9", "displayName": "Normalo", "permissions": permissions}
     return TestClient(app)
+
+
+def _client_ohne_admin():
+    return _client_mit([])
+
+
+def test_archivieren_duerfen_manager_und_admin(client):
+    """Alt-System-Regel: viewer liest nur, manager darf zusätzlich archivieren,
+    admin darf alles. Der Zwangsabschluss ist die einzige Schreibaktion der
+    Manager-Rolle."""
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+                                                "values": {"base.name": "Max"}}).json()["data"]["id"]
+    viewer = _client_mit(["view"])
+    r = viewer.post(f"/process-tickets/{tid}:archive", json={"reason": "x"})
+    assert r.status_code == 403
+    manager = _client_mit(["view", "manage"])
+    r = manager.post(f"/process-tickets/{tid}:archive", json={"reason": "hängt seit Wochen"})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["status"] == "archived"
+    # abilities spiegeln dieselbe Regel (auf einem frischen Auftrag).
+    tid2 = client.post("/process-tickets", json={"processKey": "demo",
+                                                 "values": {"base.name": "Max"}}).json()["data"]["id"]
+    a = manager.get(f"/process-tickets/{tid2}").json()["data"]["abilities"]
+    assert a["archive"] is True and a["edit"] is False and a["delete"] is False
+    a = viewer.get(f"/process-tickets/{tid2}").json()["data"]["abilities"]
+    assert a["archive"] is False
 
 
 def test_set_phase_stellt_aktiven_auftrag_um(client):

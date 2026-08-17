@@ -156,6 +156,8 @@ function zeileAusRow(t: ProcessTicketOut): Zeile {
 
 const meineId = computed(() => auth.user?.id ?? null)
 const meineGruppen = computed(() => myDepartments.value.map((d) => d.id))
+/** Aufsichts-Rollen (viewer/manager/admin) – nur sie dürfen zur Auftragsliste. */
+const hatAufsicht = computed(() => auth.canView || auth.canManage || auth.isAdmin)
 
 /** Aktive Aufträge – terminale (abgelehnt/archiviert) gehören in keine Arbeitsliste. */
 const aktiveRows = computed(() => rows.value.filter((t) => !isTicketTerminal(t)))
@@ -523,14 +525,17 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- Ehrlichkeits-Hinweis: die Arbeitslisten lesen nur die erste Seite -->
+          <!-- Ehrlichkeits-Hinweis: die Arbeitslisten lesen nur die erste Seite.
+               Der Link zur Auftragsliste nur für die Aufsichts-Rollen – für alle
+               anderen ist die Seite gesperrt (Route-Guard). -->
           <div v-if="listeAbgeschnitten && (activeTab === 'assigned' || activeTab === 'departments')"
                class="px-5 py-3 border-t border-gray-100 dark:border-white/[0.04]
                       text-xs text-gray-500 dark:text-gray-400">
             Es gibt mehr als {{ rows.length }} sichtbare Aufträge ({{ rowsTotal }}).
-            Diese Liste zeigt nur die neuesten – die vollständige Suche steht unter
-            <button @click="router.push('/prozess-auftraege')" class="text-[#3EAAB8] hover:underline">
-              Prozess-Aufträge</button>.
+            Diese Liste zeigt nur die neuesten<template v-if="hatAufsicht"> – die
+            vollständige Suche steht unter
+            <button @click="router.push('/auftraege')" class="text-[#3EAAB8] hover:underline">
+              Alle Aufträge</button></template>.
           </div>
         </div>
       </div>

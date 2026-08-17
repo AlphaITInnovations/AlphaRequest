@@ -24,6 +24,17 @@ def is_admin(user: dict) -> bool:
     return PERM_ADMIN in set(user.get("permissions") or [])
 
 
+def may_force_archive(user: dict) -> bool:
+    """Zwangsabschluss: Admin ODER Manager.
+
+    Die Aufsichts-Rolle „manage" darf Aufträge aus der Auftragsliste archivieren
+    (Alt-System-Regel: viewer liest nur, manager darf zusätzlich archivieren,
+    admin darf alles). Bewusst eine EIGENE Funktion statt einer Aufweichung von
+    may_edit – archivieren ist die einzige Schreibaktion der Manager-Rolle.
+    """
+    return is_admin(user) or PERM_MANAGE in set(user.get("permissions") or [])
+
+
 def responsible_groups(defn: Optional[ProcessDefinition], row: dict) -> set:
     """Gruppen, die für die AKTUELLE Phase zuständig sind (inkl. Abteilungen)."""
     if defn is None:

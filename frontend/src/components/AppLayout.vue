@@ -38,6 +38,11 @@ const isProzessTicketActive = computed(
 const isUebersichtActive = computed(() => route.path === '/dashboard')
 const isAuftraegeActive = computed(() => route.path === '/auftraege')
 
+// „Alle Aufträge" ist eine Aufsichts-Seite (Alt-System-Regel): nur viewer/
+// manager/admin sehen den Menüpunkt – die Route ist zusätzlich per Guard
+// geschützt. Alle anderen arbeiten über die Übersicht.
+const hatAufsicht = computed(() => auth.canView || auth.canManage || auth.isAdmin)
+
 function navigate(path: string) {
   router.push(path)
   mobileOpen.value = false
@@ -174,7 +179,8 @@ defineProps<{ title?: string }>()
           <span v-if="sidebarOpen" class="truncate">Übersicht</span>
         </a>
 
-        <a @click.prevent="navigate('/auftraege')"
+        <a v-if="hatAufsicht"
+           @click.prevent="navigate('/auftraege')"
            href="/auftraege"
            class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
            :class="[

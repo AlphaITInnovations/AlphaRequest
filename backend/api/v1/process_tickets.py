@@ -156,7 +156,9 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
                 or (ist_owner and not _is_terminal(row))),
         # Wiederaufnahme greift in einen FERTIGEN Auftrag ein – nur Admin.
         reopen=acc.is_admin(user) and _is_terminal(row),
-        archive=acc.is_admin(user) and not _is_terminal(row),
+        # Archivieren dürfen auch Manager (Aufsichts-Rolle „manage") – die
+        # einzige Schreibaktion dieser Rolle, siehe acc.may_force_archive.
+        archive=acc.may_force_archive(user) and not _is_terminal(row),
         delete=acc.is_admin(user),
     )
 
@@ -878,9 +880,9 @@ def archive_process_ticket(ticket_id: int, body: RejectRequest,
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
-    if not acc.is_admin(user):
+    if not acc.may_force_archive(user):
         raise api_error(403, ErrorCode.ADMIN_REQUIRED,
-                        "Nur Admins können einen Auftrag zwangsweise abschließen")
+                        "Nur Manager oder Admins können einen Auftrag zwangsweise abschließen")
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
                         "Der Auftrag ist bereits abgeschlossen/abgelehnt")

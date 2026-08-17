@@ -21,12 +21,20 @@ const props = defineProps<{
   loading?: boolean
   /** Text für die leere Liste – hängt von der gewählten Sicht ab. */
   emptyText: string
+  /** Archivieren-Knopf je Zeile (Manager + Admin) – verbindlich prüft der Server. */
+  canArchive?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'open', id: number): void
   (e: 'sort', key: OverviewSortKey): void
+  (e: 'archive', id: number): void
 }>()
+
+/** Terminale Aufträge (archiviert/abgelehnt) haben nichts mehr zu archivieren. */
+function archivierbar(r: OverviewRow): boolean {
+  return !!props.canArchive && r.status !== 'archived' && r.status !== 'rejected'
+}
 
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
@@ -128,7 +136,14 @@ function sortIcon(key: OverviewSortKey) {
             <td class="px-4 py-3.5 text-gray-500 dark:text-gray-400 whitespace-nowrap hidden sm:table-cell">
               {{ r.updatedAt }}
             </td>
-            <td class="px-4 py-3.5 text-right" @click.stop>
+            <td class="px-4 py-3.5 text-right whitespace-nowrap" @click.stop>
+              <button v-if="archivierbar(r)" @click="emit('archive', r.id)"
+                      title="Zwangsweise abschließen (Begründung Pflicht)"
+                      class="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/10
+                             text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5
+                             text-xs font-medium transition whitespace-nowrap mr-1.5">
+                Archivieren
+              </button>
               <button @click="emit('open', r.id)"
                       class="px-3 py-1.5 rounded-xl bg-[#3EAAB8]/10 text-[#3EAAB8]
                              hover:bg-[#3EAAB8]/20 text-xs font-medium transition whitespace-nowrap">
