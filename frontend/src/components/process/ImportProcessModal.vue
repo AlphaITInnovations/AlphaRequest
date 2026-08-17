@@ -345,7 +345,7 @@ async function submit() {
                 <option value="" disabled>Bitte wählen…</option>
                 <option v-if="!r.placeholder" :value="KEEP">Unverändert übernehmen</option>
                 <option v-for="g in gruppenSortiert" :key="g.id" :value="g.id">
-                  {{ g.name }}{{ g.id === r.suggestion ? ' (empfohlen)' : '' }}
+                  {{ g.name }}
                 </option>
               </select>
             </div>

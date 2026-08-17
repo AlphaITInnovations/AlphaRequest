@@ -89,28 +89,21 @@ export interface UnknownGroupRef {
   label: string
   /** Anzahl Fundstellen in der Definition. */
   sites: number
-  /** Gruppen-ID mit passendem Namen (case-insensitiv) – Vorbelegung fürs Dropdown. */
-  suggestion: string | null
 }
 
 /**
  * Alle fremden Gruppen-Referenzen der Definition, je Wert EIN Eintrag.
  * Reihenfolge: Platzhalter zuerst (die blockieren den Import), dann IDs,
  * innerhalb dessen nach Fundreihenfolge.
+ *
+ * BEWUSST ohne Namens-Vorschlag: die Zuordnung wird immer selbst getroffen
+ * (die IDs sind je Umgebung verschieden), es wird nichts vorbelegt oder
+ * empfohlen.
  */
 export function unknownGroupRefs(
   d: ProcessDefinition, groups: { id: string; name: string }[],
 ): UnknownGroupRef[] {
   const known = new Set(groups.map((g) => g.id))
-
-  // Name (kleingeschrieben, getrimmt) → ID; mehrdeutige Namen geben keinen
-  // Vorschlag – lieber keine Vorbelegung als die falsche Gruppe.
-  const byName = new Map<string, string | null>()
-  for (const g of groups) {
-    const name = g.name.trim().toLowerCase()
-    if (!name) continue
-    byName.set(name, byName.has(name) && byName.get(name) !== g.id ? null : g.id)
-  }
 
   const counts = new Map<string, number>()
   for (const { value } of collectGroupRefs(d)) {
@@ -121,10 +114,7 @@ export function unknownGroupRefs(
   for (const [value, sites] of counts) {
     const placeholder = isGroupPlaceholder(value)
     const label = PLACEHOLDER_GROUP_NAMES[value] ?? value
-    const suggestion = placeholder
-      ? (byName.get(label.trim().toLowerCase()) ?? null)
-      : null
-    rows.push({ value, placeholder, label, sites, suggestion })
+    rows.push({ value, placeholder, label, sites })
   }
   return rows.sort((a, b) => Number(b.placeholder) - Number(a.placeholder))
 }

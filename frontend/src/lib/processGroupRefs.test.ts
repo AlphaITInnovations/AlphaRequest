@@ -81,7 +81,7 @@ describe('collectGroupRefs', () => {
 })
 
 describe('unknownGroupRefs', () => {
-  it('liefert je fremdem Wert einen Eintrag mit Klartext, Zähler und Namens-Vorschlag', () => {
+  it('liefert je fremdem Wert einen Eintrag mit Klartext und Zähler', () => {
     const rows = unknownGroupRefs(defn(), GRUPPEN)
     const byValue = Object.fromEntries(rows.map((r) => [r.value, r]))
 
@@ -89,27 +89,18 @@ describe('unknownGroupRefs', () => {
 
     expect(byValue[PH_HR]).toMatchObject({
       placeholder: true, label: 'Personalabteilung', sites: 1,
-      suggestion: 'gid-hr',                            // case-insensitiv gefunden
     })
-    expect(byValue[PH_IT]).toMatchObject({ suggestion: 'gid-it', sites: 2 })
-    expect(byValue[PH_SGL]).toMatchObject({
-      label: 'Sekretariat GL', sites: 2, suggestion: null,   // Gruppe fehlt
-    })
-    expect(byValue['fremd-99']).toMatchObject({
-      placeholder: false, label: 'fremd-99', suggestion: null,
-    })
+    expect(byValue[PH_IT]).toMatchObject({ sites: 2 })
+    expect(byValue[PH_SGL]).toMatchObject({ label: 'Sekretariat GL', sites: 2 })
+    expect(byValue['fremd-99']).toMatchObject({ placeholder: false, label: 'fremd-99' })
+
+    // Es wird nichts empfohlen/vorbelegt – die Zeilen tragen keinen Vorschlag.
+    expect(rows.every((r) => !('suggestion' in r))).toBe(true)
 
     // Platzhalter (blockieren den Import) stehen vor echten IDs.
     const letzterPlatzhalter = rows.map((r) => r.placeholder).lastIndexOf(true)
     const ersteId = rows.map((r) => r.placeholder).indexOf(false)
     expect(letzterPlatzhalter).toBeLessThan(ersteId)
-  })
-
-  it('macht bei mehrdeutigen Gruppennamen keinen Vorschlag', () => {
-    const rows = unknownGroupRefs(defn(), [
-      { id: 'gid-1', name: 'IT' }, { id: 'gid-2', name: 'it ' },
-    ])
-    expect(rows.find((r) => r.value === PH_IT)?.suggestion).toBeNull()
   })
 })
 
