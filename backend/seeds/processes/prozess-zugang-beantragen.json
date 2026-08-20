@@ -1429,6 +1429,29 @@
       "assign": null,
       "mode": null,
       "item": []
+    },
+    {
+      "key": "ablauf.freigabe_ueberspringen",
+      "label": "Freigabe überspringen",
+      "widget": "checkbox",
+      "help": "Nur Sekretariat GL: Wenn gesetzt, geht der Auftrag OHNE Freigabe durch Herrn Lutz (und ohne Freigabe-Mail) direkt in die Bearbeitung.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": true,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
     }
   ],
   "phases": [
@@ -1447,6 +1470,13 @@
         "resetOnDescriptionChange": false
       },
       "fields": [
+        {
+          "ref": "ablauf.freigabe_ueberspringen",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
         {
           "ref": "dokumente.uploads",
           "mode": "editable",
@@ -1713,6 +1743,21 @@
         }
       ],
       "layout": [
+        {
+          "type": "section",
+          "title": "Freigabe",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "ablauf.freigabe_ueberspringen",
+              "width": "full"
+            }
+          ]
+        },
         {
           "type": "section",
           "title": "Dokumente",
@@ -2214,7 +2259,28 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [
+        {
+          "id": "freigabe_ueberspringen",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null
+          },
+          "guard": {
+            "truthy": "ablauf.freigabe_ueberspringen"
+          },
+          "action": {
+            "type": "auto_advance",
+            "to": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null
+          }
+        }
+      ]
     },
     {
       "key": "bearbeitung",

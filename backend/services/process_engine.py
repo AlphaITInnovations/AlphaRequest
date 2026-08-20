@@ -21,7 +21,7 @@ from typing import Optional
 from backend.database import process_tickets as store
 from backend.database import process_timer_fires as fires
 from backend.database.audit_log import record_audit
-from backend.schemas.process_definition import ProcessDefinition, PhaseDef, TriggerType
+from backend.schemas.process_definition import ActionType, ProcessDefinition, PhaseDef, TriggerType
 from backend.services import process_actions as actions
 from backend.services import process_automations as pa
 from backend.services import process_events as events
@@ -105,6 +105,18 @@ def fire(automation, row: dict, defn: ProcessDefinition, phase: PhaseDef,
                          automation.id, row.get("id"))
         _audit_failed(row, automation, exc)
         return False
+
+
+def _auto_advance_pending(defn: ProcessDefinition, phase: PhaseDef, row: dict) -> bool:
+    """Wird die Phase beim Eintritt sofort per on_enter-auto_advance verlassen?
+    (Guard bereits ausgewertet.) Dient nur dazu, für einen solchen Durchgangs-
+    punkt die Phasen-Benachrichtigung zu unterdrücken."""
+    for a in list(defn.automations) + list(phase.automations):
+        if (a.trigger.type == TriggerType.on_enter
+                and a.action.type == ActionType.auto_advance
+                and guard_passes(a, row)):
+            return True
+    return False
 
 
 def run_inline(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
@@ -220,7 +232,12 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
     # Zuständige Stelle automatisch informieren – ohne das erfährt niemand, dass
     # Arbeit ansteht (das Alt-System hat an sechs Stellen gemailt). Abschaltbar
     # je Phase über responsibility.notifyOnEnter.
-    if new_phase is not None:
+    #
+    # AUSNAHME: Schaltet die neu betretene Phase beim Eintritt sofort weiter (ein
+    # on_enter-auto_advance, dessen Guard greift – z. B. „Freigabe überspringen"),
+    # ist sie nur ein Durchgangspunkt. Dann NICHT benachrichtigen, sonst ginge die
+    # Mail (z. B. die Freigabe-Anfrage) raus, obwohl hier gar nichts zu tun ist.
+    if new_phase is not None and not _auto_advance_pending(defn, new_phase, row):
         try:
             recips = actions.notify_phase_entry(row, defn, new_phase, sender=SENDER)
             if recips:

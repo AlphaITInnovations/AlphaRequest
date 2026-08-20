@@ -33,6 +33,30 @@ DEFN = {
 }
 
 
+#: Start -> Freigabe(approval, on_enter-auto_advance per Haken) -> Ende.
+#: Prueft: gesetzter Haken ueberspringt die Freigabe (kein Halt, keine Mail).
+DEFN_SKIP = {
+    "schemaVersion": 1, "key": "skip", "name": "Skip-Flow",
+    "fields": [{"key": "base.name", "widget": "text"},
+               {"key": "ueberspringen", "widget": "checkbox"}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "required": True}, {"ref": "ueberspringen"}],
+         "automations": [{"id": "go", "trigger": {"type": "on_enter"},
+                          "action": {"type": "auto_advance"}}]},
+        {"key": "frei", "kind": "approval", "view": "approval",
+         "responsibility": {"kind": "owner"},
+         "approval": {"question": "Freigeben?", "externalLink": True, "emailBody": "x"},
+         "fields": [{"ref": "base.name", "mode": "readonly"}],
+         "automations": [{"id": "skip", "trigger": {"type": "on_enter"},
+                          "guard": {"truthy": "ueberspringen"},
+                          "action": {"type": "auto_advance"}}]},
+        {"key": "ende", "kind": "task", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "mode": "readonly"}]},
+    ],
+}
+
+
 class FakeStore:
     ProcessTicketConflict = ProcessTicketConflict   # damit `store.ProcessTicketConflict` im Endpunkt greift
 
@@ -126,6 +150,8 @@ class FakeDefs:
             return {"version": 1, "definition": DEFN_FIXED}
         if key == "flow":
             return {"version": 1, "definition": DEFN_FLOW}
+        if key == "skip":
+            return {"version": 1, "definition": DEFN_SKIP}
         return None
 
     def get_definition(self, key, ver):
@@ -136,6 +162,8 @@ class FakeDefs:
             return {"version": ver, "definition": DEFN_FIXED}
         if key == "flow":
             return {"version": ver, "definition": DEFN_FLOW}
+        if key == "skip":
+            return {"version": ver, "definition": DEFN_SKIP}
         return None
 
 
@@ -223,6 +251,23 @@ def test_create_rendert_titel_aus_vorlage(client):
                     "title": "wird ignoriert", "values": {"base.name": "Max Mustermann"}})
     assert r.status_code == 200
     assert r.json()["data"]["title"] == "Neuer Auftrag – Max Mustermann"
+
+
+def test_gesetzter_haken_ueberspringt_freigabe(client):
+    """Haken gesetzt: der Auftrag schaltet durch die Freigabe-Phase hindurch
+    direkt in die Folgephase (kein Halt, keine Freigabe-Benachrichtigung)."""
+    r = client.post("/process-tickets", json={"processKey": "skip",
+                    "values": {"base.name": "Max", "ueberspringen": True}})
+    assert r.status_code == 200
+    assert r.json()["data"]["current_phase"] == "ende"
+
+
+def test_ohne_haken_haelt_in_der_freigabe(client):
+    """Haken NICHT gesetzt: der Auftrag bleibt in der Freigabe-Phase stehen."""
+    r = client.post("/process-tickets", json={"processKey": "skip",
+                    "values": {"base.name": "Max"}})
+    assert r.status_code == 200
+    assert r.json()["data"]["current_phase"] == "frei"
 
 
 def test_create_defer_start_bleibt_in_startphase(client):
