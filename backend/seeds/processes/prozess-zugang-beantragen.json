@@ -1218,14 +1218,14 @@
       "computed": {
         "from": "personal.position",
         "map": {
-          "Disposition": "Gruppe 1 (BLP 40.000 €)",
-          "Niederlassungsleitung": "Gruppe 2 (BLP 50.000 €)",
-          "Abteilungsleitung / Verwaltung": "Gruppe 2 (BLP 50.000 €)",
-          "Regionalleitung": "Gruppe 3 (BLP 60.000 €)",
-          "Regionaldirektion": "Gruppe 4 (BLP 70.000 €)",
-          "Geschäftsbereichsleitung": "Gruppe 5 (BLP 80.000–90.000 €)",
-          "C-Level": "Gruppe 6 (BLP 100.000 €)",
-          "Geschäftsführung": "Gruppe 6 (BLP 100.000 €)"
+          "Disposition": "Disposition (BLP 40.000 €)",
+          "Niederlassungsleitung": "Niederlassungsleitung (BLP 50.000 €)",
+          "Abteilungsleitung / Verwaltung": "Abteilungsleitung / Verwaltung (BLP 50.000 €)",
+          "Regionalleitung": "Regionalleitung (BLP 60.000 €)",
+          "Regionaldirektion": "Regionaldirektion (BLP 70.000 €)",
+          "Geschäftsbereichsleitung": "Geschäftsbereichsleitung (BLP 80.000–90.000 €)",
+          "C-Level": "C-Level (BLP 100.000 €)",
+          "Geschäftsführung": "Geschäftsführung (BLP 100.000 €)"
         }
       },
       "overridable": false,
