@@ -75,6 +75,9 @@ const phase = computed(() => {
   return definition.value.phases[i] ?? null
 })
 
+/** Index der aktiven Phase – Grundlage für den Fortschritts-Stepper links. */
+const aktivIndex = computed(() => ticket.value?.runtime?.current_index ?? 0)
+
 /** Ist die aktuelle Phase die LETZTE? Dann schließt der Abschluss den Auftrag ab
  *  („Abschließen"), sonst geht er an die nächste Stelle („Weitergeben"). */
 const istLetztePhase = computed(() => {
@@ -241,8 +244,9 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
 
 <template>
   <AppLayout>
-    <!-- Admin-Modus breiter: rechts kommt die Verlauf-Spalte dazu. -->
-    <div class="mx-auto px-4 py-6" :class="adminModus ? 'max-w-7xl' : 'max-w-5xl'">
+    <!-- Admin-Modus am breitesten (Verlauf-Spalte rechts); sonst breit genug für
+         die zweispaltige Ansicht (Fortschritt-Leiste links + Formular rechts). -->
+    <div class="mx-auto px-4 py-6" :class="adminModus ? 'max-w-7xl' : 'max-w-6xl'">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
       </div>
@@ -270,8 +274,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                            :readonly="leseModus" />
 
         <template v-else-if="ticket && definition">
-        <!-- Kopf (Aktionen stehen in der sticky Aktionsleiste unten – wie beim
-             Basis-Ticket: ein UI-Design für alle Aufträge) -->
+        <!-- Kopf: volle Breite über den zwei Spalten. -->
         <div class="mb-4 min-w-0">
           <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100 truncate">
             {{ ticket.title }}
@@ -281,121 +284,139 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             <span class="font-mono">{{ ticket.process_key }} v{{ ticket.process_version }}</span>
             <span>·</span>
             <span>{{ STATUS_LABEL[ticket.status] || ticket.status }}</span>
-            <span v-if="ticket.current_phase_label">· Phase: {{ ticket.current_phase_label }}</span>
           </div>
         </div>
 
-        <!-- Phasenfortschritt -->
-        <div class="card-section mb-4">
-          <ol class="flex items-center gap-2 flex-wrap">
-            <li v-for="(p, i) in definition.phases" :key="p.key" class="flex items-center gap-2">
-              <span class="px-2.5 py-1 rounded-full text-xs"
-                    :class="i < (ticket.runtime?.current_index ?? 0)
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                      : i === (ticket.runtime?.current_index ?? 0)
-                        ? 'bg-[#3EAAB8]/15 text-[#3EAAB8]'
-                        : 'bg-gray-100 text-gray-400 dark:bg-white/10'">
-                {{ p.label || p.key }}
-              </span>
-              <span v-if="i < definition.phases.length - 1" class="text-gray-300">→</span>
-            </li>
-          </ol>
-          <div v-if="ticket.responsibility" class="text-xs text-gray-400 mt-2">
-            Zuständig:
-            <template v-if="ticket.responsibility.kind === 'departments'">
-              {{ ticket.responsibility.departments.map(d => groupName(d.group)).join(', ') || '—' }}
+        <!-- Zwei Spalten wie beim Basis-Ticket: links Fortschritt + Beobachter,
+             rechts das Formular. Der Verlauf gehört NICHT hierher (nur Admin);
+             „Alle Angaben" ist die Leseansicht und wird beim Bearbeiten NICHT
+             doppelt gezeigt. -->
+        <div class="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)] items-start">
+          <!-- Linke Leiste -->
+          <aside class="space-y-4 lg:sticky lg:top-4">
+            <!-- Fortschritt (vertikaler Stepper) -->
+            <div class="card-section">
+              <div class="flex items-center justify-between mb-4">
+                <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Fortschritt
+                </span>
+                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full
+                             bg-[#3EAAB8]/15 text-[#3EAAB8]">
+                  Phase {{ aktivIndex + 1 }} von {{ definition.phases.length }}
+                </span>
+              </div>
+              <ol>
+                <li v-for="(p, i) in definition.phases" :key="p.key" class="flex gap-3">
+                  <!-- Kreis + Verbindungslinie -->
+                  <div class="flex flex-col items-center">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center
+                                 text-xs font-semibold shrink-0"
+                          :class="i < aktivIndex ? 'bg-green-500 text-white'
+                            : i === aktivIndex ? 'bg-[#3EAAB8] text-white'
+                            : 'bg-gray-100 text-gray-400 dark:bg-white/10 dark:text-gray-500'">
+                      <template v-if="i < aktivIndex">✓</template>
+                      <template v-else>{{ i + 1 }}</template>
+                    </span>
+                    <span v-if="i < definition.phases.length - 1" class="w-px flex-1 my-1 min-h-[1rem]"
+                          :class="i < aktivIndex ? 'bg-green-400/50' : 'bg-gray-200 dark:bg-white/10'" />
+                  </div>
+                  <div class="pb-3 min-w-0">
+                    <p class="text-sm font-medium leading-tight"
+                       :class="i === aktivIndex ? 'text-[#3EAAB8]'
+                         : i < aktivIndex ? 'text-green-700 dark:text-green-300'
+                         : 'text-gray-400'">
+                      {{ p.label || p.key }}
+                    </p>
+                    <p class="text-[11px] text-gray-400">
+                      {{ i < aktivIndex ? 'Erledigt' : i === aktivIndex ? 'Aktuell' : 'Ausstehend' }}
+                    </p>
+                  </div>
+                </li>
+              </ol>
+              <!-- Wer ist gerade zuständig? (bewusst kompakt, read-only) -->
+              <div v-if="ticket.responsibility"
+                   class="text-xs text-gray-400 mt-1 pt-3 border-t border-gray-100 dark:border-white/[0.06]">
+                Zuständig:
+                <template v-if="ticket.responsibility.kind === 'departments'">
+                  {{ ticket.responsibility.departments.map(d => groupName(d.group)).join(', ') || '—' }}
+                </template>
+                <template v-else-if="ticket.responsibility.kind === 'group'">
+                  <span v-if="ticket.responsibility.group">
+                    {{ groupName(ticket.responsibility.group) }}
+                  </span>
+                  <span v-else class="text-red-500 font-medium">niemand (keine Fachabteilung gewählt)</span>
+                </template>
+                <template v-else-if="ticket.responsibility.kind === 'owner'">
+                  {{ ticket.owner_name || 'Ersteller:in' }}
+                </template>
+                <template v-else>—</template>
+              </div>
+            </div>
+
+            <!-- Beobachter -->
+            <ProcessWatchers :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
+                             :can-manage="abilities.manage_watchers"
+                             :users="sources.users" />
+          </aside>
+
+          <!-- Rechte Spalte: Arbeitsbereich -->
+          <div class="min-w-0 space-y-4">
+            <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen
+                 blockiert `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst
+                 AUSSERHALB von abilities.edit: quittieren muss auch, wer den
+                 Auftrag nicht bearbeiten darf. `terminal` unterdrückt die Knöpfe
+                 in der Leseansicht und bei abgeschlossenen Aufträgen. -->
+            <ProcessDepartments
+              v-if="ticket.responsibility?.kind === 'departments'"
+              :ticket-id="ticket.id"
+              :departments="ticket.responsibility.departments"
+              :group-name="groupName"
+              :terminal="terminal || (leseModus && !adminModus)"
+              @updated="onDepartmentsUpdated" />
+
+            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
+            <template v-if="abilities.edit && phase && !isExportPhase">
+              <SchemaForm :definition="definition" :phase="phase" :model-value="values"
+                          :viewer="viewer" :errors="errors" :sources="sources"
+                          @update:model-value="onValues($event)" />
+              <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst. -->
+              <div v-if="generalErrors.length"
+                   class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
+                          px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                <ul class="list-disc list-inside">
+                  <li v-for="(e, i) in generalErrors" :key="i">
+                    <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
+                  </li>
+                </ul>
+              </div>
             </template>
-            <template v-else-if="ticket.responsibility.kind === 'group'">
-              <!-- `group` kann NULL sein: beim Basis-Ticket steht die Zuständigkeit
-                   in einem Feld, und solange es leer ist, ist niemand zuständig.
-                   Das muss sichtbar sein – sonst läge der Auftrag unbemerkt. -->
-              <span v-if="ticket.responsibility.group">
-                {{ groupName(ticket.responsibility.group) }}
-              </span>
-              <span v-else class="text-red-500 font-medium">niemand (keine Fachabteilung gewählt)</span>
-            </template>
-            <template v-else-if="ticket.responsibility.kind === 'owner'">
-              {{ ticket.owner_name || 'Ersteller:in' }}
-            </template>
-            <template v-else>—</template>
+
+            <!-- Export-Phase: druckbare Zusammenfassung. Sonst die vollständige
+                 Leseansicht – aber NUR, wenn nicht bearbeitet wird (beim Bearbeiten
+                 zeigt das Formular die Felder bereits, kein doppeltes Rendern). -->
+            <SchemaExportView
+              v-if="isExportPhase"
+              :definition="definition" :ticket="ticket" :phase="phase"
+              :viewer="viewer" :sources="sources"
+              @exported="showToast('PDF erzeugt')"
+              @failed="showToast($event, false)" />
+            <div v-else-if="!abilities.edit" class="card-section">
+              <h3 class="section-title">Alle Angaben</h3>
+              <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
+                                  :sources="sources" />
+            </div>
+
+            <!-- Allgemeine Anhänge (Feld-Anhänge stehen im Formular) -->
+            <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
+                                :can-attach="abilities.attach"
+                                :current-user-id="auth.user?.id ?? null" />
           </div>
         </div>
 
-        <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen blockiert
-             `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst AUSSERHALB von
-             abilities.edit: quittieren muss auch, wer den Auftrag nicht bearbeiten darf. -->
-        <!-- `terminal` unterdrückt die Quittier-Knöpfe – in der Leseansicht
-             genauso gewollt wie bei abgeschlossenen Aufträgen. In der
-             ADMIN-Ansicht bleiben sie bedienbar (Notfall-Quittierung). -->
-        <ProcessDepartments
-          v-if="ticket.responsibility?.kind === 'departments'"
-          class="mb-4"
-          :ticket-id="ticket.id"
-          :departments="ticket.responsibility.departments"
-          :group-name="groupName"
-          :terminal="terminal || (leseModus && !adminModus)"
-          @updated="onDepartmentsUpdated" />
-
-        <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
-        <template v-if="abilities.edit && phase && !isExportPhase">
-          <SchemaForm :definition="definition" :phase="phase" :model-value="values"
-                      :viewer="viewer" :errors="errors" :sources="sources"
-                      @update:model-value="onValues($event)" />
-          <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst an. -->
-          <div v-if="generalErrors.length"
-               class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
-                      px-4 py-3 text-sm text-red-800 dark:text-red-200 mt-3">
-            <ul class="list-disc list-inside">
-              <li v-for="(e, i) in generalErrors" :key="i">
-                <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
-              </li>
-            </ul>
-          </div>
-        </template>
-
-        <!-- Export-Phase: druckbare Zusammenfassung; sonst die Gesamtansicht -->
-        <SchemaExportView
-          v-if="isExportPhase"
-          class="mt-4"
-          :definition="definition"
-          :ticket="ticket"
-          :phase="phase"
-          :viewer="viewer"
-          :sources="sources"
-          @exported="showToast('PDF erzeugt')"
-          @failed="showToast($event, false)" />
-        <div v-else class="card-section mt-4">
-          <h3 class="section-title">Alle Angaben</h3>
-          <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
-                              :sources="sources" />
-        </div>
-
-        <!-- Allgemeine Anhänge des Auftrags (Feld-Anhänge stehen im Formular) -->
-        <div class="mt-4">
-          <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
-                              :can-attach="abilities.attach"
-                              :current-user-id="auth.user?.id ?? null" />
-        </div>
-
-        <!-- Im Admin-Modus steht der Verlauf in der rechten Spalte – hier unten
-             bleibt dann nur die Beobachter-Karte (volle Breite). -->
-        <div class="grid gap-4 mt-4 items-start"
-             :class="adminModus ? '' : 'lg:grid-cols-[2fr_1fr]'">
-          <ProcessTimeline v-if="!adminModus"
-                           ref="timeline" :ticket-id="ticket.id"
-                           :field-labels="fieldLabels" :phase-labels="phaseLabels"
-                           :group-name="groupName"
-                           :can-be-internal="abilities.internal_comment" />
-          <ProcessWatchers :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
-                           :can-manage="abilities.manage_watchers"
-                           :users="sources.users" />
-        </div>
-
-        <!-- Aktionsleiste – sticky und in JEDER Ansicht da (lesend wie bearbeitend),
-             gleiches Layout wie das Basis-Ticket: „Abbrechen" führt immer zurück;
-             die Schreib-Knöpfe kommen nur dazu, wenn bearbeitet werden darf.
-             Ablehnen/Zwangsabschluss/Wiederaufnahme/Löschen sind Admin-Werkzeuge
-             und stehen ausschließlich im AdminActionsPanel (?ansicht=admin). -->
+        <!-- Aktionsleiste – sticky, gleiches Layout wie das Basis-Ticket:
+             „Abbrechen" führt immer zurück; die Schreib-Knöpfe kommen nur dazu,
+             wenn bearbeitet werden darf. Ablehnen/Zwangsabschluss/Wiederaufnahme/
+             Löschen sind Admin-Werkzeuge (AdminActionsPanel, ?ansicht=admin). -->
         <div class="card-section sticky bottom-4 z-20 shadow-lg mt-4
                     flex items-center justify-end gap-2 flex-wrap">
           <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
