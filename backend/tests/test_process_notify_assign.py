@@ -237,22 +237,27 @@ def test_attachment_note_text():
 
 def test_ticket_attachments_deckelt_gesamtgroesse(monkeypatch):
     """Große Dateien werden ausgelassen, damit die Graph-Grenze nicht den ganzen
-    Versand kippt – kleinere danach kommen trotzdem noch mit."""
+    Versand kippt – kleinere danach kommen trotzdem noch mit. Gemessen wird die
+    base64-KODIERTE Länge (das, was Graph überträgt)."""
+    from types import SimpleNamespace
     from backend.database import attachments as att_db
     from backend.services import attachment_storage as storage
     from backend.services import microsoft_mail as mm
     rows = [
-        {"original_filename": "cv.pdf", "stored_path": "cv.pdf", "size_bytes": 1000},
-        {"original_filename": "riesig.zip", "stored_path": "riesig.zip",
-         "size_bytes": pactions._MAIL_ATTACH_TOTAL_LIMIT},
-        {"original_filename": "foto.png", "stored_path": "foto.png", "size_bytes": 2000},
+        {"original_filename": "cv.pdf", "stored_path": "cv.pdf"},
+        {"original_filename": "riesig.zip", "stored_path": "riesig.zip"},
+        {"original_filename": "foto.png", "stored_path": "foto.png"},
     ]
+    # kodierte Länge je Datei: cv passt, riesig.zip füllt allein das Limit, foto passt noch.
+    enc_len = {"cv.pdf": 1000, "riesig.zip": pactions._MAIL_ATTACH_TOTAL_LIMIT, "foto.png": 2000}
     monkeypatch.setattr(att_db, "list_for_ticket",
                         lambda tid, entity_type=None: [dict(r) for r in rows])
     monkeypatch.setattr(storage, "full_path", lambda sp: sp)
-    monkeypatch.setattr(mm, "attachment_from_path", lambda path, filename=None: {"file": filename})
+    monkeypatch.setattr(mm, "attachment_from_path",
+                        lambda path, filename=None: SimpleNamespace(
+                            file=filename, content_bytes_b64="x" * enc_len[filename]))
     out = pactions._ticket_attachments({"id": 5})
-    assert [a["file"] for a in out] == ["cv.pdf", "foto.png"]   # riesig.zip übersprungen
+    assert [a.file for a in out] == ["cv.pdf", "foto.png"]   # riesig.zip übersprungen
 
 
 def test_ticket_attachments_ohne_id_leer():

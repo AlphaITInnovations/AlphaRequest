@@ -146,8 +146,15 @@ def _check_constraints(f: FieldDef, val: Any) -> list[dict]:
 
 def validate_phase_completion(defn: ProcessDefinition, phase: PhaseDef, values: dict) -> list[dict]:
     errors: list[dict] = []
+    fmap = {f.key: f for f in defn.fields}
     for fr in phase.fields:
         if fr.mode == FieldMode.hidden:
+            continue
+        # Anhang-Felder speichern nichts in `values` (die Dateien liegen als
+        # eigene Entität vor) – ein „required" ließe sich hier nie erfüllen und
+        # würde den Phasen-Abschluss dauerhaft blockieren. Deshalb überspringen.
+        f = fmap.get(fr.ref)
+        if f is not None and f.widget == Widget.attachment:
             continue
         if fr.visibleWhen is not None and not evaluate(fr.visibleWhen, values):
             continue  # nicht sichtbar → nicht pflicht

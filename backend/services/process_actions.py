@@ -323,19 +323,20 @@ def _approval_message(row: dict, phase: PhaseDef, title: str,
     return subject, body
 
 
-# Gesamtgröße der an die Freigabe-Mail gehängten Dateien. Graph bettet
-# `contentBytes` inline ein und deckelt die GESAMTE Nachricht bei ~3–4 MB;
-# darüber schlägt der Versand fehl. Konservativ darunter bleiben und größere
-# Dateien auslassen (mit Log), statt die ganze Freigabe-Mail scheitern zu lassen.
-_MAIL_ATTACH_TOTAL_LIMIT = 3 * 1024 * 1024
+# Gesamtgröße der base64-KODIERTEN Anhänge (genau das, was Graph inline als
+# `contentBytes` überträgt). Graph deckelt die GESAMTE Nachricht bei ~4 MB, und
+# base64 bläht die Rohgröße um 4/3 auf – deshalb messen wir die KODIERTE Länge und
+# bleiben konservativ darunter (eine Rohgrößen-Prüfung ließe eine 3-MB-Datei durch,
+# die kodiert ~4 MB ergibt und den Versand still scheitern ließe).
+_MAIL_ATTACH_TOTAL_LIMIT = int(3.5 * 1024 * 1024)
 
 
 def _ticket_attachments(row: dict) -> list:
     """Aktuelle Datei-Anhänge des Auftrags als Mail-Anhänge (Freigabe-Mail).
 
-    Nur die jeweils aktuellen Versionen, bis zu einem Gesamt-Limit. Fehlende,
-    unlesbare oder zu große Dateien werden ausgelassen (Log) – ein Anhang-Problem
-    darf den Versand der Freigabe-Mail nie kippen.
+    Nur die jeweils aktuellen Versionen, bis zu einem Gesamt-Limit (base64-kodiert
+    gemessen). Fehlende, unlesbare oder zu große Dateien werden ausgelassen (Log) –
+    ein Anhang-Problem darf den Versand der Freigabe-Mail nie kippen.
     """
     tid = row.get("id")
     if not tid:
@@ -357,15 +358,16 @@ def _ticket_attachments(row: dict) -> list:
     for a in rows:
         name = a.get("original_filename") or "Anhang"
         try:
-            size = int(a.get("size_bytes") or 0)
-            if size and total + size > _MAIL_ATTACH_TOTAL_LIMIT:
-                logger.warning("Freigabe-Mail #%s: „%s“ (%d B) ausgelassen – "
-                               "Gesamtlimit %d B erreicht", tid, name, size,
+            path = storage.full_path(a["stored_path"])
+            att = attachment_from_path(str(path), filename=name)
+            enc = len(getattr(att, "content_bytes_b64", "") or "")   # ~ übertragene Größe
+            if total + enc > _MAIL_ATTACH_TOTAL_LIMIT:
+                logger.warning("Freigabe-Mail #%s: „%s“ ausgelassen – kodiertes "
+                               "Gesamtlimit %d B erreicht", tid, name,
                                _MAIL_ATTACH_TOTAL_LIMIT)
                 continue
-            path = storage.full_path(a["stored_path"])
-            out.append(attachment_from_path(str(path), filename=name))
-            total += size
+            out.append(att)
+            total += enc
         except Exception:
             logger.exception("Freigabe-Mail #%s: „%s“ nicht anhängbar", tid, name)
     return out

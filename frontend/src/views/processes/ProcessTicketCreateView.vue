@@ -126,28 +126,48 @@ async function submit() {
       for (const file of fs) files.push({ fieldKey, file })
     }
     const hasFiles = files.length > 0
-    // Mit Anhängen: NICHT sofort weiterschalten – erst hochladen, dann selbst
-    // :advance. So verschickt der Server die Freigabe-Mail MIT den Anhängen.
-    const ticket = await createTicket({
-      processKey: definition.value.key,
-      title: title.value || null,
-      priority: priority.value,
-      values: values.value,
-      autoStart: !hasFiles,
-    })
+
+    // 1) Anlegen. Mit Anhängen NICHT sofort weiterschalten (autoStart=false) –
+    //    erst hochladen, dann selbst :advance, damit die Freigabe-Mail die
+    //    Anhänge mitbekommt. Schlägt schon das Anlegen fehl, existiert kein
+    //    Ticket → auf dem Formular bleiben und Feldfehler zeigen.
+    let ticket
+    try {
+      ticket = await createTicket({
+        processKey: definition.value.key,
+        title: title.value || null,
+        priority: priority.value,
+        values: values.value,
+        autoStart: !hasFiles,
+      })
+    } catch (e) {
+      const issues = issuesFromError(e)
+      errors.value = issues.map((i) => ({ path: i.path, code: i.code, message: i.message }))
+      showToast(errorMessage(e, 'Anlegen fehlgeschlagen'), false)
+      return
+    }
+
+    // 2) Ab hier EXISTIERT das Ticket (parkt in der Startphase). Ein Fehler beim
+    //    Hochladen/Weitergeben darf NICHT zu einem zweiten Anlege-Versuch (und
+    //    damit Duplikat) führen: stattdessen in den Auftrag springen, wo man
+    //    Dateien nachreichen und selbst weitergeben kann.
     if (hasFiles) {
-      for (const { fieldKey, file } of files) {
-        await uploadAttachment(ticket.id, file, { fieldKey })
+      try {
+        for (const { fieldKey, file } of files) {
+          await uploadAttachment(ticket.id, file, { fieldKey })
+        }
+        await advanceTicket(ticket.id)
+      } catch (e) {
+        showToast(`Auftrag #${ticket.id} wurde angelegt, aber Hochladen/Weitergeben `
+                  + `schlug fehl (${errorMessage(e, 'Fehler')}). Bitte im Auftrag prüfen `
+                  + `und weitergeben.`, false)
+        router.push(`/prozess-auftraege/${ticket.id}?ansicht=bearbeiten`)
+        return
       }
-      await advanceTicket(ticket.id)
     }
     showToast('Auftrag angelegt')
     // Nach dem Anlegen zur Übersicht (einheitlich mit dem Basis-Ticket).
     router.push('/dashboard')
-  } catch (e) {
-    const issues = issuesFromError(e)
-    errors.value = issues.map((i) => ({ path: i.path, code: i.code, message: i.message }))
-    showToast(errorMessage(e, 'Anlegen fehlgeschlagen'), false)
   } finally {
     submitting.value = false
   }

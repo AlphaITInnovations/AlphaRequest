@@ -199,7 +199,12 @@ export function validatePhaseCompletion(
   const byKey = new Map(defn.fields.map((f) => [f.key, f]))
   for (const ref of phase.fields) {
     if (ref.mode === 'hidden') continue
-    if (!byKey.has(ref.ref)) continue
+    const f = byKey.get(ref.ref)
+    if (!f) continue
+    // Anhang-Felder speichern NICHTS in `values` (die Dateien liegen separat) –
+    // ein „Pflicht"-Häkchen ließe sich hier nie erfüllen und würde das Formular
+    // unabsendbar machen. Deshalb nicht über den Wert erzwingen.
+    if (f.widget === 'attachment') continue
     if (ref.visibleWhen && !evaluate(ref.visibleWhen as Condition, values)) continue
     const required = ref.required
       || (!!ref.requiredWhen && evaluate(ref.requiredWhen as Condition, values))
