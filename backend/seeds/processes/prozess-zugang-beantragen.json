@@ -230,6 +230,74 @@
       "item": []
     },
     {
+      "key": "personal.position",
+      "label": "Position",
+      "widget": "select",
+      "help": "Bestimmt u. a. die Fahrzeuggruppe für einen etwaigen Dienstwagen.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Praktikum / Ausbildung / Werkstudium",
+          "label": "Praktikum / Ausbildung / Werkstudium"
+        },
+        {
+          "value": "Teamassistenz",
+          "label": "Teamassistenz"
+        },
+        {
+          "value": "Disposition",
+          "label": "Disposition"
+        },
+        {
+          "value": "Niederlassungsleitung",
+          "label": "Niederlassungsleitung"
+        },
+        {
+          "value": "Verwaltungsmitarbeitende HQ",
+          "label": "Verwaltungsmitarbeitende HQ"
+        },
+        {
+          "value": "Regionalleitung",
+          "label": "Regionalleitung"
+        },
+        {
+          "value": "Regionaldirektion",
+          "label": "Regionaldirektion"
+        },
+        {
+          "value": "Abteilungsleitung / Verwaltung",
+          "label": "Abteilungsleitung / Verwaltung"
+        },
+        {
+          "value": "Geschäftsbereichsleitung",
+          "label": "Geschäftsbereichsleitung"
+        },
+        {
+          "value": "C-Level",
+          "label": "C-Level"
+        },
+        {
+          "value": "Geschäftsführung",
+          "label": "Geschäftsführung"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
       "key": "personal.private_street",
       "label": "Straße & Hausnummer (privat)",
       "widget": "text",
@@ -1044,7 +1112,7 @@
     },
     {
       "key": "it.additional_cost_centers_needed",
-      "label": "Zusätzliche Kostenstellen / Niederlassungen?",
+      "label": "Zusätzliche Drucker / Niederlassungsfreigaben?",
       "widget": "select",
       "help": null,
       "placeholder": null,
@@ -1076,7 +1144,7 @@
     },
     {
       "key": "it.additional_cost_centers",
-      "label": "Kostenstellen / Niederlassungen eintragen",
+      "label": "Drucker / Niederlassungsfreigaben eintragen",
       "widget": "textarea",
       "help": "Für Zugriff auf mehr als die eigene Niederlassung (z. B. Drucker oder Rechte aufs Niederlassungslaufwerk).",
       "placeholder": null,
@@ -1131,40 +1199,11 @@
     },
     {
       "key": "fuhrpark.car_class",
-      "label": "Fahrzeuggruppe (1–7)",
-      "widget": "select",
-      "help": null,
+      "label": "Fahrzeuggruppe (BLP)",
+      "widget": "text",
+      "help": "Wird automatisch aus der Position ermittelt und ist nicht manuell änderbar.",
       "placeholder": null,
-      "options": [
-        {
-          "value": "1",
-          "label": "1"
-        },
-        {
-          "value": "2",
-          "label": "2"
-        },
-        {
-          "value": "3",
-          "label": "3"
-        },
-        {
-          "value": "4",
-          "label": "4"
-        },
-        {
-          "value": "5",
-          "label": "5"
-        },
-        {
-          "value": "6",
-          "label": "6"
-        },
-        {
-          "value": "7",
-          "label": "7"
-        }
-      ],
+      "options": [],
       "optionsSource": null,
       "allowOther": false,
       "valueShape": null,
@@ -1175,7 +1214,19 @@
           "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN"
         ]
       },
-      "computed": null,
+      "computed": {
+        "from": "personal.position",
+        "map": {
+          "Disposition": "Gruppe 1 (BLP 40.000 €)",
+          "Niederlassungsleitung": "Gruppe 2 (BLP 50.000 €)",
+          "Abteilungsleitung / Verwaltung": "Gruppe 2 (BLP 50.000 €)",
+          "Regionalleitung": "Gruppe 3 (BLP 60.000 €)",
+          "Regionaldirektion": "Gruppe 4 (BLP 70.000 €)",
+          "Geschäftsbereichsleitung": "Gruppe 5 (BLP 80.000–90.000 €)",
+          "C-Level": "Gruppe 6 (BLP 100.000 €)",
+          "Geschäftsführung": "Gruppe 6 (BLP 100.000 €)"
+        }
+      },
       "overridable": false,
       "assign": null,
       "mode": null,
@@ -1585,22 +1636,52 @@
           "visibleWhen": null
         },
         {
-          "ref": "fuhrpark.car",
+          "ref": "personal.position",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
-          "ref": "fuhrpark.car_class",
+          "ref": "fuhrpark.car",
           "mode": "editable",
           "required": false,
           "requiredWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
+            "in": [
+              "personal.position",
+              [
+                "Disposition",
+                "Niederlassungsleitung",
+                "Abteilungsleitung / Verwaltung",
+                "Regionalleitung",
+                "Regionaldirektion",
+                "Geschäftsbereichsleitung",
+                "C-Level",
+                "Geschäftsführung"
+              ]
             ]
           },
+          "visibleWhen": {
+            "in": [
+              "personal.position",
+              [
+                "Disposition",
+                "Niederlassungsleitung",
+                "Abteilungsleitung / Verwaltung",
+                "Regionalleitung",
+                "Regionaldirektion",
+                "Geschäftsbereichsleitung",
+                "C-Level",
+                "Geschäftsführung"
+              ]
+            ]
+          }
+        },
+        {
+          "ref": "fuhrpark.car_class",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
           "visibleWhen": {
             "==": [
               "fuhrpark.car",
@@ -1748,12 +1829,43 @@
         },
         {
           "type": "section",
+          "title": "Personaldaten",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "personal.position",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
           "title": "Fuhrpark",
           "variant": "fuhrpark",
           "badge": null,
           "description": null,
           "collapsed": false,
           "items": [
+            {
+              "type": "note",
+              "text": "Für diese Position ist kein Dienstwagen vorgesehen.",
+              "tone": "warning",
+              "width": "full",
+              "visibleWhen": {
+                "in": [
+                  "personal.position",
+                  [
+                    "Praktikum / Ausbildung / Werkstudium",
+                    "Teamassistenz",
+                    "Verwaltungsmitarbeitende HQ"
+                  ]
+                ]
+              }
+            },
             {
               "type": "field",
               "ref": "fuhrpark.car",
@@ -1948,6 +2060,13 @@
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
+        },
+        {
+          "ref": "personal.position",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
         }
       ],
       "layout": [
@@ -2063,6 +2182,21 @@
               "type": "field",
               "ref": "konditionen.sonderkonditionen",
               "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Personaldaten",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "personal.position",
+              "width": "half"
             }
           ]
         }
@@ -2235,6 +2369,13 @@
         },
         {
           "ref": "konditionen.sonderkonditionen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.position",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -2696,6 +2837,11 @@
           "description": null,
           "collapsed": false,
           "items": [
+            {
+              "type": "field",
+              "ref": "personal.position",
+              "width": "half"
+            },
             {
               "type": "field",
               "ref": "personal.private_street",
@@ -3287,6 +3433,13 @@
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
+        },
+        {
+          "ref": "personal.position",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
         }
       ],
       "constraints": [],
@@ -3423,6 +3576,11 @@
             {
               "type": "field",
               "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.position",
               "width": "half"
             }
           ]

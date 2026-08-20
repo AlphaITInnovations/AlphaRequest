@@ -70,7 +70,10 @@ export function normalizeField(v: any): FieldDef {
     valueShape: str(v?.valueShape),
     constraints: normConstraints(v?.constraints),
     visibility: normVisibility(v?.visibility),
-    computed: from ? { from: String(from) } : null,
+    computed: from
+      ? { from: String(from),
+          map: (v?.computed?.map && typeof v.computed.map === 'object') ? v.computed.map : null }
+      : null,
     overridable: bool(v?.overridable),
     // `action` ist serverseitig Pflicht und darf nur assign_sequence sein –
     // fehlt sie, wäre das Feld ohne Ersatz unspeicherbar (422 statt Meldung).
@@ -126,7 +129,7 @@ function normLayoutItem(v: any): LayoutItem | null {
   if (t === 'field') return { type: 'field', ref: String(v.ref ?? ''), width: v.width ?? 'full' }
   if (t === 'note') {
     return { type: 'note', text: String(v.text ?? ''), tone: v.tone ?? 'info',
-      width: v.width ?? 'full' }
+      width: v.width ?? 'full', visibleWhen: cond(v.visibleWhen) }
   }
   if (t === 'heading') return { type: 'heading', text: String(v.text ?? '') }
   if (t === 'divider') return { type: 'divider' }

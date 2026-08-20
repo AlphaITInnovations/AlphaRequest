@@ -67,7 +67,7 @@ export function isEmpty(v: unknown): boolean {
 
 export interface ComputedFieldDef {
   key: string
-  computed?: { from: string } | null
+  computed?: { from: string; map?: Record<string, unknown> | null } | null
   overridable?: boolean
 }
 
@@ -75,6 +75,8 @@ export interface ComputedFieldDef {
  * Füllt computed-Felder (Spiegel von process_compute.apply_computed):
  *  - non-overridable → immer aus der Quelle,
  *  - overridable     → nur wenn Ziel leer (manuell gesetzter Wert bleibt).
+ * Mit `computed.map` wird der Quellwert übersetzt (z. B. Position →
+ * Fahrzeuggruppe); ein nicht enthaltener Quellwert ergibt null.
  */
 export function applyComputed(fields: ComputedFieldDef[], values: Values): Values {
   const out: Values = { ...values }
@@ -83,10 +85,12 @@ export function applyComputed(fields: ComputedFieldDef[], values: Values): Value
     let changed = false
     for (const f of computed) {
       const src = out[f.computed!.from]
+      const m = f.computed!.map
+      const derived = m != null ? (m[String(src)] ?? null) : src
       if (f.overridable) {
-        if (isEmpty(out[f.key]) && !isEmpty(src)) { out[f.key] = src; changed = true }
-      } else if (out[f.key] !== src) {
-        out[f.key] = src
+        if (isEmpty(out[f.key]) && !isEmpty(derived)) { out[f.key] = derived; changed = true }
+      } else if (out[f.key] !== derived) {
+        out[f.key] = derived
         changed = true
       }
     }

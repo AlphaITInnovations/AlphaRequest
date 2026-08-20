@@ -138,6 +138,19 @@ describe('Leere Abschnitte', () => {
     expect(secs[0].section.title).toBe('Hinweise')
     expect(secs[0].items[0].item.type).toBe('note')
   })
+
+  it('bedingte Notiz erscheint nur, wenn visibleWhen erfüllt ist', () => {
+    const layout = [{ type: 'section', title: 'H', items: [
+      { type: 'note', text: 'Kein Dienstwagen', tone: 'warning', width: 'full',
+        visibleWhen: { '==': ['car', 'Nein'] } },
+    ] }]
+    // erfüllt → Abschnitt mit Notiz
+    const shown = run(layout, { car: 'Nein' })
+    expect(shown[0]?.items[0]?.item.type).toBe('note')
+    // nicht erfüllt → Notiz weg, Abschnitt hat keinen Inhalt und entfällt
+    const hidden = run(layout, { car: 'Ja' })
+    expect(hidden.map((s) => s.section.title)).not.toContain('H')
+  })
 })
 
 describe('Breiten', () => {

@@ -17,9 +17,12 @@ describe('normalizeDefinition', () => {
 
   it('akzeptiert from_ und gibt immer from aus (Python-Alias)', () => {
     const f = normalizeField({ key: 'a', widget: 'text', computed: { from_: 'b' } })
-    expect(f.computed).toEqual({ from: 'b' })
+    expect(f.computed).toEqual({ from: 'b', map: null })
     const g = normalizeField({ key: 'a', widget: 'text', computed: { from: 'c' } })
-    expect(g.computed).toEqual({ from: 'c' })
+    expect(g.computed).toEqual({ from: 'c', map: null })
+    // Lookup-Map wird durchgereicht
+    const h = normalizeField({ key: 'a', widget: 'text', computed: { from: 'p', map: { X: 'Y' } } })
+    expect(h.computed).toEqual({ from: 'p', map: { X: 'Y' } })
   })
 
   it('kennt die gegensätzlichen required-Defaults', () => {

@@ -67,13 +67,17 @@ def apply_computed(defn: ProcessDefinition, values: dict) -> dict:
         changed = False
         for f in computed:
             src_val = out.get(f.computed.from_)
+            # Mit `map` wird der Quellwert übersetzt (z. B. Position →
+            # Fahrzeuggruppe); ohne `map` 1:1 kopiert. Fehlt der Quellwert in der
+            # Map, ist das Ergebnis leer (None).
+            derived = f.computed.map.get(src_val) if f.computed.map is not None else src_val
             if f.overridable:
-                if _is_empty(out.get(f.key)) and not _is_empty(src_val):
-                    out[f.key] = src_val
+                if _is_empty(out.get(f.key)) and not _is_empty(derived):
+                    out[f.key] = derived
                     changed = True
             else:
-                if out.get(f.key) != src_val:
-                    out[f.key] = src_val
+                if out.get(f.key) != derived:
+                    out[f.key] = derived
                     changed = True
         if not changed:
             break

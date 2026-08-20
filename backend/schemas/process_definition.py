@@ -237,6 +237,11 @@ class FieldVisibility(_Base):
 
 class ComputedSpec(_Base):
     from_: str = Field(alias="from")
+    #: Optionaler Lookup: Quellwert → abgeleiteter Wert. Ohne `map` wird der
+    #: Quellwert 1:1 kopiert (bisheriges Verhalten). Mit `map` wird er übersetzt
+    #: (z. B. Position → Fahrzeuggruppe); ein nicht enthaltener Quellwert ergibt
+    #: einen leeren Wert.
+    map: Optional[dict[str, Any]] = None
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
@@ -512,6 +517,16 @@ class LayoutNote(_Base):
     text: str
     tone: NoteTone = NoteTone.info
     width: LayoutWidth = LayoutWidth.full
+    #: Optionale Bedingung (gleiche DSL wie Feld-visibleWhen): die Notiz erscheint
+    #: nur, wenn sie erfüllt ist – z. B. ein roter Hinweis „kein Firmenwagen“ nur
+    #: für bestimmte Positionen.
+    visibleWhen: Optional[dict] = None
+
+    @model_validator(mode="after")
+    def _check_visible_when(self) -> "LayoutNote":
+        if self.visibleWhen is not None:
+            validate_condition(self.visibleWhen, "layout.note.visibleWhen")
+        return self
 
 
 class LayoutHeading(_Base):
@@ -797,6 +812,12 @@ class ProcessDefinition(_Base):
                     if cond:
                         for r in dsl_refs(cond):
                             _need(r, f"{p.key}.{fr.ref}.{lbl}")
+            for si, sec in enumerate(p.layout):
+                for ii, item in enumerate(sec.items):
+                    vw = getattr(item, "visibleWhen", None)
+                    if vw:
+                        for r in dsl_refs(vw):
+                            _need(r, f"{p.key}.layout[{si}].items[{ii}].visibleWhen")
             for i, c in enumerate(p.constraints):
                 for r in dsl_refs(c.get("when", {})):
                     _need(r, f"{p.key}.constraints[{i}].when")

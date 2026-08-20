@@ -58,4 +58,10 @@ describe('applyComputed (mirror of backend)', () => {
   it('non-overridable always derives', () => {
     expect(applyComputed(fields, { 'base.title': 'Dr.', 'mirror.title': 'x' })['mirror.title']).toBe('Dr.')
   })
+
+  it('map übersetzt den Quellwert; nicht gemappt → null', () => {
+    const mapped = [{ key: 'grp', computed: { from: 'pos', map: { Disposition: 'Gruppe 1' } } }]
+    expect(applyComputed(mapped, { pos: 'Disposition' }).grp).toBe('Gruppe 1')
+    expect(applyComputed(mapped, { pos: 'Werkstudium' }).grp).toBeNull()
+  })
 })

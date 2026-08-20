@@ -56,7 +56,7 @@ export interface FieldVisibility {
 }
 
 /** Wire-Name ist `from` (Python: from_ mit alias). */
-export interface ComputedSpec { from: string }
+export interface ComputedSpec { from: string; map?: Record<string, unknown> | null }
 
 /**
  * Wie ein `server_generated`-Feld gefüllt wird. Serverseitig gilt: `action` muss
@@ -180,7 +180,7 @@ export type SectionVariant = 'base' | 'hr' | 'it' | 'fuhrpark' | 'marketing' | '
 export type NoteTone = 'info' | 'warning' | 'success' | 'neutral'
 
 export interface LayoutFieldItem { type: 'field'; ref: string; width: LayoutWidth }
-export interface LayoutNoteItem { type: 'note'; text: string; tone: NoteTone; width: LayoutWidth }
+export interface LayoutNoteItem { type: 'note'; text: string; tone: NoteTone; width: LayoutWidth; visibleWhen?: Condition | null }
 export interface LayoutHeadingItem { type: 'heading'; text: string }
 export interface LayoutDividerItem { type: 'divider' }
 export interface LayoutSpacerItem { type: 'spacer' }

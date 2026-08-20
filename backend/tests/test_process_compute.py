@@ -37,6 +37,25 @@ def test_empty_source_leaves_overridable_empty():
     assert "sig.title" not in out or out.get("sig.title") in (None, "")
 
 
+def test_computed_map_translates_source_value():
+    """Mit `map` wird der Quellwert übersetzt (Position → Fahrzeuggruppe); ein
+    nicht enthaltener Wert ergibt einen leeren (None) abgeleiteten Wert."""
+    defn = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "position", "widget": "select",
+             "options": [{"value": "Disposition"}, {"value": "Werkstudium"}]},
+            {"key": "gruppe", "widget": "text",
+             "computed": {"from": "position", "map": {"Disposition": "Gruppe 1"}}},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "position"}]}],
+    })
+    assert apply_computed(defn, {"position": "Disposition"})["gruppe"] == "Gruppe 1"
+    # nicht gemappt → leer (nicht der rohe Quellwert)
+    assert apply_computed(defn, {"position": "Werkstudium"}).get("gruppe") is None
+
+
 def test_computed_from_computed_resolves_regardless_of_order():
     # B leitet aus A ab, A aus base – B steht VOR A deklariert (fixpoint nötig)
     defn = ProcessDefinition.model_validate({

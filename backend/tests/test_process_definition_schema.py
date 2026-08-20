@@ -206,3 +206,43 @@ def test_group_reference_detector():
 def test_validate_condition_rejects_malformed(bad):
     with pytest.raises(ValueError):
         validate_condition(bad)
+
+
+# ── computed.map + bedingte Layout-Notiz (Position → Fahrzeuggruppe) ──────────
+
+def test_computed_map_accepted():
+    """computed darf zusätzlich zu `from` ein Lookup-`map` tragen."""
+    d = copy.deepcopy(VALID)
+    d["fields"].append({"key": "gruppe", "widget": "text",
+                        "computed": {"from": "fuhrpark.car", "map": {"Ja": "G1"}}})
+    d["phases"][0]["fields"].append({"ref": "gruppe", "mode": "readonly"})
+    defn = ProcessDefinition.model_validate(d)
+    g = next(f for f in defn.fields if f.key == "gruppe")
+    assert g.computed.map == {"Ja": "G1"}
+
+
+def _defn_with_note(visible_when):
+    return {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "base.name", "widget": "text"}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "base.name"}],
+                    "layout": [{"type": "section", "title": "S", "items": [
+                        {"type": "field", "ref": "base.name"},
+                        {"type": "note", "text": "Hinweis", "visibleWhen": visible_when},
+                    ]}]}],
+    }
+
+
+def test_layout_note_visible_when_valid():
+    ProcessDefinition.model_validate(_defn_with_note({"truthy": "base.name"}))
+
+
+def test_layout_note_visible_when_unknown_ref_rejected():
+    with pytest.raises(ValidationError):    # Referenz nicht im Katalog
+        ProcessDefinition.model_validate(_defn_with_note({"truthy": "gibtsnicht"}))
+
+
+def test_layout_note_visible_when_malformed_rejected():
+    with pytest.raises(ValidationError):    # kaputte DSL-Struktur
+        ProcessDefinition.model_validate(_defn_with_note({"kaputt": 1}))
