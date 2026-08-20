@@ -27,3 +27,16 @@ export function mailVariables(text: string | null | undefined): string[] {
 export function mailFieldRefs(text: string | null | undefined): string[] {
   return mailVariables(text).filter((v) => !SPECIAL_MAIL_VARS.includes(v as any))
 }
+
+/**
+ * Setzt `{{token}}` durch `resolve(token)` ein (spiegelt serverseitiges
+ * mail_template.substitute). Wird für die Dokument-Vorlage genutzt, um sie im
+ * Frontend mit den Auftragswerten vorzubefüllen.
+ */
+export function renderMailTemplate(
+  text: string | null | undefined, resolve: (token: string) => string,
+): string {
+  // Frisches RegExp je Aufruf: das Modul-`MAIL_VAR_RE` trägt das g-Flag und damit
+  // einen lastIndex – geteilt zwischen matchAll/replace wäre das eine Fehlerquelle.
+  return (text ?? '').replace(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g, (_m, token) => resolve(token))
+}

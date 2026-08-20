@@ -12,7 +12,7 @@
  */
 import type {
   Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions, LayoutItem,
-  LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
+  DocumentSpec, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger,
 } from '@/types/process'
@@ -191,6 +191,17 @@ export function normalizeAutomation(v: any): Automation {
     guard: cond(v?.guard), action: normAction(v?.action) }
 }
 
+/** Dokument-Vorlage. FEHLT sie, bleibt es bei `null` (der Server verbietet sie
+ *  bei jeder Ansicht außer view=document). Ist sie DA, werden alle Keys gefüllt. */
+function normDocument(v: any): DocumentSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return {
+    templateHtml: String(v.templateHtml ?? ''),
+    filename: String(v.filename ?? 'Dokument'),
+    title: String(v.title ?? 'Dokument'),
+  }
+}
+
 /** Extra-Keys bleiben erhalten – der Server verbietet sie hier NICHT. */
 function normConstraintEntry(v: any): PhaseConstraint {
   return { ...(v ?? {}), when: cond(v?.when) ?? {}, message: String(v?.message ?? '') }
@@ -207,6 +218,7 @@ export function normalizePhase(v: any): PhaseDef {
     grantsFullView: bool(v?.grantsFullView),
     responsibility: normResponsibility(v?.responsibility),
     approval: normApproval(v?.approval),
+    document: normDocument(v?.document),
     fields: arr(v?.fields).map(normalizeFieldRef),
     layout: arr(v?.layout).map(normLayoutSection),
     constraints: arr(v?.constraints).map(normConstraintEntry),

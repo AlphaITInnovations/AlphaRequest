@@ -334,6 +334,23 @@ export function validateDefinition(
       }
     }
 
+    // Dokument-Phase: Ansicht „Dokument" und die Vorlage gehören zusammen; jede
+    // {{variable}} muss ein Katalog-Feld sein (wie serverseitig geprüft).
+    const doc = ph.document
+    if ((ph.view === 'document') !== !!doc) {
+      out.push(err(`${p}.view`, anchor, 'INVALID',
+        'Die Ansicht „Dokument" und eine Dokument-Vorlage gehören zusammen – '
+        + 'entweder beides oder keins.'))
+    }
+    if (doc) {
+      for (const ref of [...mailFieldRefs(doc.templateHtml), ...mailFieldRefs(doc.filename)]) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${p}.document`, anchor, 'UNKNOWN_REF',
+            `Vorlagen-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
+        }
+      }
+    }
+
     const r = ph.responsibility
     if (!RESPONSIBILITY_KINDS.includes(r.kind)) {
       out.push(err(`${p}.responsibility.kind`, anchor, 'UNSUPPORTED',

@@ -65,6 +65,9 @@ class PhaseView(str, Enum):
     approval = "approval"
     review = "review"
     export = "export"
+    #: Dokument-Phase: HTML-Vorlage mit {{feld}}-Platzhaltern, vorausgefüllt,
+    #: im Editor anpassbar, als Word/PDF exportierbar (z. B. Arbeitsvertrag).
+    document = "document"
 
 
 class ResponsibilityKind(str, Enum):
@@ -592,6 +595,19 @@ class ApprovalSpec(_Base):
         return self
 
 
+class DocumentSpec(_Base):
+    """Vorlage einer Dokument-Phase (view=document).
+
+    `templateHtml` ist ein begrenztes HTML mit `{{feld.key}}`-Platzhaltern (plus
+    {{title}}, {{id}} wie in der Mail-Vorlage). Zur Laufzeit wird es
+    vorausgefüllt, im Editor angepasst und als Word/PDF exportiert. `filename`
+    darf ebenfalls Platzhalter enthalten (z. B. Arbeitsvertrag_{{base.last_name}}).
+    """
+    templateHtml: str = ""
+    filename: str = "Dokument"
+    title: str = "Dokument"
+
+
 class PhaseDef(_Base):
     key: str
     label: Optional[str] = None
@@ -602,6 +618,8 @@ class PhaseDef(_Base):
     responsibility: Responsibility
     #: Pflicht bei kind=approval, sonst verboten.
     approval: Optional[ApprovalSpec] = None
+    #: Pflicht bei view=document, sonst verboten.
+    document: Optional[DocumentSpec] = None
     fields: list[FieldRef] = Field(default_factory=list)
     #: Optionale Darstellung. Felder, die hier NICHT vorkommen, werden hinten in
     #: einem Sammel-Abschnitt gerendert – so wird nie ein Feld unsichtbar.
@@ -859,6 +877,20 @@ class ProcessDefinition(_Base):
                     raise ValueError(f"Phase „{p.key}“.approval.onReject: „{ziel}“ liegt nicht "
                                      f"VOR dieser Phase – ein Rücksprung nach vorn würde "
                                      f"Arbeit überspringen")
+
+        # Dokument-Phasen: view=document und die Vorlage (document) gehören
+        # zusammen, und jede {{variable}} der Vorlage muss ein Katalog-Feld sein
+        # (sonst bliebe im Vertrag eine leere Stelle, ohne dass es auffällt).
+        for p in self.phases:
+            if (p.view == PhaseView.document) != (p.document is not None):
+                raise ValueError(
+                    f"Phase „{p.key}“: „view=document“ und eine Dokument-Vorlage gehören "
+                    f"zusammen – bitte beides setzen oder beides weglassen")
+            if p.document is not None:
+                from backend.services import mail_template as _mt
+                for txt in (p.document.templateHtml, p.document.filename):
+                    for ref in _mt.field_refs(txt):
+                        _need(ref, f"Phase „{p.key}“.document (Variable «{ref}»)")
 
         # server_generated-Felder füllt ausschließlich der Server. Wären sie in
         # einer Phase editierbar, könnte der Client eine vergebene Nummer setzen

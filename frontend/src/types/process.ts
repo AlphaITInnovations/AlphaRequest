@@ -21,7 +21,7 @@ export type Widget =
 
 export type OptionsSource = 'static' | 'groups' | 'companies' | 'users'
 export type PhaseKind = 'start' | 'task' | 'approval' | 'review' | 'end'
-export type PhaseView = 'form' | 'readonly' | 'approval' | 'review' | 'export'
+export type PhaseView = 'form' | 'readonly' | 'approval' | 'review' | 'export' | 'document'
 export type ResponsibilityKind =
   | 'owner' | 'group' | 'user' | 'departments'
   /** Zuständige Person steht in einem Personen-Feld des Auftrags (widget='user'). */
@@ -235,6 +235,15 @@ export interface ApprovalSpec {
   onReject: ApprovalOnReject
 }
 
+/** Vorlage einer Dokument-Phase (view='document'): HTML mit `{{feld.key}}`-
+ *  Platzhaltern (plus {{title}}, {{id}}), zur Laufzeit vorausgefüllt, im Editor
+ *  anpassbar und als Word/PDF exportierbar. */
+export interface DocumentSpec {
+  templateHtml: string
+  filename: string
+  title: string
+}
+
 export interface PhaseDef {
   key: string
   label: string | null
@@ -245,6 +254,8 @@ export interface PhaseDef {
   responsibility: Responsibility
   /** Pflicht bei kind='approval', sonst `null` (der Server lehnt ihn sonst ab). */
   approval: ApprovalSpec | null
+  /** Pflicht bei view='document', sonst `null`. */
+  document: DocumentSpec | null
   fields: FieldRef[]
   /** Optionale Darstellung; nicht platzierte Felder kommen in einen Sammel-Abschnitt. */
   layout: LayoutSection[]

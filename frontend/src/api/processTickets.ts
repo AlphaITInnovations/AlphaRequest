@@ -29,6 +29,19 @@ export async function getTicket(id: number): Promise<ProcessTicketOut> {
   return data.data
 }
 
+/**
+ * Dokument-Phase: das (im Editor angepasste) HTML als Word-Datei (.docx) holen.
+ * Der Server wandelt reines HTML→docx; Antwort ist ein Blob (Download).
+ */
+export async function exportTicketDocument(
+  id: number, html: string, filename: string,
+): Promise<Blob> {
+  const { data } = await client.post(
+    `/process-tickets/${id}/document:export`, { html, filename },
+    { responseType: 'blob' })
+  return data as Blob
+}
+
 export async function createTicket(body: {
   processKey: string
   title?: string | null

@@ -16,7 +16,7 @@ Phasen-Abschluss bei :advance.
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
 
 from backend.core.dependencies import get_current_user
@@ -460,6 +460,49 @@ def get_pinned_definition(ticket_id: int, user: dict = Depends(get_current_user)
                         f"Gepinnte Definition {row['process_key']} "
                         f"v{row['process_version']} fehlt")
     return DataResponse(data=defn.model_dump(mode="json", by_alias=True, exclude_none=True))
+
+
+class DocumentExportRequest(BaseModel):
+    #: Das (evtl. im Editor angepasste) HTML der Dokument-Vorlage.
+    html: str
+    #: Dateiname ohne Endung; darf schon im Client aufgelöste Werte enthalten.
+    filename: Optional[str] = None
+
+
+def _safe_filename(name: Optional[str]) -> str:
+    """Dateiname für den Download absichern (keine Pfade/Steuerzeichen)."""
+    base = (name or "Dokument").strip() or "Dokument"
+    keep = "".join(c for c in base if c.isalnum() or c in " _-.()äöüÄÖÜß").strip()
+    return (keep or "Dokument")[:120]
+
+
+@router.post("/process-tickets/{ticket_id}/document:export")
+def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
+                           user: dict = Depends(get_current_user)):
+    """Das (im Frontend gefüllte und ggf. angepasste) Dokument-HTML als Word-Datei
+    ausliefern. Reiner HTML→.docx-Wandler (services/html_to_docx) – die Werte
+    stehen bereits im gesendeten HTML, gelesen wird aus dem Auftrag nichts.
+
+    Zugriff = Leserecht am Auftrag: wer den Auftrag sehen darf, hat den Inhalt
+    ohnehin schon; das Gate bindet den Wandler an den Auftrag (kein offener
+    Konverter). PDF erzeugt das Frontend selbst (jsPDF)."""
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    _assert_view(row, defn, user)
+
+    from backend.services.html_to_docx import html_to_docx
+    data = html_to_docx(body.html or "")
+    fname = _safe_filename(body.filename) + ".docx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])

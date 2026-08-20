@@ -11,7 +11,7 @@
  */
 import type {
   LayoutItem, LayoutItemType, LayoutSection, LayoutWidth, NoteTone, SectionVariant,
-  ActionType, ApprovalSpec, AssignSpec, Automation, DepartmentRule, FieldDef, FieldMode,
+  ActionType, ApprovalSpec, AssignSpec, Automation, DepartmentRule, DocumentSpec, FieldDef, FieldMode,
   FieldRef, OptionsSource,
   CreatePermissions, PhaseDef, PhaseKind, PhaseView, ProcessDefinition, Responsibility, ResponsibilityKind,
   SubField, Widget,
@@ -36,7 +36,7 @@ export const WIDGETS_SUB: readonly Widget[] = [
 
 export const PHASE_KINDS: readonly PhaseKind[] = ['start', 'task', 'approval', 'review', 'end']
 export const PHASE_VIEWS: readonly PhaseView[] =
-  ['form', 'readonly', 'approval', 'review', 'export']
+  ['form', 'readonly', 'approval', 'review', 'export', 'document']
 export const RESPONSIBILITY_KINDS: readonly ResponsibilityKind[] =
   ['owner', 'assignable', 'group', 'group_from_field', 'departments', 'user']
 export const FIELD_MODES: readonly FieldMode[] = ['editable', 'readonly', 'hidden', 'append_only']
@@ -139,7 +139,7 @@ export const PHASE_KIND_LABEL: Record<PhaseKind, string> = {
 
 export const PHASE_VIEW_LABEL: Record<PhaseView, string> = {
   form: 'Formular', readonly: 'Nur lesen', approval: 'Freigabe',
-  review: 'Prüfung', export: 'Export',
+  review: 'Prüfung', export: 'Export', document: 'Dokument',
 }
 
 export const RESPONSIBILITY_LABEL: Record<ResponsibilityKind, string> = {
@@ -240,6 +240,17 @@ export function blankApproval(question = ''): ApprovalSpec {
   }
 }
 
+/** Leere Dokument-Vorlage (view=document). Ein Start-Template, damit die Phase
+ *  gültig ist; die eigentliche Vorlage wird darunter bearbeitet. */
+export function blankDocument(): DocumentSpec {
+  return {
+    templateHtml: '<h1>Dokument</h1>\n<p>Hier die Vorlage bearbeiten. Platzhalter wie '
+      + '{{base.first_name}} werden mit den Auftragsdaten gefüllt.</p>',
+    filename: 'Dokument',
+    title: 'Dokument',
+  }
+}
+
 /** Passende Standard-Ansicht zur Phasenart (view=approval nur bei kind=approval). */
 export function defaultViewFor(kind: PhaseKind): PhaseView {
   if (kind === 'approval') return 'approval'
@@ -253,6 +264,7 @@ export function blankPhase(key: string, kind: PhaseKind = 'task'): PhaseDef {
     enterStatus: null, grantsFullView: false,
     responsibility: blankResponsibility(kind === 'review' ? 'departments' : 'owner'),
     approval: kind === 'approval' ? blankApproval() : null,
+    document: null,
     fields: [], layout: [], constraints: [], automations: [],
   }
 }

@@ -28,6 +28,7 @@ import ProcessDepartments from '@/components/process/ProcessDepartments.vue'
 import BasisTicketDetail from '@/components/process/BasisTicketDetail.vue'
 import { isBasisTicket } from '@/lib/basisTicket'
 import SchemaExportView from '@/components/process/form/SchemaExportView.vue'
+import DocumentView from '@/components/process/form/DocumentView.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -144,6 +145,8 @@ const terminal = computed(() => {
 
 /** Phasen mit view='export' zeigen die Druckansicht statt der Gesamtansicht. */
 const isExportPhase = computed(() => phase.value?.view === 'export')
+/** Dokument-Phase (view=document): Vertrag/Dokument aus Vorlage, Inline-Editor + Word-Export. */
+const isDocumentPhase = computed(() => phase.value?.view === 'document')
 
 /** Nach einer Fachabteilungs-Quittierung: Auftrag, Werte und Verlauf nachziehen –
  *  die Aktion kann den GANZEN Auftrag ablehnen (Status und Zuständigkeit ändern sich). */
@@ -374,7 +377,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               @updated="onDepartmentsUpdated" />
 
             <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
-            <template v-if="abilities.edit && phase && !isExportPhase">
+            <template v-if="abilities.edit && phase && !isExportPhase && !isDocumentPhase">
               <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                           :viewer="viewer" :errors="errors" :sources="sources"
                           @update:model-value="onValues($event)" />
@@ -399,6 +402,12 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               :viewer="viewer" :sources="sources"
               @exported="showToast('PDF erzeugt')"
               @failed="showToast($event, false)" />
+            <!-- Dokument-Phase: Vertrag aus Vorlage, Inline-Editor + Word-Export.
+                 In der Leseansicht nur anzeigen (readonly). -->
+            <DocumentView
+              v-else-if="isDocumentPhase && phase"
+              :definition="definition" :ticket="ticket" :phase="phase"
+              :sources="sources" :readonly="!abilities.edit" />
             <div v-else-if="!abilities.edit" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"

@@ -4,11 +4,11 @@
  *  der Formular-Baukasten (FormBuilder.vue) – hier bewusst NICHT nochmal. */
 import { computed } from 'vue'
 import type {
-  ApprovalSpec, Condition, FieldDef, PhaseConstraint, PhaseDef, PhaseKind, PhaseView,
+  ApprovalSpec, Condition, DocumentSpec, FieldDef, PhaseConstraint, PhaseDef, PhaseKind, PhaseView,
 } from '@/types/process'
 import {
   ENTER_STATUS, PHASE_KINDS, PHASE_KIND_LABEL,
-  PHASE_VIEWS, PHASE_VIEW_LABEL, STATUS_LABEL, blankApproval,
+  PHASE_VIEWS, PHASE_VIEW_LABEL, STATUS_LABEL, blankApproval, blankDocument,
   isValidPhaseKey, phaseKindPatch,
 } from '@/lib/processSchema'
 import ApprovalEditor from './ApprovalEditor.vue'
@@ -42,6 +42,20 @@ const keyValid = computed(() => !props.modelValue.key || isValidPhaseKey(props.m
 function setKind(kind: PhaseKind) {
   if (kind === props.modelValue.kind) return
   patch(phaseKindPatch(props.modelValue, kind))
+}
+
+/** Ansicht umstellen – die Dokument-Vorlage gehört zu view=document (Server-Regel):
+ *  beim Wechsel dorthin ein Start-Template anlegen, beim Wechsel weg entfernen. */
+function setView(view: PhaseView) {
+  const part: Partial<PhaseDef> = { view }
+  if (view === 'document') { if (!props.modelValue.document) part.document = blankDocument() }
+  else if (props.modelValue.document) { part.document = null }
+  patch(part)
+}
+
+function patchDocument(part: Partial<DocumentSpec>) {
+  if (!props.modelValue.document) return
+  patch({ document: { ...props.modelValue.document, ...part } })
 }
 
 /** Nur Phasen VOR dieser taugen als Rücksprung-Ziel. */
@@ -89,7 +103,7 @@ function removeConstraint(i: number) {
         <div>
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Ansicht</label>
           <select :value="modelValue.view" :disabled="readonly" class="afi w-full"
-                  @change="patch({ view: ($event.target as HTMLSelectElement).value as PhaseView })">
+                  @change="setView(($event.target as HTMLSelectElement).value as PhaseView)">
             <!-- „Freigabe" passt nur zur gleichnamigen Phasen-Art (Server-Regel). -->
             <option v-for="v in PHASE_VIEWS" :key="v" :value="v"
                     :disabled="v === 'approval' && modelValue.kind !== 'approval'">
@@ -143,6 +157,38 @@ function removeConstraint(i: number) {
         <button v-if="!readonly" class="btn-secondary text-xs py-1 shrink-0"
                 @click="patch({ approval: blankApproval() })">Freigabe einrichten</button>
       </div>
+    </section>
+
+    <!-- Dokument-Vorlage (nur bei der Ansicht „Dokument") -->
+    <section v-if="modelValue.view === 'document' && modelValue.document" class="card-section">
+      <h3 class="section-title">Dokument-Vorlage</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+        HTML-Vorlage (z. B. Arbeitsvertrag). Platzhalter in doppelten geschweiften
+        Klammern werden mit den Auftragsdaten gefüllt – etwa
+        <span class="font-mono text-xs">base.first_name</span>,
+        <span class="font-mono text-xs">base.last_name</span>; zusätzlich
+        <span class="font-mono text-xs">title</span> und
+        <span class="font-mono text-xs">id</span>. Zur Laufzeit lässt sich der Text
+        anpassen und als Word/PDF exportieren.
+      </p>
+      <div class="grid md:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titel (Überschrift)</label>
+          <input :value="modelValue.document.title" :disabled="readonly" class="afi w-full"
+                 placeholder="z. B. Arbeitsvertrag"
+                 @input="patchDocument({ title: ($event.target as HTMLInputElement).value })" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Dateiname (Export)</label>
+          <input :value="modelValue.document.filename" :disabled="readonly" class="afi w-full font-mono text-sm"
+                 placeholder="Arbeitsvertrag_{ Platzhalter erlaubt }"
+                 @input="patchDocument({ filename: ($event.target as HTMLInputElement).value })" />
+        </div>
+      </div>
+      <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Vorlage (HTML)</label>
+      <textarea :value="modelValue.document.templateHtml" :disabled="readonly" rows="14" spellcheck="false"
+                class="afi w-full font-mono text-xs resize-y"
+                @input="patchDocument({ templateHtml: ($event.target as HTMLTextAreaElement).value })" />
     </section>
 
     <!-- Zuständigkeit -->
