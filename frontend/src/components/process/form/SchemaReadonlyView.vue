@@ -18,7 +18,7 @@ import type {
   FieldDef, LayoutItem, LayoutSection as LayoutSectionDef, OptionSources, PhaseDef,
   ProcessDefinition, SubField,
 } from '@/types/process'
-import { colSpanClass, resolveLayout, REST_SECTION_TITLE } from '@/lib/processLayout'
+import { colSpanClass, mergedSections, resolveLayout, REST_SECTION_TITLE } from '@/lib/processLayout'
 // Die Wertdarstellung liegt in einem reinen Modul, damit die Export-/Druckansicht
 // (lib/processPdf.ts) Zeichen für Zeichen dasselbe zeigt wie diese Lese-Ansicht.
 import {
@@ -83,8 +83,27 @@ const phaseBlocks = computed<Block[]>(() => {
     .filter((b) => b.rows.length > 0)
 })
 
+/**
+ * Ohne übergebene Phase zeigt die Ansicht den GANZEN Auftrag. Dann werden die
+ * Abschnitte aller Phasen zusammengeführt (mergedSections), damit die Angaben
+ * gegliedert erscheinen statt als eine durchgehende Liste.
+ */
+const mergedBlocks = computed<Block[]>(() => {
+  const byKey = new Map(catalog.value.map((f) => [f.key, f]))
+  return mergedSections(props.definition)
+    .map((m) => ({
+      section: section(m.title, m.variant),
+      rows: m.refs.flatMap((ref): Row[] => {
+        const f = byKey.get(ref)
+        return f && allowed.value.has(f.key) ? [fieldRow(f, 6)] : []
+      }),
+    }))
+    .filter((b) => b.rows.length > 0)
+})
+
 const blocks = computed<Block[]>(() => {
-  const out = [...phaseBlocks.value]
+  // Mit Phase: deren Layout. Ohne Phase: Abschnitte über alle Phasen.
+  const out = props.phase ? [...phaseBlocks.value] : [...mergedBlocks.value]
   const shown = new Set<string>()
   for (const b of out) for (const r of b.rows) if (r.kind === 'field') shown.add(r.f.key)
 

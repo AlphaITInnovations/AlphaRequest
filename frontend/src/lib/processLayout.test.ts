@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { normalizeDefinition } from './processNormalize'
-import { colSpanClass, resolveLayout, REST_SECTION_TITLE } from './processLayout'
+import { colSpanClass, mergedSections, resolveLayout, REST_SECTION_TITLE } from './processLayout'
 import type { ResolvedItem } from './processLayout'
 import type { SimViewer } from './processSim'
 
@@ -183,5 +183,52 @@ describe('Kein Feld doppelt', () => {
     })
     const secs = resolveLayout(defn, defn.phases[0], {}, VIEWER)
     expect(refsOf(secs[0].items)).toEqual(['name'])
+  })
+})
+
+describe('mergedSections', () => {
+  // Prozess mit mehreren Phasen: dieselben Abschnitte tauchen in mehreren Phasen
+  // auf, ein Feld kommt in mehreren Phasen vor – es zählt der ERSTE Fund.
+  const defn = () => normalizeDefinition({
+    key: 'onb', name: 'Onboarding',
+    fields: [
+      { key: 'base.vorname', widget: 'text' },
+      { key: 'base.nachname', widget: 'text' },
+      { key: 'it.sig', widget: 'text' },
+      { key: 'lose', widget: 'text' },
+    ],
+    phases: [
+      { key: 'p1', kind: 'start',
+        fields: [{ ref: 'base.vorname' }, { ref: 'base.nachname' }, { ref: 'lose' }],
+        layout: [{ type: 'section', title: 'Basisdaten', variant: 'base',
+                   items: [{ type: 'field', ref: 'base.vorname' },
+                           { type: 'field', ref: 'base.nachname' }] }] },
+      { key: 'p2', kind: 'task',
+        fields: [{ ref: 'base.vorname' }, { ref: 'it.sig' }],
+        layout: [
+          { type: 'section', title: 'Basisdaten', variant: 'base',
+            items: [{ type: 'field', ref: 'base.vorname' }] },
+          { type: 'section', title: 'IT', variant: 'it',
+            items: [{ type: 'field', ref: 'it.sig' }] },
+        ] },
+    ],
+  })
+
+  it('führt gleichnamige Abschnitte zusammen und platziert jedes Feld beim ersten Auftreten', () => {
+    const secs = mergedSections(defn())
+    expect(secs.map((s) => s.title)).toEqual(['Basisdaten', 'IT'])
+    expect(secs[0].refs).toEqual(['base.vorname', 'base.nachname'])   // vorname nur EINMAL
+    expect(secs[1]).toMatchObject({ variant: 'it', refs: ['it.sig'] })
+    // `lose` ist nirgends platziert → gehört NICHT zu einem Abschnitt.
+    expect(secs.flatMap((s) => s.refs)).not.toContain('lose')
+  })
+
+  it('ohne Layout leer (Leseansicht fällt dann auf eine Sammel-Liste zurück)', () => {
+    const flat = normalizeDefinition({
+      key: 'x', name: 'X', fields: [{ key: 'a', widget: 'text' }],
+      phases: [{ key: 'p', kind: 'start', fields: [{ ref: 'a' }] }],
+    })
+    expect(mergedSections(flat)).toEqual([])
+    expect(mergedSections(null)).toEqual([])
   })
 })
