@@ -94,6 +94,21 @@ class FakeStore:
 #: Wie DEFN, aber mit festem Titel (titleEditable=false – wie das Basis-Ticket).
 DEFN_FIXED = {**DEFN, "key": "fix", "titleEditable": False}
 
+#: Start-Phase mit on_enter-auto_advance – zum Prüfen von autoStart (Onboarding:
+#: erst Anhänge hochladen, dann selbst :advance, damit die Freigabe-Mail sie mitnimmt).
+DEFN_FLOW = {
+    "schemaVersion": 1, "key": "flow", "name": "Auto-Flow",
+    "fields": [{"key": "base.name", "widget": "text"}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "required": True}],
+         "automations": [{"id": "go", "trigger": {"type": "on_enter"},
+                          "action": {"type": "auto_advance"}}]},
+        {"key": "work", "kind": "task", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "mode": "readonly"}]},
+    ],
+}
+
 
 class FakeDefs:
     def __init__(self):
@@ -108,6 +123,8 @@ class FakeDefs:
             return {"version": 1, "definition": DEFN}
         if key == "fix":
             return {"version": 1, "definition": DEFN_FIXED}
+        if key == "flow":
+            return {"version": 1, "definition": DEFN_FLOW}
         return None
 
     def get_definition(self, key, ver):
@@ -116,6 +133,8 @@ class FakeDefs:
             return {"version": ver, "definition": DEFN}
         if key == "fix":
             return {"version": ver, "definition": DEFN_FIXED}
+        if key == "flow":
+            return {"version": ver, "definition": DEFN_FLOW}
         return None
 
 
@@ -186,6 +205,29 @@ def test_create_ok(client):
     assert d["current_phase"] == "start"
     assert d["process_version"] == 1
     assert d["values"] == {"base.name": "Max"}
+
+
+def test_create_auto_start_schaltet_direkt_weiter(client):
+    """Standard: eine Start-Phase mit on_enter-auto_advance schaltet beim Anlegen
+    sofort weiter (unverändertes Verhalten)."""
+    r = client.post("/process-tickets", json={"processKey": "flow", "values": {"base.name": "Max"}})
+    assert r.status_code == 200
+    assert r.json()["data"]["current_phase"] == "work"
+
+
+def test_create_defer_start_bleibt_in_startphase(client):
+    """autoStart=false unterdrückt das sofortige Weiterschalten: der Auftrag bleibt
+    in der Start-Phase, damit der Client zuerst Datei-Anhänge hochladen und dann
+    selbst :advance rufen kann (so landen sie in der Freigabe-Mail)."""
+    r = client.post("/process-tickets",
+                    json={"processKey": "flow", "values": {"base.name": "Max"}, "autoStart": False})
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["current_phase"] == "start"
+    # Der nachgelagerte :advance schaltet dann regulär weiter.
+    adv = client.post(f"/process-tickets/{d['id']}:advance")
+    assert adv.status_code == 200
+    assert adv.json()["data"]["current_phase"] == "work"
 
 
 def test_patch_merges_values(client):

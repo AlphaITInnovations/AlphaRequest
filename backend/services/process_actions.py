@@ -146,14 +146,15 @@ def _build_message(action: Action, row: dict, phase: Optional[PhaseDef]) -> tupl
     return subject, body
 
 
-def _default_sender(recipients: list[str], subject: str, body: str, kind: str = "automation") -> None:
+def _default_sender(recipients: list[str], subject: str, body: str, kind: str = "automation",
+                    attachments: Optional[list] = None) -> None:
     if not recipients:
         return
     from backend.services.microsoft_mail import send_mail_app_only
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=subject, body=body, to_recipients=list(recipients),
-        body_type="HTML", kind=kind,
+        body_type="HTML", kind=kind, attachments=attachments,
     )
 
 
@@ -288,7 +289,17 @@ def _approval_info_html(row: dict, spec) -> str:
             f"border-radius:8px;font-size:14px;color:#111827;\">{_rich_text(plain)}</div>")
 
 
-def _approval_message(row: dict, phase: PhaseDef, title: str) -> tuple[str, str]:
+def _attachment_note_html(n: int) -> str:
+    """Kleiner Hinweis in der Freigabe-Mail, dass Dateien beigefügt sind."""
+    if n <= 0:
+        return ""
+    was = "1 Datei ist" if n == 1 else f"{n} Dateien sind"
+    return (f"<p style=\"font-size:13px;color:#4B5563;\">&#128206; {was} dieser "
+            f"E-Mail beigefügt (z. B. Lebenslauf).</p>")
+
+
+def _approval_message(row: dict, phase: PhaseDef, title: str,
+                      *, n_attachments: int = 0) -> tuple[str, str]:
     from backend.services.iso_duration import parse_duration
     spec = phase.approval
     approve_url, reject_url = approval_links(row, phase)
@@ -301,6 +312,7 @@ def _approval_message(row: dict, phase: PhaseDef, title: str) -> tuple[str, str]
         f"<p>Für den Auftrag „{html.escape(title)}“ (#{row.get('id')}) wird Ihre "
         f"Entscheidung gebraucht.</p>"
         + _approval_info_html(row, spec)
+        + _attachment_note_html(n_attachments)
         + f"<p><b>{html.escape(spec.question)}</b></p>"
         + _approval_buttons_html(approve_url, reject_url,
                                  spec.approveLabel, spec.rejectLabel)
@@ -309,6 +321,54 @@ def _approval_message(row: dict, phase: PhaseDef, title: str) -> tuple[str, str]
           f"nicht nötig. Gültig {html.escape(gueltig)} ab Versand.</p>"
     )
     return subject, body
+
+
+# Gesamtgröße der an die Freigabe-Mail gehängten Dateien. Graph bettet
+# `contentBytes` inline ein und deckelt die GESAMTE Nachricht bei ~3–4 MB;
+# darüber schlägt der Versand fehl. Konservativ darunter bleiben und größere
+# Dateien auslassen (mit Log), statt die ganze Freigabe-Mail scheitern zu lassen.
+_MAIL_ATTACH_TOTAL_LIMIT = 3 * 1024 * 1024
+
+
+def _ticket_attachments(row: dict) -> list:
+    """Aktuelle Datei-Anhänge des Auftrags als Mail-Anhänge (Freigabe-Mail).
+
+    Nur die jeweils aktuellen Versionen, bis zu einem Gesamt-Limit. Fehlende,
+    unlesbare oder zu große Dateien werden ausgelassen (Log) – ein Anhang-Problem
+    darf den Versand der Freigabe-Mail nie kippen.
+    """
+    tid = row.get("id")
+    if not tid:
+        return []
+    try:
+        from backend.database import attachments as att_db
+        from backend.services import attachment_storage as storage
+        from backend.services.microsoft_mail import attachment_from_path
+    except Exception:
+        logger.exception("Anhang-Module für Freigabe-Mail nicht ladbar (#%s)", tid)
+        return []
+    try:
+        rows = att_db.list_for_ticket(tid, entity_type=att_db.ENTITY_PROCESS_TICKET)
+    except Exception:
+        logger.exception("Anhänge für Freigabe-Mail nicht ladbar (#%s)", tid)
+        return []
+    out: list = []
+    total = 0
+    for a in rows:
+        name = a.get("original_filename") or "Anhang"
+        try:
+            size = int(a.get("size_bytes") or 0)
+            if size and total + size > _MAIL_ATTACH_TOTAL_LIMIT:
+                logger.warning("Freigabe-Mail #%s: „%s“ (%d B) ausgelassen – "
+                               "Gesamtlimit %d B erreicht", tid, name, size,
+                               _MAIL_ATTACH_TOTAL_LIMIT)
+                continue
+            path = storage.full_path(a["stored_path"])
+            out.append(attachment_from_path(str(path), filename=name))
+            total += size
+        except Exception:
+            logger.exception("Freigabe-Mail #%s: „%s“ nicht anhängbar", tid, name)
+    return out
 
 
 def _report_recipient_gap(row: dict, phase: PhaseDef, recips: list[str]) -> None:
@@ -386,8 +446,13 @@ def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[Phase
             # das muss sichtbar werden, nicht nur im Log stehen.
             _report_recipient_gap(row, phase, recips)
             if recips:
-                subject, body = _approval_message(row, phase, title)
-                sender(recips, subject, body, kind="approval_link")
+                # Hochgeladene Dateien (z. B. Lebenslauf) reisen mit – die
+                # freigebende Person hat sonst keinen Zugang zum Auftrag.
+                atts = _ticket_attachments(row)
+                subject, body = _approval_message(row, phase, title,
+                                                  n_attachments=len(atts))
+                extra = {"attachments": atts} if atts else {}
+                sender(recips, subject, body, kind="approval_link", **extra)
         elif recips:
             subject = _subject(f"[AlphaRequest] Neue Aufgabe: {title}")
             body = (f"<p>Der Auftrag „{html.escape(title)}“ liegt jetzt bei Ihnen "

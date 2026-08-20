@@ -174,3 +174,86 @@ def test_mailfehler_bricht_nichts_ab():
     t = ticket({"verantwortlich": "u_chef"}, phase_index=2)
     # darf NICHT werfen – der Phasenwechsel selbst muss durchgehen
     assert pactions.notify_phase_entry(t, DEFN, DEFN.phases[2], sender=boom, groups=GROUPS) == []
+
+
+# ── Freigabe-Mail mit Datei-Anhängen ──────────────────────────────────────────
+
+_APPROVAL_DEFN = ProcessDefinition.model_validate({
+    "key": "f", "name": "F", "fields": [{"key": "a", "widget": "text"}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "a"}]},
+        {"key": "frei", "kind": "approval", "view": "approval",
+         "responsibility": {"kind": "group", "group": "g_it"},
+         "approval": {"question": "Freigeben?", "externalLink": True, "emailBody": "Info"},
+         "fields": [{"ref": "a", "mode": "readonly"}]},
+    ],
+})
+
+
+def _approval_ticket():
+    return {"id": 5, "title": "Freigabe-Auftrag", "owner_id": "o", "status": "in_progress",
+            "values": {}, "runtime": pr.initial_runtime(_APPROVAL_DEFN, "t0", {})}
+
+
+def test_freigabe_mail_haengt_hochgeladene_dateien_an(monkeypatch):
+    """Sind Dateien am Auftrag, reisen sie in der Freigabe-Mail mit – plus Hinweis."""
+    monkeypatch.setattr(pactions, "approval_links", lambda row, phase: ("http://ja", "http://nein"))
+    monkeypatch.setattr(pactions, "_ticket_attachments", lambda row: ["ANHANG1", "ANHANG2"])
+    cap: dict = {}
+
+    def sender(recips, subject, body, kind=None, attachments=None):
+        cap.update(to=recips, kind=kind, body=body, attachments=attachments)
+
+    out = pactions.notify_phase_entry(_approval_ticket(), _APPROVAL_DEFN,
+                                      _APPROVAL_DEFN.phases[1], sender=sender, groups=GROUPS)
+    assert out == ["it@example.org"]
+    assert cap["kind"] == "approval_link"
+    assert cap["attachments"] == ["ANHANG1", "ANHANG2"]
+    assert "beigefügt" in cap["body"]           # der kleine Hinweis im Mailtext
+
+
+def test_freigabe_mail_ohne_anhaenge_uebergibt_kein_kwarg(monkeypatch):
+    """Ohne Dateien wird `attachments` NICHT übergeben – alte Sender-Signaturen
+    (ohne den Parameter) müssen weiter funktionieren."""
+    monkeypatch.setattr(pactions, "approval_links", lambda row, phase: ("http://ja", "http://nein"))
+    monkeypatch.setattr(pactions, "_ticket_attachments", lambda row: [])
+    cap: dict = {}
+
+    def sender(recips, subject, body, kind=None):   # KEIN attachments-Parameter
+        cap.update(kind=kind, body=body)
+
+    out = pactions.notify_phase_entry(_approval_ticket(), _APPROVAL_DEFN,
+                                      _APPROVAL_DEFN.phases[1], sender=sender, groups=GROUPS)
+    assert out == ["it@example.org"] and cap["kind"] == "approval_link"
+    assert "beigefügt" not in cap["body"]           # ohne Dateien kein Hinweis
+
+
+def test_attachment_note_text():
+    assert pactions._attachment_note_html(0) == ""
+    assert "1 Datei ist" in pactions._attachment_note_html(1)
+    assert "3 Dateien sind" in pactions._attachment_note_html(3)
+
+
+def test_ticket_attachments_deckelt_gesamtgroesse(monkeypatch):
+    """Große Dateien werden ausgelassen, damit die Graph-Grenze nicht den ganzen
+    Versand kippt – kleinere danach kommen trotzdem noch mit."""
+    from backend.database import attachments as att_db
+    from backend.services import attachment_storage as storage
+    from backend.services import microsoft_mail as mm
+    rows = [
+        {"original_filename": "cv.pdf", "stored_path": "cv.pdf", "size_bytes": 1000},
+        {"original_filename": "riesig.zip", "stored_path": "riesig.zip",
+         "size_bytes": pactions._MAIL_ATTACH_TOTAL_LIMIT},
+        {"original_filename": "foto.png", "stored_path": "foto.png", "size_bytes": 2000},
+    ]
+    monkeypatch.setattr(att_db, "list_for_ticket",
+                        lambda tid, entity_type=None: [dict(r) for r in rows])
+    monkeypatch.setattr(storage, "full_path", lambda sp: sp)
+    monkeypatch.setattr(mm, "attachment_from_path", lambda path, filename=None: {"file": filename})
+    out = pactions._ticket_attachments({"id": 5})
+    assert [a["file"] for a in out] == ["cv.pdf", "foto.png"]   # riesig.zip übersprungen
+
+
+def test_ticket_attachments_ohne_id_leer():
+    assert pactions._ticket_attachments({}) == []

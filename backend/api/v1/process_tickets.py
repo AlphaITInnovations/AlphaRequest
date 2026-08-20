@@ -59,6 +59,11 @@ class CreateTicketRequest(BaseModel):
     title: Optional[str] = None
     priority: Optional[str] = None
     values: Optional[dict] = None
+    #: Startphase direkt weiterschalten (Standard). Der Client setzt das auf
+    #: false, wenn er ANSCHLIESSEND Datei-Anhänge hochlädt und erst DANACH selbst
+    #: :advance ruft – nur so landen die Anhänge (z. B. Lebenslauf) in der
+    #: Freigabe-Mail, die beim Verlassen der Startphase verschickt wird.
+    autoStart: bool = True
 
 
 class PatchTicketRequest(BaseModel):
@@ -397,6 +402,15 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
                        row["id"])
     events.record(row, events.CREATED, actor_id=user.get("id"), actor_name=_actor_name(user),
                   details={"process_key": defn.key, "version": pub["version"]})
+    if not body.autoStart:
+        # Der Client lädt gleich Datei-Anhänge hoch und ruft DANACH :advance –
+        # so verlässt der Auftrag die Startphase erst nach dem Upload und die
+        # Freigabe-Mail bekommt die Anhänge mit. Ohne diese Ausnahme feuerte das
+        # on_enter-auto_advance sofort und die Mail ginge ohne Anhänge raus.
+        # :advance prüft die Pflichtangaben erneut, bevor es weiterschaltet.
+        _safe_restamp(row, defn)
+        return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn),
+                                      user, group_ids))
     # Ein `auto_advance` aus den on_enter-Automationen wurde hier bisher
     # STILLSCHWEIGEND verworfen (der Rückgabewert wurde ignoriert). Prozesse, die
     # direkt nach dem Anlegen weiterschalten sollen – z. B. das Basis-Ticket, das
