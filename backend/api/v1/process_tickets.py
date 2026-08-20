@@ -518,6 +518,49 @@ def _safe_filename(name: Optional[str]) -> str:
     return (keep or "Dokument")[:120]
 
 
+def _content_disposition(filename: str) -> str:
+    """Content-Disposition-Header, der auch Nicht-latin-1-Namen (Ł, ş, CJK) verträgt.
+
+    Starlette kodiert Header-Werte als latin-1; ein Name wie „Arbeitsvertrag_Łukasz"
+    würde den Response-Aufbau mit UnicodeEncodeError (→ HTTP 500) sprengen. Deshalb
+    ein reiner ASCII-`filename=` als Rückfallebene UND `filename*=UTF-8''…`
+    (RFC 5987) mit dem echten Namen für Browser, die es verstehen.
+    """
+    import urllib.parse
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "Dokument.docx"
+    quoted = urllib.parse.quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"
+
+
+def _option_text(field, raw) -> str:
+    """Einen skalaren Wert wie in der Vorschau in seine Options-Beschriftung
+    übersetzen (statische Auswahl). User-/Gruppen-Felder werden hier NICHT
+    aufgelöst – sie sind als Vertrags-Platzhalter nicht zugelassen (der Editor
+    bietet sie nicht an), sodass Vorschau und Export übereinstimmen."""
+    v = str(raw)
+    for o in (getattr(field, "options", None) or []):
+        if o.value == v:
+            return o.label or o.value
+    return v
+
+
+def _fill_text(field, raw) -> str:
+    """Feldwert für die .docx-Vorlage darstellen – deckungsgleich mit der
+    Vorschau (Ja/Nein, Options-Beschriftung, Liste). Leer → "" ; der Aufrufer
+    lässt den Marker dann WEG, damit fill_docx dort die Lücke (GAP) setzt statt
+    eines „—" (das im Vertrag wie ein gewollter Gedankenstrich aussähe)."""
+    if raw is None or raw == "":
+        return ""
+    if isinstance(raw, bool):
+        return "Ja" if raw else "Nein"
+    if isinstance(raw, (list, tuple)):
+        parts = [_option_text(field, v) for v in raw if not isinstance(v, (dict, list, tuple))]
+        return ", ".join(p for p in parts if p)
+    if isinstance(raw, dict):
+        return ""
+    return _option_text(field, raw)
+
+
 @router.post("/process-tickets/{ticket_id}/document:export")
 def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                            user: dict = Depends(get_current_user)):
@@ -537,30 +580,42 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
         defn = None
 
     _MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    # Dokument-Phase der Definition bestimmen (aktuelle Phase, sonst die erste mit
+    # Vorlage). Die .docx liegt je (Prozess, PHASE) – ihr Schlüssel steckt hier.
+    docphase = None
+    if defn is not None:
+        cur = pr.current_phase(defn, row.get("runtime") or {})
+        docphase = cur if (cur and cur.document is not None) else \
+            next((p for p in defn.phases if p.document is not None), None)
+
     from backend.database import process_templates as tpl_db
-    try:
-        tpl = tpl_db.get_template(row["process_key"]) if row.get("process_key") else None
-    except Exception:
-        logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", ticket_id)
-        tpl = None
+    tpl = None
+    if defn is not None and docphase is not None and row.get("process_key"):
+        try:
+            tpl = tpl_db.get_template(row["process_key"], docphase.key)
+        except Exception:
+            logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", ticket_id)
+            tpl = None
 
     # Mit hochgeladener .docx-Vorlage: der Server füllt die {{marker}} aus den
     # Auftragswerten (Zuordnung = DocumentSpec.bindings). Der gefüllte Vertrag
     # enthält auch vertrauliche Werte (Gehalt …) → nur Vollsicht/Admin, nicht
     # jede lesende Rolle (Fachabteilung).
-    if tpl and defn is not None:
+    if tpl is not None and docphase is not None:
         gids = vis.user_group_ids(user)
         ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
         if not (ctx.full_view or ctx.is_admin):
             raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                             "Nur die zuständige Stelle bzw. Vollsicht darf den "
                             "ausgefüllten Vertrag exportieren")
-        phase = pr.current_phase(defn, row.get("runtime") or {})
-        docphase = phase if (phase and phase.document is not None) else \
-            next((p for p in defn.phases if p.document is not None), None)
-        doc = docphase.document if docphase else None
+        doc = docphase.document
         bindings = dict(doc.bindings) if doc else {}
-        values = row.get("values") or {}
+        # §5.1: NUR sichtbare Werte einsetzen. `confidential` (z. B. Gehalt) ist
+        # eine harte Sperre, die auch die Vollsicht NICHT umgeht – gesperrte Felder
+        # fallen hier weg und landen im Dokument als Lücke (GAP), nicht im Klartext.
+        values = vis.filter_values(defn, row.get("values") or {}, ctx)
+        catalog = {f.key: f for f in defn.fields}
         from backend.services import attachment_storage as _storage
         from backend.services import docx_fill
         from backend.services import mail_template as mt
@@ -572,7 +627,13 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                 return str(row.get("id") or "")
             return mt.format_value(values.get(token))
 
-        fill_values = {marker: mt.format_value(values.get(fk)) for marker, fk in bindings.items()}
+        # Werte wie in der Vorschau (Options-Beschriftung, Ja/Nein); LEERE bewusst
+        # weglassen, damit fill_docx dort die Lücke setzt statt eines „—".
+        fill_values = {}
+        for marker, fk in bindings.items():
+            text = _fill_text(catalog.get(fk), values.get(fk))
+            if text != "":
+                fill_values[marker] = text
         try:
             from pathlib import Path
             tpl_bytes = Path(_storage.full_path(tpl["stored_path"])).read_bytes()
@@ -581,18 +642,23 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                             "Die hinterlegte Vorlage ist nicht lesbar")
         data = docx_fill.fill_docx(tpl_bytes, fill_values)
         name = body.filename or mt.substitute((doc.filename if doc else "") or "Dokument", _resolve)
-        fname = _safe_filename(name) + ".docx"
         return Response(content=data, media_type=_MIME,
-                        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+                        headers={"Content-Disposition": _content_disposition(_safe_filename(name) + ".docx")})
 
     # Kein Template → bisheriger HTML→docx-Weg (Werte stehen im gesendeten HTML,
     # Leserecht genügt).
     _assert_view(row, defn, user)
+    # Im .docx-Modus wird KEIN html gesendet; ohne hinterlegte Vorlage käme sonst
+    # nur eine leere Datei heraus (Fehlkonfiguration, kein Export).
+    if not (body.html or "").strip():
+        raise api_error(409, "TEMPLATE_MISSING",
+                        "Für diese Dokument-Phase ist keine Vorlage hinterlegt. "
+                        "Bitte im Prozess-Editor eine .docx-Vorlage hochladen.")
     from backend.services.html_to_docx import html_to_docx
     data = html_to_docx(body.html or "")
-    fname = _safe_filename(body.filename) + ".docx"
     return Response(content=data, media_type=_MIME,
-                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+                    headers={"Content-Disposition":
+                             _content_disposition(_safe_filename(body.filename) + ".docx")})
 
 
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])

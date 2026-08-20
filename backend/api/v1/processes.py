@@ -816,6 +816,15 @@ def _safe_docname(name: Optional[str]) -> str:
     return (keep or "Vorlage.docx")[:150]
 
 
+def _content_disposition(filename: str) -> str:
+    """Header mit ASCII-Rückfallebene + RFC-5987 `filename*` – sonst sprengt ein
+    Nicht-latin-1-Zeichen (Ł, ş, CJK) den Header (Starlette kodiert latin-1)."""
+    import urllib.parse
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "Vorlage.docx"
+    quoted = urllib.parse.quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"
+
+
 def _template_bytes(row: dict) -> bytes:
     from pathlib import Path
     return Path(storage.full_path(row["stored_path"])).read_bytes()
@@ -833,16 +842,16 @@ def _template_info(row: dict) -> dict:
             "uploaded_by": row.get("uploaded_by_name")}
 
 
-@router.get("/processes/{key}/document-template")
-def get_document_template(key: str, user: dict = Depends(get_current_user)):
+@router.get("/processes/{key}/phases/{phase}/document-template")
+def get_document_template(key: str, phase: str, user: dict = Depends(get_current_user)):
     """Info zur Vorlage + Liste der gefundenen {{marker}} (für die Zuordnung)."""
     _require_manage(user)
-    row = tpl_db.get_template(key)
+    row = tpl_db.get_template(key, phase)
     return DataResponse(data=_template_info(row) if row else {"exists": False})
 
 
-@router.post("/processes/{key}/document-template")
-async def upload_document_template(key: str, file: UploadFile = File(...),
+@router.post("/processes/{key}/phases/{phase}/document-template")
+async def upload_document_template(key: str, phase: str, file: UploadFile = File(...),
                                    user: dict = Depends(get_current_user)):
     """Vorlage (.docx) hochladen/ersetzen. Gibt die gefundenen Marker zurück."""
     _require_admin(user)
@@ -861,8 +870,8 @@ async def upload_document_template(key: str, file: UploadFile = File(...),
         storage.delete(stored_path)
         raise api_error(422, "INVALID_DOCX",
                         "Die Datei ließ sich nicht als Word-Dokument (.docx) lesen")
-    old = tpl_db.get_template(key)
-    tpl_db.set_template(process_key=key, stored_path=stored_path,
+    old = tpl_db.get_template(key, phase)
+    tpl_db.set_template(process_key=key, phase_key=phase, stored_path=stored_path,
                         original_filename=_safe_docname(file.filename),
                         content_type=file.content_type, size_bytes=size,
                         uploaded_by_id=user.get("id"),
@@ -872,30 +881,33 @@ async def upload_document_template(key: str, file: UploadFile = File(...),
     record_audit(action="process_template_uploaded", actor_id=user.get("id"),
                  actor_name=user.get("displayName") or "", entity_type="process",
                  entity_id=key,
-                 summary=f"Dokument-Vorlage für „{key}“ hochgeladen ({size} B)",
-                 details={"filename": _safe_docname(file.filename), "placeholders": placeholders})
-    row = tpl_db.get_template(key)
+                 summary=f"Dokument-Vorlage für „{key}“ (Phase „{phase}“) hochgeladen ({size} B)",
+                 details={"phase": phase, "filename": _safe_docname(file.filename),
+                          "placeholders": placeholders})
+    row = tpl_db.get_template(key, phase)
     return DataResponse(data=_template_info(row))
 
 
-@router.get("/processes/{key}/document-template/download")
-def download_document_template(key: str, user: dict = Depends(get_current_user)):
+@router.get("/processes/{key}/phases/{phase}/document-template/download")
+def download_document_template(key: str, phase: str, user: dict = Depends(get_current_user)):
     _require_manage(user)
-    row = tpl_db.get_template(key)
+    row = tpl_db.get_template(key, phase)
     if not row:
         raise api_error(404, "TEMPLATE_NOT_FOUND", "Keine Vorlage hinterlegt")
     return Response(content=_template_bytes(row), media_type=_DOCX_MIME,
                     headers={"Content-Disposition":
-                             f'attachment; filename="{_safe_docname(row["original_filename"])}"'})
+                             _content_disposition(_safe_docname(row["original_filename"]))})
 
 
-@router.delete("/processes/{key}/document-template")
-def delete_document_template(key: str, user: dict = Depends(get_current_user)):
+@router.delete("/processes/{key}/phases/{phase}/document-template")
+def delete_document_template(key: str, phase: str, user: dict = Depends(get_current_user)):
     _require_admin(user)
-    row = tpl_db.delete_template(key)
+    row = tpl_db.delete_template(key, phase)
     if row and row.get("stored_path"):
         storage.delete(row["stored_path"])
     record_audit(action="process_template_deleted", actor_id=user.get("id"),
                  actor_name=user.get("displayName") or "", entity_type="process",
-                 entity_id=key, summary=f"Dokument-Vorlage für „{key}“ entfernt", details={})
+                 entity_id=key,
+                 summary=f"Dokument-Vorlage für „{key}“ (Phase „{phase}“) entfernt",
+                 details={"phase": phase})
     return DataResponse(data={"exists": False})

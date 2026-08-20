@@ -245,9 +245,12 @@ export function blankApproval(question = ''): ApprovalSpec {
 export function blankDocument(): DocumentSpec {
   // Neuer Standard: eine hochgeladene .docx-Vorlage + Marker-Zuordnung (bindings).
   // templateHtml bleibt leer (nur noch Alt-Prozesse nutzen den HTML-Weg).
+  // Dateiname OHNE Platzhalter: ein {{feld}}-Default würde bei Prozessen ohne
+  // genau dieses Feld sofort einen UNKNOWN_REF-Fehler werfen und das Speichern
+  // sperren (der Admin kann später eigene Platzhalter eintragen).
   return {
     templateHtml: '',
-    filename: 'Dokument_{{base.last_name}}',
+    filename: 'Dokument',
     title: 'Dokument',
     bindings: {},
   }

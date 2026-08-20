@@ -12,7 +12,9 @@ from backend.database.process_ticket_events import (
 )
 from backend.database.process_ticket_watchers import PROCESS_TICKET_WATCHERS_DDL
 from backend.database.process_sequences import PROCESS_SEQUENCE_CLAIMS_DDL
-from backend.database.process_templates import PROCESS_TEMPLATES_DDL
+from backend.database.process_templates import (
+    PROCESS_TEMPLATES_DDL, PROCESS_TEMPLATES_MIGRATIONS,
+)
 from backend.database.process_timer_fires import (
     PROCESS_TIMER_FIRES_DDL, PROCESS_TIMER_FIRES_MIGRATIONS,
 )
@@ -57,7 +59,8 @@ def init_db():
                               + list(PROCESS_DEFINITIONS_MIGRATIONS)
                               + list(PROCESS_TICKETS_MIGRATIONS)
                               + list(PROCESS_TICKET_EVENTS_MIGRATIONS)
-                              + list(PROCESS_TIMER_FIRES_MIGRATIONS)):
+                              + list(PROCESS_TIMER_FIRES_MIGRATIONS)
+                              + list(PROCESS_TEMPLATES_MIGRATIONS)):
                 _exec(conn, migration)
             conn.commit()
         finally:

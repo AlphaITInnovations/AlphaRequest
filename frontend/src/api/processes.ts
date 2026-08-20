@@ -50,24 +50,33 @@ export interface DocumentTemplateInfo {
   uploaded_by?: string | null
 }
 
-export async function getDocumentTemplate(key: string): Promise<DocumentTemplateInfo> {
-  const { data } = await client.get(`/processes/${encodeURIComponent(key)}/document-template`)
+/** URL der Vorlage je (Prozess, Phase). */
+function templateUrl(key: string, phaseKey: string): string {
+  return `/processes/${encodeURIComponent(key)}/phases/${encodeURIComponent(phaseKey)}`
+    + '/document-template'
+}
+
+export async function getDocumentTemplate(
+  key: string, phaseKey: string,
+): Promise<DocumentTemplateInfo> {
+  const { data } = await client.get(templateUrl(key, phaseKey))
   return data.data
 }
 
-export async function uploadDocumentTemplate(key: string, file: File): Promise<DocumentTemplateInfo> {
+export async function uploadDocumentTemplate(
+  key: string, phaseKey: string, file: File,
+): Promise<DocumentTemplateInfo> {
   const form = new FormData()
   form.append('file', file)
   // Content-Type NICHT setzen: der Browser ergänzt die multipart-Boundary
   // (der Axios-Client setzt global JSON – hier mit undefined überschreiben).
-  const { data } = await client.post(
-    `/processes/${encodeURIComponent(key)}/document-template`, form,
+  const { data } = await client.post(templateUrl(key, phaseKey), form,
     { headers: { 'Content-Type': undefined } })
   return data.data
 }
 
-export async function deleteDocumentTemplate(key: string): Promise<void> {
-  await client.delete(`/processes/${encodeURIComponent(key)}/document-template`)
+export async function deleteDocumentTemplate(key: string, phaseKey: string): Promise<void> {
+  await client.delete(templateUrl(key, phaseKey))
 }
 
 /** Rohe Definition einer Version (Export-Datei). */

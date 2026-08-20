@@ -26,14 +26,22 @@ import re
 import zipfile
 from typing import Optional
 
-#: Ein Marker-Name: Buchstaben/Ziffern/._- , optional Leerraum in den Klammern.
-_TOKEN = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
+#: Ein Marker-Name: Wortzeichen (inkl. Umlaute/ß dank Unicode-`\w`) plus ._-,
+#: optional Leerraum in den Klammern.
+_TOKEN = re.compile(r"\{\{\s*([\w.\-]+)\s*\}\}", re.UNICODE)
 #: `{{ … }}` inkl. etwaiger Run-/Tag-Grenzen dazwischen – bewusst längenbegrenzt,
 #: damit ein verwaistes `{{` nicht über das halbe Dokument „frisst".
 _SPLIT = re.compile(r"\{\{(?:(?!\}\})[\s\S]){0,800}?\}\}")
 _TAG = re.compile(r"<[^>]*>")
-#: Text-tragende Teile eines .docx.
-_TEXT_PART = re.compile(r"^word/(document|header\d*|footer\d*)\.xml$")
+#: Block-Ebene: ein echter, nur über RUNS zerlegter Marker überschreitet diese
+#: Grenzen nie (ein `{{` und `}}` in verschiedenen Absätzen/Zellen ist kein
+#: Marker). Taucht so ein Tag im `{{…}}`-Fenster auf, stammt das schließende `}}`
+#: von einem SPÄTEREN echten Marker (verwaistes `{{`) – dann NICHT ent-splitten,
+#: sonst würden Struktur-Tags gelöscht und das OOXML zerstört.
+_BLOCK_TAG = re.compile(r"</?w:(p|tbl|tr|tc|sdt|sdtContent|sectPr|tblGrid|gridCol|body)\b")
+#: Text-tragende Teile eines .docx (auch Fuß-/Endnoten und Kommentare).
+_TEXT_PART = re.compile(
+    r"^word/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$")
 
 #: Standard-Füllung für Marker OHNE Zuordnung – eine Lücke wie im Ausgangsvertrag.
 GAP = "…………………………"
@@ -41,8 +49,14 @@ GAP = "…………………………"
 
 def _desplit(xml: str) -> str:
     """Tag-Grenzen INNERHALB eines `{{…}}` entfernen (über Runs zerlegte Marker
-    wieder zusammenführen). Marker ohne Tags dazwischen bleiben unverändert."""
-    return _SPLIT.sub(lambda m: _TAG.sub("", m.group(0)), xml)
+    wieder zusammenführen). Marker ohne Tags dazwischen bleiben unverändert;
+    Spannen, die eine Block-Grenze überqueren, ebenfalls (verwaistes `{{`)."""
+    def _merge(m: "re.Match[str]") -> str:
+        span = m.group(0)
+        if _BLOCK_TAG.search(span):
+            return span   # überspannt eine Block-Grenze → kein echter Marker
+        return _TAG.sub("", span)
+    return _SPLIT.sub(_merge, xml)
 
 
 def _xml_escape(s: str) -> str:

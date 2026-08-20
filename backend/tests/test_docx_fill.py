@@ -69,3 +69,46 @@ def test_verwaiste_klammern_fressen_nicht_das_ganze_dokument():
     # Ein einzelnes {{ ohne passendes }} in erreichbarer Nähe bleibt unangetastet.
     xml = "{{ " + ("<w:t>Text</w:t>" * 200)
     assert _desplit(xml) == xml
+
+
+def test_umlaut_marker_wird_erkannt_und_gefuellt():
+    """Marker-Namen mit Umlaut/ß (deutsche Verträge) müssen erkannt UND gefüllt
+    werden – sonst stünde roh {{tätigkeit}} im unterschriebenen Vertrag."""
+    tpl = html_to_docx("<p>Tätigkeit: {{tätigkeit}}, Straße {{straße}}.</p>")
+    assert find_placeholders(tpl) == ["tätigkeit", "straße"]
+    txt = _doc_text(fill_docx(tpl, {"tätigkeit": "Entwicklung", "straße": "Hauptweg 1"}))
+    assert "Entwicklung" in txt and "Hauptweg 1" in txt
+    assert "{{" not in txt
+
+
+def test_marker_in_fussnote_wird_erkannt_und_gefuellt():
+    """Text-Teile jenseits von document/header/footer (Fußnoten) müssen ebenfalls
+    gefüllt werden – sonst bliebe {{marker}} roh in der Fußnote stehen."""
+    ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(_template())) as zin, \
+            zipfile.ZipFile(buf, "w") as zout:
+        for it in zin.infolist():
+            zout.writestr(it, zin.read(it.filename))
+        zout.writestr("word/footnotes.xml",
+                      f'<?xml version="1.0"?><w:footnotes {ns}><w:t>Ref {{{{fn}}}}</w:t></w:footnotes>')
+    tpl = buf.getvalue()
+    assert "fn" in find_placeholders(tpl)
+    filled = fill_docx(tpl, {"fn": "42"})
+    footnote = zipfile.ZipFile(io.BytesIO(filled)).read("word/footnotes.xml").decode("utf-8")
+    assert "Ref 42" in footnote and "{{" not in footnote
+
+
+def test_desplit_zerstoert_keine_struktur_bei_verwaistem_marker():
+    """Ein verwaistes `{{` VOR einem echten Marker über eine Block-Grenze (Tabelle)
+    darf keine Struktur-Tags löschen – sonst entstünde kaputtes OOXML, das Word
+    nicht öffnet. Der echte Marker bleibt trotzdem erkennbar."""
+    from backend.services.docx_fill import _desplit
+    xml = ("<w:p><w:r><w:t>{{ offen</w:t></w:r></w:p>"
+           "<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Gehalt {{gehalt}}</w:t></w:r></w:p>"
+           "</w:tc></w:tr></w:tbl>")
+    out = _desplit(xml)
+    # Struktur-Tags erhalten (Fenster über Block-Grenze → NICHT ent-splittet).
+    assert "<w:tbl>" in out and "<w:tc>" in out and "</w:tbl>" in out
+    # Der echte Marker ist weiterhin ersetzbar.
+    assert re.search(r"\{\{\s*gehalt\s*\}\}", out)

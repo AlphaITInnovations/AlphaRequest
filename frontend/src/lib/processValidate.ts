@@ -349,11 +349,20 @@ export function validateDefinition(
             `Vorlagen-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
         }
       }
-      // Marker-Zuordnungen (.docx-Vorlage): jedes zugeordnete Feld muss existieren.
+      // Marker-Zuordnungen (.docx-Vorlage): jedes zugeordnete Feld muss existieren
+      // und als Text einsetzbar sein (collection/attachment lehnt der Server ab).
       for (const [marker, fieldKey] of Object.entries(doc.bindings ?? {})) {
-        if (fieldKey && !catalog.has(fieldKey)) {
+        if (!fieldKey) continue
+        if (!catalog.has(fieldKey)) {
           out.push(err(`${p}.document`, anchor, 'UNKNOWN_REF',
             `Vorlagen-Marker „{{${marker}}}" ist einem Feld zugeordnet, das es nicht gibt.`))
+          continue
+        }
+        const wf = d.fields.find((f) => f.key === fieldKey)?.widget
+        if (wf === 'collection' || wf === 'attachment') {
+          out.push(err(`${p}.document`, anchor, 'INVALID',
+            `Vorlagen-Marker „{{${marker}}}" verweist auf ein Feld vom Typ `
+            + `„${WIDGET_LABEL[wf] ?? wf}", das sich nicht in das Dokument einsetzen lässt.`))
         }
       }
     }

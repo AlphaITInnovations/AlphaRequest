@@ -58,16 +58,37 @@ DEFN_SKIP = {
 
 
 #: Prozess mit Dokument-Phase + bindings – für den .docx-Export (Fill-Engine).
+#: `stadt` ist einem LEEREN Feld zugeordnet → muss als Lücke landen, nicht „—".
 DEFN_DOC = {
     "schemaVersion": 1, "key": "doc", "name": "Doc-Flow",
-    "fields": [{"key": "base.name", "widget": "text"}],
+    "fields": [{"key": "base.name", "widget": "text"},
+               {"key": "base.city", "widget": "text"}],
     "phases": [
         {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
          "fields": [{"ref": "base.name", "required": True}]},
         {"key": "vertrag", "kind": "task", "view": "document",
          "responsibility": {"kind": "owner"},
          "document": {"title": "Vertrag", "filename": "Vertrag_{{base.name}}",
-                      "bindings": {"name": "base.name"}}},
+                      "bindings": {"name": "base.name", "stadt": "base.city"}}},
+    ],
+}
+
+
+#: Wie DEFN_DOC, aber `base.salary` ist VERTRAULICH (nur g_hr) und einem Marker
+#: zugeordnet – prüft, dass der Export die harte confidential-Sperre nicht umgeht.
+DEFN_CONF = {
+    "schemaVersion": 1, "key": "conf", "name": "Conf-Flow",
+    "fields": [{"key": "base.name", "widget": "text"},
+               {"key": "base.salary", "widget": "text",
+                "visibility": {"confidential": True, "visibleToGroups": ["g_hr"]}}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "required": True},
+                    {"ref": "base.salary", "mode": "editable"}]},
+        {"key": "vertrag", "kind": "task", "view": "document",
+         "responsibility": {"kind": "owner"},
+         "document": {"title": "Vertrag", "filename": "Vertrag",
+                      "bindings": {"name": "base.name", "gehalt": "base.salary"}}},
     ],
 }
 
@@ -169,6 +190,8 @@ class FakeDefs:
             return {"version": 1, "definition": DEFN_SKIP}
         if key == "doc":
             return {"version": 1, "definition": DEFN_DOC}
+        if key == "conf":
+            return {"version": 1, "definition": DEFN_CONF}
         return None
 
     def get_definition(self, key, ver):
@@ -183,6 +206,8 @@ class FakeDefs:
             return {"version": ver, "definition": DEFN_SKIP}
         if key == "doc":
             return {"version": ver, "definition": DEFN_DOC}
+        if key == "conf":
+            return {"version": ver, "definition": DEFN_CONF}
         return None
 
 
@@ -273,9 +298,11 @@ def test_document_export_fuellt_docx_vorlage(client, monkeypatch, tmp_path):
     from backend.services.docx_fill import GAP
 
     tplfile = tmp_path / "vertrag.docx"
-    tplfile.write_bytes(html_to_docx("<p>Name {{name}} in {{ort}}.</p>"))
-    monkeypatch.setattr(tpl_db, "get_template",
-                        lambda key: {"process_key": key, "stored_path": "v.docx"} if key == "doc" else None)
+    tplfile.write_bytes(html_to_docx("<p>Name {{name}} in {{ort}}, Stadt {{stadt}}.</p>"))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v.docx"}
+                            if key == "doc" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
 
     tid = client.post("/process-tickets",
@@ -292,6 +319,59 @@ def test_document_export_fuellt_docx_vorlage(client, monkeypatch, tmp_path):
     assert "Max Mustermann" in doc         # bindings name -> base.name
     assert GAP in doc                       # {{ort}} ohne Zuordnung -> Lücke
     assert "{{" not in doc                  # keine rohen Marker mehr
+    # {{stadt}} ist einem LEEREN Feld zugeordnet → Lücke, NICHT „—".
+    assert "—" not in doc
+
+
+def test_document_export_respektiert_confidential(client, monkeypatch, tmp_path):
+    """Der gefüllte Vertrag darf ein vertrauliches Feld (Gehalt) NICHT enthalten,
+    wenn der Exportierende zwar Vollsicht hat (Owner), aber nicht in der Gruppe des
+    Feldes ist. Die harte confidential-Sperre gilt auch hier (§5.1)."""
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+    from backend.services.docx_fill import GAP
+
+    tplfile = tmp_path / "v.docx"
+    tplfile.write_bytes(html_to_docx("<p>{{name}} verdient {{gehalt}}.</p>"))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+                            if key == "conf" and phase == "vertrag" else None))
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+
+    # Als Admin anlegen (darf das vertrauliche Feld schreiben).
+    tid = client.post("/process-tickets",
+                      json={"processKey": "conf",
+                            "values": {"base.name": "Max", "base.salary": "50000"}}
+                      ).json()["data"]["id"]
+    # Export als Nicht-Admin, aber Owner (u1) und NICHT in g_hr: Vollsicht per
+    # Ownership, das vertrauliche Feld bleibt aber gesperrt.
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u1", "displayName": "Chef", "permissions": []}
+    r = client.post(f"/process-tickets/{tid}/document:export", json={})
+    assert r.status_code == 200
+
+    import io
+    import zipfile
+    doc = zipfile.ZipFile(io.BytesIO(r.content)).read("word/document.xml").decode("utf-8")
+    assert "Max" in doc
+    assert "50000" not in doc               # vertraulich -> NICHT im Vertrag
+    assert GAP in doc                       # gesperrtes Feld -> Lücke
+
+
+def test_document_export_ohne_vorlage_meldet_fehler(client, monkeypatch):
+    """.docx-Modus ohne hinterlegte Vorlage (und ohne HTML): statt einer leeren
+    Datei ein klarer 409 – der Admin soll erst eine Vorlage hochladen."""
+    from backend.database import process_templates as tpl_db
+    monkeypatch.setattr(tpl_db, "get_template", lambda key, phase: None)
+
+    tid = client.post("/process-tickets",
+                      json={"processKey": "doc", "values": {"base.name": "Max"}}
+                      ).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}/document:export", json={})
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "TEMPLATE_MISSING"
 
 
 def test_create_rendert_titel_aus_vorlage(client):
