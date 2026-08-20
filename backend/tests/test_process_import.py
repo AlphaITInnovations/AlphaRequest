@@ -155,4 +155,6 @@ def test_onboarding_seed_nutzt_die_neue_laufzeit():
     doc = next(p for p in defn["phases"] if p["key"] == "arbeitsvertrag")
     assert doc["view"] == "document"
     assert doc["responsibility"]["group"] == "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
-    assert "{{base.contract_company}}" in doc["document"]["templateHtml"]
+    # Neuer .docx-Weg: KEINE HTML-Vorlage mehr im Seed. Die echte .docx wird pro
+    # Installation im Editor hochgeladen und die {{marker}} dort zugeordnet.
+    assert doc["document"]["templateHtml"] == ""

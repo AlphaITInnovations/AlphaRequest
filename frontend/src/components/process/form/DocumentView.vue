@@ -156,10 +156,12 @@ function drucken() {
             {{ busy ? 'Wird erzeugt…' : 'Als Word exportieren' }}
           </button>
         </template>
-        <!-- .docx-Modus: nur Export (der Server füllt die Vorlage). Nur wer
-             bearbeiten darf, kann exportieren – der Server sperrt Nur-Leser
-             ohne Vollsicht sonst mit 403. -->
-        <button v-else-if="!readonly" @click="docxExport" :disabled="busy"
+        <!-- .docx-Modus: nur Export (der Server füllt die Vorlage). Bewusst OHNE
+             readonly-Guard: exportieren darf jede:r mit Vollsicht (Ersteller:in,
+             Aufsicht, Admin) – nicht nur die aktuell bearbeitende Stelle. Wer
+             kein Recht hat, bekommt vom Server sauber 403 (keine Sicherheitsnaht
+             in der UI). -->
+        <button v-else @click="docxExport" :disabled="busy"
                 class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
                        disabled:opacity-40 transition">
           {{ busy ? 'Wird erzeugt…' : 'Als Word (.docx) exportieren' }}

@@ -962,10 +962,16 @@ class ProcessDefinition(_Base):
                 for marker, fieldkey in p.document.bindings.items():
                     _need(fieldkey, f"Phase „{p.key}“.document.bindings[„{marker}“]")
                     f = feld_je_key.get(fieldkey)
-                    if f and f.widget in (Widget.collection, Widget.attachment):
+                    # Nicht einsetzbar: Anhang/Wiederholgruppe (kein Text) sowie
+                    # Personen-/Gruppenauswahl (trägt nur eine rohe ID, die der
+                    # Export nicht in einen Namen auflöst → Vorschau ≠ Vertrag).
+                    if f and (f.widget in (Widget.collection, Widget.attachment,
+                                           Widget.user, Widget.group)
+                              or f.optionsSource in (OptionsSource.users, OptionsSource.groups)):
                         raise ValueError(
                             f"Phase „{p.key}“.document.bindings[„{marker}“]: Feld „{fieldkey}“ "
-                            f"vom Typ „{f.widget.value}“ lässt sich nicht in den Vertrag einsetzen")
+                            f"lässt sich nicht in den Vertrag einsetzen (Anhang, Wiederholgruppe "
+                            f"oder Personen-/Gruppenauswahl)")
 
         # server_generated-Felder füllt ausschließlich der Server. Wären sie in
         # einer Phase editierbar, könnte der Client eine vergebene Nummer setzen

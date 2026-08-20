@@ -101,3 +101,19 @@ def delete_template(process_key: str, phase_key: str) -> Optional[dict]:
     finally:
         conn.close()
     return row
+
+
+def delete_all(process_key: str) -> list[dict]:
+    """ALLE Vorlagen eines Prozesses entfernen; gibt die alten Zeilen zurück (für
+    Blob-Cleanup). Für die Prozess-Löschung – sonst verwaisen Zeile und .docx auf
+    der Platte und könnten einen später gleichnamigen Prozess mit einer alten
+    Vorlage füllen."""
+    rows = list_templates(process_key)
+    conn = get_connection()
+    try:
+        _exec(conn, "DELETE FROM process_document_templates WHERE process_key=%s",
+              (process_key,))
+        conn.commit()
+    finally:
+        conn.close()
+    return rows

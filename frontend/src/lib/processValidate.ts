@@ -358,11 +358,16 @@ export function validateDefinition(
             `Vorlagen-Marker „{{${marker}}}" ist einem Feld zugeordnet, das es nicht gibt.`))
           continue
         }
-        const wf = d.fields.find((f) => f.key === fieldKey)?.widget
-        if (wf === 'collection' || wf === 'attachment') {
+        // Nicht einsetzbar: Anhang/Wiederholgruppe (kein Text) und Personen-/
+        // Gruppenauswahl (nur rohe ID – serverseitig nicht zum Namen aufgelöst).
+        const bf = d.fields.find((f) => f.key === fieldKey)
+        if (bf && (bf.widget === 'collection' || bf.widget === 'attachment'
+                   || bf.widget === 'user' || bf.widget === 'group'
+                   || bf.optionsSource === 'users' || bf.optionsSource === 'groups')) {
           out.push(err(`${p}.document`, anchor, 'INVALID',
-            `Vorlagen-Marker „{{${marker}}}" verweist auf ein Feld vom Typ `
-            + `„${WIDGET_LABEL[wf] ?? wf}", das sich nicht in das Dokument einsetzen lässt.`))
+            `Vorlagen-Marker „{{${marker}}}" verweist auf ein Feld, das sich nicht `
+            + 'in das Dokument einsetzen lässt (Anhang, Wiederholgruppe oder '
+            + 'Personen-/Gruppenauswahl).'))
         }
       }
     }

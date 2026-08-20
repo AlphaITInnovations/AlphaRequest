@@ -792,6 +792,14 @@ def confirm_process_delete(body: ConfirmDeleteRequest,
         if mapped:
             raise mapped
         raise
+    # Dokument-Vorlagen (Zeilen + Blobs) mitnehmen – sonst verwaisen sie und ein
+    # später gleichnamiger Prozess bekäme über get_template die ALTE .docx.
+    try:
+        for r in tpl_db.delete_all(key):
+            if r.get("stored_path"):
+                storage.delete(r["stored_path"])
+    except Exception:
+        logger.warning("Vorlagen-Cleanup für „%s“ übersprungen", key)
     _audit(user, pdel.AUDIT_CONFIRMED, key, versions=versionen,
            tickets=geloeschte_tickets, requested_by=data.get("by"))
     return DataResponse(data={"key": key, "versions_deleted": versionen,
