@@ -21,6 +21,8 @@ import LayoutSection from './LayoutSection.vue'
 import LayoutDecoration from './LayoutDecoration.vue'
 import SchemaWidget from './SchemaWidget.vue'
 import CollectionWidget from './CollectionWidget.vue'
+import PendingFilePicker from './PendingFilePicker.vue'
+import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
 
 const props = withDefaults(defineProps<{
   definition: ProcessDefinition
@@ -30,9 +32,26 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   errors?: SimFieldError[]
   sources?: OptionSources
-}>(), { disabled: false })
+  /** Bestehendes Ticket: Anhang-Felder laden/laden direkt gegen den Server.
+   *  Fehlt es (Anlege-Formular), sammelt PendingFilePicker die Dateien im
+   *  Speicher, bis das Ticket existiert. */
+  ticketId?: number | null
+  currentUserId?: string | null
+  /** Anlege-Modus: gemerkte, noch nicht hochgeladene Dateien je Anhang-Feld. */
+  pendingAttachments?: Record<string, File[]>
+}>(), { disabled: false, ticketId: null, currentUserId: null,
+        pendingAttachments: () => ({}) })
 
-const emit = defineEmits<{ 'update:modelValue': [values: Record<string, unknown>] }>()
+const emit = defineEmits<{
+  'update:modelValue': [values: Record<string, unknown>]
+  'update:pendingAttachments': [pending: Record<string, File[]>]
+}>()
+
+const pendingFor = (key: string): File[] => props.pendingAttachments?.[key] ?? []
+
+function setPending(key: string, files: File[]) {
+  emit('update:pendingAttachments', { ...props.pendingAttachments, [key]: files })
+}
 
 const values = computed<Record<string, unknown>>(() => props.modelValue ?? {})
 
@@ -102,8 +121,24 @@ function setValue(key: string, value: unknown) {
               {{ labelOf(row.r.field) }}<span v-if="row.r.required" class="text-red-500"> *</span>
             </label>
 
+            <!-- Anhang-Feld: bei bestehendem Ticket direkt gegen den Server
+                 (Upload/Version/Löschen bzw. nur Download, wenn nicht editierbar);
+                 im Anlege-Formular nur vormerken und nach dem Anlegen hochladen. -->
+            <ProcessAttachments
+              v-if="row.r.field.widget === 'attachment' && ticketId"
+              :ticket-id="ticketId"
+              :field-key="row.r.field.key"
+              :can-edit="!disabled && row.r.editable"
+              :current-user-id="currentUserId"
+            />
+            <PendingFilePicker
+              v-else-if="row.r.field.widget === 'attachment'"
+              :model-value="pendingFor(row.r.field.key)"
+              :disabled="disabled || !row.r.editable"
+              @update:model-value="setPending(row.r.field.key, $event)"
+            />
             <CollectionWidget
-              v-if="row.r.field.widget === 'collection'"
+              v-else-if="row.r.field.widget === 'collection'"
               :field="row.r.field"
               :model-value="values[row.r.field.key]"
               :disabled="disabled || !row.r.editable"

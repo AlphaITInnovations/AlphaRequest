@@ -29,6 +29,7 @@ import type { SimViewer } from '@/lib/processSim'
 import LayoutSection from './LayoutSection.vue'
 import LayoutDecoration from './LayoutDecoration.vue'
 import ReadonlyField from '@/components/ReadonlyField.vue'
+import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
 
 const props = defineProps<{
   definition: ProcessDefinition
@@ -36,6 +37,8 @@ const props = defineProps<{
   viewer: SimViewer
   sources?: OptionSources
   phase?: PhaseDef | null
+  /** Bestehendes Ticket – nötig, um Anhang-Felder (Download-Liste) zu laden. */
+  ticketId?: number | null
 }>()
 
 const catalog = computed<FieldDef[]>(() => props.definition?.fields ?? [])
@@ -151,8 +154,13 @@ const subText = (v: unknown): string => subValueText(v)
         <div v-for="row in b.rows" :key="row.key"
              class="col-span-12" :class="colSpanClass(row.cols)">
           <template v-if="row.kind === 'field'">
+            <!-- Anhang-Feld: die Datei-Liste des Auftrags (nur Ansicht/Download). -->
+            <div v-if="row.f.widget === 'attachment' && ticketId">
+              <div class="label mb-1">{{ row.f.label || row.f.key }}</div>
+              <ProcessAttachments :ticket-id="ticketId" :field-key="row.f.key" :can-edit="false" />
+            </div>
             <!-- Wiederholgruppe als kleine Tabelle -->
-            <ReadonlyField v-if="isCollection(row.f)" :label="row.f.label || row.f.key">
+            <ReadonlyField v-else-if="isCollection(row.f)" :label="row.f.label || row.f.key">
               <span v-if="!rowsOf(row.f).length" class="text-gray-400 italic">—</span>
               <div v-else class="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10">
                 <table class="w-full text-sm">

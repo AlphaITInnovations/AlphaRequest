@@ -380,6 +380,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             <template v-if="abilities.edit && phase && !isExportPhase && !isDocumentPhase">
               <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                           :viewer="viewer" :errors="errors" :sources="sources"
+                          :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
                           @update:model-value="onValues($event)" />
               <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst. -->
               <div v-if="generalErrors.length"
@@ -411,7 +412,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             <div v-else-if="!abilities.edit" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
-                                  :sources="sources" />
+                                  :sources="sources" :ticket-id="ticket.id" />
             </div>
 
             <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen

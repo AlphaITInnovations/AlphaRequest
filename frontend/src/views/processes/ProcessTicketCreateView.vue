@@ -15,7 +15,8 @@ import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import * as processesApi from '@/api/processes'
-import { createTicket } from '@/api/processTickets'
+import { createTicket, advanceTicket } from '@/api/processTickets'
+import { uploadAttachment } from '@/api/processAttachments'
 import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 
@@ -38,6 +39,8 @@ const title = ref('')
 const priority = ref('normal')
 const errors = ref<SimFieldError[]>([])
 const sources = ref<OptionSources>(emptySources())
+/** Beim Anlegen gewählte, noch nicht hochgeladene Dateien je Anhang-Feld. */
+const pendingAttachments = ref<Record<string, File[]>>({})
 
 /**
  * Welche Felder die erstellende Person sehen und ausfüllen darf, sagt der Server
@@ -77,6 +80,7 @@ async function loadProcess(key: string) {
     }
     title.value = row.name
     values.value = {}
+    pendingAttachments.value = {}
     errors.value = []
   } catch (e) {
     definition.value = null
@@ -116,12 +120,27 @@ async function submit() {
   }
   submitting.value = true
   try {
-    await createTicket({
+    // Anhänge einsammeln (je Feld können mehrere Dateien gewählt sein).
+    const files: { fieldKey: string; file: File }[] = []
+    for (const [fieldKey, fs] of Object.entries(pendingAttachments.value)) {
+      for (const file of fs) files.push({ fieldKey, file })
+    }
+    const hasFiles = files.length > 0
+    // Mit Anhängen: NICHT sofort weiterschalten – erst hochladen, dann selbst
+    // :advance. So verschickt der Server die Freigabe-Mail MIT den Anhängen.
+    const ticket = await createTicket({
       processKey: definition.value.key,
       title: title.value || null,
       priority: priority.value,
       values: values.value,
+      autoStart: !hasFiles,
     })
+    if (hasFiles) {
+      for (const { fieldKey, file } of files) {
+        await uploadAttachment(ticket.id, file, { fieldKey })
+      }
+      await advanceTicket(ticket.id)
+    }
     showToast('Auftrag angelegt')
     // Nach dem Anlegen zur Übersicht (einheitlich mit dem Basis-Ticket).
     router.push('/dashboard')
@@ -215,7 +234,9 @@ onMounted(async () => {
 
           <SchemaForm :definition="definition" :phase="startPhase" :model-value="values"
                       :viewer="viewer" :errors="errors" :sources="sources"
-                      @update:model-value="onValues($event)" />
+                      :ticket-id="null" :pending-attachments="pendingAttachments"
+                      @update:model-value="onValues($event)"
+                      @update:pending-attachments="pendingAttachments = $event" />
 
           <div v-if="generalErrors.length"
                class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20

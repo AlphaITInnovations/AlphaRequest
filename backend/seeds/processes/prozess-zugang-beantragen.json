@@ -11,6 +11,24 @@
   },
   "fields": [
     {
+      "key": "dokumente.uploads",
+      "label": "Dokumente (Lebenslauf, Zeugnisse, …)",
+      "widget": "attachment",
+      "help": "Optional. Hochgeladene Dateien werden der Freigabe-Mail beigefügt.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
       "key": "base.salutation",
       "label": "Anrede",
       "widget": "select",
@@ -1378,6 +1396,13 @@
       },
       "fields": [
         {
+          "ref": "dokumente.uploads",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "base.salutation",
           "mode": "editable",
           "required": true,
@@ -1608,6 +1633,21 @@
       "layout": [
         {
           "type": "section",
+          "title": "Dokumente",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "dokumente.uploads",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
           "title": "Basisdaten",
           "variant": "base",
           "badge": null,
@@ -1755,6 +1795,13 @@
         "onReject": "reject"
       },
       "fields": [
+        {
+          "ref": "dokumente.uploads",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
         {
           "ref": "base.salutation",
           "mode": "readonly",
@@ -1906,6 +1953,21 @@
       "layout": [
         {
           "type": "section",
+          "title": "Dokumente",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "dokumente.uploads",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
           "title": "Basisdaten",
           "variant": "base",
           "badge": null,
@@ -2024,6 +2086,13 @@
         "notifyOnEnter": true
       },
       "fields": [
+        {
+          "ref": "dokumente.uploads",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
         {
           "ref": "base.salutation",
           "mode": "readonly",
@@ -2506,6 +2575,21 @@
       "layout": [
         {
           "type": "section",
+          "title": "Dokumente",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "dokumente.uploads",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
           "title": "Basisdaten",
           "variant": "base",
           "badge": null,
@@ -2883,6 +2967,13 @@
       },
       "fields": [
         {
+          "ref": "dokumente.uploads",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "base.salutation",
           "mode": "readonly",
           "required": false,
@@ -3201,6 +3292,21 @@
       "constraints": [],
       "automations": [],
       "layout": [
+        {
+          "type": "section",
+          "title": "Dokumente",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "dokumente.uploads",
+              "width": "full"
+            }
+          ]
+        },
         {
           "type": "section",
           "title": "Basisdaten",

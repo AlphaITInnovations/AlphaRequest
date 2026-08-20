@@ -47,6 +47,9 @@ export async function createTicket(body: {
   title?: string | null
   priority?: string | null
   values?: Record<string, unknown> | null
+  /** false = NICHT sofort weiterschalten: der Client lädt erst Datei-Anhänge
+   *  hoch und ruft danach :advance (damit sie in der Freigabe-Mail landen). */
+  autoStart?: boolean
 }): Promise<ProcessTicketOut> {
   const { data } = await client.post('/process-tickets', body)
   return data.data
