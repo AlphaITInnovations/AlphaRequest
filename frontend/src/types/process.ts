@@ -283,6 +283,10 @@ export interface ProcessDefinition {
    *  beim Anlegen festgelegt, danach überall nur lesbar (der Server weist
    *  Änderungen mit TITLE_LOCKED ab). */
   titleEditable: boolean
+  /** Optionale Titel-Vorlage mit {{feld.key}} (Startphasen-Werte) und
+   *  {{erstellt}} (Erstellzeitpunkt). Gesetzt → der Titel wird beim Anlegen
+   *  daraus erzeugt statt manuell eingegeben. */
+  titleTemplate: string | null
   createPermissions: CreatePermissions
   fields: FieldDef[]
   phases: PhaseDef[]

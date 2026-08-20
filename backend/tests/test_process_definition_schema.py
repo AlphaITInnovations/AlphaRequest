@@ -221,6 +221,33 @@ def test_computed_map_accepted():
     assert g.computed.map == {"Ja": "G1"}
 
 
+def test_title_template_valid():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "Demo – {{base.name}} ({{erstellt}})"
+    ProcessDefinition.model_validate(d)   # {{erstellt}} + Katalog-Feld sind erlaubt
+
+
+def test_title_template_unknown_ref_rejected():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "{{gibtsnicht}}"
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_title_template_reserved_id_rejected():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "#{{id}} {{base.name}}"   # id ist beim Anlegen noch nicht vergeben
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_title_template_collection_field_rejected():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "{{eintraege}}"           # collection lässt sich nicht als Titel setzen
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
 def test_computed_map_on_number_source_rejected():
     """map arbeitet mit Zeichenketten-Schlüsseln – ein Zahlen-Quellfeld ist nicht
     unterstützt (Backend/Frontend würden sonst auseinanderlaufen)."""

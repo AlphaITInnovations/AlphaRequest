@@ -721,6 +721,11 @@ class ProcessDefinition(_Base):
     #: (durchgesetzt im PATCH-Endpunkt, nicht nur in der Oberfläche). Default
     #: True, damit bestehende Definitionen ihr Verhalten behalten.
     titleEditable: bool = True
+    #: Optionale Titel-Vorlage. Ist sie gesetzt, wird der Auftrags-Titel beim
+    #: Anlegen daraus erzeugt (statt manueller Eingabe) – mit {{feld.key}} aus den
+    #: Startphasen-Werten und {{erstellt}} (Erstellzeitpunkt), z. B.
+    #: „Onboarding Mitarbeiter:innen – {{base.first_name}} {{base.last_name}}“.
+    titleTemplate: Optional[str] = None
     createPermissions: CreatePermissions = Field(default_factory=CreatePermissions)
     fields: list[FieldDef] = Field(default_factory=list)
     phases: list[PhaseDef] = Field(default_factory=list)
@@ -801,6 +806,27 @@ class ProcessDefinition(_Base):
         def _need(ref: str, where: str):
             if ref not in catalog:
                 raise ValueError(f"{where}: Referenz „{ref}“ ist nicht im Feld-Katalog")
+
+        # Titel-Vorlage: {{feld.key}} müssen Katalog-Felder sein; {{erstellt}} ist
+        # der einzige erlaubte Spezial-Platzhalter (Erstellzeitpunkt). {{id}} ist
+        # beim Anlegen noch nicht vergeben, {{title}} wäre selbstbezüglich – beide
+        # verboten. Nicht-skalare Felder lassen sich nicht als Titel einsetzen.
+        if self.titleTemplate:
+            from backend.services import mail_template as _mt
+            feld_je_key = {f.key: f for f in self.fields}
+            for ref in _mt.variables(self.titleTemplate):
+                if ref == "erstellt":
+                    continue
+                if ref in ("id", "title"):
+                    raise ValueError(
+                        f"titleTemplate: «{ref}» ist als Titel-Variable nicht erlaubt "
+                        f"(erlaubt sind Feld-Schlüssel und «erstellt»)")
+                _need(ref, f"titleTemplate (Variable «{ref}»)")
+                f = feld_je_key.get(ref)
+                if f and f.widget in (Widget.collection, Widget.attachment):
+                    raise ValueError(
+                        f"titleTemplate: Variable «{ref}» verweist auf ein "
+                        f"„{f.widget.value}“-Feld und lässt sich nicht als Titel einsetzen")
 
         # Ein `computed.map`-Lookup arbeitet mit Zeichenketten-Schlüsseln (JSON) –
         # er ergibt nur für Felder Sinn, deren Wert eine Zeichenkette ist. Auf

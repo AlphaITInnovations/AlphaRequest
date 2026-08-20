@@ -14,6 +14,7 @@ import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
+import { renderMailTemplate } from '@/lib/mailTemplate'
 import * as processesApi from '@/api/processes'
 import { createTicket, advanceTicket } from '@/api/processTickets'
 import { uploadAttachment } from '@/api/processAttachments'
@@ -61,6 +62,24 @@ const viewer = computed<SimViewer>(() => ({
 }))
 
 const startPhase = computed(() => definition.value?.phases?.[0] ?? null)
+
+/** Live-Vorschau des Titels aus der Vorlage (falls konfiguriert). Der Server
+ *  erzeugt den echten Titel; hier nur die Anzeige beim Ausfüllen. */
+const titelVorschau = computed(() => {
+  const tpl = definition.value?.titleTemplate
+  if (!tpl) return ''
+  const jetzt = new Date().toLocaleString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+  return renderMailTemplate(tpl, (token) => {
+    if (token === 'erstellt') return jetzt
+    const v = values.value[token]
+    if (v === null || v === undefined || v === '') return '—'
+    if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
+    return Array.isArray(v) ? v.join(', ') : String(v)
+  })
+})
+
 /** Prozess global deaktiviert? Dann kein Formular, sondern ein Hinweis. */
 const deaktiviert = ref(false)
 
@@ -135,7 +154,8 @@ async function submit() {
     try {
       ticket = await createTicket({
         processKey: definition.value.key,
-        title: title.value || null,
+        // Bei konfigurierter Vorlage erzeugt der Server den Titel – nichts senden.
+        title: definition.value.titleTemplate ? null : (title.value || null),
         priority: priority.value,
         values: values.value,
         autoStart: !hasFiles,
@@ -249,7 +269,17 @@ onMounted(async () => {
                geklärt ist, wie sie genutzt wird (Feld bleibt in DB und API). -->
           <section class="card-section mb-4">
             <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titel</label>
-            <input v-model="title" class="afi w-full" maxlength="255" />
+            <!-- Ist im Prozess eine Titel-Vorlage hinterlegt, wird der Titel beim
+                 Anlegen automatisch erzeugt – hier nur eine Live-Vorschau. -->
+            <template v-if="definition.titleTemplate">
+              <div class="afi w-full bg-gray-50 dark:bg-white/[0.03] text-gray-700 dark:text-gray-200">
+                {{ titelVorschau || '—' }}
+              </div>
+              <p class="text-xs text-gray-400 mt-1">
+                Der Titel wird beim Anlegen automatisch aus der Vorlage erzeugt.
+              </p>
+            </template>
+            <input v-else v-model="title" class="afi w-full" maxlength="255" />
           </section>
 
           <SchemaForm :definition="definition" :phase="startPhase" :model-value="values"

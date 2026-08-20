@@ -217,6 +217,28 @@ def _actor_name(user: dict) -> str:
     return user.get("displayName") or user.get("email") or user.get("id") or "System"
 
 
+def _render_title(defn: ProcessDefinition, values: dict, now_iso: str) -> str:
+    """Titel aus `defn.titleTemplate` erzeugen: {{feld.key}} aus den (fertig
+    berechneten) Startphasen-Werten, {{erstellt}} = Erstellzeitpunkt. Auf die
+    Spaltenbreite (VARCHAR 255) gekappt."""
+    from datetime import datetime
+    from backend.services import mail_template as mt
+
+    def _erstellt() -> str:
+        try:
+            dt = datetime.fromisoformat((now_iso or "").replace("Z", "+00:00"))
+            return dt.strftime("%d.%m.%Y %H:%M")
+        except Exception:
+            return str(now_iso or "")
+
+    def resolve(token: str) -> str:
+        if token == "erstellt":
+            return _erstellt()
+        return mt.format_value(values.get(token))
+
+    return mt.substitute(defn.titleTemplate, resolve).strip()[:255]
+
+
 def _safe_restamp(row: dict, defn: ProcessDefinition) -> None:
     """Timer neu stempeln, ohne den Request zu kippen – aber NIEMALS stillschweigend:
     ein Fehlschlag wird als ERROR geloggt UND auditiert, sonst sähe ein toter Timer
@@ -384,9 +406,13 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
 
     runtime = pr.initial_runtime(defn, now, values)
     status = pr.enter_status_for(start_phase)
+    # Titel: aus der Vorlage erzeugen (falls konfiguriert), sonst manuell/Name.
+    # Eine leere Vorlagen-Ausgabe (nichts eingesetzt) fällt auf den Namen zurück.
+    ticket_title = (_render_title(defn, values, now) or defn.name) if defn.titleTemplate \
+        else (body.title or defn.name)
     row = store.create(
         process_key=defn.key, process_version=pub["version"],
-        title=body.title or defn.name, status=status, priority=(body.priority or "normal"),
+        title=ticket_title, status=status, priority=(body.priority or "normal"),
         owner_id=user.get("id"), owner_name=user.get("displayName") or user.get("email"),
         values_json=json.dumps(values, ensure_ascii=False),
         runtime_json=json.dumps(runtime, ensure_ascii=False),

@@ -98,6 +98,7 @@ DEFN_FIXED = {**DEFN, "key": "fix", "titleEditable": False}
 #: erst Anhänge hochladen, dann selbst :advance, damit die Freigabe-Mail sie mitnimmt).
 DEFN_FLOW = {
     "schemaVersion": 1, "key": "flow", "name": "Auto-Flow",
+    "titleTemplate": "Neuer Auftrag – {{base.name}}",
     "fields": [{"key": "base.name", "widget": "text"}],
     "phases": [
         {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
@@ -213,6 +214,15 @@ def test_create_auto_start_schaltet_direkt_weiter(client):
     r = client.post("/process-tickets", json={"processKey": "flow", "values": {"base.name": "Max"}})
     assert r.status_code == 200
     assert r.json()["data"]["current_phase"] == "work"
+
+
+def test_create_rendert_titel_aus_vorlage(client):
+    """Ist eine titleTemplate gesetzt, wird der Titel beim Anlegen daraus erzeugt
+    (aus den Startphasen-Werten) statt aus dem manuell gesendeten Titel."""
+    r = client.post("/process-tickets", json={"processKey": "flow",
+                    "title": "wird ignoriert", "values": {"base.name": "Max Mustermann"}})
+    assert r.status_code == 200
+    assert r.json()["data"]["title"] == "Neuer Auftrag – Max Mustermann"
 
 
 def test_create_defer_start_bleibt_in_startphase(client):

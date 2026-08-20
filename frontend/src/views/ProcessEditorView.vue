@@ -40,6 +40,13 @@ const ed = useProcessEditor()
 
 const tab = ref<'flow' | 'prozess' | 'preview' | 'json'>('flow')
 const selectedPhase = ref(0)
+
+// Literale Doppel-Klammern lassen sich nicht direkt in den Template-Text
+// schreiben (Vue würde das innere }} als Interpolationsende lesen) – daher als
+// Konstanten für die Hilfetexte der Titel-Vorlage.
+const PH_FELD = '{{feld.key}}'
+const PH_ERSTELLT = '{{erstellt}}'
+const TITEL_PLATZHALTER = 'z. B. Onboarding Mitarbeiter:innen – {{base.first_name}} {{base.last_name}}'
 const jsonText = ref('')
 const jsonError = ref<string | null>(null)
 
@@ -279,6 +286,19 @@ onUnmounted(() => {
               <p class="text-xs text-gray-400 mt-1">
                 Abgewählt wird der Auftrags-Titel beim Anlegen festgelegt und ist danach
                 überall nur lesbar – das setzt der Server durch, nicht nur die Oberfläche.
+              </p>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                Titel-Vorlage (optional)
+              </label>
+              <input :value="ed.draft.value.titleTemplate ?? ''" :disabled="ed.readonly.value"
+                     class="afi w-full" maxlength="255" :placeholder="TITEL_PLATZHALTER"
+                     @input="setDefinition({ titleTemplate: ($event.target as HTMLInputElement).value || null })" />
+              <p class="text-xs text-gray-400 mt-1">
+                Gesetzt, wird der Titel beim Anlegen automatisch erzeugt. Platzhalter:
+                <span class="font-mono">{{ PH_FELD }}</span> (Werte der Startphase) und
+                <span class="font-mono">{{ PH_ERSTELLT }}</span> (Erstellzeitpunkt).
               </p>
             </div>
           </div>

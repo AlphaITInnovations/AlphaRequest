@@ -237,6 +237,7 @@ export function normalizeDefinition(v: any): ProcessDefinition {
     description: str(v?.description),
     icon: str(v?.icon),
     titleEditable: bool(v?.titleEditable, true),   // Default true (wie der Server)
+    titleTemplate: str(v?.titleTemplate),
     createPermissions: normCreatePermissions(v?.createPermissions),
     fields: arr(v?.fields).map(normalizeField),
     phases: arr(v?.phases).map(normalizePhase),
