@@ -57,6 +57,21 @@ DEFN_SKIP = {
 }
 
 
+#: Prozess mit Dokument-Phase + bindings – für den .docx-Export (Fill-Engine).
+DEFN_DOC = {
+    "schemaVersion": 1, "key": "doc", "name": "Doc-Flow",
+    "fields": [{"key": "base.name", "widget": "text"}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "required": True}]},
+        {"key": "vertrag", "kind": "task", "view": "document",
+         "responsibility": {"kind": "owner"},
+         "document": {"title": "Vertrag", "filename": "Vertrag_{{base.name}}",
+                      "bindings": {"name": "base.name"}}},
+    ],
+}
+
+
 class FakeStore:
     ProcessTicketConflict = ProcessTicketConflict   # damit `store.ProcessTicketConflict` im Endpunkt greift
 
@@ -152,6 +167,8 @@ class FakeDefs:
             return {"version": 1, "definition": DEFN_FLOW}
         if key == "skip":
             return {"version": 1, "definition": DEFN_SKIP}
+        if key == "doc":
+            return {"version": 1, "definition": DEFN_DOC}
         return None
 
     def get_definition(self, key, ver):
@@ -164,6 +181,8 @@ class FakeDefs:
             return {"version": ver, "definition": DEFN_FLOW}
         if key == "skip":
             return {"version": ver, "definition": DEFN_SKIP}
+        if key == "doc":
+            return {"version": ver, "definition": DEFN_DOC}
         return None
 
 
@@ -242,6 +261,37 @@ def test_create_auto_start_schaltet_direkt_weiter(client):
     r = client.post("/process-tickets", json={"processKey": "flow", "values": {"base.name": "Max"}})
     assert r.status_code == 200
     assert r.json()["data"]["current_phase"] == "work"
+
+
+def test_document_export_fuellt_docx_vorlage(client, monkeypatch, tmp_path):
+    """Ist eine .docx-Vorlage hinterlegt, füllt der Server ihre {{marker}} aus den
+    Auftragswerten (bindings) und liefert die gefüllte .docx – nicht zugeordnete
+    Marker werden zur Lücke; Rest bleibt."""
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+    from backend.services.docx_fill import GAP
+
+    tplfile = tmp_path / "vertrag.docx"
+    tplfile.write_bytes(html_to_docx("<p>Name {{name}} in {{ort}}.</p>"))
+    monkeypatch.setattr(tpl_db, "get_template",
+                        lambda key: {"process_key": key, "stored_path": "v.docx"} if key == "doc" else None)
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+
+    tid = client.post("/process-tickets",
+                      json={"processKey": "doc", "values": {"base.name": "Max Mustermann"}}
+                      ).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}/document:export", json={})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+    import io
+    import zipfile
+    doc = zipfile.ZipFile(io.BytesIO(r.content)).read("word/document.xml").decode("utf-8")
+    assert "Max Mustermann" in doc         # bindings name -> base.name
+    assert GAP in doc                       # {{ort}} ohne Zuordnung -> Lücke
+    assert "{{" not in doc                  # keine rohen Marker mehr
 
 
 def test_create_rendert_titel_aus_vorlage(client):

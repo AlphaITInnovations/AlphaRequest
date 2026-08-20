@@ -621,6 +621,11 @@ class DocumentSpec(_Base):
     templateHtml: str = ""
     filename: str = "Dokument"
     title: str = "Dokument"
+    #: Marker→Feld-Zuordnung für eine hochgeladene .docx-Vorlage: `{{marker}}` wird
+    #: beim Export durch den Wert des zugeordneten Katalog-Felds ersetzt; Marker
+    #: OHNE Zuordnung bleiben als Lücke (in Word auszufüllen). Die .docx selbst
+    #: liegt nicht hier, sondern als Blob je Prozess (installationsspezifisch).
+    bindings: dict[str, str] = Field(default_factory=dict)
 
 
 class PhaseDef(_Base):
@@ -948,9 +953,19 @@ class ProcessDefinition(_Base):
                     f"zusammen – bitte beides setzen oder beides weglassen")
             if p.document is not None:
                 from backend.services import mail_template as _mt
+                feld_je_key = {f.key: f for f in self.fields}
                 for txt in (p.document.templateHtml, p.document.filename):
                     for ref in _mt.field_refs(txt):
                         _need(ref, f"Phase „{p.key}“.document (Variable «{ref}»)")
+                # bindings: jeder zugeordnete Marker muss auf ein einsetzbares
+                # (skalares) Katalog-Feld zeigen.
+                for marker, fieldkey in p.document.bindings.items():
+                    _need(fieldkey, f"Phase „{p.key}“.document.bindings[„{marker}“]")
+                    f = feld_je_key.get(fieldkey)
+                    if f and f.widget in (Widget.collection, Widget.attachment):
+                        raise ValueError(
+                            f"Phase „{p.key}“.document.bindings[„{marker}“]: Feld „{fieldkey}“ "
+                            f"vom Typ „{f.widget.value}“ lässt sich nicht in den Vertrag einsetzen")
 
         # server_generated-Felder füllt ausschließlich der Server. Wären sie in
         # einer Phase editierbar, könnte der Client eine vergebene Nummer setzen

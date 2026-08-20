@@ -248,6 +248,30 @@ def test_title_template_collection_field_rejected():
         ProcessDefinition.model_validate(d)
 
 
+def _defn_with_document(bindings):
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "vertrag", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"},
+        "document": {"title": "Vertrag", "filename": "Vertrag_{{base.name}}",
+                     "bindings": bindings}})
+    return d
+
+
+def test_document_bindings_valid():
+    ProcessDefinition.model_validate(_defn_with_document({"name": "base.name"}))
+
+
+def test_document_bindings_unknown_field_rejected():
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(_defn_with_document({"name": "gibtsnicht"}))
+
+
+def test_document_bindings_collection_field_rejected():
+    with pytest.raises(ValidationError):     # eintraege ist eine collection
+        ProcessDefinition.model_validate(_defn_with_document({"eintr": "eintraege"}))
+
+
 def test_computed_map_on_number_source_rejected():
     """map arbeitet mit Zeichenketten-Schlüsseln – ein Zahlen-Quellfeld ist nicht
     unterstützt (Backend/Frontend würden sonst auseinanderlaufen)."""

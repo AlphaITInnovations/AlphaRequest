@@ -14,11 +14,12 @@ einheitlichen Fehler-Envelope { error: { code, message, fields[] } } normalisier
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Response
+from fastapi import APIRouter, Depends, File, Header, Response, UploadFile
 from pydantic import BaseModel
 
 from backend.core.dependencies import get_current_user
 from backend.database import process_definitions as db
+from backend.database import process_templates as tpl_db
 from backend.database.audit_log import record_audit
 from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN, PERM_MANAGE
@@ -26,6 +27,8 @@ from backend.schemas.process_definition import ProcessDefinition
 from backend.schemas.responses import DataResponse, api_error, ErrorCode
 import html
 
+from backend.services import attachment_storage as storage
+from backend.services import docx_fill
 from backend.services import process_delete as pdel
 from backend.services import process_permissions as perms
 from backend.services import process_runtime as pr
@@ -793,3 +796,106 @@ def confirm_process_delete(body: ConfirmDeleteRequest,
            tickets=geloeschte_tickets, requested_by=data.get("by"))
     return DataResponse(data={"key": key, "versions_deleted": versionen,
                               "tickets_deleted": geloeschte_tickets})
+
+
+# ── Dokument-Vorlage (.docx) je Prozess ───────────────────────────────────────
+#
+# Die Vorlage ist installationsspezifisch (der echte Vertrag) und liegt daher
+# NICHT im Seed, sondern wird hier pro Installation hochgeladen. Beim Export der
+# Dokument-Phase füllt services/docx_fill die {{marker}} aus den Auftragswerten
+# (Zuordnung Marker→Feld = DocumentSpec.bindings). Bewusst KEIN _require_editable:
+# die Vorlage ist Betriebsdaten, kein Definitions-Inhalt – sie darf auch bei
+# System-Prozessen gesetzt werden.
+
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _safe_docname(name: Optional[str]) -> str:
+    base = (name or "Vorlage.docx").strip() or "Vorlage.docx"
+    keep = "".join(c for c in base if c.isalnum() or c in " _-.()äöüÄÖÜß").strip()
+    return (keep or "Vorlage.docx")[:150]
+
+
+def _template_bytes(row: dict) -> bytes:
+    from pathlib import Path
+    return Path(storage.full_path(row["stored_path"])).read_bytes()
+
+
+def _template_info(row: dict) -> dict:
+    try:
+        placeholders = docx_fill.find_placeholders(_template_bytes(row))
+    except Exception:
+        logger.exception("Vorlage %s nicht lesbar", row.get("process_key"))
+        placeholders = []
+    return {"exists": True, "filename": row.get("original_filename"),
+            "size": row.get("size_bytes"), "placeholders": placeholders,
+            "uploaded_at": str(row.get("uploaded_at") or ""),
+            "uploaded_by": row.get("uploaded_by_name")}
+
+
+@router.get("/processes/{key}/document-template")
+def get_document_template(key: str, user: dict = Depends(get_current_user)):
+    """Info zur Vorlage + Liste der gefundenen {{marker}} (für die Zuordnung)."""
+    _require_manage(user)
+    row = tpl_db.get_template(key)
+    return DataResponse(data=_template_info(row) if row else {"exists": False})
+
+
+@router.post("/processes/{key}/document-template")
+async def upload_document_template(key: str, file: UploadFile = File(...),
+                                   user: dict = Depends(get_current_user)):
+    """Vorlage (.docx) hochladen/ersetzen. Gibt die gefundenen Marker zurück."""
+    _require_admin(user)
+    if not (file.filename or "").lower().endswith(".docx"):
+        raise api_error(422, ErrorCode.VALIDATION_FAILED,
+                        "Nur Word-Dateien (.docx) werden als Vorlage unterstützt")
+    max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
+    try:
+        stored_path, size, _sha = storage.save_stream(file.file, max_bytes=max_bytes)
+    except storage.FileTooLarge:
+        raise api_error(413, "FILE_TOO_LARGE", f"Datei zu groß (max. {config.MAX_UPLOAD_MB} MB)")
+    # Lesbarkeit prüfen (gültiges .docx?) – sonst den Blob gleich wieder entfernen.
+    try:
+        placeholders = docx_fill.find_placeholders(_template_bytes({"stored_path": stored_path}))
+    except Exception:
+        storage.delete(stored_path)
+        raise api_error(422, "INVALID_DOCX",
+                        "Die Datei ließ sich nicht als Word-Dokument (.docx) lesen")
+    old = tpl_db.get_template(key)
+    tpl_db.set_template(process_key=key, stored_path=stored_path,
+                        original_filename=_safe_docname(file.filename),
+                        content_type=file.content_type, size_bytes=size,
+                        uploaded_by_id=user.get("id"),
+                        uploaded_by_name=user.get("displayName") or user.get("email"))
+    if old and old.get("stored_path") and old["stored_path"] != stored_path:
+        storage.delete(old["stored_path"])
+    record_audit(action="process_template_uploaded", actor_id=user.get("id"),
+                 actor_name=user.get("displayName") or "", entity_type="process",
+                 entity_id=key,
+                 summary=f"Dokument-Vorlage für „{key}“ hochgeladen ({size} B)",
+                 details={"filename": _safe_docname(file.filename), "placeholders": placeholders})
+    row = tpl_db.get_template(key)
+    return DataResponse(data=_template_info(row))
+
+
+@router.get("/processes/{key}/document-template/download")
+def download_document_template(key: str, user: dict = Depends(get_current_user)):
+    _require_manage(user)
+    row = tpl_db.get_template(key)
+    if not row:
+        raise api_error(404, "TEMPLATE_NOT_FOUND", "Keine Vorlage hinterlegt")
+    return Response(content=_template_bytes(row), media_type=_DOCX_MIME,
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{_safe_docname(row["original_filename"])}"'})
+
+
+@router.delete("/processes/{key}/document-template")
+def delete_document_template(key: str, user: dict = Depends(get_current_user)):
+    _require_admin(user)
+    row = tpl_db.delete_template(key)
+    if row and row.get("stored_path"):
+        storage.delete(row["stored_path"])
+    record_audit(action="process_template_deleted", actor_id=user.get("id"),
+                 actor_name=user.get("displayName") or "", entity_type="process",
+                 entity_id=key, summary=f"Dokument-Vorlage für „{key}“ entfernt", details={})
+    return DataResponse(data={"exists": False})

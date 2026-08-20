@@ -503,9 +503,11 @@ def get_pinned_definition(ticket_id: int, user: dict = Depends(get_current_user)
 
 
 class DocumentExportRequest(BaseModel):
-    #: Das (evtl. im Editor angepasste) HTML der Dokument-Vorlage.
-    html: str
-    #: Dateiname ohne Endung; darf schon im Client aufgelöste Werte enthalten.
+    #: Nur für den Alt-Weg (keine .docx-Vorlage hinterlegt): das im Client
+    #: gefüllte HTML der Dokument-Vorlage. Mit hochgeladener .docx-Vorlage
+    #: irrelevant – dann füllt der Server die Vorlage selbst.
+    html: Optional[str] = None
+    #: Dateiname ohne Endung; überschreibt den aus der Vorlage abgeleiteten Namen.
     filename: Optional[str] = None
 
 
@@ -533,16 +535,64 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
-    _assert_view(row, defn, user)
 
+    _MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    from backend.database import process_templates as tpl_db
+    try:
+        tpl = tpl_db.get_template(row["process_key"]) if row.get("process_key") else None
+    except Exception:
+        logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", ticket_id)
+        tpl = None
+
+    # Mit hochgeladener .docx-Vorlage: der Server füllt die {{marker}} aus den
+    # Auftragswerten (Zuordnung = DocumentSpec.bindings). Der gefüllte Vertrag
+    # enthält auch vertrauliche Werte (Gehalt …) → nur Vollsicht/Admin, nicht
+    # jede lesende Rolle (Fachabteilung).
+    if tpl and defn is not None:
+        gids = vis.user_group_ids(user)
+        ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
+        if not (ctx.full_view or ctx.is_admin):
+            raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                            "Nur die zuständige Stelle bzw. Vollsicht darf den "
+                            "ausgefüllten Vertrag exportieren")
+        phase = pr.current_phase(defn, row.get("runtime") or {})
+        docphase = phase if (phase and phase.document is not None) else \
+            next((p for p in defn.phases if p.document is not None), None)
+        doc = docphase.document if docphase else None
+        bindings = dict(doc.bindings) if doc else {}
+        values = row.get("values") or {}
+        from backend.services import attachment_storage as _storage
+        from backend.services import docx_fill
+        from backend.services import mail_template as mt
+
+        def _resolve(token: str) -> str:
+            if token == "title":
+                return str(row.get("title") or "")
+            if token == "id":
+                return str(row.get("id") or "")
+            return mt.format_value(values.get(token))
+
+        fill_values = {marker: mt.format_value(values.get(fk)) for marker, fk in bindings.items()}
+        try:
+            from pathlib import Path
+            tpl_bytes = Path(_storage.full_path(tpl["stored_path"])).read_bytes()
+        except Exception:
+            raise api_error(500, "TEMPLATE_UNREADABLE",
+                            "Die hinterlegte Vorlage ist nicht lesbar")
+        data = docx_fill.fill_docx(tpl_bytes, fill_values)
+        name = body.filename or mt.substitute((doc.filename if doc else "") or "Dokument", _resolve)
+        fname = _safe_filename(name) + ".docx"
+        return Response(content=data, media_type=_MIME,
+                        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+    # Kein Template → bisheriger HTML→docx-Weg (Werte stehen im gesendeten HTML,
+    # Leserecht genügt).
+    _assert_view(row, defn, user)
     from backend.services.html_to_docx import html_to_docx
     data = html_to_docx(body.html or "")
     fname = _safe_filename(body.filename) + ".docx"
-    return Response(
-        content=data,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
-    )
+    return Response(content=data, media_type=_MIME,
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
