@@ -2956,42 +2956,42 @@
             {
               "type": "field",
               "ref": "it.software.datev",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.datev_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.persopro",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.persopro_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.timejob",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.timejob_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.zvoove",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.zvoove_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
@@ -3647,42 +3647,42 @@
             {
               "type": "field",
               "ref": "it.software.datev",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.datev_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.persopro",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.persopro_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.timejob",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.timejob_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.zvoove",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
               "ref": "it.software.zvoove_rights",
-              "width": "half"
+              "width": "full"
             },
             {
               "type": "field",
