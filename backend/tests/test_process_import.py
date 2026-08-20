@@ -150,3 +150,9 @@ def test_onboarding_seed_nutzt_die_neue_laufzeit():
     assert frei["kind"] == "approval" and frei["approval"]["externalLink"] is True
     assert frei["responsibility"]["group"] == "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN"
     assert "{{base.first_name}}" in frei["approval"]["emailBody"]
+    # Arbeitsvertrag-Dokument-Phase (Sekretariat GL) liegt vor der Durchführung.
+    assert keys.index("arbeitsvertrag") < keys.index("durchfuehrung")
+    doc = next(p for p in defn["phases"] if p["key"] == "arbeitsvertrag")
+    assert doc["view"] == "document"
+    assert doc["responsibility"]["group"] == "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+    assert "{{base.contract_company}}" in doc["document"]["templateHtml"]

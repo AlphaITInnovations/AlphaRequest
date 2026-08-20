@@ -2513,6 +2513,31 @@
       ]
     },
     {
+      "key": "arbeitsvertrag",
+      "label": "Arbeitsvertrag erstellen",
+      "kind": "task",
+      "view": "document",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "approval": null,
+      "document": {
+        "title": "Arbeitsvertrag",
+        "filename": "Arbeitsvertrag_{{base.last_name}}_{{base.first_name}}",
+        "templateHtml": "<h1>Arbeitsvertrag</h1><p>zwischen der <strong>{{base.contract_company}}</strong> (nachfolgend „Arbeitgeber\")</p><p>und</p><p><strong>{{base.salutation}} {{base.first_name}} {{base.last_name}}</strong>, {{base.title}} (nachfolgend „Arbeitnehmer:in\").</p><h2>&#167; 1 Beginn und Einsatzort</h2><p>Das Arbeitsverhältnis beginnt am <strong>{{base.start_date}}</strong>. Einsatzort ist die Niederlassung {{base.location}} (Kostenstelle {{base.cost_center}}).</p><h2>&#167; 2 Aufgaben</h2><p>Die/der Arbeitnehmer:in wird als {{base.title}} beschäftigt.</p><h2>&#167; 3 Schlussbestimmungen</h2><p>Änderungen und Ergänzungen dieses Vertrages bedürfen der Schriftform.</p><p>&nbsp;</p><p>_____________________________<br>Ort, Datum</p><p>&nbsp;</p><p>_____________________________&nbsp;&nbsp;&nbsp;_____________________________<br>Arbeitgeber&nbsp;&nbsp;&nbsp;Arbeitnehmer:in</p>"
+      },
+      "fields": [],
+      "layout": [],
+      "constraints": [],
+      "automations": []
+    },
+    {
       "key": "durchfuehrung",
       "label": "Durchführung durch Fachabteilungen",
       "kind": "review",
