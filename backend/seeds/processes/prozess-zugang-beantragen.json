@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "key": "zugang-beantragen",
   "name": "Zugang beantragen (Onboarding nach Vertragsrücklauf)",
-  "description": "Onboarding: Erfassung aller Personal-, IT- und Fuhrpark-Daten einer neuen Mitarbeiterin / eines neuen Mitarbeiters und anschließende Umsetzung durch die Fachabteilungen. Ablauf: Erstellung (Basisdaten) → Bearbeitung durch Sekretariat GL (vergibt beim Abschluss automatisch die Personalnummer aus dem Nummernkreis der Vertragsfirma und wählt die nächste bearbeitende Person) → Bearbeitung durch Vorgesetzte:n (IT/Signatur) → Durchführung durch die Fachabteilungen (IT, Personalabteilung, Fuhrpark nur bei Dienstwagen).\n\nAbweichungen zum Alt-System:\n• Der automatische Start aus „Einstellung Mitarbeiter:in“ (Spawn beim Vertragsrücklauf inkl. Datenübernahme) existiert bewusst nicht mehr – dieser Prozess wird nach dem Vertragsrücklauf manuell gestartet.\n• Bundesland-Ableitung aus der PLZ (OpenPLZ-API) und die Vorbelegung „Infopostfach = an“ entfallen.\n• Die Fachabteilungs-Auswahl speichert Gruppen-IDs statt Gruppennamen; „Sonstige“ wird über die Freitext-Option des Feldes erfasst.\n• Feld-Sichtbarkeit wie bisher: Basisdaten für alle Beteiligten, personal.* nur Personalabteilung, it.* nur IT, fuhrpark.* nur Fuhrpark (Voll-Sicht der bearbeitenden Stellen über grantsFullView).",
+  "description": "Onboarding einer neuen Mitarbeiterin / eines neuen Mitarbeiters: Basis-, Konditions-, Personal-, IT- und Fuhrpark-Daten erfassen und durch die Fachabteilungen umsetzen.\n\nAblauf: Erstellung (Basisdaten, Konditionen und Fuhrpark durch die/den Ersteller:in) → Freigabe durch Herrn Lutz (per Mail-Link) → Restliche Angaben durch die/den Ersteller:in (Personal- und IT-Daten; die Personalnummer wird beim Abschluss automatisch aus dem Nummernkreis der Vertragsfirma vergeben) → Arbeitsvertrag erstellen (Sekretariat GL) → Durchführung durch die Fachabteilungen (IT, Personalabteilung, Fuhrpark nur bei Dienstwagen).\n\nSichtbarkeit: Basisdaten für alle Beteiligten; personal.* nur Personalabteilung; it.* nur IT; fuhrpark.* nur Fuhrpark; konditionen.* nur Sekretariat GL (Voll-Sicht der bearbeitenden Stellen über grantsFullView).",
   "icon": "🧑‍💼",
   "createPermissions": {
     "everyone": false,
@@ -65,6 +65,42 @@
       "widget": "text",
       "help": null,
       "placeholder": "Mustermann",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.private_email",
+      "label": "Private E-Mail",
+      "widget": "text",
+      "help": null,
+      "placeholder": "max.mustermann@example.com",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "base.private_phone",
+      "label": "Private Telefonnummer",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. 0170 1234567",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -412,7 +448,7 @@
       "label": "Fachabteilung",
       "widget": "select",
       "help": "Nur ändern, wenn es sich um eine Fachabteilung handelt. Gruppe auswählen (Freitext-Option möglich); „Keine“ = Feld leer lassen.",
-      "placeholder": null,
+      "placeholder": "Keine (Standard)",
       "options": [],
       "optionsSource": "groups",
       "allowOther": true,
@@ -483,28 +519,6 @@
     {
       "key": "personal.supervisor_hr_id",
       "label": "Vorgesetzter (vertraglich)",
-      "widget": "user",
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
-        ]
-      },
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": []
-    },
-    {
-      "key": "personal.contact_person_id",
-      "label": "Ansprechpartner für Rückfragen",
       "widget": "user",
       "placeholder": null,
       "options": [],
@@ -668,6 +682,29 @@
         "minDate": null,
         "maxDate": null
       },
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "it.timebutler.approver_differs",
+      "label": "Urlaubsfreigabe weicht vom vertraglichen Vorgesetzten ab",
+      "widget": "checkbox",
+      "help": "Nur ankreuzen, wenn eine andere Person als der/die vertragliche Vorgesetzte den Urlaub freigeben soll.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
@@ -913,7 +950,7 @@
       "key": "it.mailboxes.info_mailbox",
       "label": "Infopostfach der Niederlassung",
       "widget": "checkbox",
-      "help": "Im Alt-Formular standardmäßig angehakt – Vorbelegungen kennt das neue Format nicht.",
+      "help": "Standardmäßig angehakt; bei Bedarf abwählen.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -1148,6 +1185,180 @@
       "assign": null,
       "mode": null,
       "item": []
+    },
+    {
+      "key": "konditionen.gehalt",
+      "label": "Gehalt",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. 3.500 € / Monat",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "konditionen.dreizehntes",
+      "label": "13. Gehalt?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": "Ja"
+        },
+        {
+          "value": "Nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "konditionen.dreizehntes_art",
+      "label": "13. Gehalt – halb oder ganz?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Halbes 13. Gehalt",
+          "label": "Halbes 13. Gehalt"
+        },
+        {
+          "value": "Ganzes 13. Gehalt",
+          "label": "Ganzes 13. Gehalt"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "konditionen.halb_wahl",
+      "label": "Auszahlung (halbes 13. Gehalt)",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Urlaubsgeld",
+          "label": "Urlaubsgeld"
+        },
+        {
+          "value": "Weihnachtsgeld",
+          "label": "Weihnachtsgeld"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "konditionen.ganz_wahl",
+      "label": "Auszahlung (ganzes 13. Gehalt)",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Volles Weihnachtsgeld",
+          "label": "Volles Weihnachtsgeld"
+        },
+        {
+          "value": "Halb Urlaubsgeld / halb Weihnachtsgeld",
+          "label": "Halb Urlaubsgeld / halb Weihnachtsgeld"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "konditionen.sonderkonditionen",
+      "label": "Sonderkonditionen",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "Freitext für abweichende Vereinbarungen",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
     }
   ],
   "phases": [
@@ -1182,6 +1393,20 @@
         },
         {
           "ref": "base.last_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.private_email",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.private_phone",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -1223,6 +1448,118 @@
           "visibleWhen": null
         },
         {
+          "ref": "konditionen.gehalt",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes_art",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "konditionen.dreizehntes",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "konditionen.dreizehntes",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.halb_wahl",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Halbes 13. Gehalt"
+                ]
+              }
+            ]
+          },
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Halbes 13. Gehalt"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.ganz_wahl",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Ganzes 13. Gehalt"
+                ]
+              }
+            ]
+          },
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Ganzes 13. Gehalt"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.sonderkonditionen",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "fuhrpark.car",
           "mode": "editable",
           "required": true,
@@ -1231,23 +1568,6 @@
         },
         {
           "ref": "fuhrpark.car_class",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          }
-        },
-        {
-          "ref": "fuhrpark.car_from",
           "mode": "editable",
           "required": false,
           "requiredWhen": {
@@ -1311,6 +1631,16 @@
             },
             {
               "type": "field",
+              "ref": "base.private_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.private_phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
               "ref": "base.title",
               "width": "half"
             },
@@ -1338,6 +1668,46 @@
         },
         {
           "type": "section",
+          "title": "Konditionen",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "konditionen.gehalt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes_art",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.halb_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.ganz_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.sonderkonditionen",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
           "title": "Fuhrpark",
           "variant": "fuhrpark",
           "badge": null,
@@ -1352,11 +1722,6 @@
             {
               "type": "field",
               "ref": "fuhrpark.car_class",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "fuhrpark.car_from",
               "width": "half"
             }
           ]
@@ -1382,7 +1747,7 @@
         "approveLabel": "Einstellung freigeben",
         "rejectLabel": "Ablehnen",
         "externalLink": true,
-        "emailBody": "Es liegt eine neue Einstellung zur Freigabe vor:\n\nAnrede: {{base.salutation}}\nName: {{base.first_name}} {{base.last_name}}\nTitel: {{base.title}}\nFirma lt. Arbeitsvertrag: {{base.contract_company}}\nNiederlassung: {{base.location}}\nKostenstelle: {{base.cost_center}}\nArbeitsbeginn: {{base.start_date}}\nDienstwagen: {{fuhrpark.car}}\nFahrzeuggruppe: {{fuhrpark.car_class}}",
+        "emailBody": "Es liegt eine neue Einstellung zur Freigabe vor:\n\nAnrede: {{base.salutation}}\nName: {{base.first_name}} {{base.last_name}}\nTitel: {{base.title}}\nFirma lt. Arbeitsvertrag: {{base.contract_company}}\nNiederlassung: {{base.location}}\nKostenstelle: {{base.cost_center}}\nArbeitsbeginn: {{base.start_date}}\nDienstwagen: {{fuhrpark.car}}\nFahrzeuggruppe: {{fuhrpark.car_class}}\n\nKonditionen:\nGehalt: {{konditionen.gehalt}}\n13. Gehalt: {{konditionen.dreizehntes}}\nArt (13. Gehalt): {{konditionen.dreizehntes_art}}\nAuszahlung halbes 13.: {{konditionen.halb_wahl}}\nAuszahlung ganzes 13.: {{konditionen.ganz_wahl}}\nSonderkonditionen: {{konditionen.sonderkonditionen}}",
         "linkMaxAge": "P7D",
         "requireReason": true,
         "decisionField": null,
@@ -1406,6 +1771,20 @@
         },
         {
           "ref": "base.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.private_email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.private_phone",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -1445,6 +1824,83 @@
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.gehalt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes_art",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "konditionen.dreizehntes",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.halb_wahl",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Halbes 13. Gehalt"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.ganz_wahl",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Ganzes 13. Gehalt"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.sonderkonditionen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
         }
       ],
       "layout": [
@@ -1473,6 +1929,16 @@
             },
             {
               "type": "field",
+              "ref": "base.private_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.private_phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
               "ref": "base.title",
               "width": "half"
             },
@@ -1495,6 +1961,46 @@
               "type": "field",
               "ref": "base.start_date",
               "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Konditionen",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "konditionen.gehalt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes_art",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.halb_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.ganz_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.sonderkonditionen",
+              "width": "full"
             }
           ]
         }
@@ -1540,6 +2046,20 @@
           "visibleWhen": null
         },
         {
+          "ref": "base.private_email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.private_phone",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "base.title",
           "mode": "readonly",
           "required": false,
@@ -1569,6 +2089,83 @@
         },
         {
           "ref": "base.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.gehalt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes_art",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "konditionen.dreizehntes",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.halb_wahl",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Halbes 13. Gehalt"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.ganz_wahl",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Ganzes 13. Gehalt"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "ref": "konditionen.sonderkonditionen",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -1619,7 +2216,7 @@
         {
           "ref": "personal.department",
           "mode": "editable",
-          "required": true,
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
@@ -1648,18 +2245,36 @@
           "visibleWhen": null
         },
         {
-          "ref": "personal.contact_person_id",
+          "ref": "personal.personal_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.timebutler.vacation_year",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
-          "ref": "personal.personal_number",
-          "mode": "readonly",
+          "ref": "it.timebutler.approver_differs",
+          "mode": "editable",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
+        },
+        {
+          "ref": "it.timebutler.supervisor_id",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "truthy": "it.timebutler.approver_differs"
+          },
+          "visibleWhen": {
+            "truthy": "it.timebutler.approver_differs"
+          }
         },
         {
           "ref": "it.appearance_company",
@@ -1691,20 +2306,6 @@
         },
         {
           "ref": "it.signature.city",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.timebutler.vacation_year",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.timebutler.supervisor_id",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -1865,9 +2466,14 @@
         },
         {
           "ref": "fuhrpark.car_from",
-          "mode": "readonly",
+          "mode": "editable",
           "required": false,
-          "requiredWhen": null,
+          "requiredWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          },
           "visibleWhen": {
             "==": [
               "fuhrpark.car",
@@ -1877,7 +2483,26 @@
         }
       ],
       "constraints": [],
-      "automations": [],
+      "automations": [
+        {
+          "id": "infopostfach_vorbelegen",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null
+          },
+          "guard": null,
+          "action": {
+            "type": "set_field",
+            "to": null,
+            "template": null,
+            "field": "it.mailboxes.info_mailbox",
+            "value": true,
+            "counter": null
+          }
+        }
+      ],
       "layout": [
         {
           "type": "section",
@@ -1904,6 +2529,16 @@
             },
             {
               "type": "field",
+              "ref": "base.private_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.private_phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
               "ref": "base.title",
               "width": "half"
             },
@@ -1926,6 +2561,46 @@
               "type": "field",
               "ref": "base.start_date",
               "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Konditionen",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "konditionen.gehalt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes_art",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.halb_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.ganz_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.sonderkonditionen",
+              "width": "full"
             }
           ]
         },
@@ -1984,11 +2659,6 @@
             },
             {
               "type": "field",
-              "ref": "personal.contact_person_id",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "personal.personal_number",
               "width": "half"
             }
@@ -2005,6 +2675,11 @@
             {
               "type": "field",
               "ref": "it.timebutler.vacation_year",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.approver_differs",
               "width": "half"
             },
             {
@@ -2229,6 +2904,20 @@
           "visibleWhen": null
         },
         {
+          "ref": "base.private_email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "base.private_phone",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "base.title",
           "mode": "readonly",
           "required": false,
@@ -2334,7 +3023,21 @@
           "visibleWhen": null
         },
         {
-          "ref": "personal.contact_person_id",
+          "ref": "it.timebutler.vacation_year",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.timebutler.approver_differs",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "it.timebutler.supervisor_id",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -2370,20 +3073,6 @@
         },
         {
           "ref": "it.signature.city",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.timebutler.vacation_year",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.timebutler.supervisor_id",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -2537,6 +3226,16 @@
             },
             {
               "type": "field",
+              "ref": "base.private_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.private_phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
               "ref": "base.title",
               "width": "half"
             },
@@ -2619,11 +3318,6 @@
               "type": "field",
               "ref": "personal.supervisor_hr_id",
               "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.contact_person_id",
-              "width": "half"
             }
           ]
         },
@@ -2638,6 +3332,11 @@
             {
               "type": "field",
               "ref": "it.timebutler.vacation_year",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.approver_differs",
               "width": "half"
             },
             {
