@@ -322,6 +322,30 @@ export function sendBack(
   return { runtime: next, status: enterStatusFor(defn.phases[idx]) }
 }
 
+/**
+ * NUR VORSCHAU: frei zu einer beliebigen Phase springen (vor oder zurück), ohne
+ * Pflichtprüfung – damit man sich jede Phase ansehen kann. Der echte Ablauf hat
+ * keine Entsprechung (Phasen wechseln dort nur über advance/sendBack am Server).
+ */
+export function simJumpTo(
+  defn: ProcessDefinition, state: SimState, idx: number, nowIso = new Date().toISOString(),
+): SimState {
+  if (idx < 0 || idx >= defn.phases.length || idx >= state.runtime.phases.length) return state
+  const rt: ProcessRuntime = JSON.parse(JSON.stringify(state.runtime))
+  rt.current_index = idx
+  rt.rejected = false
+  rt.phases.forEach((entry, i) => {
+    entry.status = i < idx ? 'done' : i === idx ? 'open' : 'pending'
+    entry.entered_at = i <= idx ? nowIso : null
+  })
+  const ph = defn.phases[idx]
+  return {
+    ...state, runtime: rt, status: enterStatusFor(ph),
+    events: [...state.events, { at: nowIso,
+      text: `Vorschau: zu „${ph.label || ph.key}" gesprungen` }],
+  }
+}
+
 export function resolveResponsibility(
   phase: PhaseDef, values: Record<string, unknown>,
 ): SimResponsibility {
@@ -402,13 +426,17 @@ export function simSetValues(
   return { ...state, values }
 }
 
-/** Phase abschließen. Gibt Fehler zurück, wenn die Pflichtprüfung greift. */
+/** Phase abschließen. Gibt Fehler zurück, wenn die Pflichtprüfung greift.
+ *  `bypassRequired` (NUR Vorschau) überspringt die Pflichtprüfung, damit man in
+ *  die nächste Phase schauen kann. Der echte Ablauf ruft validatePhaseCompletion
+ *  direkt (nicht über simAdvance) und ist davon unberührt. */
 export function simAdvance(
   defn: ProcessDefinition, state: SimState, nowIso = new Date().toISOString(),
+  opts: { bypassRequired?: boolean } = {},
 ): { state: SimState; errors: SimFieldError[] } {
   const phase = currentPhase(defn, state.runtime)
   if (!phase) return { state, errors: [] }
-  const errors = validatePhaseCompletion(defn, phase, state.values)
+  const errors = opts.bypassRequired ? [] : validatePhaseCompletion(defn, phase, state.values)
   if (errors.length) return { state, errors }
 
   let cur = { ...state }
@@ -469,7 +497,7 @@ export function currentApproval(defn: ProcessDefinition, state: SimState): Appro
  */
 export function simDecide(
   defn: ProcessDefinition, state: SimState, act: ApprovalAct,
-  opts: { reason?: string } = {}, nowIso = new Date().toISOString(),
+  opts: { reason?: string; bypassRequired?: boolean } = {}, nowIso = new Date().toISOString(),
 ): { state: SimState; errors: SimFieldError[] } {
   const phase = currentPhase(defn, state.runtime)
   const spec = phase?.kind === 'approval' ? phase.approval : null
@@ -497,7 +525,7 @@ export function simDecide(
       + (reason && !spec.reasonField ? ` – ${reason}` : '') }] }
 
   if (act === 'approve') {
-    const res = simAdvance(defn, cur, nowIso)
+    const res = simAdvance(defn, cur, nowIso, { bypassRequired: opts.bypassRequired })
     // Bleibt die Phase wegen fehlender Pflichtangaben stehen, darf auch die
     // Entscheidung nicht im Verlauf und in den Feldern landen.
     return res.errors.length ? { state, errors: res.errors } : res

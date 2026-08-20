@@ -11,7 +11,7 @@ import type { OptionSources, ProcessDefinition } from '@/types/process'
 import type { ApprovalAct, SimFieldError, SimState, SimViewer } from '@/lib/processSim'
 import {
   currentApproval, currentPhase, isTerminal, resolveResponsibility, responsibilityText,
-  simAdvance, simDecide, simReject, simSetValues, startSim,
+  simAdvance, simDecide, simJumpTo, simReject, simSetValues, startSim,
 } from '@/lib/processSim'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
@@ -50,6 +50,9 @@ const responsibility = computed(() =>
   phase.value ? resolveResponsibility(phase.value, state.value.values) : null)
 const approval = computed(() => currentApproval(props.definition, state.value))
 const reason = ref('')
+/** NUR Vorschau: Pflichtfelder beim Weiterschalten ignorieren (Durchklicken). */
+const bypass = ref(false)
+const phaseIndexNow = computed(() => state.value.runtime.current_index)
 
 /** Niemand zuständig – im echten Betrieb bliebe der Auftrag liegen. */
 const offeneZustaendigkeit = computed(() => {
@@ -62,12 +65,20 @@ const offeneZustaendigkeit = computed(() => {
 })
 
 function decide(act: ApprovalAct) {
-  const res = simDecide(props.definition, state.value, act, { reason: reason.value })
+  const res = simDecide(props.definition, state.value, act,
+                        { reason: reason.value, bypassRequired: bypass.value })
   errors.value = res.errors
   if (!res.errors.length) {
     state.value = res.state
     reason.value = ''
   }
+}
+
+/** NUR Vorschau: frei zu einer beliebigen Phase springen. */
+function jumpTo(idx: number) {
+  state.value = simJumpTo(props.definition, state.value, idx)
+  errors.value = []
+  reason.value = ''
 }
 
 const groupName = (id: string) =>
@@ -88,7 +99,7 @@ function onValues(v: Record<string, unknown>) {
 }
 
 function advance() {
-  const res = simAdvance(props.definition, state.value)
+  const res = simAdvance(props.definition, state.value, undefined, { bypassRequired: bypass.value })
   errors.value = res.errors
   if (!res.errors.length) state.value = res.state
 }
@@ -131,6 +142,15 @@ function reject() { state.value = simReject(state.value) }
             </div>
           </div>
           <div class="ml-auto">
+            <label class="block text-xs text-gray-400 mb-1">Phase (Vorschau)</label>
+            <select :value="phaseIndexNow" class="afi text-sm"
+                    @change="jumpTo(Number(($event.target as HTMLSelectElement).value))">
+              <option v-for="(p, i) in definition.phases" :key="p.key" :value="i">
+                {{ i + 1 }}. {{ p.label || p.key }}
+              </option>
+            </select>
+          </div>
+          <div>
             <label class="block text-xs text-gray-400 mb-1">Ansicht als</label>
             <select v-model="roleKey" class="afi text-sm">
               <option v-for="r in roles" :key="r.key" :value="r.key">{{ r.label }}</option>
@@ -154,6 +174,15 @@ function reject() { state.value = simReject(state.value) }
               </li>
             </ul>
           </div>
+
+          <!-- NUR Vorschau: ohne Pflichtangaben in die nächste Phase schauen. -->
+          <label class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400
+                        mt-3 cursor-pointer select-none w-fit">
+            <input type="checkbox" v-model="bypass"
+                   class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]
+                          focus:ring-[#3EAAB8]/30 cursor-pointer" />
+            <span>Pflichtfelder in der Vorschau ignorieren (zum Durchklicken)</span>
+          </label>
 
           <!-- Freigabe-Phase: die Frage aus der Definition, zwei Antworten -->
           <div v-if="approval" class="card-section mt-3 space-y-3">

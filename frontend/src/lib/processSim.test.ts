@@ -4,7 +4,7 @@ import {
   advance, canSeeField, currentApproval, currentPhase, enterStatusFor, filterValues,
   initialRuntime, isTerminal,
   renderFields, resolveResponsibility, responsibilityText, sendBack, simAdvance, simDecide,
-  simSetValues, startSim, validatePhaseCompletion,
+  simJumpTo, simSetValues, startSim, validatePhaseCompletion,
   validateValues, visibleFieldKeys,
 } from './processSim'
 import type { SimViewer } from './processSim'
@@ -175,6 +175,20 @@ describe('Simulation', () => {
     let s = startSim(DEFN, 't0')
     s = simSetValues(DEFN, s, { 'personal.salary': '50k' })
     expect(s.values['salary_copy']).toBe('50k')
+  })
+
+  it('bypassRequired überspringt die Pflichtprüfung (nur Vorschau)', () => {
+    const s = startSim(DEFN, 't0')             // base.name fehlt → würde normal blocken
+    const res = simAdvance(DEFN, s, 't1', { bypassRequired: true })
+    expect(res.errors).toEqual([])
+    expect(currentPhase(DEFN, res.state.runtime)!.key).toBe('review')
+  })
+
+  it('simJumpTo springt frei zu einer Phase (nur Vorschau)', () => {
+    const s = startSim(DEFN, 't0')
+    const jumped = simJumpTo(DEFN, s, 1, 't1')
+    expect(jumped.runtime.current_index).toBe(1)
+    expect(currentPhase(DEFN, jumped.runtime)!.key).toBe('review')
   })
 })
 
