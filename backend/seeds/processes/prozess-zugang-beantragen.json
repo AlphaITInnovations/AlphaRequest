@@ -4,6 +4,7 @@
   "name": "Zugang beantragen (Onboarding nach Vertragsrücklauf)",
   "description": "Onboarding einer neuen Mitarbeiterin / eines neuen Mitarbeiters: Basis-, Konditions-, Personal-, IT- und Fuhrpark-Daten erfassen und durch die Fachabteilungen umsetzen.\n\nAblauf: Erstellung (Basisdaten, Konditionen und Fuhrpark durch die/den Ersteller:in) → Freigabe durch Herrn Lutz (per Mail-Link) → Restliche Angaben durch die/den Ersteller:in (Personal- und IT-Daten; die Personalnummer wird beim Abschluss automatisch aus dem Nummernkreis der Vertragsfirma vergeben) → Arbeitsvertrag erstellen (Sekretariat GL) → Durchführung durch die Fachabteilungen (IT, Personalabteilung, Fuhrpark nur bei Dienstwagen).\n\nSichtbarkeit: Basisdaten für alle Beteiligten; personal.* nur Personalabteilung; it.* nur IT; fuhrpark.* nur Fuhrpark; konditionen.* nur Sekretariat GL (Voll-Sicht der bearbeitenden Stellen über grantsFullView).",
   "icon": "🧑‍💼",
+  "titleTemplate": "Onboarding Mitarbeiter:innen – {{base.first_name}} {{base.last_name}}",
   "createPermissions": {
     "everyone": false,
     "groups": [],
