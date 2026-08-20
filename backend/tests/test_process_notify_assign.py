@@ -111,6 +111,30 @@ def test_start_phase_benachrichtigt_nicht(monkeypatch):
     assert out == [] and sent == []
 
 
+def test_spaetere_owner_phase_benachrichtigt_den_ersteller(monkeypatch):
+    """Kommt der Auftrag SPÄTER (nicht die Start-Phase) über responsibility.kind=
+    owner zur erstellenden Person zurück, ist das eine echte neue Aufgabe – die
+    muss eine Mail auslösen (früher fälschlich mit der Start-Phase unterdrückt)."""
+    monkeypatch.setattr(pactions, "_user_email",
+                        lambda uid: "owner@example.org" if uid == "u_owner" else None)
+    defn = ProcessDefinition.model_validate({
+        "key": "d2", "name": "D2",
+        "fields": [{"key": "a", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}]},
+            {"key": "zurueck", "kind": "task", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a", "mode": "editable"}]},
+        ],
+    })
+    t = {"id": 9, "title": "Zurück-Auftrag", "owner_id": "u_owner", "status": "in_progress",
+         "values": {}, "runtime": pr.initial_runtime(defn, "t0", {})}
+    sent, sender = _capture()
+    out = pactions.notify_phase_entry(t, defn, defn.phases[1], sender=sender, groups=GROUPS)
+    assert out == ["owner@example.org"]
+    assert sent and sent[0]["kind"] == "phase_entry"
+
+
 def test_abteilungsphase_benachrichtigt_alle_offenen(monkeypatch):
     sent, sender = _capture()
     t = ticket({"verantwortlich": "u_chef"}, phase_index=2)

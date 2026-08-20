@@ -28,7 +28,7 @@ import json
 from typing import Callable, Optional
 
 from backend.schemas.process_definition import (
-    Action, ActionType, PhaseDef, PhaseKind, ProcessDefinition, ResponsibilityKind,
+    Action, ActionType, PhaseDef, PhaseKind, ProcessDefinition,
 )
 from backend.services import process_runtime as pr
 from backend.utils.config import config
@@ -368,10 +368,13 @@ def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[Phase
         return []
     freigabe = (phase.kind == PhaseKind.approval and phase.approval is not None
                 and phase.approval.externalLink)
-    # Die Start-Phase gehört der Person, die gerade angelegt hat – die muss man
-    # nicht über ihre eigene Eingabe informieren. Bei einer Freigabe schon: dort
-    # wird eine ENTSCHEIDUNG von ihr verlangt, nicht ihre eigene Eingabe gespiegelt.
-    if phase.responsibility.kind == ResponsibilityKind.owner and not freigabe:
+    # NUR die Start-Phase überspringt die Benachrichtigung: dort legt die
+    # erstellende Person gerade selbst an – sie über ihre eigene Eingabe zu
+    # informieren wäre sinnlos. Eine SPÄTERE Phase, die (über
+    # responsibility.kind=owner) zur erstellenden Person zurückkommt, ist dagegen
+    # eine echte neue Aufgabe für sie und MUSS eine Mail auslösen – früher hat die
+    # Prüfung auf owner das fälschlich mitunterdrückt.
+    if phase.kind == PhaseKind.start:
         return []
     try:
         recips = resolve_recipients("responsible", row, phase, groups)
