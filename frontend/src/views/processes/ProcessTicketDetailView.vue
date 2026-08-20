@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
- * Auftrag eines dynamischen Prozesses: aktuelle Phase bearbeiten, abschließen,
- * ablehnen. Formular und Sichtbarkeit kommen aus der GEPINNTEN Definition.
+ * Auftrag eines dynamischen Prozesses: aktuelle Phase bearbeiten, speichern und
+ * weitergeben/abschließen. Formular und Sichtbarkeit kommen aus der GEPINNTEN
+ * Definition. Ablehnen, Zwangsabschluss, Wiederaufnahme und Löschen sind
+ * Admin-Werkzeuge und leben im AdminActionsPanel (?ansicht=admin).
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -16,7 +18,6 @@ import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import * as ticketsApi from '@/api/processTickets'
-import { reopenTicket } from '@/api/processEvents'
 import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 import AdminActionsPanel from '@/components/process/AdminActionsPanel.vue'
@@ -73,6 +74,14 @@ const phase = computed(() => {
   const i = ticket.value.runtime?.current_index ?? 0
   return definition.value.phases[i] ?? null
 })
+
+/** Ist die aktuelle Phase die LETZTE? Dann schließt der Abschluss den Auftrag ab
+ *  („Abschließen"), sonst geht er an die nächste Stelle („Weitergeben"). */
+const istLetztePhase = computed(() => {
+  const i = ticket.value?.runtime?.current_index ?? 0
+  return i >= (definition.value?.phases.length ?? 1) - 1
+})
+const weiterLabel = computed(() => (istLetztePhase.value ? 'Abschließen' : 'Weitergeben'))
 
 /**
  * Erlaubte Aktionen kommen vom Server (`abilities`). Fehlt das Feld (alte
@@ -204,7 +213,8 @@ async function advance() {
   if (dirty.value) { showToast('Bitte zuerst speichern', false); return }
   const req = validatePhaseCompletion(definition.value, phase.value, values.value)
   if (req.length) { errors.value = req; showToast('Pflichtangaben fehlen', false); return }
-  if (!confirm('Diese Phase abschließen?')) return
+  if (!confirm(istLetztePhase.value
+    ? 'Auftrag abschließen?' : 'An die nächste Stelle weitergeben?')) return
   busy.value = true
   try {
     ticket.value = await ticketsApi.advanceTicket(id.value)
@@ -218,71 +228,9 @@ async function advance() {
   } finally { busy.value = false }
 }
 
-async function reject() {
-  // Begründung ist Pflicht: ohne sie ist die Ablehnung im Verlauf nicht erklärbar
-  // und die antragstellende Person erfährt nie, was zu ändern wäre.
-  const grund = prompt('Warum wird der Auftrag abgelehnt? '
-    + '(geht per Mail an die Ersteller:in und steht im Verlauf)')
-  if (grund === null) return
-  if (!grund.trim()) { showToast('Ohne Begründung keine Ablehnung', false); return }
-  busy.value = true
-  try {
-    ticket.value = await ticketsApi.rejectTicket(id.value, grund.trim())
-    showToast('Auftrag abgelehnt')
-    router.push('/dashboard')
-  } catch (e) {
-    showToast(errorMessage(e, 'Ablehnen fehlgeschlagen'), false)
-  } finally { busy.value = false }
-}
-
-/** Zwangsabschluss: für Aufträge, die niemand mehr weiterschalten kann (z. B. weil
- *  die zuständige Gruppe aufgelöst wurde). Rückholbar über die Wiederaufnahme. */
-async function forceArchive() {
-  const grund = prompt('Warum wird der Auftrag zwangsweise abgeschlossen? '
-    + '(steht im Verlauf; rückholbar über „Wieder aufnehmen")')
-  if (grund === null) return
-  if (!grund.trim()) { showToast('Ohne Grund kein Zwangsabschluss', false); return }
-  busy.value = true
-  try {
-    ticket.value = await ticketsApi.archiveTicket(id.value, grund.trim())
-    showToast('Auftrag abgeschlossen')
-    timeline.value?.reload()
-  } catch (e) {
-    showToast(errorMessage(e, 'Abschließen fehlgeschlagen'), false)
-  } finally { busy.value = false }
-}
-
-/** Endgültiges Löschen – der Audit-Eintrag bleibt, der Auftrag ist weg. */
-async function destroy() {
-  if (!confirm(`Auftrag #${id.value} endgültig löschen? Das lässt sich NICHT rückgängig `
-    + 'machen. Verlauf, Beobachter:innen und Anhänge gehen mit verloren; im Audit-Log '
-    + 'bleibt der Vorgang nachvollziehbar.')) return
-  busy.value = true
-  try {
-    await ticketsApi.deleteTicket(id.value)
-    showToast('Auftrag gelöscht')
-    router.push('/auftraege')
-  } catch (e) {
-    showToast(errorMessage(e, 'Löschen fehlgeschlagen'), false)
-  } finally { busy.value = false }
-}
-
-/** Wiederaufnahme: nur Admin, nur bei fertigem Auftrag, Grund ist Pflicht. */
-async function reopen() {
-  const reason = prompt('Warum wird der Auftrag wieder aufgenommen? '
-    + '(steht anschließend im Verlauf)')
-  if (reason === null) return
-  if (!reason.trim()) { showToast('Ohne Grund keine Wiederaufnahme', false); return }
-  busy.value = true
-  try {
-    ticket.value = await reopenTicket(id.value, reason.trim())
-    values.value = { ...(ticket.value.values || {}) }
-    showToast('Auftrag wieder aufgenommen')
-    timeline.value?.reload()
-  } catch (e) {
-    showToast(errorMessage(e, 'Wiederaufnahme fehlgeschlagen'), false)
-  } finally { busy.value = false }
-}
+// Ablehnen, Zwangsabschluss, Wiederaufnahme und Löschen sind Admin-Werkzeuge und
+// leben ausschließlich im AdminActionsPanel (?ansicht=admin). Die normale
+// Bearbeitungs-Leiste kennt nur Speichern und Weitergeben.
 
 const groupName = (gid: string) => sources.value.groups.find((g) => g.id === gid)?.name || gid
 
@@ -443,42 +391,26 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                            :users="sources.users" />
         </div>
 
-        <!-- Aktionsleiste – sticky und in JEDER Ansicht da (lesend wie
-             bearbeitend), identisch zum Basis-Ticket: „Abbrechen" führt immer
-             zurück; alles Weitere hängt an den Server-Rechten (abilities). -->
+        <!-- Aktionsleiste – sticky und in JEDER Ansicht da (lesend wie bearbeitend),
+             gleiches Layout wie das Basis-Ticket: „Abbrechen" führt immer zurück;
+             die Schreib-Knöpfe kommen nur dazu, wenn bearbeitet werden darf.
+             Ablehnen/Zwangsabschluss/Wiederaufnahme/Löschen sind Admin-Werkzeuge
+             und stehen ausschließlich im AdminActionsPanel (?ansicht=admin). -->
         <div class="card-section sticky bottom-4 z-20 shadow-lg mt-4
                     flex items-center justify-end gap-2 flex-wrap">
           <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
-          <button v-if="abilities.edit" @click="saveValues" :disabled="busy || !dirty"
-                  class="btn-secondary text-sm">Speichern</button>
-          <button v-if="abilities.edit" @click="advance" :disabled="busy"
-                  class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
-                         disabled:opacity-40 transition">Phase abschließen</button>
-          <button v-if="abilities.edit" @click="reject" :disabled="busy"
-                  class="px-3 py-2 rounded-xl text-sm border border-red-300 text-red-600
-                         hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 transition">
-            Ablehnen
-          </button>
-          <button v-if="abilities.reopen" @click="reopen" :disabled="busy"
-                  class="px-3 py-2 rounded-xl text-sm border border-amber-300 text-amber-700
-                         dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20
-                         disabled:opacity-40 transition">
-            Wieder aufnehmen
-          </button>
-          <!-- Notfalleingriffe: nur Admin, bewusst optisch zurückhaltend -->
-          <button v-if="abilities.archive" @click="forceArchive" :disabled="busy"
-                  title="Auftrag zwangsweise abschließen (rückholbar)"
-                  class="px-3 py-2 rounded-xl text-sm border border-gray-300 dark:border-white/20
-                         text-gray-600 dark:text-gray-300 hover:bg-gray-50
-                         dark:hover:bg-white/5 disabled:opacity-40 transition">
-            Zwangsabschluss
-          </button>
-          <button v-if="abilities.delete" @click="destroy" :disabled="busy"
-                  title="Endgültig löschen"
-                  class="px-3 py-2 rounded-xl text-sm text-gray-400 hover:text-red-600
-                         disabled:opacity-40 transition">
-            Löschen
-          </button>
+          <template v-if="abilities.edit">
+            <button @click="saveValues" :disabled="busy || !dirty"
+                    class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
+                           disabled:opacity-40 transition">
+              Speichern &amp; später weiterbearbeiten
+            </button>
+            <button @click="advance" :disabled="busy"
+                    class="px-4 py-2 rounded-xl text-sm text-white bg-green-600 hover:bg-green-700
+                           disabled:opacity-40 transition">
+              {{ weiterLabel }}
+            </button>
+          </template>
         </div>
         </template>
         </div>

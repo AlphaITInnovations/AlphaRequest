@@ -151,7 +151,24 @@ async function rawSpeichern() {
   } finally { busy.value = false }
 }
 
-// ── Archivieren / Löschen ─────────────────────────────────────────────────────
+// ── Ablehnen / Archivieren / Löschen ──────────────────────────────────────────
+
+async function ablehnen() {
+  // Begründung ist Pflicht: sie geht per Mail an die Ersteller:in und steht im
+  // Verlauf – ohne sie ist die Ablehnung nicht nachvollziehbar.
+  const grund = prompt('Auftrag ablehnen – warum? '
+    + '(Pflicht; geht per Mail an die Ersteller:in und steht im Verlauf)')
+  if (grund === null) return
+  if (!grund.trim()) { showToast('Ohne Begründung keine Ablehnung', false); return }
+  busy.value = true
+  try {
+    await ticketsApi.rejectTicket(props.ticket.id, grund.trim())
+    showToast('Auftrag abgelehnt')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Ablehnen fehlgeschlagen')
+  } finally { busy.value = false }
+}
 
 async function archivieren() {
   const grund = prompt('Auftrag zwangsweise abschließen – warum? (Pflicht, steht im Verlauf)')
@@ -213,6 +230,12 @@ async function loeschen() {
                      border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
                      hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
         🧬 Raw-JSON bearbeiten
+      </button>
+      <button v-if="!terminal" @click="ablehnen" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-300
+                     hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition">
+        🚫 Ablehnen
       </button>
       <button v-if="!terminal" @click="archivieren" :disabled="busy"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
