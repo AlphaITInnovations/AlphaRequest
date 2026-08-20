@@ -20,14 +20,15 @@ import {
 } from '@/api/processEvents'
 import { errorMessage } from '@/lib/processErrors'
 import { useToast } from '@/composables/useToast'
+import UserSelect from '@/components/UserSelect.vue'
 
 const props = withDefaults(defineProps<{
   ticketId: number
-  /** Angemeldete Person – für „ich beobachte" und das Entfernen ohne Rückfrage. */
+  /** Angemeldete Person – darf sich selbst ein-/austragen (ohne `canManage`). */
   currentUserId?: string | null
-  /** Darf fremde Personen ein-/austragen? */
+  /** Darf FREMDE Personen ein-/austragen? */
   canManage?: boolean
-  /** Auswahlliste für das Eintragen fremder Personen. */
+  /** Auswahlliste für das Eintragen (Suche im Dropdown). */
   users?: { id: string; displayName: string }[]
   /** Panel-Optik: ohne eigene Karte, kleine Überschrift (siehe Docstring). */
   embedded?: boolean
@@ -41,15 +42,20 @@ const items = ref<ProcessWatcher[]>([])
 const loading = ref(false)
 const busy = ref(false)
 const fehler = ref<string | null>(null)
-const auswahl = ref('')
+/** Gebunden an UserSelect – beim Auswählen wird sofort eingetragen. */
+const auswahl = ref<{ id: string; name: string } | null>(null)
 
-const beobachteIch = computed(() =>
-  !!props.currentUserId && items.value.some((w) => w.id === props.currentUserId))
-
-/** Nur Personen anbieten, die noch nicht beobachten. */
-const offeneUsers = computed(() => {
+/**
+ * Wer im Dropdown gefunden werden kann: mit Verwaltungsrecht ALLE noch nicht
+ * eingetragenen Personen; ohne Recht ausschließlich man selbst (jede Person
+ * darf sich selbst eintragen – durch Suche nach dem eigenen Namen). Bereits
+ * Eingetragene fallen raus.
+ */
+const auswaehlbar = computed(() => {
   const drin = new Set(items.value.map((w) => w.id))
-  return props.users.filter((u) => !drin.has(u.id))
+  const offen = props.users.filter((u) => !drin.has(u.id))
+  if (props.canManage) return offen
+  return props.currentUserId ? offen.filter((u) => u.id === props.currentUserId) : []
 })
 
 const nameVon = (w: ProcessWatcher) =>
@@ -74,12 +80,18 @@ async function umstellen(hinzu: boolean, userId?: string) {
       ? await addWatcher(props.ticketId, userId ?? null)
       : await removeWatcher(props.ticketId, userId || props.currentUserId || '')
     emit('changed', items.value)
-    auswahl.value = ''
+    auswahl.value = null
   } catch (e) {
     showToast(errorMessage(e, 'Beobachtung konnte nicht geändert werden'), false)
   } finally {
     busy.value = false
   }
+}
+
+/** UserSelect meldet eine Auswahl → sofort eintragen (kein extra Knopf mehr). */
+function onAuswahl(sel: { id: string; name: string } | null) {
+  auswahl.value = sel
+  if (sel && !busy.value) umstellen(true, sel.id)
 }
 
 onMounted(load)
@@ -88,17 +100,10 @@ watch(() => props.ticketId, load)
 
 <template>
   <div :class="embedded ? '' : 'card-section'">
-    <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+    <div class="mb-2">
       <h3 :class="embedded
             ? 'text-xs font-semibold text-gray-400 uppercase tracking-wider'
             : 'section-title mb-0'">Beobachter:innen</h3>
-      <button v-if="currentUserId" @click="umstellen(!beobachteIch)" :disabled="busy"
-              class="text-xs px-2.5 py-1 rounded-lg border transition disabled:opacity-40"
-              :class="beobachteIch
-                ? 'border-[#3EAAB8] text-[#3EAAB8] hover:bg-[#3EAAB8]/10'
-                : 'border-gray-300 dark:border-white/20 text-gray-500 hover:text-[#3EAAB8]'">
-        {{ beobachteIch ? '✓ Ich beobachte' : 'Beobachten' }}
-      </button>
     </div>
 
     <div v-if="fehler" class="text-sm text-red-600">{{ fehler }}</div>
@@ -119,14 +124,14 @@ watch(() => props.ticketId, load)
       </li>
     </ul>
 
-    <!-- Fremde eintragen: nur die zuständige Stelle -->
-    <div v-if="canManage && offeneUsers.length" class="flex items-center gap-2 mt-3">
-      <select v-model="auswahl" class="afi flex-1 text-sm">
-        <option value="">– Person hinzufügen –</option>
-        <option v-for="u in offeneUsers" :key="u.id" :value="u.id">{{ u.displayName }}</option>
-      </select>
-      <button @click="umstellen(true, auswahl)" :disabled="busy || !auswahl"
-              class="btn-secondary text-xs py-1.5">Hinzufügen</button>
+    <!-- Eintragen per Suche: beim Auswählen wird sofort hinzugefügt (kein extra
+         Knopf). Ohne Verwaltungsrecht findet man ausschließlich sich selbst. -->
+    <div v-if="auswaehlbar.length" class="mt-3">
+      <UserSelect :model-value="auswahl" label=""
+                  :placeholder="canManage ? 'Person suchen und hinzufügen…' : 'Nach eigenem Namen suchen…'"
+                  :show-users="true" :show-groups="false"
+                  :users="auswaehlbar" :disabled="busy"
+                  @update:model-value="onAuswahl" />
     </div>
 
     <!-- Datenschutz-Hinweis: wer beobachtet, liest ALLES mit. Steht nur dort, wo
