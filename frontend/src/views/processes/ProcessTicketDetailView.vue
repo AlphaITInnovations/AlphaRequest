@@ -24,7 +24,6 @@ import AdminActionsPanel from '@/components/process/AdminActionsPanel.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
 import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
 import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
-import ProcessAttachments from '@/components/process/ProcessAttachments.vue'
 import ProcessDepartments from '@/components/process/ProcessDepartments.vue'
 import BasisTicketDetail from '@/components/process/BasisTicketDetail.vue'
 import { isBasisTicket } from '@/lib/basisTicket'
@@ -406,10 +405,9 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                                   :sources="sources" />
             </div>
 
-            <!-- Allgemeine Anhänge (Feld-Anhänge stehen im Formular) -->
-            <ProcessAttachments :ticket-id="ticket.id" :can-edit="abilities.edit"
-                                :can-attach="abilities.attach"
-                                :current-user-id="auth.user?.id ?? null" />
+            <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen
+                 Anhänge ausschließlich über konfigurierte Anhang-Felder
+                 (widget=attachment), die das Formular oben rendert. -->
           </div>
         </div>
 
