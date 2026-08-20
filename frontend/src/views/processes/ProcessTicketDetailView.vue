@@ -215,13 +215,24 @@ async function saveValues() {
 
 async function advance() {
   if (!definition.value || !phase.value) return
-  if (dirty.value) { showToast('Bitte zuerst speichern', false); return }
+  // Gegen die AKTUELLEN (evtl. noch ungespeicherten) Eingaben prüfen – nicht
+  // gegen den zuletzt geladenen Stand. So darf man direkt nach dem Ausfüllen
+  // weitergeben, ohne vorher separat speichern zu müssen.
+  const shape = validateValues(definition.value, values.value)
+  if (shape.length) { errors.value = shape; showToast('Bitte Eingaben prüfen', false); return }
   const req = validatePhaseCompletion(definition.value, phase.value, values.value)
   if (req.length) { errors.value = req; showToast('Pflichtangaben fehlen', false); return }
   if (!confirm(istLetztePhase.value
     ? 'Auftrag abschließen?' : 'An die nächste Stelle weitergeben?')) return
   busy.value = true
   try {
+    // Offene Eingaben zuerst persistieren – sonst prüft/schaltet der Server
+    // gegen den alten Stand und die Weitergabe scheitert an „Pflichtangaben
+    // fehlen", obwohl im Formular alles ausgefüllt ist.
+    if (dirty.value) {
+      ticket.value = await ticketsApi.patchTicket(id.value, { values: values.value })
+      values.value = { ...(ticket.value.values || {}) }
+    }
     ticket.value = await ticketsApi.advanceTicket(id.value)
     values.value = { ...(ticket.value.values || {}) }
     errors.value = []
