@@ -1237,7 +1237,7 @@
       "key": "fuhrpark.car_from",
       "label": "Benötigt ab?",
       "widget": "date",
-      "help": "Bitte abstimmen, ob der Firmenwagen bereits während der Probezeit oder erst nach deren Abschluss bereitgestellt werden soll, und entsprechendes Datum eintragen.",
+      "help": "Hinweis: Bitte abstimmen, ob der Firmenwagen bereits während der Probezeit oder erst nach deren Abschluss bereitgestellt werden soll, und entsprechendes Datum eintragen.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
