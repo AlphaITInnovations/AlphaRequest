@@ -179,7 +179,7 @@
       "key": "personal.salary",
       "label": "Gehalt",
       "widget": "text",
-      "help": "Vertraulich – hartes Gate: sichtbar und beschreibbar NUR für die Gruppe Sekretariat GL (plus Admin). Im Alt-System konnte die/der Vorgesetzte den Wert bei der Erstellung eintragen (aber nicht mehr lesen); im neuen Format sperrt das Gate auch das Schreiben. Deshalb ist das Feld zusätzlich in der Phase „Arbeitsvertrag erstellen & versenden“ editierbar, damit das Sekretariat GL es nachtragen kann.",
+      "help": "Vertraulich – sichtbar und beschreibbar nur für die Gruppe Sekretariat GL (plus Admin). In der Phase „Arbeitsvertrag erstellen & versenden“ editierbar, damit das Sekretariat GL den Wert nachtragen kann.",
       "placeholder": "z. B. 3.500 € / Monat",
       "options": [],
       "optionsSource": null,
