@@ -59,9 +59,12 @@ describe('applyComputed (mirror of backend)', () => {
     expect(applyComputed(fields, { 'base.title': 'Dr.', 'mirror.title': 'x' })['mirror.title']).toBe('Dr.')
   })
 
-  it('map übersetzt den Quellwert; nicht gemappt → null', () => {
+  it('map übersetzt den Quellwert; nicht gemappt / Nicht-String / Prototype → null', () => {
     const mapped = [{ key: 'grp', computed: { from: 'pos', map: { Disposition: 'Gruppe 1' } } }]
     expect(applyComputed(mapped, { pos: 'Disposition' }).grp).toBe('Gruppe 1')
     expect(applyComputed(mapped, { pos: 'Werkstudium' }).grp).toBeNull()
+    // Parität zum Backend (map.get): Nicht-String und Prototype-Namen treffen NICHT
+    expect(applyComputed(mapped, { pos: 2 as unknown as string }).grp).toBeNull()
+    expect(applyComputed(mapped, { pos: 'toString' }).grp).toBeNull()
   })
 })

@@ -802,9 +802,22 @@ class ProcessDefinition(_Base):
             if ref not in catalog:
                 raise ValueError(f"{where}: Referenz „{ref}“ ist nicht im Feld-Katalog")
 
+        # Ein `computed.map`-Lookup arbeitet mit Zeichenketten-Schlüsseln (JSON) –
+        # er ergibt nur für Felder Sinn, deren Wert eine Zeichenkette ist. Auf
+        # Zahl/Checkbox/Mehrfachauswahl würden Backend (nativer Schlüssel) und
+        # Frontend sonst auseinanderlaufen; hier hart ausschließen.
+        _map_source_ok = {Widget.select, Widget.text, Widget.textarea, Widget.date,
+                          Widget.user, Widget.company, Widget.group, Widget.server_generated}
         for f in self.fields:
             if f.computed:
                 _need(f.computed.from_, f"Feld „{f.key}“.computed.from")
+                if f.computed.map is not None:
+                    src = next((x for x in self.fields if x.key == f.computed.from_), None)
+                    if src is not None and src.widget not in _map_source_ok:
+                        raise ValueError(
+                            f"Feld „{f.key}“.computed.map: Das Quellfeld "
+                            f"„{f.computed.from_}“ (widget={src.widget.value}) ist nicht "
+                            f"unterstützt – ein Lookup arbeitet nur mit Text-/Auswahl-Feldern.")
 
         for p in self.phases:
             for fr in p.fields:

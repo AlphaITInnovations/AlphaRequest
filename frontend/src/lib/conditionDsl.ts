@@ -86,7 +86,14 @@ export function applyComputed(fields: ComputedFieldDef[], values: Values): Value
     for (const f of computed) {
       const src = out[f.computed!.from]
       const m = f.computed!.map
-      const derived = m != null ? (m[String(src)] ?? null) : src
+      // Exakt wie das Backend (process_compute.apply_computed): map.get(src) über
+      // die EIGENEN String-Schlüssel. Nicht-String-Quellen und nicht enthaltene
+      // Schlüssel ergeben null (kein String()-Zwang, keine Prototype-Kette – sonst
+      // liefen JS und Python auseinander, z. B. bei Zahlen/„toString").
+      const derived = m != null
+        ? (typeof src === 'string' && Object.prototype.hasOwnProperty.call(m, src)
+            ? (m[src] ?? null) : null)
+        : src
       if (f.overridable) {
         if (isEmpty(out[f.key]) && !isEmpty(derived)) { out[f.key] = derived; changed = true }
       } else if (out[f.key] !== derived) {

@@ -221,6 +221,18 @@ def test_computed_map_accepted():
     assert g.computed.map == {"Ja": "G1"}
 
 
+def test_computed_map_on_number_source_rejected():
+    """map arbeitet mit Zeichenketten-Schlüsseln – ein Zahlen-Quellfeld ist nicht
+    unterstützt (Backend/Frontend würden sonst auseinanderlaufen)."""
+    d = copy.deepcopy(VALID)
+    d["fields"].append({"key": "stufe", "widget": "number"})
+    d["fields"].append({"key": "label", "widget": "text",
+                        "computed": {"from": "stufe", "map": {"1": "Junior"}}})
+    d["phases"][0]["fields"] += [{"ref": "stufe"}, {"ref": "label", "mode": "readonly"}]
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
 def _defn_with_note(visible_when):
     return {
         "schemaVersion": 1, "key": "k", "name": "N",
