@@ -71,8 +71,8 @@ def test_import_loest_platzhalter_auf(ctx):
     defn = ctx["db"].created[0]["definition"]
     assert "HIER_" not in json.dumps(defn, ensure_ascii=False)
     # Stichproben: Zuständigkeit und Sichtbarkeit zeigen auf echte Gruppen.
-    sgl = next(p for p in defn["phases"] if p["key"] == "bearbeitung_sgl")
-    assert sgl["responsibility"]["group"] == "gid-sgl"
+    vertrag = next(p for p in defn["phases"] if p["key"] == "arbeitsvertrag")
+    assert vertrag["responsibility"]["group"] == "gid-sgl"      # Sekretariat GL
     strasse = next(f for f in defn["fields"] if f["key"] == "personal.private_street")
     assert strasse["visibility"]["visibleToGroups"] == ["gid-hr"]
 
@@ -120,17 +120,17 @@ def test_onboarding_seed_nutzt_die_neue_laufzeit():
     assert pnr["widget"] == "server_generated"
     assert pnr["assign"] == {"action": "assign_sequence", "counter": "personalnummer",
                              "companyRef": "base.contract_company"}
-    # Vergeben beim Abschluss der SGL-Phase (erste Phase, die das Feld führt).
+    # Vergeben beim Abschluss der Rest-Erfassung durch die/den Ersteller:in –
+    # das ist die ERSTE Phase, die die Personalnummer führt (keine SGL-Phase mehr).
     erste = next(p["key"] for p in defn["phases"]
                  if any(fr["ref"] == "personal.personal_number" for fr in p["fields"]))
-    assert erste == "bearbeitung_sgl"
-    # Vorgesetzten-Phase: vom Sekretariat GL gewählte Person (wie im Alt-System).
+    assert erste == "bearbeitung"
+    # Die Sekretariat-GL-Erfassungsphase gibt es nicht mehr; die/der Ersteller:in
+    # füllt nach der Freigabe die restlichen Felder selbst aus.
+    assert not any(p["key"] == "bearbeitung_sgl" for p in defn["phases"])
+    assert not any(f["key"] == "ablauf.naechster_bearbeiter" for f in defn["fields"])
     bearbeitung = next(p for p in defn["phases"] if p["key"] == "bearbeitung")
-    assert bearbeitung["responsibility"]["kind"] == "assignable"
-    assert bearbeitung["responsibility"]["fromField"] == "ablauf.naechster_bearbeiter"
-    sgl = next(p for p in defn["phases"] if p["key"] == "bearbeitung_sgl")
-    picker = next(fr for fr in sgl["fields"] if fr["ref"] == "ablauf.naechster_bearbeiter")
-    assert picker["required"] is True and picker["mode"] == "editable"
+    assert bearbeitung["responsibility"]["kind"] == "owner"
     # Signatur-Titel: vorbefüllt aus base.title, manuell übersteuerbar.
     sig = felder["it.signature.title"]
     assert sig["computed"] == {"from": "base.title"} and sig["overridable"] is True
@@ -141,11 +141,11 @@ def test_onboarding_seed_nutzt_die_neue_laufzeit():
     assert any(a["trigger"]["type"] == "on_enter"
                and a["action"]["type"] == "auto_advance"
                for a in start["automations"]), "Start-Phase muss direkt weiterschalten"
-    # Freigabe durch Herrn Lutz liegt zwischen Erstellung und Sekretariat GL,
-    # entscheidet per Mail-Link und trägt die Basisdaten über Variablen in die Mail.
+    # Freigabe durch Herrn Lutz liegt direkt nach der Erstellung und vor der
+    # Rest-Erfassung; entscheidet per Mail-Link und trägt die Basisdaten mit.
     keys = [p["key"] for p in defn["phases"]]
     assert keys.index("freigabe") == keys.index("erstellung") + 1
-    assert keys.index("freigabe") < keys.index("bearbeitung_sgl")
+    assert keys.index("freigabe") < keys.index("bearbeitung")
     frei = next(p for p in defn["phases"] if p["key"] == "freigabe")
     assert frei["kind"] == "approval" and frei["approval"]["externalLink"] is True
     assert frei["responsibility"]["group"] == "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN"

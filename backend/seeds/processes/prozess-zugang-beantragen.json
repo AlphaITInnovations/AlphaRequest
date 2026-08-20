@@ -481,24 +481,6 @@
       "item": []
     },
     {
-      "key": "ablauf.naechster_bearbeiter",
-      "label": "Nächste:r Bearbeiter:in (Vorgesetzte:r)",
-      "widget": "user",
-      "help": "Das Sekretariat GL wählt hier, wer die Phase „Bearbeitung durch Vorgesetzten“ übernimmt (im Alt-System das Feld „Nächster Bearbeiter“).",
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": []
-    },
-    {
       "key": "personal.supervisor_hr_id",
       "label": "Vorgesetzter (vertraglich)",
       "widget": "user",
@@ -1242,6 +1224,47 @@
           "required": true,
           "requiredWhen": null,
           "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.car",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "fuhrpark.car_class",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          }
+        },
+        {
+          "ref": "fuhrpark.car_from",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          }
         }
       ],
       "constraints": [],
@@ -1312,6 +1335,31 @@
             {
               "type": "field",
               "ref": "base.start_date",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "fuhrpark.car",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_from",
               "width": "half"
             }
           ]
@@ -1458,478 +1506,21 @@
       "automations": []
     },
     {
-      "key": "bearbeitung_sgl",
-      "label": "Bearbeitung durch Sekretariat GL",
-      "kind": "task",
-      "view": "form",
-      "enterStatus": null,
-      "grantsFullView": true,
-      "responsibility": {
-        "kind": "group",
-        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
-        "user": null,
-        "rule": [],
-        "resetOnDescriptionChange": false
-      },
-      "fields": [
-        {
-          "ref": "base.salutation",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.first_name",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.last_name",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.title",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.contract_company",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.location",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.cost_center",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.start_date",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.private_street",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.private_zip",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.private_city",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.homeoffice",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.weekly_hours",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.federal_state",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.department",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.department_other",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "personal.department",
-              "Sonstige"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "personal.department",
-              "Sonstige"
-            ]
-          }
-        },
-        {
-          "ref": "personal.supervisor_hr_id",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.contact_person_id",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "personal.personal_number",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "ablauf.naechster_bearbeiter",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.timebutler.vacation_year",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.timebutler.supervisor_id",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "fuhrpark.car",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "fuhrpark.car_class",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          }
-        },
-        {
-          "ref": "fuhrpark.car_from",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          }
-        }
-      ],
-      "constraints": [],
-      "automations": [],
-      "layout": [
-        {
-          "type": "section",
-          "title": "Basisdaten",
-          "variant": "base",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "base.salutation",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.first_name",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.last_name",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.title",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.contract_company",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.location",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.cost_center",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.start_date",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Personaldaten",
-          "variant": "hr",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "personal.private_street",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.private_zip",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.private_city",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.homeoffice",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.weekly_hours",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.federal_state",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.department",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.department_other",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.supervisor_hr_id",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.contact_person_id",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.personal_number",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Urlaub (TimeButler)",
-          "variant": "it",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "it.timebutler.vacation_year",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.timebutler.supervisor_id",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Fuhrpark",
-          "variant": "fuhrpark",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "fuhrpark.car",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "fuhrpark.car_class",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "fuhrpark.car_from",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Weitergabe",
-          "variant": "default",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "ablauf.naechster_bearbeiter",
-              "width": "half"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "key": "bearbeitung",
-      "label": "Bearbeitung durch Vorgesetzten",
+      "label": "Restliche Angaben durch Ersteller:in",
       "kind": "task",
       "view": "form",
       "enterStatus": null,
       "grantsFullView": true,
       "responsibility": {
-        "kind": "assignable",
+        "kind": "owner",
         "group": null,
         "user": null,
-        "fromField": "ablauf.naechster_bearbeiter",
         "rule": [],
-        "resetOnDescriptionChange": false
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
       },
       "fields": [
-        {
-          "ref": "base.salutation",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.first_name",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.last_name",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.title",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.contract_company",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.location",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.cost_center",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "base.start_date",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
         {
           "ref": "personal.private_street",
           "mode": "editable",
@@ -2199,102 +1790,11 @@
               "Ja"
             ]
           }
-        },
-        {
-          "ref": "fuhrpark.car",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "fuhrpark.car_class",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          }
-        },
-        {
-          "ref": "fuhrpark.car_from",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          }
         }
       ],
       "constraints": [],
       "automations": [],
       "layout": [
-        {
-          "type": "section",
-          "title": "Basisdaten",
-          "variant": "base",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "base.salutation",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.first_name",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.last_name",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.title",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.contract_company",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.location",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.cost_center",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.start_date",
-              "width": "half"
-            }
-          ]
-        },
         {
           "type": "section",
           "title": "Personaldaten",
@@ -2482,31 +1982,6 @@
               "type": "field",
               "ref": "it.additional_cost_centers",
               "width": "full"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Fuhrpark",
-          "variant": "fuhrpark",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "fuhrpark.car",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "fuhrpark.car_class",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "fuhrpark.car_from",
-              "width": "half"
             }
           ]
         }
