@@ -1853,6 +1853,17 @@
           "items": [
             {
               "type": "note",
+              "text": "Bitte zuerst die Position wählen – danach erscheint hier der Dienstwagen (oder ein Hinweis, falls für die Position keiner vorgesehen ist).",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": {
+                "not": {
+                  "truthy": "personal.position"
+                }
+              }
+            },
+            {
+              "type": "note",
               "text": "Für diese Position ist kein Dienstwagen vorgesehen.",
               "tone": "warning",
               "width": "full",
