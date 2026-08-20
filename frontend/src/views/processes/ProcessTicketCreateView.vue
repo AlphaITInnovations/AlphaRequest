@@ -67,6 +67,9 @@ function removeWatcher(watcherId: string) {
   pendingWatchers.value = pendingWatchers.value.filter((w) => w.id !== watcherId)
 }
 
+/** Anzeigename der/des Ersteller:in – ist immer Beobachter:in (fester Chip). */
+const selfWatcherName = computed(() => auth.user?.displayName || auth.user?.id || 'Ich')
+
 /**
  * Welche Felder die erstellende Person sehen und ausfüllen darf, sagt der Server
  * (GET /processes/{key}/field-access). Selbst herleiten kann das Frontend es
@@ -338,7 +341,14 @@ onMounted(async () => {
               <!-- Beobachter:innen: Auswahl wird nach dem Anlegen eingetragen. -->
               <div class="card-section">
                 <h3 class="section-title mb-2">Beobachter:innen</h3>
-                <ul v-if="pendingWatchers.length" class="flex flex-wrap gap-2 mb-2">
+                <ul class="flex flex-wrap gap-2 mb-2">
+                  <!-- Ersteller:in ist immer Beobachter:in (serverseitig automatisch) –
+                       fest vorausgewählt, nicht entfernbar. -->
+                  <li class="flex items-center gap-1.5 pl-2.5 pr-2.5 py-1 rounded-full text-xs
+                             bg-[#3EAAB8]/15 text-[#3EAAB8]">
+                    <span>{{ selfWatcherName }}</span>
+                    <span class="text-[10px] opacity-70">(Ersteller:in)</span>
+                  </li>
                   <li v-for="w in pendingWatchers" :key="w.id"
                       class="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs
                              bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-200">
@@ -347,7 +357,6 @@ onMounted(async () => {
                             class="text-gray-400 hover:text-red-500" :aria-label="`${w.name} entfernen`">✕</button>
                   </li>
                 </ul>
-                <p v-else class="text-sm text-gray-400 italic mb-2">Noch niemand ausgewählt.</p>
                 <UserSelect v-if="watcherAuswaehlbar.length" :model-value="watcherAuswahl" label=""
                             placeholder="Person suchen und hinzufügen…"
                             :show-users="true" :show-groups="false" :users="watcherAuswaehlbar"
