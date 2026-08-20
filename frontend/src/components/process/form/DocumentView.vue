@@ -1,13 +1,20 @@
 <script setup lang="ts">
 /**
- * Dokument-Phase (view='document'): eine HTML-Vorlage mit {{feld.key}}-
- * Platzhaltern wird mit den Auftragsdaten vorausgefüllt, in einem Inline-Editor
- * (contenteditable) angezeigt und als Word (.docx) exportiert (Drucken → PDF
- * geht über den Browser). Genutzt z. B. für den Arbeitsvertrag.
+ * Dokument-Phase (view='document') – ZWEI Modi, die sich aus der Definition
+ * ergeben (kein Zugriff auf den Manage-Endpunkt nötig):
  *
- * Sicherheit: die VORLAGE ist admin-verfasst (vertrauenswürdiges HTML), die
- * eingesetzten WERTE stammen aus Nutzereingaben und werden deshalb escaped, bevor
- * sie ins innerHTML gehen. Der Word-Export escaped serverseitig ohnehin erneut.
+ *  1. .docx-VORLAGE (Standard, `document.templateHtml` leer): eine im Editor
+ *     hochgeladene Word-Datei ist die Vorlage. Beim Export füllt der SERVER die
+ *     {{marker}} aus den Auftragswerten (Zuordnung = `document.bindings`) und
+ *     lässt alles andere im Dokument unverändert. Kein Inline-Editor – die Datei
+ *     kommt fertig zurück; übrige Lücken füllt Sekretariat GL in Word nach.
+ *
+ *  2. HTML-VORLAGE (Alt-Weg, `document.templateHtml` gesetzt): eine HTML-Vorlage
+ *     mit {{feld.key}} wird clientseitig vorausgefüllt, inline bearbeitet und der
+ *     Stand serverseitig nach .docx gewandelt.
+ *
+ * Sicherheit (nur HTML-Modus): die VORLAGE ist admin-verfasst, die WERTE stammen
+ * aus Nutzereingaben und werden vor dem innerHTML escaped.
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import type { OptionSources, PhaseDef, ProcessDefinition, ProcessTicketOut } from '@/types/process'
@@ -34,49 +41,83 @@ const editor = ref<HTMLElement | null>(null)
 
 const catalog = computed(() => new Map(props.definition.fields.map((f) => [f.key, f])))
 
+/** .docx-Modus, sobald KEINE HTML-Vorlage hinterlegt ist (der Normalfall). */
+const isHtml = computed(() => !!spec.value?.templateHtml?.trim())
+
+/** Roh-Text eines Platzhalters: {{title}}/{{id}} plus jedes Katalog-Feld. */
+function rawValue(token: string): string {
+  if (token === 'title') return String(props.ticket.title ?? '')
+  if (token === 'id') return String(props.ticket.id ?? '')
+  const f = catalog.value.get(token)
+  if (!f) return ''
+  const text = fieldValueText(f, (props.ticket.values ?? {})[token], props.sources)
+  return text === '—' ? '' : text   // leeres Feld → leere Stelle, kein Strich
+}
+
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-/** Platzhalter-Wert (escaped): {{title}}/{{id}} plus jedes Katalog-Feld. */
-function resolve(token: string): string {
-  if (token === 'title') return esc(String(props.ticket.title ?? ''))
-  if (token === 'id') return esc(String(props.ticket.id ?? ''))
-  const f = catalog.value.get(token)
-  if (!f) return ''
-  const text = fieldValueText(f, (props.ticket.values ?? {})[token], props.sources)
-  return esc(text === '—' ? '' : text)   // leeres Feld → leere Stelle, kein Strich
-}
-
-const gefuelltHtml = computed(() => renderMailTemplate(spec.value?.templateHtml ?? '', resolve))
 const dateiname = computed(() =>
-  renderMailTemplate(spec.value?.filename ?? 'Dokument', resolve).trim() || 'Dokument')
+  renderMailTemplate(spec.value?.filename ?? 'Dokument', rawValue).trim() || 'Dokument')
 
-/** Editor-Inhalt EINMAL setzen – nicht reaktiv (sonst würde jede Ticket-Aktualisierung
- *  die Anpassungen des Bearbeiters überschreiben). Ticket-Wechsel füllt neu. */
-function fuelle() {
-  if (editor.value) editor.value.innerHTML = gefuelltHtml.value
-}
-onMounted(fuelle)
-watch(() => props.ticket.id, fuelle)
-
-async function wordExport() {
-  const html = editor.value?.innerHTML ?? gefuelltHtml.value
-  busy.value = true
-  let url: string | null = null
+/** Datei herunterladen (Blob → temporärer Link). */
+function download(blob: Blob) {
+  const url = URL.createObjectURL(blob)
   try {
-    const blob = await exportTicketDocument(props.ticket.id, html, dateiname.value)
-    url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download = `${dateiname.value}.docx`
     document.body.appendChild(a)
     a.click()
     a.remove()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+}
+
+// ── .docx-Modus ──────────────────────────────────────────────────────────────
+
+/** Was automatisch aus dem Auftrag eingesetzt wird (aus `document.bindings`). */
+const boundPreview = computed(() =>
+  Object.entries(spec.value?.bindings ?? {}).map(([marker, fieldKey]) => {
+    const f = catalog.value.get(fieldKey)
+    return { marker, label: f?.label || fieldKey, value: rawValue(fieldKey) }
+  }))
+
+async function docxExport() {
+  busy.value = true
+  try {
+    // Kein HTML: der Server füllt die hinterlegte Vorlage selbst.
+    download(await exportTicketDocument(props.ticket.id, { filename: dateiname.value }))
+  } catch (e) {
+    showToast(errorMessage(e, 'Export fehlgeschlagen'), false)
+  } finally {
+    busy.value = false
+  }
+}
+
+// ── HTML-Modus (Alt-Weg) ─────────────────────────────────────────────────────
+
+const gefuelltHtml = computed(() =>
+  renderMailTemplate(spec.value?.templateHtml ?? '', (t) => esc(rawValue(t))))
+
+/** Editor-Inhalt EINMAL setzen – nicht reaktiv (sonst überschriebe jede Ticket-
+ *  Aktualisierung die Anpassungen des Bearbeiters). Ticket-Wechsel füllt neu. */
+function fuelle() {
+  if (editor.value) editor.value.innerHTML = gefuelltHtml.value
+}
+onMounted(() => { if (isHtml.value) fuelle() })
+watch(() => props.ticket.id, () => { if (isHtml.value) fuelle() })
+
+async function htmlExport() {
+  const html = editor.value?.innerHTML ?? gefuelltHtml.value
+  busy.value = true
+  try {
+    download(await exportTicketDocument(props.ticket.id, { html, filename: dateiname.value }))
   } catch (e) {
     showToast(errorMessage(e, 'Word-Export fehlgeschlagen'), false)
   } finally {
-    if (url) { const u = url; setTimeout(() => URL.revokeObjectURL(u), 0) }
     busy.value = false
   }
 }
@@ -101,29 +142,67 @@ function drucken() {
     <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
       <h3 class="section-title mb-0">{{ spec?.title || 'Dokument' }}</h3>
       <div class="flex items-center gap-2">
-        <button v-if="!readonly" @click="fuelle" :disabled="busy" class="btn-secondary text-xs">
-          Zurücksetzen
-        </button>
-        <button @click="drucken" :disabled="busy" class="btn-secondary text-xs">
-          Drucken / PDF
-        </button>
-        <button v-if="!readonly" @click="wordExport" :disabled="busy"
+        <!-- HTML-Modus: Zurücksetzen / Drucken / Word -->
+        <template v-if="isHtml">
+          <button v-if="!readonly" @click="fuelle" :disabled="busy" class="btn-secondary text-xs">
+            Zurücksetzen
+          </button>
+          <button @click="drucken" :disabled="busy" class="btn-secondary text-xs">
+            Drucken / PDF
+          </button>
+          <button v-if="!readonly" @click="htmlExport" :disabled="busy"
+                  class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
+                         disabled:opacity-40 transition">
+            {{ busy ? 'Wird erzeugt…' : 'Als Word exportieren' }}
+          </button>
+        </template>
+        <!-- .docx-Modus: nur Export (der Server füllt die Vorlage) -->
+        <button v-else @click="docxExport" :disabled="busy"
                 class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
                        disabled:opacity-40 transition">
-          {{ busy ? 'Wird erzeugt…' : 'Als Word exportieren' }}
+          {{ busy ? 'Wird erzeugt…' : 'Als Word (.docx) exportieren' }}
         </button>
       </div>
     </div>
-    <p class="text-xs text-gray-400 mb-2">
-      <template v-if="readonly">Vorschau mit den Auftragsdaten. Bearbeiten und Word-Export
-        über die Bearbeitungsansicht.</template>
-      <template v-else>Vorschau mit den Auftragsdaten – direkt im Text anpassbar. Der Export
-        nimmt genau diesen Stand.</template>
-    </p>
-    <div ref="editor" :contenteditable="!readonly" spellcheck="false"
-         class="doc-editor rounded-xl border border-gray-200 dark:border-white/10
-                bg-white dark:bg-[#1A2130] text-gray-900 dark:text-gray-100 p-6 min-h-[320px]
-                text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
+
+    <!-- .docx-Modus: Zusammenfassung statt Inline-Editor -->
+    <template v-if="!isHtml">
+      <p class="text-xs text-gray-400 mb-3">
+        Der Export erzeugt die Word-Datei aus der hinterlegten Vorlage. Zugeordnete
+        Felder werden automatisch eingesetzt; übrige Lücken bitte anschließend in
+        Word nachfüllen.
+      </p>
+      <div v-if="boundPreview.length"
+           class="rounded-xl border border-gray-200 dark:border-white/10 divide-y
+                  divide-gray-100 dark:divide-white/5">
+        <div v-for="b in boundPreview" :key="b.marker"
+             class="flex items-baseline justify-between gap-4 px-4 py-2 text-sm">
+          <span class="text-gray-500 dark:text-gray-400 shrink-0">{{ b.label }}</span>
+          <span class="text-gray-900 dark:text-gray-100 text-right truncate"
+                :class="{ 'italic text-gray-400 dark:text-gray-500': !b.value }">
+            {{ b.value || '(leer – in Word nachfüllen)' }}
+          </span>
+        </div>
+      </div>
+      <p v-else class="text-sm text-gray-400 italic">
+        Für diese Phase ist noch keine automatische Feld-Zuordnung hinterlegt – die
+        Vorlage wird unverändert exportiert.
+      </p>
+    </template>
+
+    <!-- HTML-Modus: Inline-Editor -->
+    <template v-else>
+      <p class="text-xs text-gray-400 mb-2">
+        <template v-if="readonly">Vorschau mit den Auftragsdaten. Bearbeiten und Word-Export
+          über die Bearbeitungsansicht.</template>
+        <template v-else>Vorschau mit den Auftragsdaten – direkt im Text anpassbar. Der Export
+          nimmt genau diesen Stand.</template>
+      </p>
+      <div ref="editor" :contenteditable="!readonly" spellcheck="false"
+           class="doc-editor rounded-xl border border-gray-200 dark:border-white/10
+                  bg-white dark:bg-[#1A2130] text-gray-900 dark:text-gray-100 p-6 min-h-[320px]
+                  text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
+    </template>
   </div>
 </template>
 

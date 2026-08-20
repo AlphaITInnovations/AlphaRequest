@@ -38,6 +38,38 @@ export async function getPublished(key: string): Promise<ProcessOut> {
   return data.data
 }
 
+// ── Dokument-Vorlage (.docx) je Prozess ───────────────────────────────────────
+
+export interface DocumentTemplateInfo {
+  exists: boolean
+  filename?: string
+  size?: number
+  /** Alle in der Vorlage gefundenen {{marker}} (zum Zuordnen). */
+  placeholders?: string[]
+  uploaded_at?: string
+  uploaded_by?: string | null
+}
+
+export async function getDocumentTemplate(key: string): Promise<DocumentTemplateInfo> {
+  const { data } = await client.get(`/processes/${encodeURIComponent(key)}/document-template`)
+  return data.data
+}
+
+export async function uploadDocumentTemplate(key: string, file: File): Promise<DocumentTemplateInfo> {
+  const form = new FormData()
+  form.append('file', file)
+  // Content-Type NICHT setzen: der Browser ergänzt die multipart-Boundary
+  // (der Axios-Client setzt global JSON – hier mit undefined überschreiben).
+  const { data } = await client.post(
+    `/processes/${encodeURIComponent(key)}/document-template`, form,
+    { headers: { 'Content-Type': undefined } })
+  return data.data
+}
+
+export async function deleteDocumentTemplate(key: string): Promise<void> {
+  await client.delete(`/processes/${encodeURIComponent(key)}/document-template`)
+}
+
 /** Rohe Definition einer Version (Export-Datei). */
 /**
  * Feld-Auskunft für den Anlege-Dialog. Beim Anlegen gibt es noch kein Ticket und

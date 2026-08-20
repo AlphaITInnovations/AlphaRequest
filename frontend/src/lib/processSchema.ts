@@ -243,11 +243,13 @@ export function blankApproval(question = ''): ApprovalSpec {
 /** Leere Dokument-Vorlage (view=document). Ein Start-Template, damit die Phase
  *  gültig ist; die eigentliche Vorlage wird darunter bearbeitet. */
 export function blankDocument(): DocumentSpec {
+  // Neuer Standard: eine hochgeladene .docx-Vorlage + Marker-Zuordnung (bindings).
+  // templateHtml bleibt leer (nur noch Alt-Prozesse nutzen den HTML-Weg).
   return {
-    templateHtml: '<h1>Dokument</h1>\n<p>Hier die Vorlage bearbeiten. Platzhalter wie '
-      + '{{base.first_name}} werden mit den Auftragsdaten gefüllt.</p>',
-    filename: 'Dokument',
+    templateHtml: '',
+    filename: 'Dokument_{{base.last_name}}',
     title: 'Dokument',
+    bindings: {},
   }
 }
 

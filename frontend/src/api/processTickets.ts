@@ -34,10 +34,13 @@ export async function getTicket(id: number): Promise<ProcessTicketOut> {
  * Der Server wandelt reines HTML→docx; Antwort ist ein Blob (Download).
  */
 export async function exportTicketDocument(
-  id: number, html: string, filename: string,
+  id: number, opts: { html?: string; filename?: string } = {},
 ): Promise<Blob> {
+  // Mit hochgeladener .docx-Vorlage fuellt der Server selbst (html irrelevant);
+  // ohne Vorlage kommt das im Client gefuellte HTML mit.
   const { data } = await client.post(
-    `/process-tickets/${id}/document:export`, { html, filename },
+    `/process-tickets/${id}/document:export`,
+    { html: opts.html, filename: opts.filename },
     { responseType: 'blob' })
   return data as Blob
 }

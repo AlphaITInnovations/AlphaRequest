@@ -242,6 +242,10 @@ export interface DocumentSpec {
   templateHtml: string
   filename: string
   title: string
+  /** Marker→Feld-Zuordnung für eine hochgeladene .docx-Vorlage: {{marker}} wird
+   *  beim Export durch den Wert des Felds ersetzt; nicht zugeordnete Marker
+   *  bleiben als Lücke. */
+  bindings: Record<string, string>
 }
 
 export interface PhaseDef {

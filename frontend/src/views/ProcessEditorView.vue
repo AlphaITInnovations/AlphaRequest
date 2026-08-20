@@ -328,6 +328,7 @@ onUnmounted(() => {
                                 :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
                                 :field-labels="ed.fieldLabels.value" :taken-ids="ed.automationIds.value"
                                 :phases="ed.draft.value.phases"
+                                :process-key="ed.draft.value.key"
                                 :readonly="ed.readonly.value"
                                 @update:model-value="setPhase" />
               </template>

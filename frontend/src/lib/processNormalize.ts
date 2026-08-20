@@ -198,10 +198,17 @@ export function normalizeAutomation(v: any): Automation {
  *  bei jeder Ansicht außer view=document). Ist sie DA, werden alle Keys gefüllt. */
 function normDocument(v: any): DocumentSpec | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const bindings: Record<string, string> = {}
+  if (v.bindings && typeof v.bindings === 'object' && !Array.isArray(v.bindings)) {
+    for (const [k, val] of Object.entries(v.bindings)) {
+      if (val) bindings[String(k)] = String(val)
+    }
+  }
   return {
     templateHtml: String(v.templateHtml ?? ''),
     filename: String(v.filename ?? 'Dokument'),
     title: String(v.title ?? 'Dokument'),
+    bindings,
   }
 }
 

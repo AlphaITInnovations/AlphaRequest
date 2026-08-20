@@ -2,7 +2,7 @@
 /** Detail-Editor der EINSTELLUNGEN einer Phase: Stammdaten, Freigabe,
  *  Zuständigkeit, Regeln und Automationen. Die Felder samt Darstellung baut
  *  der Formular-Baukasten (FormBuilder.vue) – hier bewusst NICHT nochmal. */
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type {
   ApprovalSpec, Condition, DocumentSpec, FieldDef, PhaseConstraint, PhaseDef, PhaseKind, PhaseView,
 } from '@/types/process'
@@ -11,6 +11,12 @@ import {
   PHASE_VIEWS, PHASE_VIEW_LABEL, STATUS_LABEL, blankApproval, blankDocument,
   isValidPhaseKey, phaseKindPatch,
 } from '@/lib/processSchema'
+import {
+  deleteDocumentTemplate, getDocumentTemplate, uploadDocumentTemplate,
+  type DocumentTemplateInfo,
+} from '@/api/processes'
+import { errorMessage } from '@/lib/processErrors'
+import { useToast } from '@/composables/useToast'
 import ApprovalEditor from './ApprovalEditor.vue'
 import ResponsibilityEditor from './ResponsibilityEditor.vue'
 import ConditionEditor from './ConditionEditor.vue'
@@ -27,6 +33,8 @@ const props = defineProps<{
   takenIds?: string[]
   /** Alle Phasen des Prozesses – für den Rücksprung einer Freigabe nötig. */
   phases?: { key: string; label: string | null }[]
+  /** Prozess-Schlüssel – nötig, um die .docx-Vorlage hoch-/runterzuladen. */
+  processKey?: string
   readonly?: boolean
 }>()
 
@@ -57,6 +65,105 @@ function patchDocument(part: Partial<DocumentSpec>) {
   if (!props.modelValue.document) return
   patch({ document: { ...props.modelValue.document, ...part } })
 }
+
+// ── .docx-Vorlage (nur bei view=document) ────────────────────────────────────
+// Anders als der Rest des Entwurfs liegt die Vorlage-DATEI NICHT in der
+// Definition, sondern als Blob am Prozess (Installationsdatei). Deshalb hier
+// direkte API-Aufrufe statt patch(); die {{marker}}-ZUORDNUNG dagegen ist
+// Definition (document.bindings) und wandert über patchDocument in den Entwurf.
+const { showToast } = useToast()
+const template = ref<DocumentTemplateInfo | null>(null)
+const tplLoading = ref(false)
+const tplBusy = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+const placeholders = computed(() => template.value?.placeholders ?? [])
+
+async function loadTemplate() {
+  if (!props.processKey || props.modelValue.view !== 'document') { template.value = null; return }
+  tplLoading.value = true
+  try {
+    template.value = await getDocumentTemplate(props.processKey)
+  } catch {
+    template.value = null       // Kein Vorlage-Endpunkt / kein Zugriff: still degradieren.
+  } finally {
+    tplLoading.value = false
+  }
+}
+onMounted(loadTemplate)
+watch(() => [props.processKey, props.index, props.modelValue.view], loadTemplate)
+
+function pickFile() { fileInput.value?.click() }
+
+async function onFilePicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''              // dieselbe Datei erneut wählbar machen
+  if (!file || !props.processKey) return
+  if (!file.name.toLowerCase().endsWith('.docx')) {
+    showToast('Bitte eine .docx-Datei wählen.', false); return
+  }
+  tplBusy.value = true
+  try {
+    template.value = await uploadDocumentTemplate(props.processKey, file)
+    pruneBindings()             // Zuordnungen auf die neuen Marker eindampfen
+    showToast('Vorlage hochgeladen.')
+  } catch (err) {
+    showToast(errorMessage(err, 'Upload fehlgeschlagen.'), false)
+  } finally {
+    tplBusy.value = false
+  }
+}
+
+async function removeTemplate() {
+  if (!props.processKey) return
+  tplBusy.value = true
+  try {
+    await deleteDocumentTemplate(props.processKey)
+    template.value = { exists: false }
+  } catch (err) {
+    showToast(errorMessage(err, 'Löschen fehlgeschlagen.'), false)
+  } finally {
+    tplBusy.value = false
+  }
+}
+
+function bindingFor(marker: string): string {
+  return props.modelValue.document?.bindings?.[marker] ?? ''
+}
+function setBinding(marker: string, fieldKey: string) {
+  const next = { ...(props.modelValue.document?.bindings ?? {}) }
+  if (fieldKey) next[marker] = fieldKey
+  else delete next[marker]
+  patchDocument({ bindings: next })
+}
+/** Zuordnungen zu nicht mehr vorhandenen Markern verwerfen (nach Neu-Upload). */
+function pruneBindings() {
+  const cur = props.modelValue.document?.bindings ?? {}
+  const known = new Set(placeholders.value)
+  const next: Record<string, string> = {}
+  for (const [k, v] of Object.entries(cur)) if (known.has(k)) next[k] = v
+  if (Object.keys(next).length !== Object.keys(cur).length) patchDocument({ bindings: next })
+}
+
+/** Auswählbare Ticket-Felder für die Zuordnung (mit Label). */
+const bindableFields = computed(() =>
+  (props.fieldKeys ?? []).map((k) => ({ key: k, label: props.fieldLabels?.[k] || k })))
+
+// Doppelte geschweifte Klammern gehören NICHT direkt ins <template> (der Vue-
+// Compiler liest sie als Interpolation) – darum als Script-Konstanten/Helfer.
+const PH_HINT = '{{…}}'
+function markerLabel(m: string): string { return '{{' + m + '}}' }
+
+/** Fertig zugeordnete Marker (für die Fortschritts-Anzeige). */
+const mappedCount = computed(() =>
+  placeholders.value.filter((m) => !!bindingFor(m)).length)
+
+/** Nur Anzeige: kürzt einen langen Datumsstring auf Datum. */
+const uploadedAtLabel = computed(() => {
+  const raw = template.value?.uploaded_at
+  return raw ? raw.replace('T', ' ').slice(0, 16) : null
+})
 
 /** Nur Phasen VOR dieser taugen als Rücksprung-Ziel. */
 const earlierPhases = computed(() => (props.phases ?? []).slice(0, props.index))
@@ -161,16 +268,15 @@ function removeConstraint(i: number) {
 
     <!-- Dokument-Vorlage (nur bei der Ansicht „Dokument") -->
     <section v-if="modelValue.view === 'document' && modelValue.document" class="card-section">
-      <h3 class="section-title">Dokument-Vorlage</h3>
+      <h3 class="section-title">Dokument-Vorlage (.docx)</h3>
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
-        HTML-Vorlage (z. B. Arbeitsvertrag). Platzhalter in doppelten geschweiften
-        Klammern werden mit den Auftragsdaten gefüllt – etwa
-        <span class="font-mono text-xs">base.first_name</span>,
-        <span class="font-mono text-xs">base.last_name</span>; zusätzlich
-        <span class="font-mono text-xs">title</span> und
-        <span class="font-mono text-xs">id</span>. Zur Laufzeit lässt sich der Text
-        anpassen und als Word/PDF exportieren.
+        Word-Vorlage (z. B. Arbeitsvertrag) hochladen und die
+        <span class="font-mono text-xs">{{ PH_HINT }}</span>-Platzhalter darin
+        einzelnen Ticket-Feldern zuordnen. Beim Export bleibt alles andere im
+        Dokument unverändert; nicht zugeordnete Platzhalter werden als Lücke
+        (Pünktchen) ausgegeben – zum Nachfüllen in Word.
       </p>
+
       <div class="grid md:grid-cols-2 gap-3 mb-3">
         <div>
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titel (Überschrift)</label>
@@ -181,14 +287,69 @@ function removeConstraint(i: number) {
         <div>
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Dateiname (Export)</label>
           <input :value="modelValue.document.filename" :disabled="readonly" class="afi w-full font-mono text-sm"
-                 placeholder="Arbeitsvertrag_{ Platzhalter erlaubt }"
+                 placeholder="z. B. Arbeitsvertrag_Nachname"
                  @input="patchDocument({ filename: ($event.target as HTMLInputElement).value })" />
         </div>
       </div>
-      <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Vorlage (HTML)</label>
-      <textarea :value="modelValue.document.templateHtml" :disabled="readonly" rows="14" spellcheck="false"
-                class="afi w-full font-mono text-xs resize-y"
-                @input="patchDocument({ templateHtml: ($event.target as HTMLTextAreaElement).value })" />
+
+      <p v-if="!processKey" class="text-sm text-amber-600 dark:text-amber-400">
+        Bitte den Prozess zuerst speichern – danach lässt sich die Vorlage hochladen.
+      </p>
+
+      <template v-else>
+        <input ref="fileInput" type="file" accept=".docx" class="hidden" @change="onFilePicked" />
+
+        <p v-if="tplLoading" class="text-sm text-gray-400 italic">Vorlage wird geladen …</p>
+
+        <!-- Noch keine Vorlage -->
+        <div v-else-if="!template?.exists"
+             class="rounded-xl border border-dashed border-gray-300 dark:border-white/15 px-4 py-6 text-center">
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">Noch keine Vorlage hinterlegt.</p>
+          <button v-if="!readonly" class="btn-primary text-sm" :disabled="tplBusy" @click="pickFile">
+            {{ tplBusy ? 'Lädt hoch …' : '.docx-Vorlage hochladen' }}
+          </button>
+        </div>
+
+        <!-- Vorlage vorhanden -->
+        <div v-else class="space-y-3">
+          <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200
+                      dark:border-white/10 px-4 py-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+                {{ template.filename }}
+              </p>
+              <p class="text-[11px] text-gray-400">
+                {{ placeholders.length }} Platzhalter · {{ mappedCount }} zugeordnet
+                <span v-if="uploadedAtLabel"> · {{ uploadedAtLabel }}</span>
+                <span v-if="template.uploaded_by"> · {{ template.uploaded_by }}</span>
+              </p>
+            </div>
+            <div v-if="!readonly" class="flex items-center gap-2 shrink-0">
+              <button class="btn-secondary text-xs py-1" :disabled="tplBusy" @click="pickFile">Ersetzen</button>
+              <button class="text-gray-400 hover:text-red-500 px-1" :disabled="tplBusy"
+                      title="Vorlage entfernen" @click="removeTemplate">✕</button>
+            </div>
+          </div>
+
+          <!-- Zuordnung je Platzhalter -->
+          <div v-if="placeholders.length" class="space-y-2">
+            <label class="block text-xs text-gray-500 dark:text-gray-400">Platzhalter zuordnen</label>
+            <div v-for="m in placeholders" :key="m"
+                 class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-2">
+              <span class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate"
+                    :title="m">{{ markerLabel(m) }}</span>
+              <select :value="bindingFor(m)" :disabled="readonly" class="afi w-full text-sm"
+                      @change="setBinding(m, ($event.target as HTMLSelectElement).value)">
+                <option value="">— manuell (in Word nachfüllen) —</option>
+                <option v-for="f in bindableFields" :key="f.key" :value="f.key">{{ f.label }}</option>
+              </select>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400 italic">
+            In dieser Vorlage wurden keine {{ PH_HINT }}-Platzhalter gefunden.
+          </p>
+        </div>
+      </template>
     </section>
 
     <!-- Zuständigkeit -->
