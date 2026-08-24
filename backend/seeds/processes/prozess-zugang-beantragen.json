@@ -3277,23 +3277,7 @@
       "document": {
         "title": "Arbeitsvertrag",
         "filename": "Arbeitsvertrag_{{base.last_name}}_{{base.first_name}}",
-        "templateHtml": "",
-        "bindings": {
-          "vorname": "base.first_name",
-          "nachname": "base.last_name",
-          "privat_straße_und_hausnummer": "personal.private_street",
-          "privat_plz": "personal.private_zip",
-          "privat_ort": "personal.private_city",
-          "geburtsdatum": "personal.geburtsdatum",
-          "geburtsort": "personal.geburtsort",
-          "arbeitsbeginn": "base.start_date",
-          "titel": "base.title",
-          "niederlassung": "base.location",
-          "verguetung_probezeit": "konditionen.gehalt_probezeit",
-          "verguetung": "konditionen.gehalt",
-          "firmenwagen_gruppe": "fuhrpark.car_class",
-          "urlaubstage": "it.timebutler.vacation_year"
-        }
+        "templateHtml": ""
       },
       "fields": [],
       "layout": [],

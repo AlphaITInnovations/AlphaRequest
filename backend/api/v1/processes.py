@@ -70,12 +70,6 @@ def _require_editable(key: Optional[str]) -> None:
                         f"„{key}“ ist ein System-Prozess und nicht änderbar. Er wird mit der "
                         "Anwendung ausgeliefert und beim Start aktuell gehalten. Für eine "
                         "eigene Fassung: duplizieren.")
-    if seeds.is_auto_managed(key):
-        raise api_error(403, ErrorCode.SYSTEM_PROCESS_READONLY,
-                        f"„{key}“ wird automatisch aus der Auslieferung (seeds/auto) gepflegt "
-                        "und ist im UI nicht änderbar. Änderungen laufen über die JSON; beim "
-                        "Start wird daraus eine neue Version veröffentlicht. Für eine eigene "
-                        "Fassung: duplizieren.")
 
 
 def _audit(user: dict, action: str, key: str, **details) -> None:
@@ -113,9 +107,6 @@ class ProcessOut(BaseModel):
     #: SYSTEM_PROCESS_READONLY). Die Oberfläche soll die Knöpfe deshalb gar nicht
     #: erst anbieten – abgeleitet aus dem Key, kein DB-Feld.
     is_system: bool = False
-    #: Auto-verwaltet (seeds/auto): ebenfalls im UI schreibgeschützt – die JSON ist
-    #: die Wahrheit, der Start hält den Prozess aktuell. Abgeleitet aus dem Key.
-    is_auto_managed: bool = False
     #: Global deaktiviert? Dann lassen sich keine neuen Aufträge anlegen. Eine
     #: key-weite Eigenschaft (process_state), unabhängig von der Version – im
     #: Katalog und in der veröffentlichten Ansicht gefüllt.
@@ -136,7 +127,6 @@ def _out(row: dict) -> ProcessOut:
     daten = {k: row.get(k) for k in ProcessOut.model_fields}
     # Aus dem Key abgeleitet: die Zeile führt kein solches Feld (und soll keins).
     daten["is_system"] = seeds.is_system_process(row.get("key"))
-    daten["is_auto_managed"] = seeds.is_auto_managed(row.get("key"))
     # Nicht-optionales Bool: die meisten Zeilen führen die Spalte nicht (nur der
     # Katalog/die veröffentlichte Ansicht setzen sie danach explizit).
     daten["disabled"] = bool(row.get("disabled"))

@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from backend.api.v1 import processes as papi
 from backend.core.dependencies import get_current_user
 from backend.main import _install_error_handlers
-from backend.seeds import AUTO_SEED_DIR
+from backend.seeds import PROCESS_SEED_DIR
 
 ADMIN = {"id": "u_admin", "displayName": "Admin", "permissions": ["admin"]}
 
@@ -59,15 +59,13 @@ def ctx(monkeypatch):
 
 
 def _onboarding_roh() -> dict:
-    # zugang-beantragen ist ein auto-verwalteter Prozess (seeds/auto). Er dient hier
-    # weiter als realer Beispiel-Seed für den Import-Endpunkt (Platzhalter-Auflösung).
-    return json.loads((AUTO_SEED_DIR / "prozess-zugang-beantragen.json")
+    return json.loads((PROCESS_SEED_DIR / "prozess-zugang-beantragen.json")
                       .read_text(encoding="utf-8"))
 
 
 def test_import_loest_platzhalter_auf(ctx):
     r = ctx["client"].post("/processes:import",
-                           json={"targetKey": "onboarding-import-test",
+                           json={"targetKey": "zugang-beantragen",
                                  "definition": _onboarding_roh()})
     assert r.status_code == 200, r.text
     defn = ctx["db"].created[0]["definition"]
@@ -83,7 +81,7 @@ def test_import_faellt_geschlossen_wenn_gruppen_fehlen(ctx, monkeypatch):
     monkeypatch.setattr(ctx["groups_db"], "get_groups",
                         lambda: [{"id": "gid-it", "name": "IT"}])
     r = ctx["client"].post("/processes:import",
-                           json={"targetKey": "onboarding-import-test",
+                           json={"targetKey": "zugang-beantragen",
                                  "definition": _onboarding_roh()})
     assert r.status_code == 422
     err = r.json()["error"]
@@ -107,7 +105,7 @@ def test_import_erlaubt_unbekannte_echte_ids(ctx):
     }.items():
         text = text.replace(ph, ersatz)
     r = ctx["client"].post("/processes:import",
-                           json={"targetKey": "onboarding-import-test",
+                           json={"targetKey": "zugang-beantragen",
                                  "definition": json.loads(text)})
     assert r.status_code == 200, r.text
 

@@ -25,8 +25,6 @@ describe('isSystemProcess', () => {
   it('folgt allein dem Merkmal des Servers', () => {
     expect(isSystemProcess({ is_system: true })).toBe(true)
     expect(isSystemProcess({ is_system: false })).toBe(false)
-    expect(isSystemProcess({ is_auto_managed: true })).toBe(true)   // auto-verwaltet = read-only
-    expect(isSystemProcess({ is_system: false, is_auto_managed: false })).toBe(false)
   })
 
   it('rät nicht anhand des Schlüssels', () => {

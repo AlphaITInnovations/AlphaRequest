@@ -13,9 +13,7 @@ import json
 import pytest
 
 from backend.schemas.process_definition import ProcessDefinition
-from backend.seeds import (
-    AUTO_SEED_DIR, PROCESS_SEED_DIR, auto_seed_files, process_seed_files,
-)
+from backend.seeds import PROCESS_SEED_DIR, process_seed_files
 from backend.services import seed_definitions as sd
 
 
@@ -105,15 +103,10 @@ def _minimal(**extra) -> dict:
 # ── Die ausgelieferten Seeds ─────────────────────────────────────────────────
 
 def test_es_sind_zehn_seeds_und_sie_liegen_unter_backend():
-    # Neun manuelle Seeds unter processes/, plus der auto-verwaltete
-    # zugang-beantragen unter auto/ – zusammen zehn ausgelieferte Prozesse.
-    manuell = process_seed_files()
-    auto = auto_seed_files()
-    assert len(manuell) == 9, [p.name for p in manuell]
-    assert [p.name for p in auto] == ["prozess-zugang-beantragen.json"]
-    # Pfade relativ zu __file__, nicht zum cwd – im Container ist das cwd /app.
+    dateien = process_seed_files()
+    assert len(dateien) == 10, [p.name for p in dateien]
+    # Pfad relativ zu __file__, nicht zum cwd – im Container ist das cwd /app.
     assert PROCESS_SEED_DIR.parts[-3:] == ("backend", "seeds", "processes")
-    assert AUTO_SEED_DIR.parts[-3:] == ("backend", "seeds", "auto")
 
 
 def test_alle_seeds_validieren_nach_der_aufloesung():
@@ -122,7 +115,7 @@ def test_alle_seeds_validieren_nach_der_aufloesung():
     bekannt = set(index.values())
 
     geprueft = 0
-    for pfad in process_seed_files() + auto_seed_files():
+    for pfad in process_seed_files():
         roh = json.loads(pfad.read_text(encoding="utf-8"))
         aufgeloest = sd.replace_placeholders(roh, mapping)
         assert sd.check_group_refs(aufgeloest, bekannt) == [], pfad.name
@@ -136,7 +129,7 @@ def test_platzhalter_abbildung_deckt_alle_vorkommen_ab():
     """Kein Seed darf einen Platzhalter enthalten, den die Konstante nicht kennt."""
     bekannt = set(sd.PLACEHOLDER_GROUP_NAMES)
     gefunden: set[str] = set()
-    for pfad in process_seed_files() + auto_seed_files():
+    for pfad in process_seed_files():
         text = pfad.read_text(encoding="utf-8")
         gefunden |= set(sd._PLACEHOLDER_RE.findall(text))
     assert gefunden <= bekannt, gefunden - bekannt
@@ -251,9 +244,8 @@ def test_trockenlauf_schreibt_nichts(umgebung):
     report = sd.seed_processes(commit=False, with_permissions=False)
     assert store.created == [] and store.published == []
     assert groups.ensure_aufrufe == []
-    # Acht ohne jede Konfiguration; das Basis-Ticket ist System-Prozess und
-    # zugang-beantragen liegt (auto-verwaltet) nicht mehr in processes/.
-    assert report.erstellt == 8
+    # Neun ohne jede Konfiguration; das Basis-Ticket ist System-Prozess.
+    assert report.erstellt == 9
     assert report.uebersprungen == 1
     fach = [o for o in report.outcomes if o.key != "basis-ticket"]
     assert all(o.aktion == "would_create" for o in fach)
@@ -273,19 +265,17 @@ def test_trockenlauf_meldet_fehlende_gruppen_ohne_sie_anzulegen(monkeypatch):
 
 # ── Commit ───────────────────────────────────────────────────────────────────
 
-def test_commit_legt_die_acht_fachprozesse_an_und_veroeffentlicht(umgebung):
+def test_commit_legt_die_neun_fachprozesse_an_und_veroeffentlicht(umgebung):
     _, store = umgebung
     report = sd.seed_processes(commit=True, with_permissions=False)
 
     assert report.fehler == 0
-    # zugang-beantragen ist auto-verwaltet (seeds/auto) und wird von diesem Lauf
-    # NICHT angefasst – acht Fachprozesse bleiben unter processes/.
-    assert len(store.created) == 8 and len(store.published) == 8
+    assert len(store.created) == 9 and len(store.published) == 9
     assert {k for k, *_ in store.created} == {
         "einstellung", "hardware", "hotelbuchung",
         "marketing-stellenanzeige", "niederlassung-anmelden",
         "niederlassung-schliessen", "niederlassung-umzug",
-        "zugang-sperren"}
+        "zugang-beantragen", "zugang-sperren"}
     # Gespeichert wird die AUFGELÖSTE Definition, kein Platzhalter.
     for _, _, definition_json, *_ in store.created:
         assert "HIER_GRUPPEN_ID" not in definition_json
@@ -314,7 +304,7 @@ def test_commit_legt_fehlende_pflichtgruppen_versteckt_an(monkeypatch):
     assert sorted(report.angelegte_gruppen) == sorted(sd.required_group_names())
     (_, hidden), = groups.ensure_aufrufe
     assert hidden == sd.AUTO_ASSIGNED_GROUP_NAMES
-    assert report.fehler == 0 and len(store.created) == 8
+    assert report.fehler == 0 and len(store.created) == 9
 
 
 def test_nur_ein_prozess_mit_only(umgebung):

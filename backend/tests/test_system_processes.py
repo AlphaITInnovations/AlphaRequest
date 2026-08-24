@@ -513,9 +513,7 @@ def test_trockenlauf_ist_der_standard_und_schreibt_nichts(seed_api):
     d = r.json()["data"]
     assert d["commit"] is False
     assert store.aufrufe == [] and groups.ensure_aufrufe == []
-    # Acht Fach-Prozesse in processes/ (zugang-beantragen ist auto-verwaltet und
-    # liegt in seeds/auto), das Basis-Ticket wird als System-Prozess übersprungen.
-    assert d["created"] == 8 and d["skipped"] == 1 and d["errors"] == 0
+    assert d["created"] == 9 and d["skipped"] == 1 and d["errors"] == 0
     assert all(o["action"] == "would_create"
                for o in d["outcomes"] if o["key"] != SYSTEM_KEY)
 
@@ -547,12 +545,12 @@ def test_fehlende_pflichtgruppen_stehen_im_trockenlauf(api, monkeypatch):
     assert d["errors"] == 0
 
 
-def test_commit_spielt_die_acht_ein(seed_api):
+def test_commit_spielt_die_neun_ein(seed_api):
     client, _state, _groups, store = seed_api
     d = _seed(client, commit=True).json()["data"]
-    assert d["commit"] is True and d["created"] == 8 and d["errors"] == 0
+    assert d["commit"] is True and d["created"] == 9 and d["errors"] == 0
     angelegt = [k for _a, k, _v in store.aufrufe if _a == "create"]
-    assert len(angelegt) == 8 and SYSTEM_KEY not in angelegt
+    assert len(angelegt) == 9 and SYSTEM_KEY not in angelegt
 
 
 def test_system_prozess_wird_uebersprungen_mit_notiz(seed_api):
@@ -583,7 +581,7 @@ def test_seed_wird_auditiert(seed_api, monkeypatch):
     _seed(client, commit=True)
     (e,) = eintraege
     assert e["action"] == "processes_seeded" and e["actor_id"] == "u_admin"
-    assert e["details"]["commit"] is True and e["details"]["created"] == 8
+    assert e["details"]["commit"] is True and e["details"]["created"] == 9
 
 
 def test_kaputte_installation_wird_als_konflikt_gemeldet(api, monkeypatch):
