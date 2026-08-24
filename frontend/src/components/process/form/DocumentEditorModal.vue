@@ -39,10 +39,9 @@ const exporting = ref(false)
 const pdfUrl = ref<string | null>(null)
 let pdfBlob: Blob | null = null
 
-// PDF-Viewer-Parameter: Miniaturen-Leiste aus (mehr Breite) + auf Seitenbreite
-// einpassen (statt 80%), damit die Vorschau gut lesbar ist.
+// PDF-Viewer-Parameter: Miniaturen-Leiste aus (mehr Breite) + Startzoom 100%.
 const pdfSrc = computed(() =>
-  pdfUrl.value ? `${pdfUrl.value}#toolbar=1&navpanes=0&view=FitH` : null)
+  pdfUrl.value ? `${pdfUrl.value}#toolbar=1&navpanes=0&zoom=100` : null)
 
 const manualFields = computed(() => fields.value.filter((f) => !f.bound))
 const autoFields = computed(() => fields.value.filter((f) => f.bound))
