@@ -552,7 +552,8 @@ def _option_text(field, raw) -> str:
     for o in (getattr(field, "options", None) or []):
         if o.value == v:
             return o.label or o.value
-    return v
+    from backend.services.mail_template import de_date
+    return de_date(v)   # ISO-Datum → deutsches Format (24.08.2026)
 
 
 def _fill_text(field, raw) -> str:

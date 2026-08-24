@@ -13,6 +13,19 @@ import type { FieldDef, OptionSources, SubField, Widget } from '@/types/process'
 /** Platzhalter für „kein Wert" – identisch zur Lese-Ansicht. */
 export const EMPTY_TEXT = '—'
 
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
+const ISO_DT = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/
+
+/** ISO-Datum/-Zeit (aus `<input type="date"/"datetime-local">`) → deutsches
+ *  Format: `2026-08-24` → `24.08.2026`. Alles andere bleibt unverändert. */
+export function formatIsoDate(v: string): string {
+  let m = ISO_DATE.exec(v)
+  if (m) return `${m[3]}.${m[2]}.${m[1]}`
+  m = ISO_DT.exec(v)
+  if (m) return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}`
+  return v
+}
+
 /**
  * „Leer" heißt: es steht nichts drin, was man drucken könnte. `false` ist NICHT
  * leer (das ist die Antwort „Nein"), eine leere Liste dagegen schon.
@@ -52,7 +65,7 @@ export function optionLabel(f: FieldDef, raw: unknown, sources?: OptionSources):
   if (f.widget === 'user' || f.optionsSource === 'users') return userName(v, sources)
   if (f.widget === 'group' || f.optionsSource === 'groups') return groupName(v, sources)
   const opt = (f.options ?? []).find((o) => o.value === v)
-  return opt ? (opt.label ?? opt.value) : v
+  return opt ? (opt.label ?? opt.value) : formatIsoDate(v)
 }
 
 /** Der anzeigbare Text eines Feldwertes – Ja/Nein, Options-Beschriftung, Namen. */
@@ -75,9 +88,11 @@ export function fieldValueText(f: FieldDef, raw: unknown, sources?: OptionSource
 export function subValueText(v: unknown): string {
   if (v === null || v === undefined || v === '') return EMPTY_TEXT
   if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
-  if (Array.isArray(v)) return v.length ? v.map((x) => String(x)).join(', ') : EMPTY_TEXT
+  if (Array.isArray(v)) {
+    return v.length ? v.map((x) => formatIsoDate(String(x))).join(', ') : EMPTY_TEXT
+  }
   if (typeof v === 'object') return JSON.stringify(v)
-  return String(v)
+  return formatIsoDate(String(v))
 }
 
 /** Alles, was keine Objekt-Zeile ist, wird zu {} – damit bleiben die Indizes stabil. */

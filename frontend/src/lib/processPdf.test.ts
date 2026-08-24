@@ -265,10 +265,10 @@ describe('buildExportDoc – Wiederholgruppen und Anhänge', () => {
     expect(coll).toEqual({
       kind: 'collection', cols: 12, label: 'Nächte',
       entries: [
-        [{ label: 'Datum', value: '2026-09-01' }, { label: 'Preis', value: '119' }],
+        [{ label: 'Datum', value: '01.09.2026' }, { label: 'Preis', value: '119' }],
         // Der Gedankenstrich-Platzhalter der Lese-Ansicht ist in WinAnsi nicht
         // darstellbar und wird zum Bindestrich – ohne Verlustmeldung.
-        [{ label: 'Datum', value: '2026-09-02' }, { label: 'Preis', value: '-' }],
+        [{ label: 'Datum', value: '02.09.2026' }, { label: 'Preis', value: '-' }],
       ],
     })
   })
@@ -403,7 +403,7 @@ describe('drawExportDoc', () => {
     const entry = all.find((t) => t.text === 'EINTRAG 1')!
     expect(entry).toBeTruthy()
     expect(entry.x).toBeCloseTo(20, 5)          // 16 mm Rand + 4 mm Einrückung
-    expect(all.map((t) => t.text)).toContain('Datum: 2026-09-01')
+    expect(all.map((t) => t.text)).toContain('Datum: 01.09.2026')
     expect(all.map((t) => t.text)).toContain('Preis: 119')
   })
 

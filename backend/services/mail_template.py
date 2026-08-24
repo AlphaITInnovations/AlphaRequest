@@ -23,6 +23,22 @@ VAR_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 #: Variablen, die KEIN Katalog-Feld sind, aber immer zur Verfügung stehen.
 SPECIAL_VARS: tuple[str, ...] = ("title", "id")
 
+#: ISO-Datum/-Zeit (aus <input type="date"/"datetime-local">) → deutsches Format.
+_ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+_ISO_DT = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})")
+
+
+def de_date(s: str) -> str:
+    """`2026-08-24` → `24.08.2026`, `2026-08-24T09:05` → `24.08.2026 09:05`.
+    Alles, was nicht exakt wie ein ISO-Datum aussieht, bleibt unverändert."""
+    m = _ISO_DATE.match(s)
+    if m:
+        return f"{m.group(3)}.{m.group(2)}.{m.group(1)}"
+    m = _ISO_DT.match(s)
+    if m:
+        return f"{m.group(3)}.{m.group(2)}.{m.group(1)} {m.group(4)}:{m.group(5)}"
+    return s
+
 
 def variables(text: str | None) -> list[str]:
     """Alle vorkommenden Variablen (ohne Dopplungen, in Reihenfolge)."""
@@ -55,7 +71,7 @@ def format_value(value: Any) -> str:
         return ", ".join(teile) if teile else "—"
     if isinstance(value, dict):
         return "—"
-    return str(value)
+    return de_date(str(value))
 
 
 def substitute(text: str | None, resolve: Callable[[str], str]) -> str:

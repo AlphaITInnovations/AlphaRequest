@@ -30,9 +30,19 @@ def test_format_value():
     assert mt.format_value(["a", "b"]) == "a, b"
     assert mt.format_value([]) == "—"
     assert mt.format_value("Max") == "Max"
+    # ISO-Datum → deutsches Format (auch in Mail/Titel/Vertrag).
+    assert mt.format_value("2026-08-24") == "24.08.2026"
     # Kein roher Python-Repr für verschachtelte Strukturen (Sicherheitsnetz).
     assert mt.format_value({"a": 1}) == "—"
     assert mt.format_value([{"nr": "DL-1"}, {"nr": "DL-2"}]) == "—"
+
+
+def test_de_date():
+    assert mt.de_date("2026-08-24") == "24.08.2026"
+    assert mt.de_date("2026-08-24T09:05") == "24.08.2026 09:05"
+    assert mt.de_date("2026-08-24 09:05:00") == "24.08.2026 09:05"
+    assert mt.de_date("Nürnberg") == "Nürnberg"      # kein Datum → unverändert
+    assert mt.de_date("2026") == "2026"
 
 
 def test_substitute_ersetzt_nur_die_vorlage_nicht_die_werte():
