@@ -38,11 +38,22 @@ export async function exportTicketDocument(
 ): Promise<Blob> {
   // Mit hochgeladener .docx-Vorlage fuellt der Server selbst (html irrelevant);
   // ohne Vorlage kommt das im Client gefuellte HTML mit.
-  const { data } = await client.post(
-    `/process-tickets/${id}/document:export`,
-    { html: opts.html, filename: opts.filename },
-    { responseType: 'blob' })
-  return data as Blob
+  try {
+    const { data } = await client.post(
+      `/process-tickets/${id}/document:export`,
+      { html: opts.html, filename: opts.filename },
+      { responseType: 'blob' })
+    return data as Blob
+  } catch (e) {
+    // Bei responseType:'blob' kommt AUCH der Fehler-Body als Blob an – den
+    // JSON-Umschlag {error:{message}} zurueckwandeln, damit errorMessage() die
+    // Server-Meldung zeigt (z. B. „keine Vorlage hinterlegt") statt generisch.
+    const resp = (e as { response?: { data?: unknown } })?.response
+    if (resp?.data instanceof Blob) {
+      try { resp.data = JSON.parse(await resp.data.text()) } catch { /* kein JSON */ }
+    }
+    throw e
+  }
 }
 
 export async function createTicket(body: {
