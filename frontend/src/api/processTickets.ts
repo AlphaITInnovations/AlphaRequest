@@ -58,7 +58,12 @@ export async function getDocumentFields(id: number): Promise<DocumentFields> {
 
 export async function exportTicketDocument(
   id: number,
-  opts: { html?: string; filename?: string; overrides?: Record<string, string> } = {},
+  opts: {
+    html?: string; filename?: string
+    overrides?: Record<string, string>
+    /** NUR Vorschau: eingesetzte Werte markieren (Hervorhebung). Export = false. */
+    highlight?: boolean
+  } = {},
 ): Promise<Blob> {
   // Mit hochgeladener .docx-Vorlage fuellt der Server selbst (html irrelevant);
   // `overrides` sind die Editor-Werte (manuelle Felder + Korrekturen). Ohne
@@ -66,7 +71,8 @@ export async function exportTicketDocument(
   try {
     const { data } = await client.post(
       `/process-tickets/${id}/document:export`,
-      { html: opts.html, filename: opts.filename, overrides: opts.overrides },
+      { html: opts.html, filename: opts.filename, overrides: opts.overrides,
+        highlight: opts.highlight },
       { responseType: 'blob' })
     return data as Blob
   } catch (e) {

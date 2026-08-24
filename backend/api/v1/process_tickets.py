@@ -514,6 +514,9 @@ class DocumentExportRequest(BaseModel):
     #: bearbeitende Person manuelle Felder ausfüllen und Auto-Werte korrigieren.
     #: Leerer Wert ⇒ Marker bleibt eine Lücke.
     overrides: Optional[dict[str, str]] = None
+    #: NUR für die Vorschau: eingesetzte Werte mit unsichtbaren Marken umschließen,
+    #: damit das Frontend sie hervorheben kann. Der echte Word/PDF-Export lässt es weg.
+    highlight: bool = False
 
 
 def _safe_filename(name: Optional[str]) -> str:
@@ -724,7 +727,7 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                 return str(row.get("id") or "")
             return mt.format_value(values.get(token))
 
-        data = docx_fill.fill_docx(_read_template_bytes(tpl), fill_values)
+        data = docx_fill.fill_docx(_read_template_bytes(tpl), fill_values, mark=body.highlight)
         name = body.filename or mt.substitute((doc.filename if doc else "") or "Dokument", _resolve)
         return Response(content=data, media_type=_MIME_DOCX,
                         headers={"Content-Disposition": _content_disposition(_safe_filename(name) + ".docx")})

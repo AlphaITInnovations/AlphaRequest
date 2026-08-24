@@ -46,6 +46,12 @@ _TEXT_PART = re.compile(
 #: Standard-Füllung für Marker OHNE Zuordnung – eine Lücke wie im Ausgangsvertrag.
 GAP = "…………………………"
 
+#: NUR für die Vorschau (mark=True): unsichtbare Private-Use-Marken um jeden
+#: EINGESETZTEN Wert. Das Frontend ersetzt sie beim Rendern durch eine
+#: Hervorhebung; im normalen Export (mark=False) tauchen sie nie auf.
+MARK_OPEN = "\ue000"
+MARK_CLOSE = "\ue001"
+
 
 def _desplit(xml: str) -> str:
     """Tag-Grenzen INNERHALB eines `{{…}}` entfernen (über Runs zerlegte Marker
@@ -89,10 +95,14 @@ def find_placeholders(template_bytes: bytes) -> list[str]:
 
 
 def fill_docx(template_bytes: bytes, values: dict[str, Optional[str]],
-              *, gap: str = GAP) -> bytes:
+              *, gap: str = GAP, mark: bool = False) -> bytes:
     """Die Vorlage füllen: `{{token}}` → values[token] (XML-escaped), fehlt der
     Token in `values`, kommt `gap` (Word-Lücke). Alle Nicht-Text-Teile werden
-    unverändert übernommen."""
+    unverändert übernommen.
+
+    `mark=True` klammert jeden EINGESETZTEN Wert in unsichtbare Marken
+    (MARK_OPEN/MARK_CLOSE) – nur für die Frontend-Vorschau (Hervorhebung), NICHT
+    für den echten Export."""
     src = io.BytesIO(template_bytes)
     out = io.BytesIO()
     with zipfile.ZipFile(src) as zin, \
@@ -103,8 +113,12 @@ def fill_docx(template_bytes: bytes, values: dict[str, Optional[str]],
                 xml = _desplit(data.decode("utf-8"))
 
                 def _repl(m: "re.Match[str]") -> str:
-                    val = values.get(m.group(1), gap)
-                    return _xml_escape("" if val is None else str(val))
+                    name = m.group(1)
+                    if name in values:
+                        val = values[name]
+                        esc = _xml_escape("" if val is None else str(val))
+                        return f"{MARK_OPEN}{esc}{MARK_CLOSE}" if (mark and esc) else esc
+                    return _xml_escape(gap)   # ohne Zuordnung → Lücke, nie markiert
 
                 data = _TOKEN.sub(_repl, xml).encode("utf-8")
             # ZipInfo mitgeben → Name/Modus bleiben; Nicht-Text-Teile sind inhaltlich

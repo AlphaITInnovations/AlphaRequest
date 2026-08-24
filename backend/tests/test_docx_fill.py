@@ -50,6 +50,20 @@ def test_fill_strippt_xml_verbotene_steuerzeichen():
     assert "abc" in _doc_text(filled)             # Steuerzeichen raus, Text bleibt
 
 
+def test_fill_mark_klammert_nur_eingesetzte_werte():
+    """mark=True umschließt EINGESETZTE Werte mit Marken (Vorschau-Hervorhebung),
+    Lücken bleiben unmarkiert; ohne mark gibt es keine Marken (echter Export)."""
+    from backend.services.docx_fill import MARK_CLOSE, MARK_OPEN
+    marked = fill_docx(_template(), {"arbeitsbeginn": "01.09.2026"}, mark=True)
+    xml = zipfile.ZipFile(io.BytesIO(marked)).read("word/document.xml").decode("utf-8")
+    assert f"{MARK_OPEN}01.09.2026{MARK_CLOSE}" in xml          # eingesetzt → markiert
+    assert xml.count(MARK_OPEN) == 1                            # Lücken NICHT markiert
+
+    plain = fill_docx(_template(), {"arbeitsbeginn": "01.09.2026"})
+    plain_xml = zipfile.ZipFile(io.BytesIO(plain)).read("word/document.xml").decode("utf-8")
+    assert MARK_OPEN not in plain_xml and MARK_CLOSE not in plain_xml
+
+
 def test_nicht_text_teile_bleiben_byte_identisch():
     tpl = _template()
     filled = fill_docx(tpl, {"arbeitsbeginn": "X"})

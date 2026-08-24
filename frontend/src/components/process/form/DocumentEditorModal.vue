@@ -36,6 +36,16 @@ const previewEl = ref<HTMLElement | null>(null)
 const previewBusy = ref(false)
 const exporting = ref(false)
 
+// Seiten-Navigation: docx-preview rendert je Seite eine <section.docx>; wir zeigen
+// immer nur EINE (wie in Word) und blättern per Pager.
+const pageCount = ref(0)
+const currentPage = ref(1)
+
+// Muss zu docx_fill.MARK_OPEN/MARK_CLOSE passen: der Server klammert eingesetzte
+// Werte (nur in der Vorschau, highlight=true) in diese Private-Use-Zeichen.
+const MARK_OPEN = ''
+const MARK_CLOSE = ''
+
 const manualFields = computed(() => fields.value.filter((f) => !f.bound))
 const autoFields = computed(() => fields.value.filter((f) => f.bound))
 
@@ -78,14 +88,19 @@ async function renderPreview(): Promise<boolean> {
   const seq = ++renderSeq
   previewBusy.value = true
   try {
+    // highlight=true: der Server markiert eingesetzte Werte (nur Vorschau).
     const blob = await exportTicketDocument(props.ticketId,
-      { overrides: overrides(), filename: filename.value })
+      { overrides: overrides(), filename: filename.value, highlight: true })
     const { renderAsync } = await import('docx-preview')
     if (seq !== renderSeq) return false          // ein neuerer Render hat übernommen
     host.innerHTML = ''
     await renderAsync(blob, host, undefined,
-      { inWrapper: true, breakPages: true, className: 'docx' })
-    return seq === renderSeq
+      { inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false,
+        className: 'docx' })
+    if (seq !== renderSeq) return false
+    applyHighlights(host)                        // Marken → Hervorhebung
+    setupPager(host)                             // Seitenzahl + aktuelle Seite zeigen
+    return true
   } catch (e) {
     if (seq === renderSeq) showToast(errorMessage(e, 'Vorschau fehlgeschlagen.'), false)
     return false
@@ -99,6 +114,61 @@ function schedulePreview() {
   if (timer) clearTimeout(timer)
   timer = setTimeout(renderPreview, 500)   // Tipp-Pause abwarten, nicht pro Anschlag
 }
+
+// ── Hervorhebung eingesetzter Werte ──────────────────────────────────────────
+// Der Server umklammert eingesetzte Werte mit MARK_OPEN/MARK_CLOSE. Wir suchen
+// diese Zeichen in den Textknoten und ersetzen sie durch <mark>-Spans – präzise
+// (genau die gefüllten Stellen) und ohne die Formatierung anzutasten.
+function applyHighlights(host: HTMLElement) {
+  const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
+  const hits: Text[] = []
+  let n: Node | null = walker.nextNode()
+  while (n) {
+    if (n.nodeValue && n.nodeValue.includes(MARK_OPEN)) hits.push(n as Text)
+    n = walker.nextNode()
+  }
+  for (const node of hits) wrapMarks(node)
+}
+
+function wrapMarks(node: Text) {
+  const text = node.nodeValue ?? ''
+  const frag = document.createDocumentFragment()
+  let i = 0
+  while (i < text.length) {
+    const open = text.indexOf(MARK_OPEN, i)
+    if (open === -1) { frag.appendChild(document.createTextNode(text.slice(i))); break }
+    if (open > i) frag.appendChild(document.createTextNode(text.slice(i, open)))
+    const close = text.indexOf(MARK_CLOSE, open + 1)
+    const end = close === -1 ? text.length : close
+    const mark = document.createElement('mark')
+    mark.className = 'docx-fill'
+    mark.textContent = text.slice(open + 1, end)
+    frag.appendChild(mark)
+    i = close === -1 ? text.length : close + 1
+  }
+  node.parentNode?.replaceChild(frag, node)
+}
+
+// ── Seiten-Navigation ────────────────────────────────────────────────────────
+function docxPages(host?: HTMLElement | null): HTMLElement[] {
+  const h = host ?? previewEl.value
+  return h ? Array.from(h.querySelectorAll<HTMLElement>('section.docx')) : []
+}
+
+function setupPager(host: HTMLElement) {
+  pageCount.value = docxPages(host).length
+  if (currentPage.value > pageCount.value) currentPage.value = pageCount.value || 1
+  if (currentPage.value < 1) currentPage.value = 1
+  showPage()
+}
+
+/** Nur die aktuelle Seite zeigen (wie in Word), die übrigen ausblenden. */
+function showPage() {
+  docxPages().forEach((s, idx) => { s.style.display = idx === currentPage.value - 1 ? '' : 'none' })
+}
+
+function prevPage() { if (currentPage.value > 1) { currentPage.value -= 1; showPage() } }
+function nextPage() { if (currentPage.value < pageCount.value) { currentPage.value += 1; showPage() } }
 
 // ── Export ───────────────────────────────────────────────────────────────────
 
@@ -131,16 +201,20 @@ async function exportDocx() {
 
 async function exportPdf() {
   exporting.value = true
+  // Sauber (OHNE Hervorhebung/Seiten-Ausblendung) und aktuell rendern – abseits
+  // der Bildschirm-Vorschau, damit nichts flackert und das PDF kein Gelb trägt.
+  let stage: HTMLElement | null = null
   try {
-    if (timer) { clearTimeout(timer); timer = null }
-    // Re-Render MUSS gelingen – sonst würde ein veraltetes/leeres PDF gespeichert.
-    if (!await renderPreview()) {
-      showToast('Vorschau nicht bereit – PDF nicht erzeugt.', false)
-      return
-    }
-    const host = previewEl.value
-    const pages = host
-      ? Array.from(host.querySelectorAll<HTMLElement>('section.docx')) : []
+    const blob = await exportTicketDocument(props.ticketId,
+      { overrides: overrides(), filename: filename.value })   // highlight aus → sauber
+    const { renderAsync } = await import('docx-preview')
+    stage = document.createElement('div')
+    stage.style.cssText = 'position:fixed;left:-99999px;top:0;'
+    document.body.appendChild(stage)
+    await renderAsync(blob, stage, undefined,
+      { inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false,
+        className: 'docx' })
+    const pages = Array.from(stage.querySelectorAll<HTMLElement>('section.docx'))
     if (!pages.length) { showToast('Kein Dokument zum Exportieren.', false); return }
 
     const [{ jsPDF }, h2c] = await Promise.all([import('jspdf'), import('html2canvas')])
@@ -164,6 +238,7 @@ async function exportPdf() {
   } catch (e) {
     showToast(errorMessage(e, 'PDF-Export fehlgeschlagen.'), false)
   } finally {
+    if (stage) stage.remove()
     exporting.value = false
   }
 }
@@ -182,9 +257,9 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-         @click.self="close">
-      <div class="flex w-full max-w-6xl h-[90vh] flex-col overflow-hidden rounded-2xl
+    <!-- Bewusst KEIN Schließen bei Außenklick: nur X oder „Abbrechen" (oder Esc). -->
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="flex w-full max-w-7xl h-[92vh] flex-col overflow-hidden rounded-2xl
                   bg-white dark:bg-[#141a26] shadow-2xl">
         <!-- Kopf -->
         <div class="flex items-center justify-between gap-3 border-b border-gray-200
@@ -237,13 +312,32 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
-          <!-- Vorschau -->
-          <div class="relative flex-1 overflow-auto bg-gray-100 dark:bg-[#0d1117] p-6">
+          <!-- Vorschau + Pager -->
+          <div class="relative flex flex-1 min-h-0 flex-col bg-gray-100 dark:bg-[#0d1117]">
             <div v-if="previewBusy"
-                 class="absolute right-3 top-3 z-10 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
+                 class="absolute right-4 top-3 z-10 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
               Vorschau aktualisiert …
             </div>
-            <div ref="previewEl" class="docx-host mx-auto" />
+            <div class="flex-1 overflow-auto p-8">
+              <div ref="previewEl" class="docx-host mx-auto" />
+            </div>
+            <!-- untere Leiste: Legende + Seiten-Navigation -->
+            <div v-if="!loading" class="flex items-center justify-between gap-3 border-t
+                        border-gray-200 dark:border-white/10 px-4 py-2 text-xs
+                        text-gray-500 dark:text-gray-400 bg-white/70 dark:bg-black/20">
+              <span class="inline-flex items-center gap-1.5">
+                <span class="inline-block h-3 w-3 rounded-sm"
+                      style="background:#fff3b0;box-shadow:0 0 0 1px #e6cf5a"></span>
+                eingesetzte Werte
+              </span>
+              <div v-if="pageCount > 1" class="flex items-center gap-3">
+                <button class="btn-secondary text-xs py-1 px-2 disabled:opacity-40"
+                        :disabled="currentPage <= 1" @click="prevPage">‹ Zurück</button>
+                <span class="tabular-nums">Seite {{ currentPage }} / {{ pageCount }}</span>
+                <button class="btn-secondary text-xs py-1 px-2 disabled:opacity-40"
+                        :disabled="currentPage >= pageCount" @click="nextPage">Weiter ›</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -271,6 +365,12 @@ onBeforeUnmount(() => {
    von docx-preview kommt. */
 .docx-host .docx-wrapper { background: transparent; padding: 0; }
 .docx-host .docx-wrapper > section.docx {
-  margin: 0 auto 1rem; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15); background: #fff;
+  margin: 0 auto; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15); background: #fff;
+}
+/* Hervorhebung eingesetzter Werte in der Vorschau (nur <mark class="docx-fill">,
+   vom Client aus den Server-Marken erzeugt – kein Einfluss auf den Export). */
+.docx-host mark.docx-fill {
+  background: #fff3b0; color: inherit; border-radius: 2px;
+  box-shadow: 0 0 0 1px #e6cf5a; padding: 0 1px;
 }
 </style>
