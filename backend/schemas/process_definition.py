@@ -610,6 +610,22 @@ class ApprovalSpec(_Base):
         return self
 
 
+#: Sonderquelle einer Marker-Zuordnung: der aktuelle Tag (kein Katalog-Feld).
+TODAY_BINDING = "@today"
+
+
+class DocumentBinding(_Base):
+    """Was ein `{{marker}}` beim Export füllt.
+
+    `field` ist ein Katalog-Feldschlüssel ODER die Sonderquelle `@today`
+    (aktuelles Datum). `offset` ist ein optionaler Rechen-Versatz für NUMERISCHE
+    Felder (z. B. -20 für „Urlaubsanspruch minus 20"); bei nicht-numerischen
+    Werten und bei `@today` wird er ignoriert.
+    """
+    field: str
+    offset: Optional[int] = None
+
+
 class DocumentSpec(_Base):
     """Vorlage einer Dokument-Phase (view=document).
 
@@ -621,11 +637,20 @@ class DocumentSpec(_Base):
     templateHtml: str = ""
     filename: str = "Dokument"
     title: str = "Dokument"
-    #: Marker→Feld-Zuordnung für eine hochgeladene .docx-Vorlage: `{{marker}}` wird
-    #: beim Export durch den Wert des zugeordneten Katalog-Felds ersetzt; Marker
-    #: OHNE Zuordnung bleiben als Lücke (in Word auszufüllen). Die .docx selbst
-    #: liegt nicht hier, sondern als Blob je Prozess (installationsspezifisch).
-    bindings: dict[str, str] = Field(default_factory=dict)
+    #: Marker→Zuordnung für eine hochgeladene .docx-Vorlage: `{{marker}}` wird beim
+    #: Export durch den (ggf. versetzten) Wert des zugeordneten Katalog-Felds bzw.
+    #: `@today` ersetzt; Marker OHNE Zuordnung bleiben als Lücke (in Word
+    #: auszufüllen). Die .docx selbst liegt als Blob je Prozess.
+    bindings: dict[str, DocumentBinding] = Field(default_factory=dict)
+
+    @field_validator("bindings", mode="before")
+    @classmethod
+    def _coerce_bindings(cls, v):
+        """Alt-Form `{marker: "feld.key"}` (nackter String) auf `{field: ...}`
+        heben – gespeicherte Definitionen bleiben lesbar."""
+        if not isinstance(v, dict):
+            return v
+        return {k: ({"field": b} if isinstance(b, str) else b) for k, b in v.items()}
 
 
 class PhaseDef(_Base):
@@ -961,8 +986,11 @@ class ProcessDefinition(_Base):
                     for ref in _mt.field_refs(txt):
                         _need(ref, f"Phase „{p.key}“.document (Variable «{ref}»)")
                 # bindings: jeder zugeordnete Marker muss auf ein einsetzbares
-                # (skalares) Katalog-Feld zeigen.
-                for marker, fieldkey in p.document.bindings.items():
+                # (skalares) Katalog-Feld ODER die Sonderquelle @today zeigen.
+                for marker, binding in p.document.bindings.items():
+                    fieldkey = binding.field
+                    if fieldkey == TODAY_BINDING:
+                        continue                       # aktuelles Datum – kein Katalog-Feld
                     _need(fieldkey, f"Phase „{p.key}“.document.bindings[„{marker}“]")
                     f = feld_je_key.get(fieldkey)
                     # Nicht einsetzbar: Anhang/Wiederholgruppe (kein Text) sowie

@@ -26,7 +26,9 @@ from backend.database import process_ticket_watchers as watchers
 from backend.database.audit_log import record_audit
 from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN
-from backend.schemas.process_definition import ProcessDefinition, ResponsibilityKind
+from backend.schemas.process_definition import (
+    TODAY_BINDING, ProcessDefinition, ResponsibilityKind,
+)
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
@@ -619,13 +621,29 @@ def _docx_fill_prep(row, defn, docphase, user):
     return values, catalog, bindings
 
 
+def _binding_text(binding, catalog, values) -> str:
+    """Wert eines Marker-Bindings: aktuelles Datum (Sonderquelle @today), sonst der
+    (sichtbarkeitsgefilterte) Feldwert – wie in der Vorschau (Options-Beschriftung,
+    Ja/Nein, deutsches Datum) und mit optionalem Rechen-Versatz für NUMERISCHE
+    Felder (z. B. Urlaubsanspruch - 20)."""
+    if binding.field == TODAY_BINDING:
+        from datetime import date
+        return date.today().strftime("%d.%m.%Y")
+    text = _fill_text(catalog.get(binding.field), values.get(binding.field))
+    if binding.offset and text:
+        try:
+            text = str(int(text) + binding.offset)
+        except (TypeError, ValueError):
+            pass   # nicht-numerisch → Versatz ignorieren
+    return text
+
+
 def _auto_fill_values(bindings, catalog, values) -> dict:
-    """Auto-Werte je Marker aus den bindings – wie in der Vorschau (Options-
-    Beschriftung, Ja/Nein). LEERE werden weggelassen, damit fill_docx dort die
-    Lücke setzt statt eines „—"."""
+    """Auto-Werte je Marker aus den bindings. LEERE werden weggelassen, damit
+    fill_docx dort die Lücke setzt statt eines „—"."""
     out = {}
-    for marker, fk in bindings.items():
-        text = _fill_text(catalog.get(fk), values.get(fk))
+    for marker, binding in bindings.items():
+        text = _binding_text(binding, catalog, values)
         if text != "":
             out[marker] = text
     return out
@@ -668,12 +686,17 @@ def document_fields(ticket_id: int, user: dict = Depends(get_current_user)):
     markers = docx_fill.find_placeholders(_read_template_bytes(tpl))
     out = []
     for m in markers:
-        fk = bindings.get(m)
-        if fk:
-            f = catalog.get(fk)
-            label = (f.label if (f and f.label) else fk)
+        b = bindings.get(m)
+        if b is not None:
+            if b.field == TODAY_BINDING:
+                label = "Aktuelles Datum"
+            else:
+                f = catalog.get(b.field)
+                label = (f.label if (f and f.label) else b.field)
+                if b.offset:
+                    label += f" ({b.offset:+d})"      # z. B. „Urlaubsanspruch (-20)"
             out.append({"name": m, "label": label, "bound": True,
-                        "value": _fill_text(f, values.get(fk))})
+                        "value": _binding_text(b, catalog, values)})
         else:
             out.append({"name": m, "label": m, "bound": False, "value": ""})
 

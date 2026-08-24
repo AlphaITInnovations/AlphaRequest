@@ -198,10 +198,16 @@ export function normalizeAutomation(v: any): Automation {
  *  bei jeder Ansicht außer view=document). Ist sie DA, werden alle Keys gefüllt. */
 function normDocument(v: any): DocumentSpec | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null
-  const bindings: Record<string, string> = {}
+  const bindings: Record<string, { field: string; offset: number | null }> = {}
   if (v.bindings && typeof v.bindings === 'object' && !Array.isArray(v.bindings)) {
     for (const [k, val] of Object.entries(v.bindings)) {
-      if (val) bindings[String(k)] = String(val)
+      // Alt-Form: nackter Feldschlüssel-String → {field}. Neu: {field, offset}.
+      if (typeof val === 'string') {
+        if (val) bindings[String(k)] = { field: val, offset: null }
+      } else if (val && typeof val === 'object') {
+        const field = str((val as any).field)
+        if (field) bindings[String(k)] = { field, offset: num((val as any).offset) }
+      }
     }
   }
   return {

@@ -245,8 +245,19 @@ export interface DocumentSpec {
   /** Marker→Feld-Zuordnung für eine hochgeladene .docx-Vorlage: {{marker}} wird
    *  beim Export durch den Wert des Felds ersetzt; nicht zugeordnete Marker
    *  bleiben als Lücke. */
-  bindings: Record<string, string>
+  bindings: Record<string, DocumentBinding>
 }
+
+/** Eine Marker-Zuordnung: `field` ist ein Katalog-Feldschlüssel oder die
+ *  Sonderquelle `'@today'` (aktuelles Datum). `offset` ist ein optionaler
+ *  Rechen-Versatz für numerische Felder (z. B. -20). */
+export interface DocumentBinding {
+  field: string
+  offset?: number | null
+}
+
+/** Sonderquelle „aktuelles Datum" – immer im Zuordnungs-Dropdown wählbar. */
+export const TODAY_BINDING = '@today'
 
 export interface PhaseDef {
   key: string

@@ -74,6 +74,25 @@ DEFN_DOC = {
 }
 
 
+#: Bindings mit Rechen-Versatz (offset) und der Sonderquelle @today (aktuelles Datum).
+DEFN_CALC = {
+    "schemaVersion": 1, "key": "calc", "name": "Calc-Flow",
+    "fields": [{"key": "base.name", "widget": "text"},
+               {"key": "urlaub.tage", "widget": "text"}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "required": True},
+                    {"ref": "urlaub.tage", "mode": "editable"}]},
+        {"key": "vertrag", "kind": "task", "view": "document",
+         "responsibility": {"kind": "owner"},
+         "document": {"title": "V", "filename": "V",
+                      "bindings": {"name": "base.name",
+                                   "zusatz": {"field": "urlaub.tage", "offset": -20},
+                                   "heute": {"field": "@today"}}}},
+    ],
+}
+
+
 #: Wie DEFN_DOC, aber `base.salary` ist VERTRAULICH (nur g_hr) und einem Marker
 #: zugeordnet – prüft, dass der Export die harte confidential-Sperre nicht umgeht.
 DEFN_CONF = {
@@ -192,6 +211,8 @@ class FakeDefs:
             return {"version": 1, "definition": DEFN_DOC}
         if key == "conf":
             return {"version": 1, "definition": DEFN_CONF}
+        if key == "calc":
+            return {"version": 1, "definition": DEFN_CALC}
         return None
 
     def get_definition(self, key, ver):
@@ -208,6 +229,8 @@ class FakeDefs:
             return {"version": ver, "definition": DEFN_DOC}
         if key == "conf":
             return {"version": ver, "definition": DEFN_CONF}
+        if key == "calc":
+            return {"version": ver, "definition": DEFN_CALC}
         return None
 
 
@@ -471,6 +494,42 @@ def test_document_export_pdf_konvertierungsfehler(client, monkeypatch, tmp_path)
     r = client.post(f"/process-tickets/{tid}/document:export", json={"format": "pdf"})
     assert r.status_code == 500
     assert r.json()["error"]["code"] == "PDF_CONVERSION_FAILED"
+
+
+def test_document_export_offset_und_aktuelles_datum(client, monkeypatch, tmp_path):
+    """Rechen-Versatz auf einem numerischen Feld (30 - 20 = 10) und die Sonderquelle
+    @today (aktuelles Datum) werden korrekt eingesetzt."""
+    from datetime import date
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+
+    tplfile = tmp_path / "v.docx"
+    tplfile.write_bytes(html_to_docx("<p>{{name}}: {{zusatz}} am {{heute}}.</p>"))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+                            if key == "calc" and phase == "vertrag" else None))
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+
+    tid = client.post("/process-tickets",
+                      json={"processKey": "calc",
+                            "values": {"base.name": "Max", "urlaub.tage": "30"}}
+                      ).json()["data"]["id"]
+
+    # :fields zeigt die berechneten Werte + sprechende Labels.
+    felder = {m["name"]: m for m in
+              client.get(f"/process-tickets/{tid}/document:fields").json()["data"]["markers"]}
+    assert felder["zusatz"]["value"] == "10" and "(-20)" in felder["zusatz"]["label"]
+    assert felder["heute"]["label"] == "Aktuelles Datum"
+    assert felder["heute"]["value"] == date.today().strftime("%d.%m.%Y")
+
+    # Export setzt dieselben Werte ins .docx.
+    import io
+    import zipfile
+    r = client.post(f"/process-tickets/{tid}/document:export", json={})
+    doc = zipfile.ZipFile(io.BytesIO(r.content)).read("word/document.xml").decode("utf-8")
+    assert "Max: 10 am " + date.today().strftime("%d.%m.%Y") in doc
 
 
 def test_document_fields_ohne_leserecht_gibt_404(client):

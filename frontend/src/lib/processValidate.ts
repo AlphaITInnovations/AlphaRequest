@@ -351,8 +351,10 @@ export function validateDefinition(
       }
       // Marker-Zuordnungen (.docx-Vorlage): jedes zugeordnete Feld muss existieren
       // und als Text einsetzbar sein (collection/attachment lehnt der Server ab).
-      for (const [marker, fieldKey] of Object.entries(doc.bindings ?? {})) {
-        if (!fieldKey) continue
+      // Die Sonderquelle @today (aktuelles Datum) ist kein Katalog-Feld.
+      for (const [marker, binding] of Object.entries(doc.bindings ?? {})) {
+        const fieldKey = binding?.field
+        if (!fieldKey || fieldKey === '@today') continue
         if (!catalog.has(fieldKey)) {
           out.push(err(`${p}.document`, anchor, 'UNKNOWN_REF',
             `Vorlagen-Marker „{{${marker}}}" ist einem Feld zugeordnet, das es nicht gibt.`))

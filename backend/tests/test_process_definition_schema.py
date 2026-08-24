@@ -272,6 +272,19 @@ def test_document_bindings_collection_field_rejected():
         ProcessDefinition.model_validate(_defn_with_document({"eintr": "eintraege"}))
 
 
+def test_document_binding_today_source_valid():
+    # @today ist kein Katalog-Feld, aber als Sonderquelle erlaubt.
+    ProcessDefinition.model_validate(_defn_with_document({"heute": {"field": "@today"}}))
+
+
+def test_document_binding_offset_und_string_coercion():
+    d = ProcessDefinition.model_validate(_defn_with_document(
+        {"a": "base.name", "b": {"field": "base.name", "offset": -20}}))
+    doc = next(p for p in d.phases if p.key == "vertrag").document
+    assert doc.bindings["a"].field == "base.name" and doc.bindings["a"].offset is None
+    assert doc.bindings["b"].field == "base.name" and doc.bindings["b"].offset == -20
+
+
 def test_computed_map_on_number_source_rejected():
     """map arbeitet mit Zeichenketten-Schlüsseln – ein Zahlen-Quellfeld ist nicht
     unterstützt (Backend/Frontend würden sonst auseinanderlaufen)."""
