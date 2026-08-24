@@ -1280,6 +1280,41 @@
       "item": []
     },
     {
+      "key": "fuhrpark.car_class_number",
+      "label": "Fahrzeugklasse (Nr.)",
+      "widget": "text",
+      "help": "Wird automatisch aus der Position ermittelt (Gruppe 1–7) und ist nicht manuell änderbar.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN"
+        ]
+      },
+      "computed": {
+        "from": "personal.position",
+        "map": {
+          "Disposition": "1",
+          "Niederlassungsleitung": "2",
+          "Abteilungsleitung / Verwaltung": "2",
+          "Regionalleitung": "3",
+          "Regionaldirektion": "4",
+          "Geschäftsbereichsleitung": "5",
+          "Geschäftsführung": "6",
+          "C-Level": "7"
+        }
+      },
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
       "key": "fuhrpark.car_from",
       "label": "Benötigt ab?",
       "widget": "date",
@@ -1795,6 +1830,18 @@
               "Ja"
             ]
           }
+        },
+        {
+          "ref": "fuhrpark.car_class_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          }
         }
       ],
       "constraints": [],
@@ -2012,6 +2059,11 @@
             {
               "type": "field",
               "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class_number",
               "width": "half"
             }
           ]
@@ -2867,6 +2919,18 @@
           }
         },
         {
+          "ref": "fuhrpark.car_class_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "fuhrpark.car",
+              "Ja"
+            ]
+          }
+        },
+        {
           "ref": "fuhrpark.car_from",
           "mode": "editable",
           "required": false,
@@ -3247,6 +3311,11 @@
             {
               "type": "field",
               "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class_number",
               "width": "half"
             },
             {
@@ -3676,6 +3745,13 @@
           "visibleWhen": null
         },
         {
+          "ref": "fuhrpark.car_class_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "fuhrpark.car_from",
           "mode": "readonly",
           "required": false,
@@ -3979,6 +4055,11 @@
             {
               "type": "field",
               "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class_number",
               "width": "half"
             },
             {

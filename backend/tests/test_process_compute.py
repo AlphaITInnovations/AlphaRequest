@@ -1,6 +1,9 @@
 """Ebene-1: Wert-Ausdrücke / computed-Felder (services/process_compute)."""
 
+import json
+
 from backend.schemas.process_definition import ProcessDefinition
+from backend.seeds import PROCESS_SEED_DIR
 from backend.services.process_compute import apply_computed
 
 
@@ -70,3 +73,37 @@ def test_computed_from_computed_resolves_regardless_of_order():
     })
     out = apply_computed(defn, {"base": "X"})
     assert out["a"] == "X" and out["b"] == "X"
+
+
+def test_zugang_beantragen_fahrzeugklasse_nummer():
+    """Regressionsschutz für die Geschäftsregel: fuhrpark.car_class_number wird
+    non-overridable (read-only) aus personal.position abgeleitet und stempelt die
+    Fahrzeugklasse 1–7. Positionen ohne Dienstwagen-Gruppe bleiben leer."""
+    roh = json.loads(
+        (PROCESS_SEED_DIR / "prozess-zugang-beantragen.json").read_text(encoding="utf-8"))
+    defn = ProcessDefinition.model_validate(roh)
+
+    feld = next(f for f in defn.fields if f.key == "fuhrpark.car_class_number")
+    assert feld.computed is not None and feld.computed.from_ == "personal.position"
+    assert feld.overridable is False        # immer abgeleitet, nicht manuell änderbar
+
+    erwartet = {
+        "Disposition": "1",
+        "Niederlassungsleitung": "2",
+        "Abteilungsleitung / Verwaltung": "2",
+        "Regionalleitung": "3",
+        "Regionaldirektion": "4",
+        "Geschäftsbereichsleitung": "5",
+        "Geschäftsführung": "6",
+        "C-Level": "7",
+    }
+    for position, nummer in erwartet.items():
+        out = apply_computed(defn, {"personal.position": position})
+        assert out["fuhrpark.car_class_number"] == nummer, position
+
+    # Ohne Fahrzeuggruppe (nicht in der Map) → keine Nummer, auch bei manuell gesetztem Wert.
+    for ohne in ("Teamassistenz", "Verwaltungsmitarbeitende HQ",
+                 "Praktikum / Ausbildung / Werkstudium"):
+        out = apply_computed(defn, {"personal.position": ohne,
+                                    "fuhrpark.car_class_number": "9"})
+        assert out.get("fuhrpark.car_class_number") is None, ohne
