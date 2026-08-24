@@ -644,6 +644,9 @@ def document_fields(ticket_id: int, user: dict = Depends(get_current_user)):
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
+    # Leserecht ZUERST prüfen (wie die Schwester-Endpunkte): sonst verrieten die
+    # 409-Zweige unten Nicht-Lesern die Existenz/Dokument-Lage des Auftrags.
+    _assert_view(row, defn, user)
     docphase = _pick_docphase(defn, row.get("runtime"))
     if defn is None or docphase is None:
         raise api_error(409, "TEMPLATE_MISSING", "Diese Phase hat keine Dokument-Vorlage.")

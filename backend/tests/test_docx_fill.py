@@ -39,6 +39,17 @@ def test_fill_escaped_sonderzeichen():
     assert "Overmann, Loh &amp; Co. &lt;KG&gt;" in xml     # XML-escaped, nicht roh
 
 
+def test_fill_strippt_xml_verbotene_steuerzeichen():
+    """Ein in XML 1.0 unzulässiges Steuerzeichen (z. B. aus einem Editor-Feld
+    kopiert) darf die .docx nicht unöffenbar machen – es wird entfernt."""
+    import xml.dom.minidom as minidom
+    filled = fill_docx(_template(), {"firma": "a\x0bb\x0cc"})
+    xml = zipfile.ZipFile(io.BytesIO(filled)).read("word/document.xml").decode("utf-8")
+    assert "\x0b" not in xml and "\x0c" not in xml
+    minidom.parseString(xml)                      # bleibt wohlgeformt
+    assert "abc" in _doc_text(filled)             # Steuerzeichen raus, Text bleibt
+
+
 def test_nicht_text_teile_bleiben_byte_identisch():
     tpl = _template()
     filled = fill_docx(tpl, {"arbeitsbeginn": "X"})

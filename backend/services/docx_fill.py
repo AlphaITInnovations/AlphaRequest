@@ -59,7 +59,14 @@ def _desplit(xml: str) -> str:
     return _SPLIT.sub(_merge, xml)
 
 
+#: In XML 1.0 verbotene C0-Steuerzeichen (Tab/LF/CR sind erlaubt). Ein solcher
+#: Wert – etwa aus einem overrides-Feld kopiert – würde sonst roh ins document.xml
+#: wandern und das .docx unöffenbar machen.
+_XML_FORBIDDEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
 def _xml_escape(s: str) -> str:
+    s = _XML_FORBIDDEN.sub("", s)
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 

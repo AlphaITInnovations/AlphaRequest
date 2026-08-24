@@ -417,6 +417,18 @@ def test_document_export_overrides_gewinnen(client, monkeypatch, tmp_path):
     assert GAP in doc                                    # leeres stadt -> Lücke
 
 
+def test_document_fields_ohne_leserecht_gibt_404(client):
+    """Der Feld-Endpunkt darf Fremden NICHT die Existenz/Dokument-Lage verraten:
+    ohne Leserecht 404 – vor jedem TEMPLATE_MISSING-Zweig."""
+    tid = client.post("/process-tickets",
+                      json={"processKey": "doc", "values": {"base.name": "Max"}}
+                      ).json()["data"]["id"]
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "id": "stranger", "displayName": "X", "permissions": []}
+    r = client.get(f"/process-tickets/{tid}/document:fields")
+    assert r.status_code == 404
+
+
 def test_document_export_ohne_vorlage_meldet_fehler(client, monkeypatch):
     """.docx-Modus ohne hinterlegte Vorlage (und ohne HTML): statt einer leeren
     Datei ein klarer 409 – der Admin soll erst eine Vorlage hochladen."""

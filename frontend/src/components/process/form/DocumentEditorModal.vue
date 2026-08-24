@@ -64,22 +64,33 @@ async function load() {
   }
 }
 
-/** Aktuellen Stand serverseitig füllen und die .docx in die Vorschau rendern. */
-async function renderPreview() {
+// „Latest-Wins": nur der zuletzt gestartete Render darf das DOM/den Zustand
+// schreiben. Ohne das könnte ein langsamer älterer Server-Fill nach einem
+// schnelleren neueren zurückkommen und die Vorschau auf einen VERALTETEN Stand
+// überschreiben (out-of-order).
+let renderSeq = 0
+
+/** Aktuellen Stand serverseitig füllen und die .docx in die Vorschau rendern.
+ *  Gibt true zurück, wenn DIESER (der neueste) Render erfolgreich gerendert hat. */
+async function renderPreview(): Promise<boolean> {
   const host = previewEl.value
-  if (!host) return
+  if (!host) return false
+  const seq = ++renderSeq
   previewBusy.value = true
   try {
     const blob = await exportTicketDocument(props.ticketId,
       { overrides: overrides(), filename: filename.value })
     const { renderAsync } = await import('docx-preview')
+    if (seq !== renderSeq) return false          // ein neuerer Render hat übernommen
     host.innerHTML = ''
     await renderAsync(blob, host, undefined,
-      { inWrapper: true, ignoreLastRenderedPageBreak: true, className: 'docx' })
+      { inWrapper: true, breakPages: true, className: 'docx' })
+    return seq === renderSeq
   } catch (e) {
-    showToast(errorMessage(e, 'Vorschau fehlgeschlagen.'), false)
+    if (seq === renderSeq) showToast(errorMessage(e, 'Vorschau fehlgeschlagen.'), false)
+    return false
   } finally {
-    previewBusy.value = false
+    if (seq === renderSeq) previewBusy.value = false
   }
 }
 
@@ -122,17 +133,33 @@ async function exportPdf() {
   exporting.value = true
   try {
     if (timer) { clearTimeout(timer); timer = null }
-    await renderPreview()                       // sicherstellen: Vorschau ist aktuell
+    // Re-Render MUSS gelingen – sonst würde ein veraltetes/leeres PDF gespeichert.
+    if (!await renderPreview()) {
+      showToast('Vorschau nicht bereit – PDF nicht erzeugt.', false)
+      return
+    }
     const host = previewEl.value
-    if (!host) return
-    const { jsPDF } = await import('jspdf')
+    const pages = host
+      ? Array.from(host.querySelectorAll<HTMLElement>('section.docx')) : []
+    if (!pages.length) { showToast('Kein Dokument zum Exportieren.', false); return }
+
+    const [{ jsPDF }, h2c] = await Promise.all([import('jspdf'), import('html2canvas')])
+    const html2canvas = h2c.default
     const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
-    await pdf.html(host, {
-      autoPaging: 'text',
-      margin: [24, 24, 24, 24],
-      width: 547,                               // A4-Inhaltsbreite (595 - 2*24) in pt
-      windowWidth: host.scrollWidth || 794,     // Renderbreite der docx-Seiten (~A4@96dpi)
-    })
+    const pw = pdf.internal.pageSize.getWidth()
+    const ph = pdf.internal.pageSize.getHeight()
+    // Jede docx-Seite EINZELN rastern: umgeht das Canvas-Größenlimit langer
+    // Dokumente und hält je docx-Seite genau eine PDF-Seite (keine driftenden
+    // Umbrüche oder doppelten Ränder wie beim Rastern des ganzen Wrappers).
+    for (let i = 0; i < pages.length; i++) {
+      const canvas = await html2canvas(pages[i],
+        { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+      const ratio = Math.min(pw / canvas.width, ph / canvas.height)
+      const w = canvas.width * ratio
+      const h = canvas.height * ratio
+      if (i > 0) pdf.addPage()
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (pw - w) / 2, 0, w, h)
+    }
     pdf.save(`${filename.value}.pdf`)
   } catch (e) {
     showToast(errorMessage(e, 'PDF-Export fehlgeschlagen.'), false)
