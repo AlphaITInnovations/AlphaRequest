@@ -360,6 +360,63 @@ def test_document_export_respektiert_confidential(client, monkeypatch, tmp_path)
     assert GAP in doc                       # gesperrtes Feld -> Lücke
 
 
+def test_document_fields_liefert_marker_mit_werten(client, monkeypatch, tmp_path):
+    """Der Feld-Endpunkt listet alle Marker der Vorlage mit vorausgefüllten
+    (sichtbaren) Werten – Grundlage für den Editor."""
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+
+    tplfile = tmp_path / "v.docx"
+    tplfile.write_bytes(html_to_docx("<p>{{name}} in {{ort}}, Stadt {{stadt}}.</p>"))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+                            if key == "doc" and phase == "vertrag" else None))
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+
+    tid = client.post("/process-tickets",
+                      json={"processKey": "doc", "values": {"base.name": "Max Mustermann"}}
+                      ).json()["data"]["id"]
+    r = client.get(f"/process-tickets/{tid}/document:fields")
+    assert r.status_code == 200
+    markers = {m["name"]: m for m in r.json()["data"]["markers"]}
+    assert set(markers) == {"name", "ort", "stadt"}
+    assert markers["name"]["bound"] and markers["name"]["value"] == "Max Mustermann"
+    assert markers["ort"]["bound"] is False and markers["ort"]["value"] == ""
+    assert markers["stadt"]["bound"] and markers["stadt"]["value"] == ""   # base.city leer
+
+
+def test_document_export_overrides_gewinnen(client, monkeypatch, tmp_path):
+    """Mit overrides füllt der Server GENAU die gesendeten Werte (Editor); leere
+    Marker bleiben Lücke, unerwähnte Marker ebenfalls."""
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+    from backend.services.docx_fill import GAP
+
+    tplfile = tmp_path / "v.docx"
+    tplfile.write_bytes(html_to_docx("<p>{{name}} in {{ort}}, Stadt {{stadt}}.</p>"))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+                            if key == "doc" and phase == "vertrag" else None))
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+
+    tid = client.post("/process-tickets",
+                      json={"processKey": "doc", "values": {"base.name": "Max Mustermann"}}
+                      ).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}/document:export",
+                    json={"overrides": {"name": "Editor-Name", "ort": "Nürnberg", "stadt": ""}})
+    assert r.status_code == 200
+    import io
+    import zipfile
+    doc = zipfile.ZipFile(io.BytesIO(r.content)).read("word/document.xml").decode("utf-8")
+    assert "Editor-Name" in doc and "Nürnberg" in doc   # overrides gesetzt
+    assert "Max Mustermann" not in doc                   # Auto-Wert überschrieben
+    assert GAP in doc                                    # leeres stadt -> Lücke
+
+
 def test_document_export_ohne_vorlage_meldet_fehler(client, monkeypatch):
     """.docx-Modus ohne hinterlegte Vorlage (und ohne HTML): statt einer leeren
     Datei ein klarer 409 – der Admin soll erst eine Vorlage hochladen."""

@@ -23,6 +23,7 @@ import { fieldValueText } from '@/lib/processFieldFormat'
 import { exportTicketDocument } from '@/api/processTickets'
 import { errorMessage } from '@/lib/processErrors'
 import { useToast } from '@/composables/useToast'
+import DocumentEditorModal from '@/components/process/form/DocumentEditorModal.vue'
 
 const props = defineProps<{
   definition: ProcessDefinition
@@ -85,17 +86,8 @@ const boundPreview = computed(() =>
     return { marker, label: f?.label || fieldKey, value: rawValue(fieldKey) }
   }))
 
-async function docxExport() {
-  busy.value = true
-  try {
-    // Kein HTML: der Server füllt die hinterlegte Vorlage selbst.
-    download(await exportTicketDocument(props.ticket.id, { filename: dateiname.value }))
-  } catch (e) {
-    showToast(errorMessage(e, 'Export fehlgeschlagen'), false)
-  } finally {
-    busy.value = false
-  }
-}
+/** Editor-Modal: ganzes .docx previewen, Felder ausfüllen/korrigieren, exportieren. */
+const showEditor = ref(false)
 
 // ── HTML-Modus (Alt-Weg) ─────────────────────────────────────────────────────
 
@@ -156,15 +148,14 @@ function drucken() {
             {{ busy ? 'Wird erzeugt…' : 'Als Word exportieren' }}
           </button>
         </template>
-        <!-- .docx-Modus: nur Export (der Server füllt die Vorlage). Bewusst OHNE
-             readonly-Guard: exportieren darf jede:r mit Vollsicht (Ersteller:in,
-             Aufsicht, Admin) – nicht nur die aktuell bearbeitende Stelle. Wer
-             kein Recht hat, bekommt vom Server sauber 403 (keine Sicherheitsnaht
-             in der UI). -->
-        <button v-else @click="docxExport" :disabled="busy"
+        <!-- .docx-Modus: Editor-Modal öffnen (Vorschau + Felder + Word/PDF).
+             Bewusst OHNE readonly-Guard: exportieren darf jede:r mit Vollsicht;
+             wer kein Recht hat, sieht im Modal die Server-Meldung (403/keine
+             Vorlage). -->
+        <button v-else @click="showEditor = true"
                 class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
                        disabled:opacity-40 transition">
-          {{ busy ? 'Wird erzeugt…' : 'Als Word (.docx) exportieren' }}
+          Ausfüllen &amp; exportieren
         </button>
       </div>
     </div>
@@ -172,9 +163,10 @@ function drucken() {
     <!-- .docx-Modus: Zusammenfassung statt Inline-Editor -->
     <template v-if="!isHtml">
       <p class="text-xs text-gray-400 mb-3">
-        Der Export erzeugt die Word-Datei aus der hinterlegten Vorlage. Zugeordnete
-        Felder werden automatisch eingesetzt; übrige Lücken bitte anschließend in
-        Word nachfüllen.
+        „Ausfüllen &amp; exportieren" öffnet die Vorschau des ganzen Dokuments:
+        zugeordnete Felder sind vorausgefüllt, offene Felder lassen sich dort direkt
+        eintragen und als Word oder PDF exportieren. Die Übersicht unten zeigt die
+        automatisch eingesetzten Felder.
       </p>
       <div v-if="boundPreview.length"
            class="rounded-xl border border-gray-200 dark:border-white/10 divide-y
@@ -207,6 +199,8 @@ function drucken() {
                   bg-white dark:bg-[#1A2130] text-gray-900 dark:text-gray-100 p-6 min-h-[320px]
                   text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
     </template>
+
+    <DocumentEditorModal v-if="showEditor" :ticket-id="ticket.id" @close="showEditor = false" />
   </div>
 </template>
 

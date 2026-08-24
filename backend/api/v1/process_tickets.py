@@ -509,6 +509,11 @@ class DocumentExportRequest(BaseModel):
     html: Optional[str] = None
     #: Dateiname ohne Endung; überschreibt den aus der Vorlage abgeleiteten Namen.
     filename: Optional[str] = None
+    #: Marker→Wert aus dem Frontend-Editor. Ist es gesetzt, füllt der Server die
+    #: .docx GENAU mit diesen Werten (statt aus den bindings) – so kann die
+    #: bearbeitende Person manuelle Felder ausfüllen und Auto-Werte korrigieren.
+    #: Leerer Wert ⇒ Marker bleibt eine Lücke.
+    overrides: Optional[dict[str, str]] = None
 
 
 def _safe_filename(name: Optional[str]) -> str:
@@ -561,16 +566,132 @@ def _fill_text(field, raw) -> str:
     return _option_text(field, raw)
 
 
+_MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _pick_docphase(defn, runtime):
+    """Die Dokument-Phase der Definition: die aktuelle, sonst die erste mit einer
+    Vorlage. `None`, wenn es keine gibt."""
+    if defn is None:
+        return None
+    cur = pr.current_phase(defn, runtime or {})
+    if cur is not None and cur.document is not None:
+        return cur
+    return next((p for p in defn.phases if p.document is not None), None)
+
+
+def _load_docx_template(row, docphase):
+    """Die .docx-Vorlage je (Prozess, Phase) laden – `None`, falls keine hinterlegt.
+    Fehler beim Lookup schlucken (still auf „keine Vorlage" degradieren)."""
+    from backend.database import process_templates as tpl_db
+    if docphase is None or not row.get("process_key"):
+        return None
+    try:
+        return tpl_db.get_template(row["process_key"], docphase.key)
+    except Exception:
+        logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", row.get("id"))
+        return None
+
+
+def _docx_fill_prep(row, defn, docphase, user):
+    """Gate (Vollsicht/Admin) + sichtbarkeitsgefilterte Werte + Katalog + bindings.
+
+    §5.1: Der gefüllte Vertrag trägt auch vertrauliche Werte (Gehalt …) – nur
+    Vollsicht/Admin, und selbst dort bleibt ein `confidential`-Feld gesperrt
+    (filter_values), landet also als Lücke, nicht im Klartext. Wirft 403.
+    """
+    gids = vis.user_group_ids(user)
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
+    if not (ctx.full_view or ctx.is_admin):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        "Nur die zuständige Stelle bzw. Vollsicht darf den "
+                        "ausgefüllten Vertrag exportieren")
+    values = vis.filter_values(defn, row.get("values") or {}, ctx)
+    catalog = {f.key: f for f in defn.fields}
+    bindings = dict(docphase.document.bindings) if docphase.document else {}
+    return values, catalog, bindings
+
+
+def _auto_fill_values(bindings, catalog, values) -> dict:
+    """Auto-Werte je Marker aus den bindings – wie in der Vorschau (Options-
+    Beschriftung, Ja/Nein). LEERE werden weggelassen, damit fill_docx dort die
+    Lücke setzt statt eines „—"."""
+    out = {}
+    for marker, fk in bindings.items():
+        text = _fill_text(catalog.get(fk), values.get(fk))
+        if text != "":
+            out[marker] = text
+    return out
+
+
+def _read_template_bytes(tpl) -> bytes:
+    from pathlib import Path
+    from backend.services import attachment_storage as _storage
+    try:
+        return Path(_storage.full_path(tpl["stored_path"])).read_bytes()
+    except Exception:
+        raise api_error(500, "TEMPLATE_UNREADABLE", "Die hinterlegte Vorlage ist nicht lesbar")
+
+
+@router.get("/process-tickets/{ticket_id}/document:fields")
+def document_fields(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Marker der .docx-Vorlage + vorausgefüllte (sichtbarkeitsgefilterte) Werte –
+    Grundlage für den Editor im Frontend. 409, falls keine Vorlage hinterlegt."""
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    docphase = _pick_docphase(defn, row.get("runtime"))
+    if defn is None or docphase is None:
+        raise api_error(409, "TEMPLATE_MISSING", "Diese Phase hat keine Dokument-Vorlage.")
+    tpl = _load_docx_template(row, docphase)
+    if tpl is None:
+        raise api_error(409, "TEMPLATE_MISSING",
+                        "Für diese Dokument-Phase ist keine Vorlage hinterlegt. "
+                        "Bitte im Prozess-Editor eine .docx-Vorlage hochladen.")
+    values, catalog, bindings = _docx_fill_prep(row, defn, docphase, user)
+    from backend.services import docx_fill
+    from backend.services import mail_template as mt
+    markers = docx_fill.find_placeholders(_read_template_bytes(tpl))
+    out = []
+    for m in markers:
+        fk = bindings.get(m)
+        if fk:
+            f = catalog.get(fk)
+            label = (f.label if (f and f.label) else fk)
+            out.append({"name": m, "label": label, "bound": True,
+                        "value": _fill_text(f, values.get(fk))})
+        else:
+            out.append({"name": m, "label": m, "bound": False, "value": ""})
+
+    def _resolve(token: str) -> str:
+        if token == "title":
+            return str(row.get("title") or "")
+        if token == "id":
+            return str(row.get("id") or "")
+        return mt.format_value(values.get(token))
+
+    doc = docphase.document
+    filename = _safe_filename(mt.substitute((doc.filename if doc else "") or "Dokument", _resolve))
+    return DataResponse(data={"filename": filename, "phase": docphase.key,
+                              "title": (doc.title if doc else None), "markers": out})
+
+
 @router.post("/process-tickets/{ticket_id}/document:export")
 def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                            user: dict = Depends(get_current_user)):
-    """Das (im Frontend gefüllte und ggf. angepasste) Dokument-HTML als Word-Datei
-    ausliefern. Reiner HTML→.docx-Wandler (services/html_to_docx) – die Werte
-    stehen bereits im gesendeten HTML, gelesen wird aus dem Auftrag nichts.
+    """Die Dokument-Phase als Word-Datei (.docx) ausliefern.
 
-    Zugriff = Leserecht am Auftrag: wer den Auftrag sehen darf, hat den Inhalt
-    ohnehin schon; das Gate bindet den Wandler an den Auftrag (kein offener
-    Konverter). PDF erzeugt das Frontend selbst (jsPDF)."""
+    Mit hochgeladener .docx-Vorlage füllt der SERVER die {{marker}}: entweder aus
+    `overrides` (Frontend-Editor – manuelle Felder + Korrekturen) oder aus den
+    Auto-Werten der bindings. Ohne Vorlage bleibt der Alt-Weg HTML→.docx.
+
+    Zugriff: der Vorlage-Weg verlangt Vollsicht/Admin (der Vertrag trägt evtl.
+    vertrauliche Werte); der HTML-Weg genügt Leserecht (Werte stehen im HTML).
+    PDF erzeugt das Frontend selbst."""
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
@@ -579,46 +700,19 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
     except Exception:
         defn = None
 
-    _MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    docphase = _pick_docphase(defn, row.get("runtime"))
+    tpl = _load_docx_template(row, docphase)
 
-    # Dokument-Phase der Definition bestimmen (aktuelle Phase, sonst die erste mit
-    # Vorlage). Die .docx liegt je (Prozess, PHASE) – ihr Schlüssel steckt hier.
-    docphase = None
-    if defn is not None:
-        cur = pr.current_phase(defn, row.get("runtime") or {})
-        docphase = cur if (cur and cur.document is not None) else \
-            next((p for p in defn.phases if p.document is not None), None)
-
-    from backend.database import process_templates as tpl_db
-    tpl = None
-    if defn is not None and docphase is not None and row.get("process_key"):
-        try:
-            tpl = tpl_db.get_template(row["process_key"], docphase.key)
-        except Exception:
-            logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", ticket_id)
-            tpl = None
-
-    # Mit hochgeladener .docx-Vorlage: der Server füllt die {{marker}} aus den
-    # Auftragswerten (Zuordnung = DocumentSpec.bindings). Der gefüllte Vertrag
-    # enthält auch vertrauliche Werte (Gehalt …) → nur Vollsicht/Admin, nicht
-    # jede lesende Rolle (Fachabteilung).
     if tpl is not None and docphase is not None:
-        gids = vis.user_group_ids(user)
-        ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
-        if not (ctx.full_view or ctx.is_admin):
-            raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
-                            "Nur die zuständige Stelle bzw. Vollsicht darf den "
-                            "ausgefüllten Vertrag exportieren")
+        values, catalog, bindings = _docx_fill_prep(row, defn, docphase, user)
         doc = docphase.document
-        bindings = dict(doc.bindings) if doc else {}
-        # §5.1: NUR sichtbare Werte einsetzen. `confidential` (z. B. Gehalt) ist
-        # eine harte Sperre, die auch die Vollsicht NICHT umgeht – gesperrte Felder
-        # fallen hier weg und landen im Dokument als Lücke (GAP), nicht im Klartext.
-        values = vis.filter_values(defn, row.get("values") or {}, ctx)
-        catalog = {f.key: f for f in defn.fields}
-        from backend.services import attachment_storage as _storage
         from backend.services import docx_fill
         from backend.services import mail_template as mt
+        # Editor-Werte (overrides) haben Vorrang; leere Marker bleiben Lücke.
+        if body.overrides is not None:
+            fill_values = {m: v for m, v in body.overrides.items() if v}
+        else:
+            fill_values = _auto_fill_values(bindings, catalog, values)
 
         def _resolve(token: str) -> str:
             if token == "title":
@@ -627,22 +721,9 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                 return str(row.get("id") or "")
             return mt.format_value(values.get(token))
 
-        # Werte wie in der Vorschau (Options-Beschriftung, Ja/Nein); LEERE bewusst
-        # weglassen, damit fill_docx dort die Lücke setzt statt eines „—".
-        fill_values = {}
-        for marker, fk in bindings.items():
-            text = _fill_text(catalog.get(fk), values.get(fk))
-            if text != "":
-                fill_values[marker] = text
-        try:
-            from pathlib import Path
-            tpl_bytes = Path(_storage.full_path(tpl["stored_path"])).read_bytes()
-        except Exception:
-            raise api_error(500, "TEMPLATE_UNREADABLE",
-                            "Die hinterlegte Vorlage ist nicht lesbar")
-        data = docx_fill.fill_docx(tpl_bytes, fill_values)
+        data = docx_fill.fill_docx(_read_template_bytes(tpl), fill_values)
         name = body.filename or mt.substitute((doc.filename if doc else "") or "Dokument", _resolve)
-        return Response(content=data, media_type=_MIME,
+        return Response(content=data, media_type=_MIME_DOCX,
                         headers={"Content-Disposition": _content_disposition(_safe_filename(name) + ".docx")})
 
     # Kein Template → bisheriger HTML→docx-Weg (Werte stehen im gesendeten HTML,
@@ -656,7 +737,7 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                         "Bitte im Prozess-Editor eine .docx-Vorlage hochladen.")
     from backend.services.html_to_docx import html_to_docx
     data = html_to_docx(body.html or "")
-    return Response(content=data, media_type=_MIME,
+    return Response(content=data, media_type=_MIME_DOCX,
                     headers={"Content-Disposition":
                              _content_disposition(_safe_filename(body.filename) + ".docx")})
 

@@ -33,15 +33,40 @@ export async function getTicket(id: number): Promise<ProcessTicketOut> {
  * Dokument-Phase: das (im Editor angepasste) HTML als Word-Datei (.docx) holen.
  * Der Server wandelt reines HTML→docx; Antwort ist ein Blob (Download).
  */
+/** Ein Marker der .docx-Vorlage samt vorausgefülltem Wert (für den Editor). */
+export interface DocumentField {
+  name: string
+  /** Anzeige-Label (Feldbezeichnung bei zugeordnetem Feld, sonst der Marker). */
+  label: string
+  /** true = automatisch aus einem Ticket-Feld befüllt (korrigierbar). */
+  bound: boolean
+  value: string
+}
+
+export interface DocumentFields {
+  filename: string
+  phase: string
+  title: string | null
+  markers: DocumentField[]
+}
+
+/** Marker + vorausgefüllte (sichtbarkeitsgefilterte) Werte der Dokument-Vorlage. */
+export async function getDocumentFields(id: number): Promise<DocumentFields> {
+  const { data } = await client.get(`/process-tickets/${id}/document:fields`)
+  return data.data
+}
+
 export async function exportTicketDocument(
-  id: number, opts: { html?: string; filename?: string } = {},
+  id: number,
+  opts: { html?: string; filename?: string; overrides?: Record<string, string> } = {},
 ): Promise<Blob> {
   // Mit hochgeladener .docx-Vorlage fuellt der Server selbst (html irrelevant);
-  // ohne Vorlage kommt das im Client gefuellte HTML mit.
+  // `overrides` sind die Editor-Werte (manuelle Felder + Korrekturen). Ohne
+  // Vorlage kommt das im Client gefuellte HTML mit.
   try {
     const { data } = await client.post(
       `/process-tickets/${id}/document:export`,
-      { html: opts.html, filename: opts.filename },
+      { html: opts.html, filename: opts.filename, overrides: opts.overrides },
       { responseType: 'blob' })
     return data as Blob
   } catch (e) {
