@@ -99,11 +99,13 @@ defineProps<{ title?: string }>()
     >
       <!-- Brand -->
       <div class="flex items-center justify-between px-4 py-4 border-b border-white/15 min-h-[64px]">
-        <div v-if="sidebarOpen" class="flex items-center gap-2.5 min-w-0 cursor-pointer" @click="navigate('/dashboard')">
-          <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
-            <span class="text-sm font-bold">A</span>
-          </div>
-          <span class="text-base font-semibold tracking-tight truncate">AlphaRequest</span>
+        <div v-if="sidebarOpen" class="flex items-center gap-2.5 min-w-0 cursor-pointer select-none" @click="navigate('/dashboard')">
+          <!-- Alpha-„A" in Weiß: dieselbe Logo-Datei wie in der Topbar, per CSS-Filter
+               von Türkis auf Weiß gezogen (brightness(0)=schwarz, invert(1)=weiß),
+               damit es auf dem türkisen Sidebar-Hintergrund sauber steht. -->
+          <img src="/logo.png" alt="Alpha" draggable="false"
+               class="h-9 w-auto flex-shrink-0" style="filter: brightness(0) invert(1)" />
+          <span class="text-lg font-semibold tracking-tight truncate">Request</span>
         </div>
         <button @click="sidebarOpen = !sidebarOpen"
                 class="p-1.5 rounded-lg hover:bg-white/15 transition flex-shrink-0 hidden md:flex">
@@ -288,8 +290,6 @@ defineProps<{ title?: string }>()
               <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
           </button>
-          <img src="/logo.png" alt="Logo" class="h-8 w-auto object-contain" />
-          <div class="h-5 w-px bg-gray-200 dark:bg-white/10 hidden sm:block"/>
           <span class="text-sm font-medium text-gray-500 dark:text-gray-400 hidden sm:block">
             <slot name="title">{{ title ?? 'AlphaRequest' }}</slot>
           </span>
