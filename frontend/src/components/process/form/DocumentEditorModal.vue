@@ -4,13 +4,15 @@
  *
  * Links ein Formular je {{marker}} der Vorlage (manuelle Felder ausfüllen,
  * automatisch befüllte notfalls korrigieren), rechts eine LIVE-Vorschau des
- * ganzen gefüllten .docx (docx-preview rendert die vom Server gefüllte Datei).
- * Export als Word (.docx, Server-Fill) oder PDF (client-seitig aus der Vorschau).
+ * ganzen gefüllten Dokuments als PDF. Das PDF erzeugt der Server originalgetreu
+ * über LibreOffice (korrekte Seiten/Umbrüche wie in Word) – der Browser zeigt es
+ * im eingebauten PDF-Viewer (Seiten, Zoom, Blättern nativ). Export als Word
+ * (.docx) oder PDF – beides serverseitig, kein Client-Rendering.
  *
- * Die Vorlage bleibt im Backend mit ihren {{}}; hier reisen nur die Marker-Werte
- * als `overrides` mit – die Definition/bindings werden NICHT verändert.
+ * Die Vorlage bleibt im Backend mit ihren {{}}; nur die Marker-Werte reisen als
+ * `overrides` mit – Definition/bindings bleiben unangetastet.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   getDocumentFields, exportTicketDocument, type DocumentField,
 } from '@/api/processTickets'
@@ -32,19 +34,10 @@ const fields = ref<DocumentField[]>([])
 const filename = ref('Dokument')
 const docTitle = ref<string | null>(null)
 
-const previewEl = ref<HTMLElement | null>(null)
 const previewBusy = ref(false)
 const exporting = ref(false)
-
-// Seiten-Navigation: docx-preview rendert je Seite eine <section.docx>; wir zeigen
-// immer nur EINE (wie in Word) und blättern per Pager.
-const pageCount = ref(0)
-const currentPage = ref(1)
-
-// Muss zu docx_fill.MARK_OPEN/MARK_CLOSE passen: der Server klammert eingesetzte
-// Werte (nur in der Vorschau, highlight=true) in diese Private-Use-Zeichen.
-const MARK_OPEN = ''
-const MARK_CLOSE = ''
+const pdfUrl = ref<string | null>(null)
+let pdfBlob: Blob | null = null
 
 const manualFields = computed(() => fields.value.filter((f) => !f.bound))
 const autoFields = computed(() => fields.value.filter((f) => f.bound))
@@ -65,8 +58,7 @@ async function load() {
     fields.value = data.markers.map((m) => ({ ...m }))
     filename.value = data.filename || 'Dokument'
     docTitle.value = data.title
-    await nextTick()
-    await renderPreview()
+    await refreshPreview()
   } catch (e) {
     loadError.value = errorMessage(e, 'Die Vorlage konnte nicht geladen werden.')
   } finally {
@@ -74,32 +66,24 @@ async function load() {
   }
 }
 
-// „Latest-Wins": nur der zuletzt gestartete Render darf das DOM/den Zustand
-// schreiben. Ohne das könnte ein langsamer älterer Server-Fill nach einem
-// schnelleren neueren zurückkommen und die Vorschau auf einen VERALTETEN Stand
-// überschreiben (out-of-order).
+// „Latest-Wins": nur die zuletzt gestartete Konvertierung darf die Vorschau
+// setzen – sonst überschriebe ein langsamer älterer Lauf einen neueren (out-of-order).
 let renderSeq = 0
 
-/** Aktuellen Stand serverseitig füllen und die .docx in die Vorschau rendern.
- *  Gibt true zurück, wenn DIESER (der neueste) Render erfolgreich gerendert hat. */
-async function renderPreview(): Promise<boolean> {
-  const host = previewEl.value
-  if (!host) return false
+/** Aktuellen Stand serverseitig zu PDF rendern und in die Vorschau setzen.
+ *  Gibt true zurück, wenn DIESER (der neueste) Lauf erfolgreich war. */
+async function refreshPreview(): Promise<boolean> {
   const seq = ++renderSeq
   previewBusy.value = true
   try {
-    // highlight=true: der Server markiert eingesetzte Werte (nur Vorschau).
     const blob = await exportTicketDocument(props.ticketId,
-      { overrides: overrides(), filename: filename.value, highlight: true })
-    const { renderAsync } = await import('docx-preview')
-    if (seq !== renderSeq) return false          // ein neuerer Render hat übernommen
-    host.innerHTML = ''
-    await renderAsync(blob, host, undefined,
-      { inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false,
-        className: 'docx' })
-    if (seq !== renderSeq) return false
-    applyHighlights(host)                        // Marken → Hervorhebung
-    setupPager(host)                             // Seitenzahl + aktuelle Seite zeigen
+      { overrides: overrides(), filename: filename.value, format: 'pdf' })
+    if (seq !== renderSeq) return false          // ein neuerer Lauf hat übernommen
+    pdfBlob = blob
+    const next = URL.createObjectURL(blob)
+    const prev = pdfUrl.value
+    pdfUrl.value = next
+    if (prev) URL.revokeObjectURL(prev)
     return true
   } catch (e) {
     if (seq === renderSeq) showToast(errorMessage(e, 'Vorschau fehlgeschlagen.'), false)
@@ -112,63 +96,8 @@ async function renderPreview(): Promise<boolean> {
 let timer: ReturnType<typeof setTimeout> | null = null
 function schedulePreview() {
   if (timer) clearTimeout(timer)
-  timer = setTimeout(renderPreview, 500)   // Tipp-Pause abwarten, nicht pro Anschlag
+  timer = setTimeout(refreshPreview, 600)   // Tipp-Pause abwarten (Server-Konvertierung)
 }
-
-// ── Hervorhebung eingesetzter Werte ──────────────────────────────────────────
-// Der Server umklammert eingesetzte Werte mit MARK_OPEN/MARK_CLOSE. Wir suchen
-// diese Zeichen in den Textknoten und ersetzen sie durch <mark>-Spans – präzise
-// (genau die gefüllten Stellen) und ohne die Formatierung anzutasten.
-function applyHighlights(host: HTMLElement) {
-  const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
-  const hits: Text[] = []
-  let n: Node | null = walker.nextNode()
-  while (n) {
-    if (n.nodeValue && n.nodeValue.includes(MARK_OPEN)) hits.push(n as Text)
-    n = walker.nextNode()
-  }
-  for (const node of hits) wrapMarks(node)
-}
-
-function wrapMarks(node: Text) {
-  const text = node.nodeValue ?? ''
-  const frag = document.createDocumentFragment()
-  let i = 0
-  while (i < text.length) {
-    const open = text.indexOf(MARK_OPEN, i)
-    if (open === -1) { frag.appendChild(document.createTextNode(text.slice(i))); break }
-    if (open > i) frag.appendChild(document.createTextNode(text.slice(i, open)))
-    const close = text.indexOf(MARK_CLOSE, open + 1)
-    const end = close === -1 ? text.length : close
-    const mark = document.createElement('mark')
-    mark.className = 'docx-fill'
-    mark.textContent = text.slice(open + 1, end)
-    frag.appendChild(mark)
-    i = close === -1 ? text.length : close + 1
-  }
-  node.parentNode?.replaceChild(frag, node)
-}
-
-// ── Seiten-Navigation ────────────────────────────────────────────────────────
-function docxPages(host?: HTMLElement | null): HTMLElement[] {
-  const h = host ?? previewEl.value
-  return h ? Array.from(h.querySelectorAll<HTMLElement>('section.docx')) : []
-}
-
-function setupPager(host: HTMLElement) {
-  pageCount.value = docxPages(host).length
-  if (currentPage.value > pageCount.value) currentPage.value = pageCount.value || 1
-  if (currentPage.value < 1) currentPage.value = 1
-  showPage()
-}
-
-/** Nur die aktuelle Seite zeigen (wie in Word), die übrigen ausblenden. */
-function showPage() {
-  docxPages().forEach((s, idx) => { s.style.display = idx === currentPage.value - 1 ? '' : 'none' })
-}
-
-function prevPage() { if (currentPage.value > 1) { currentPage.value -= 1; showPage() } }
-function nextPage() { if (currentPage.value < pageCount.value) { currentPage.value += 1; showPage() } }
 
 // ── Export ───────────────────────────────────────────────────────────────────
 
@@ -186,59 +115,31 @@ function triggerDownload(blob: Blob, name: string) {
   }
 }
 
-async function exportDocx() {
+async function exportPdf() {
   exporting.value = true
   try {
-    const blob = await exportTicketDocument(props.ticketId,
-      { overrides: overrides(), filename: filename.value })
-    triggerDownload(blob, `${filename.value}.docx`)
+    if (timer) { clearTimeout(timer); timer = null }
+    // Aktuelles PDF sicherstellen (nutzt dieselbe Konvertierung wie die Vorschau).
+    if (!await refreshPreview() || !pdfBlob) {
+      showToast('PDF nicht bereit – bitte erneut versuchen.', false); return
+    }
+    triggerDownload(pdfBlob, `${filename.value}.pdf`)
   } catch (e) {
-    showToast(errorMessage(e, 'Word-Export fehlgeschlagen.'), false)
+    showToast(errorMessage(e, 'PDF-Export fehlgeschlagen.'), false)
   } finally {
     exporting.value = false
   }
 }
 
-async function exportPdf() {
+async function exportDocx() {
   exporting.value = true
-  // Sauber (OHNE Hervorhebung/Seiten-Ausblendung) und aktuell rendern – abseits
-  // der Bildschirm-Vorschau, damit nichts flackert und das PDF kein Gelb trägt.
-  let stage: HTMLElement | null = null
   try {
     const blob = await exportTicketDocument(props.ticketId,
-      { overrides: overrides(), filename: filename.value })   // highlight aus → sauber
-    const { renderAsync } = await import('docx-preview')
-    stage = document.createElement('div')
-    stage.style.cssText = 'position:fixed;left:-99999px;top:0;'
-    document.body.appendChild(stage)
-    await renderAsync(blob, stage, undefined,
-      { inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false,
-        className: 'docx' })
-    const pages = Array.from(stage.querySelectorAll<HTMLElement>('section.docx'))
-    if (!pages.length) { showToast('Kein Dokument zum Exportieren.', false); return }
-
-    const [{ jsPDF }, h2c] = await Promise.all([import('jspdf'), import('html2canvas')])
-    const html2canvas = h2c.default
-    const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
-    const pw = pdf.internal.pageSize.getWidth()
-    const ph = pdf.internal.pageSize.getHeight()
-    // Jede docx-Seite EINZELN rastern: umgeht das Canvas-Größenlimit langer
-    // Dokumente und hält je docx-Seite genau eine PDF-Seite (keine driftenden
-    // Umbrüche oder doppelten Ränder wie beim Rastern des ganzen Wrappers).
-    for (let i = 0; i < pages.length; i++) {
-      const canvas = await html2canvas(pages[i],
-        { scale: 2, backgroundColor: '#ffffff', useCORS: true })
-      const ratio = Math.min(pw / canvas.width, ph / canvas.height)
-      const w = canvas.width * ratio
-      const h = canvas.height * ratio
-      if (i > 0) pdf.addPage()
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (pw - w) / 2, 0, w, h)
-    }
-    pdf.save(`${filename.value}.pdf`)
+      { overrides: overrides(), filename: filename.value, format: 'docx' })
+    triggerDownload(blob, `${filename.value}.docx`)
   } catch (e) {
-    showToast(errorMessage(e, 'PDF-Export fehlgeschlagen.'), false)
+    showToast(errorMessage(e, 'Word-Export fehlgeschlagen.'), false)
   } finally {
-    if (stage) stage.remove()
     exporting.value = false
   }
 }
@@ -252,12 +153,13 @@ onMounted(() => { document.addEventListener('keydown', onKey); load() })
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey)
   if (timer) clearTimeout(timer)
+  if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value)
 })
 </script>
 
 <template>
   <Teleport to="body">
-    <!-- Bewusst KEIN Schließen bei Außenklick: nur X oder „Abbrechen" (oder Esc). -->
+    <!-- Bewusst KEIN Schließen bei Außenklick: nur X, „Abbrechen" oder Esc. -->
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div class="flex w-full max-w-7xl h-[92vh] flex-col overflow-hidden rounded-2xl
                   bg-white dark:bg-[#141a26] shadow-2xl">
@@ -276,7 +178,7 @@ onBeforeUnmount(() => {
           <p class="text-sm text-gray-600 dark:text-gray-300 max-w-md">{{ loadError }}</p>
         </div>
 
-        <!-- Körper: Formular + Vorschau -->
+        <!-- Körper: Formular + PDF-Vorschau -->
         <div v-else class="flex flex-1 min-h-0">
           <!-- Formular -->
           <div class="w-80 shrink-0 overflow-y-auto border-r border-gray-200 dark:border-white/10 p-4 space-y-5">
@@ -312,31 +214,16 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
-          <!-- Vorschau + Pager -->
-          <div class="relative flex flex-1 min-h-0 flex-col bg-gray-100 dark:bg-[#0d1117]">
+          <!-- PDF-Vorschau (Browser-Viewer: Seiten, Blättern, Zoom) -->
+          <div class="relative flex-1 min-h-0 bg-gray-100 dark:bg-[#0d1117]">
             <div v-if="previewBusy"
                  class="absolute right-4 top-3 z-10 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
-              Vorschau aktualisiert …
+              Vorschau wird erstellt …
             </div>
-            <div class="flex-1 overflow-auto p-8">
-              <div ref="previewEl" class="docx-host mx-auto" />
-            </div>
-            <!-- untere Leiste: Legende + Seiten-Navigation -->
-            <div v-if="!loading" class="flex items-center justify-between gap-3 border-t
-                        border-gray-200 dark:border-white/10 px-4 py-2 text-xs
-                        text-gray-500 dark:text-gray-400 bg-white/70 dark:bg-black/20">
-              <span class="inline-flex items-center gap-1.5">
-                <span class="inline-block h-3 w-3 rounded-sm"
-                      style="background:#fff3b0;box-shadow:0 0 0 1px #e6cf5a"></span>
-                eingesetzte Werte
-              </span>
-              <div v-if="pageCount > 1" class="flex items-center gap-3">
-                <button class="btn-secondary text-xs py-1 px-2 disabled:opacity-40"
-                        :disabled="currentPage <= 1" @click="prevPage">‹ Zurück</button>
-                <span class="tabular-nums">Seite {{ currentPage }} / {{ pageCount }}</span>
-                <button class="btn-secondary text-xs py-1 px-2 disabled:opacity-40"
-                        :disabled="currentPage >= pageCount" @click="nextPage">Weiter ›</button>
-              </div>
+            <iframe v-if="pdfUrl" :src="pdfUrl" title="Dokument-Vorschau"
+                    class="h-full w-full border-0" />
+            <div v-else class="flex h-full items-center justify-center p-8 text-sm text-gray-400">
+              {{ loading ? 'Vorschau wird erstellt …' : 'Keine Vorschau verfügbar.' }}
             </div>
           </div>
         </div>
@@ -358,19 +245,3 @@ onBeforeUnmount(() => {
     </div>
   </Teleport>
 </template>
-
-<style>
-/* docx-preview bringt eigene Seiten-Styles mit; wir geben dem Wrapper nur etwas
-   Luft und eine dezente Seiten-Optik. Nicht scoped, weil der Inhalt per innerHTML
-   von docx-preview kommt. */
-.docx-host .docx-wrapper { background: transparent; padding: 0; }
-.docx-host .docx-wrapper > section.docx {
-  margin: 0 auto; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15); background: #fff;
-}
-/* Hervorhebung eingesetzter Werte in der Vorschau (nur <mark class="docx-fill">,
-   vom Client aus den Server-Marken erzeugt – kein Einfluss auf den Export). */
-.docx-host mark.docx-fill {
-  background: #fff3b0; color: inherit; border-radius: 2px;
-  box-shadow: 0 0 0 1px #e6cf5a; padding: 0 1px;
-}
-</style>

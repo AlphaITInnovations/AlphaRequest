@@ -417,6 +417,62 @@ def test_document_export_overrides_gewinnen(client, monkeypatch, tmp_path):
     assert GAP in doc                                    # leeres stadt -> Lücke
 
 
+def test_document_export_pdf_ueber_libreoffice(client, monkeypatch, tmp_path):
+    """format=pdf füllt die Vorlage und lässt LibreOffice sie nach PDF wandeln."""
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+    from backend.services import docx_to_pdf
+
+    tplfile = tmp_path / "v.docx"
+    tplfile.write_bytes(html_to_docx("<p>{{name}}</p>"))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+                            if key == "doc" and phase == "vertrag" else None))
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+    seen = {}
+    def _fake_convert(b):
+        seen["docx"] = b
+        return b"%PDF-1.7 fake-pdf"
+    monkeypatch.setattr(docx_to_pdf, "convert", _fake_convert)
+
+    tid = client.post("/process-tickets",
+                      json={"processKey": "doc", "values": {"base.name": "Max"}}
+                      ).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}/document:export", json={"format": "pdf"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/pdf")
+    assert r.content == b"%PDF-1.7 fake-pdf"
+    assert seen["docx"][:2] == b"PK"          # es wurde eine echte (gefüllte) .docx übergeben
+
+
+def test_document_export_pdf_konvertierungsfehler(client, monkeypatch, tmp_path):
+    """Scheitert LibreOffice, kommt ein klarer 500 statt einer kaputten Datei."""
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+    from backend.services import docx_to_pdf
+
+    tplfile = tmp_path / "v.docx"
+    tplfile.write_bytes(html_to_docx("<p>{{name}}</p>"))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+                            if key == "doc" and phase == "vertrag" else None))
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+    def _boom(b):
+        raise docx_to_pdf.ConversionError("soffice fehlt")
+    monkeypatch.setattr(docx_to_pdf, "convert", _boom)
+
+    tid = client.post("/process-tickets",
+                      json={"processKey": "doc", "values": {"base.name": "Max"}}
+                      ).json()["data"]["id"]
+    r = client.post(f"/process-tickets/{tid}/document:export", json={"format": "pdf"})
+    assert r.status_code == 500
+    assert r.json()["error"]["code"] == "PDF_CONVERSION_FAILED"
+
+
 def test_document_fields_ohne_leserecht_gibt_404(client):
     """Der Feld-Endpunkt darf Fremden NICHT die Existenz/Dokument-Lage verraten:
     ohne Leserecht 404 – vor jedem TEMPLATE_MISSING-Zweig."""

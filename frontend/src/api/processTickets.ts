@@ -63,6 +63,8 @@ export async function exportTicketDocument(
     overrides?: Record<string, string>
     /** NUR Vorschau: eingesetzte Werte markieren (Hervorhebung). Export = false. */
     highlight?: boolean
+    /** 'docx' (Standard) oder 'pdf' (Server rendert per LibreOffice). */
+    format?: 'docx' | 'pdf'
   } = {},
 ): Promise<Blob> {
   // Mit hochgeladener .docx-Vorlage fuellt der Server selbst (html irrelevant);
@@ -72,7 +74,7 @@ export async function exportTicketDocument(
     const { data } = await client.post(
       `/process-tickets/${id}/document:export`,
       { html: opts.html, filename: opts.filename, overrides: opts.overrides,
-        highlight: opts.highlight },
+        highlight: opts.highlight, format: opts.format },
       { responseType: 'blob' })
     return data as Blob
   } catch (e) {

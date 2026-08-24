@@ -517,6 +517,9 @@ class DocumentExportRequest(BaseModel):
     #: NUR für die Vorschau: eingesetzte Werte mit unsichtbaren Marken umschließen,
     #: damit das Frontend sie hervorheben kann. Der echte Word/PDF-Export lässt es weg.
     highlight: bool = False
+    #: Ausgabeformat: "docx" (Standard) oder "pdf" (LibreOffice rendert die gefüllte
+    #: Vorlage originalgetreu). Die Vorschau im Editor holt sich "pdf".
+    format: str = "docx"
 
 
 def _safe_filename(name: Optional[str]) -> str:
@@ -728,9 +731,20 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
             return mt.format_value(values.get(token))
 
         data = docx_fill.fill_docx(_read_template_bytes(tpl), fill_values, mark=body.highlight)
-        name = body.filename or mt.substitute((doc.filename if doc else "") or "Dokument", _resolve)
+        name = _safe_filename(
+            body.filename or mt.substitute((doc.filename if doc else "") or "Dokument", _resolve))
+        if body.format == "pdf":
+            # Originalgetreu über LibreOffice (Vorschau + PDF-Export).
+            from backend.services import docx_to_pdf
+            try:
+                pdf = docx_to_pdf.convert(data)
+            except docx_to_pdf.ConversionError as exc:
+                raise api_error(500, "PDF_CONVERSION_FAILED",
+                                f"Das PDF konnte nicht erzeugt werden: {exc}")
+            return Response(content=pdf, media_type="application/pdf",
+                            headers={"Content-Disposition": _content_disposition(name + ".pdf")})
         return Response(content=data, media_type=_MIME_DOCX,
-                        headers={"Content-Disposition": _content_disposition(_safe_filename(name) + ".docx")})
+                        headers={"Content-Disposition": _content_disposition(name + ".docx")})
 
     # Kein Template → bisheriger HTML→docx-Weg (Werte stehen im gesendeten HTML,
     # Leserecht genügt).
