@@ -39,6 +39,11 @@ const exporting = ref(false)
 const pdfUrl = ref<string | null>(null)
 let pdfBlob: Blob | null = null
 
+// PDF-Viewer-Parameter: Miniaturen-Leiste aus (mehr Breite) + auf Seitenbreite
+// einpassen (statt 80%), damit die Vorschau gut lesbar ist.
+const pdfSrc = computed(() =>
+  pdfUrl.value ? `${pdfUrl.value}#toolbar=1&navpanes=0&view=FitH` : null)
+
 const manualFields = computed(() => fields.value.filter((f) => !f.bound))
 const autoFields = computed(() => fields.value.filter((f) => f.bound))
 
@@ -160,8 +165,8 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <!-- Bewusst KEIN Schließen bei Außenklick: nur X, „Abbrechen" oder Esc. -->
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div class="flex w-full max-w-7xl h-[92vh] flex-col overflow-hidden rounded-2xl
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
+      <div class="flex w-full max-w-[1600px] h-[94vh] flex-col overflow-hidden rounded-2xl
                   bg-white dark:bg-[#141a26] shadow-2xl">
         <!-- Kopf -->
         <div class="flex items-center justify-between gap-3 border-b border-gray-200
@@ -220,7 +225,7 @@ onBeforeUnmount(() => {
                  class="absolute right-4 top-3 z-10 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
               Vorschau wird erstellt …
             </div>
-            <iframe v-if="pdfUrl" :src="pdfUrl" title="Dokument-Vorschau"
+            <iframe v-if="pdfSrc" :src="pdfSrc" title="Dokument-Vorschau"
                     class="h-full w-full border-0" />
             <div v-else class="flex h-full items-center justify-center p-8 text-sm text-gray-400">
               {{ loading ? 'Vorschau wird erstellt …' : 'Keine Vorschau verfügbar.' }}
