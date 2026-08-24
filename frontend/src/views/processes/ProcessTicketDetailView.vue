@@ -84,7 +84,9 @@ const istLetztePhase = computed(() => {
   const i = ticket.value?.runtime?.current_index ?? 0
   return i >= (definition.value?.phases.length ?? 1) - 1
 })
-const weiterLabel = computed(() => (istLetztePhase.value ? 'Abschließen' : 'Weitergeben'))
+const weiterLabel = computed(() =>
+  phase.value?.advanceLabel?.trim()
+  || (istLetztePhase.value ? 'Abschließen' : 'Weitergeben'))
 
 /**
  * Erlaubte Aktionen kommen vom Server (`abilities`). Fehlt das Feld (alte

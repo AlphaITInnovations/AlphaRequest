@@ -225,6 +225,7 @@ export function normalizePhase(v: any): PhaseDef {
     kind,
     view: v?.view ?? 'form',
     enterStatus: str(v?.enterStatus),
+    advanceLabel: str(v?.advanceLabel),
     grantsFullView: bool(v?.grantsFullView),
     responsibility: normResponsibility(v?.responsibility),
     approval: normApproval(v?.approval),

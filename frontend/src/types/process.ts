@@ -254,6 +254,8 @@ export interface PhaseDef {
   kind: PhaseKind
   view: PhaseView
   enterStatus: string | null
+  /** Beschriftung des „Weitergeben"-Buttons dieser Phase (leer → Standard). */
+  advanceLabel: string | null
   grantsFullView: boolean
   responsibility: Responsibility
   /** Pflicht bei kind='approval', sonst `null` (der Server lehnt ihn sonst ab). */

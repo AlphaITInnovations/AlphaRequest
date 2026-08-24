@@ -634,6 +634,9 @@ class PhaseDef(_Base):
     kind: PhaseKind
     view: PhaseView = PhaseView.form
     enterStatus: Optional[str] = None
+    #: Beschriftung des grünen „Weitergeben"-Buttons für diese Phase (z. B.
+    #: „Weitergeben an Vorgesetzten"). Leer → Standard („Weitergeben"/„Abschließen").
+    advanceLabel: Optional[str] = None
     grantsFullView: bool = False
     responsibility: Responsibility
     #: Pflicht bei kind=approval, sonst verboten.

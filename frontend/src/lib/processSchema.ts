@@ -266,7 +266,7 @@ export function defaultViewFor(kind: PhaseKind): PhaseView {
 export function blankPhase(key: string, kind: PhaseKind = 'task'): PhaseDef {
   return {
     key, label: null, kind, view: defaultViewFor(kind),
-    enterStatus: null, grantsFullView: false,
+    enterStatus: null, advanceLabel: null, grantsFullView: false,
     responsibility: blankResponsibility(kind === 'review' ? 'departments' : 'owner'),
     approval: kind === 'approval' ? blankApproval() : null,
     document: null,
