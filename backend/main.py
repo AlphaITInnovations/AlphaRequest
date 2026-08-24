@@ -90,7 +90,7 @@ def create_app() -> FastAPI:
 
     setup_session(app)
     init_metrics(app)
-
+    #a
     @app.middleware("http")
     async def _security_headers(request, call_next):
         """Defensive Response-Header (Clickjacking/MIME-Sniffing/Referer-Leak).
