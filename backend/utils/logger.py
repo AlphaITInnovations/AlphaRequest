@@ -35,11 +35,6 @@ class ColoredFormatter(logging.Formatter):
         formatter = logging.Formatter(color + fmt + _COLOR_RESET)
         return formatter.format(record)
 
-# Logs-Verzeichnis anlegen
-LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "app.log")
-
 # Redaction-Filter: entfernt Secrets (OAuth-Code, Tokens, Passwörter) aus jeder
 # Logzeile – auch aus fremden Loggern (uvicorn-Access), an die er gehängt wird.
 class RedactionFilter(logging.Filter):
@@ -62,24 +57,30 @@ logger = logging.getLogger("backend")
 logger.setLevel(getattr(logging, _LEVEL, logging.INFO))
 logger.addFilter(RedactionFilter())
 
-# 1) Console-Handler mit Farb-Formatter
+# 1) Console-Handler mit Farb-Formatter – im Container die EINZIGE Ausgabe
+#    (12-Factor: Docker/Dokploy sammelt stdout).
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
 console_handler.setFormatter(ColoredFormatter())
 logger.addHandler(console_handler)
 
-# 2) File-Handler (rotierend, ohne Farben)
-file_handler = RotatingFileHandler(
-    LOG_FILE,
-    maxBytes=10 * 1024 * 1024,
-    backupCount=5,
-    encoding="utf-8"
-)
-file_formatter = logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-)
-file_handler.setFormatter(file_formatter)
-logger.addHandler(file_handler)
+# 2) Datei-Handler (rotierend) – NUR wenn LOG_TO_FILE gesetzt ist. Standard AUS:
+#    sonst schriebe der Logger in einen nicht persistenten Container-Pfad, der bei
+#    jedem Neustart verschwindet und die beschreibbare Schicht aufbläht (dieselben
+#    Zeilen stehen ohnehin auf stdout). Wer Datei-Logs will, setzt LOG_TO_FILE=1
+#    und LOG_DIR auf ein gemountetes Volume.
+if os.getenv("LOG_TO_FILE", "").strip().lower() in ("1", "true", "yes", "on"):
+    LOG_DIR = os.getenv("LOG_DIR", os.path.join(os.path.dirname(__file__), "..", "logs"))
+    os.makedirs(LOG_DIR, exist_ok=True)
+    file_handler = RotatingFileHandler(
+        os.path.join(LOG_DIR, "app.log"),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    logger.addHandler(file_handler)
 
 
 def install_access_log_redaction() -> None:
