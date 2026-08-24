@@ -32,9 +32,16 @@ export const SYSTEM_PROCESS_BLOCKED =
   + 'Produkt und wird automatisch aktuell gehalten. Wer eine eigene Variante '
   + 'braucht, kopiert ihn: die Kopie ist frei änderbar.'
 
-/** Trägt diese Version das System-Merkmal? Maßgeblich ist allein der Server. */
-export function isSystemProcess(p: { is_system?: boolean | null } | null | undefined): boolean {
-  return p?.is_system === true
+/**
+ * Ist dieser Prozess im UI schreibgeschützt? Das gilt für System-Prozesse UND für
+ * auto-verwaltete (seeds/auto): beide werden serverseitig gepflegt und lehnen jede
+ * Mutation mit demselben 403 `SYSTEM_PROCESS_READONLY` ab. Maßgeblich ist der
+ * Server (`is_system` / `is_auto_managed`).
+ */
+export function isSystemProcess(
+  p: { is_system?: boolean | null; is_auto_managed?: boolean | null } | null | undefined,
+): boolean {
+  return p?.is_system === true || p?.is_auto_managed === true
 }
 
 /** Hat der Server den Zugriff wegen eines System-Prozesses abgewiesen? */

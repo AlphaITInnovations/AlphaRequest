@@ -15,7 +15,18 @@ from pathlib import Path
 #: Verzeichnis mit den ausgelieferten Prozess-Definitionen (eine JSON je Prozess).
 PROCESS_SEED_DIR: Path = Path(__file__).resolve().parent / "processes"
 
+#: Verzeichnis mit AUTO-VERWALTETEN Prozessen: sie werden beim Start automatisch
+#: angelegt/aktualisiert (neue Version) und sind im UI schreibgeschützt – die JSON
+#: ist die Wahrheit. Gedacht für Prozesse, die wir per Repo pflegen, ohne dass sie
+#: nach jeder Änderung von Hand neu importiert werden müssen.
+AUTO_SEED_DIR: Path = Path(__file__).resolve().parent / "auto"
+
 
 def process_seed_files() -> list[Path]:
-    """Alle Prozess-Seeds, stabil sortiert (damit Läufe vergleichbar bleiben)."""
+    """Alle (manuellen) Prozess-Seeds, stabil sortiert."""
     return sorted(PROCESS_SEED_DIR.glob("*.json"))
+
+
+def auto_seed_files() -> list[Path]:
+    """Alle auto-verwalteten Prozess-Seeds, stabil sortiert. Ordner darf fehlen."""
+    return sorted(AUTO_SEED_DIR.glob("*.json")) if AUTO_SEED_DIR.is_dir() else []

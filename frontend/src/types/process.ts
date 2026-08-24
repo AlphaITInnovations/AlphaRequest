@@ -335,6 +335,9 @@ export interface ProcessOut {
    * älteres Backend das Merkmal nicht mitschickt – siehe lib/processSystem.ts.
    */
   is_system?: boolean | null
+  /** Auto-verwaltet (seeds/auto): wie ein System-Prozess im UI schreibgeschützt,
+   *  die JSON ist die Wahrheit. Optional (älteres Backend schickt es nicht). */
+  is_auto_managed?: boolean | null
   /** Global deaktiviert? Dann lassen sich keine neuen Aufträge anlegen. Key-weit
    *  (unabhängig von der Version); im Katalog und in der veröffentlichten Ansicht
    *  gefüllt. Fehlt das Feld (älteres Backend), gilt der Prozess als aktiv. */

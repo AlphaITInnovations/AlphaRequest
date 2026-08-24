@@ -104,3 +104,14 @@ def init_db():
                 logger.warning("System-Prozess %s: %s", o.key, o.meldung)
     except Exception as e:
         logger.warning(f"System-Prozesse übersprungen: {e}")
+
+    # Auto-verwaltete Prozesse (seeds/auto/): NACH den Pflichtgruppen, damit die
+    # Platzhalter-Gruppen existieren. Wie System-Prozesse: neue Version bei
+    # Aenderung, im UI schreibgeschuetzt. Leerer Ordner = kein Effekt.
+    try:
+        from backend.services.seed_definitions import ensure_auto_processes
+        for o in ensure_auto_processes():
+            if o.aktion == "error":
+                logger.warning("Auto-Prozess %s: %s", o.key, o.meldung)
+    except Exception as e:
+        logger.warning(f"Auto-Prozesse übersprungen: {e}")
