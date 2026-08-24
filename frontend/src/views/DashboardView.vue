@@ -461,46 +461,57 @@ onMounted(async () => {
       </div>
 
       <!-- ── Liste ── -->
+      <!-- Recessed „Well" (grau) mit einzelnen weißen Auftrags-Karten darin:
+           die Abgrenzung entsteht durch Karten mit Rahmen + Abstand, nicht durch
+           dünne Trennlinien. Der Abteilungs-Reiter gruppiert die Karten unter
+           zuklappbaren Abschnitts-Köpfen. -->
       <div>
-        <!-- Ergebnisse -->
         <div class="bg-gray-50 dark:bg-[#1A2130] border border-gray-200/80 dark:border-white/[0.09]
                     rounded-2xl overflow-hidden">
 
           <!-- Keine Ergebnis-Zahl: die steht schon groß in den Kacheln. Nur die
                Status-Verteilung über ALLE für mich sichtbaren Aufträge. -->
           <div v-if="statusCounts.length"
-               class="px-5 py-2 flex items-center justify-end gap-1.5 flex-wrap
-                      border-b border-gray-100 dark:border-white/[0.04]">
+               class="px-4 py-2.5 flex items-center justify-end gap-1.5 flex-wrap
+                      border-b border-gray-200/70 dark:border-white/[0.06]">
             <span v-for="[st, n] in statusCounts" :key="st"
                   class="text-xs font-medium px-2.5 py-1 rounded-full" :class="statusClass(st)">
               {{ statusLabel(st) }} · {{ n }}
             </span>
           </div>
 
-          <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] max-h-[560px] overflow-auto">
-            <!-- EIN Zeilen-Markup für alle Reiter; der Abteilungs-Reiter streut
-                 Abschnitts-Köpfe ein. Die Köpfe kleben beim Scrollen oben – bei
-                 hunderten Aufträgen bleibt so erkennbar, in welcher Abteilung
-                 man gerade liest. -->
+          <ul class="flex flex-col gap-2 p-3 sm:p-4 max-h-[560px] overflow-auto">
+            <!-- EIN Karten-Markup für alle Reiter; der Abteilungs-Reiter streut
+                 zuklappbare Abschnitts-Köpfe ein. -->
             <template v-for="el in anzeige" :key="el.key">
-              <li v-if="el.art === 'kopf'"
-                  @click="abschnittUmklappen(el.id)"
-                  class="sticky top-0 z-10 px-5 py-2 bg-gray-50 dark:bg-[#1A2130]
-                         border-b border-gray-100 dark:border-white/[0.04]
-                         flex items-center gap-2 cursor-pointer select-none
-                         hover:bg-gray-100/70 dark:hover:bg-white/[0.04] transition">
-                <svg class="w-3.5 h-3.5 text-gray-400 transition-transform"
-                     :class="el.zu ? '-rotate-90' : ''"
-                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-                <span class="text-[11px] font-semibold uppercase tracking-wider
-                             text-purple-600 dark:text-purple-300">{{ el.name }}</span>
-                <span class="text-[11px] text-gray-400">
-                  · {{ el.anzahl }} {{ el.anzahl === 1 ? 'Auftrag' : 'Aufträge' }}
-                </span>
+              <li v-if="el.art === 'kopf'" class="first:mt-0 mt-3">
+                <button @click="abschnittUmklappen(el.id)"
+                        class="w-full flex items-center justify-between gap-2 px-1.5 py-1 rounded-lg
+                               cursor-pointer select-none text-left
+                               hover:bg-gray-100/70 dark:hover:bg-white/[0.04] transition">
+                  <span class="flex items-center gap-2.5 min-w-0">
+                    <span class="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0
+                                 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      </svg>
+                    </span>
+                    <span class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ el.name }}</span>
+                  </span>
+                  <span class="flex items-center gap-2 flex-shrink-0">
+                    <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full
+                                 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                      {{ el.anzahl }}
+                    </span>
+                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                         :class="el.zu ? '-rotate-90' : ''"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </span>
+                </button>
               </li>
-              <li v-else @click="open(el.z)" class="row group">
+              <li v-else @click="open(el.z)" class="order-card group">
                 <div class="flex items-start gap-3.5 min-w-0">
                   <div class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" :class="dotClass(el.z.status)" />
                   <div class="min-w-0">
@@ -592,12 +603,16 @@ onMounted(async () => {
          focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition;
 }
 
-.row {
-  @apply flex items-start justify-between px-5 py-4 cursor-pointer
-         hover:bg-white/60 dark:hover:bg-[#263040] transition;
+/* Eine Auftrags-Karte: weiße Fläche im grauen Well, klare Abgrenzung durch
+   Rahmen + Radius, beim Hover türkiser Rand und weicher Schatten. */
+.order-card {
+  @apply flex items-start justify-between px-4 py-3.5 rounded-xl cursor-pointer
+         bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
+         hover:border-[#3EAAB8]/40 hover:shadow-sm hover:-translate-y-px
+         transition-all duration-150;
 }
 
-.empty { @apply px-5 py-14 text-center text-sm text-gray-400 italic; }
+.empty { @apply py-14 text-center text-sm text-gray-400 italic; }
 
 /* Info-Icon mit Hover-Tooltip auf den Kacheln.
    Die Bubble wird relativ zur Karte (.stat = relative) zentriert und darunter
