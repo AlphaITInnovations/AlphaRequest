@@ -376,6 +376,52 @@
       "item": []
     },
     {
+      "key": "personal.geburtsdatum",
+      "label": "Geburtsdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "personal.geburtsort",
+      "label": "Geburtsort",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. Nürnberg",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
       "key": "personal.homeoffice",
       "label": "Homeoffice",
       "widget": "select",
@@ -1280,6 +1326,29 @@
       "item": []
     },
     {
+      "key": "konditionen.gehalt_probezeit",
+      "label": "Gehalt in der Probezeit",
+      "widget": "text",
+      "help": null,
+      "placeholder": "z. B. 3.200 € / Monat",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
       "key": "konditionen.dreizehntes",
       "label": "13. Gehalt?",
       "widget": "select",
@@ -1556,6 +1625,13 @@
         },
         {
           "ref": "konditionen.gehalt",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "konditionen.gehalt_probezeit",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -1848,6 +1924,11 @@
             },
             {
               "type": "field",
+              "ref": "konditionen.gehalt_probezeit",
+              "width": "half"
+            },
+            {
+              "type": "field",
               "ref": "konditionen.dreizehntes",
               "width": "half"
             },
@@ -2049,6 +2130,13 @@
           "visibleWhen": null
         },
         {
+          "ref": "konditionen.gehalt_probezeit",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "konditionen.dreizehntes",
           "mode": "readonly",
           "required": false,
@@ -2213,6 +2301,11 @@
             {
               "type": "field",
               "ref": "konditionen.gehalt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.gehalt_probezeit",
               "width": "half"
             },
             {
@@ -2383,6 +2476,13 @@
           "visibleWhen": null
         },
         {
+          "ref": "konditionen.gehalt_probezeit",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
           "ref": "konditionen.dreizehntes",
           "mode": "readonly",
           "required": false,
@@ -2475,6 +2575,20 @@
         },
         {
           "ref": "personal.private_city",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.geburtsdatum",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "personal.geburtsort",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -2882,6 +2996,11 @@
             },
             {
               "type": "field",
+              "ref": "konditionen.gehalt_probezeit",
+              "width": "half"
+            },
+            {
+              "type": "field",
               "ref": "konditionen.dreizehntes",
               "width": "half"
             },
@@ -2933,6 +3052,16 @@
             {
               "type": "field",
               "ref": "personal.private_city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.geburtsdatum",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.geburtsort",
               "width": "half"
             },
             {
@@ -3135,6 +3264,7 @@
       "kind": "task",
       "view": "document",
       "enterStatus": null,
+      "advanceLabel": "Arbeitsvertrag als versendet markieren",
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
@@ -3151,6 +3281,46 @@
       },
       "fields": [],
       "layout": [],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "vertragsruecklauf",
+      "label": "Warten auf unterschriebenen Arbeitsvertrag",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "advanceLabel": "Auftrag an Fachabteilungen übergeben",
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "approval": null,
+      "document": null,
+      "fields": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Vertragsrücklauf",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "note",
+              "text": "Auf den unterschriebenen Arbeitsvertrag warten. Sobald er unterschrieben vorliegt, den Auftrag über den Button unten an die Fachabteilungen übergeben.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": null
+            }
+          ]
+        }
+      ],
       "constraints": [],
       "automations": []
     },

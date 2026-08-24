@@ -79,13 +79,6 @@ function download(blob: Blob) {
 
 // ── .docx-Modus ──────────────────────────────────────────────────────────────
 
-/** Was automatisch aus dem Auftrag eingesetzt wird (aus `document.bindings`). */
-const boundPreview = computed(() =>
-  Object.entries(spec.value?.bindings ?? {}).map(([marker, fieldKey]) => {
-    const f = catalog.value.get(fieldKey)
-    return { marker, label: f?.label || fieldKey, value: rawValue(fieldKey) }
-  }))
-
 /** Editor-Modal: ganzes .docx previewen, Felder ausfüllen/korrigieren, exportieren. */
 const showEditor = ref(false)
 
@@ -160,29 +153,12 @@ function drucken() {
       </div>
     </div>
 
-    <!-- .docx-Modus: Zusammenfassung statt Inline-Editor -->
+    <!-- .docx-Modus: nur der Button oben. Die eingesetzten/auszufüllenden Werte
+         zeigt das Editor-Modal – hier bewusst keine zweite Übersicht. -->
     <template v-if="!isHtml">
-      <p class="text-xs text-gray-400 mb-3">
-        „Ausfüllen &amp; exportieren" öffnet die Vorschau des ganzen Dokuments:
-        zugeordnete Felder sind vorausgefüllt, offene Felder lassen sich dort direkt
-        eintragen und als Word oder PDF exportieren. Die Übersicht unten zeigt die
-        automatisch eingesetzten Felder.
-      </p>
-      <div v-if="boundPreview.length"
-           class="rounded-xl border border-gray-200 dark:border-white/10 divide-y
-                  divide-gray-100 dark:divide-white/5">
-        <div v-for="b in boundPreview" :key="b.marker"
-             class="flex items-baseline justify-between gap-4 px-4 py-2 text-sm">
-          <span class="text-gray-500 dark:text-gray-400 shrink-0">{{ b.label }}</span>
-          <span class="text-gray-900 dark:text-gray-100 text-right truncate"
-                :class="{ 'italic text-gray-400 dark:text-gray-500': !b.value }">
-            {{ b.value || '(leer – in Word nachfüllen)' }}
-          </span>
-        </div>
-      </div>
-      <p v-else class="text-sm text-gray-400 italic">
-        Für diese Phase ist noch keine automatische Feld-Zuordnung hinterlegt – die
-        Vorlage wird unverändert exportiert.
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        „Ausfüllen &amp; exportieren" öffnet die Vorschau des ganzen Dokuments zum
+        Ausfüllen und Export als Word oder PDF.
       </p>
     </template>
 
