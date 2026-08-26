@@ -183,6 +183,14 @@ const generalErrors = computed(() => {
   return errors.value.filter((e) => !fieldKeys.has(e.path))
 })
 
+/** Gibt es aktuell FELD-bezogene Fehler (die Felder sind rot)? Dann ganz oben im
+ *  Ticket ein deutlicher Hinweis, sonst übersieht man die Markierungen im langen
+ *  Formular. */
+const hatPflichtfehler = computed(() => {
+  const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
+  return errors.value.some((e) => fieldKeys.has(e.path))
+})
+
 /** Nach Admin-Eingriffen: Auftrag UND Verlauf nachziehen. */
 async function reloadAll() {
   await load()
@@ -353,6 +361,21 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             <span>·</span>
             <span>{{ STATUS_LABEL[ticket.status] || ticket.status }}</span>
           </div>
+        </div>
+
+        <!-- Pflichtfeld-Hinweis: erscheint beim Weitergeben/Abschließen, wenn noch
+             Felder fehlen (die Felder selbst werden im Formular rot markiert). -->
+        <div v-if="hatPflichtfehler"
+             class="mb-4 rounded-xl border border-red-200 dark:border-red-500/30
+                    bg-red-50 dark:bg-red-900/20 px-4 py-3 flex items-start gap-2">
+          <svg class="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" fill="none" viewBox="0 0 24 24"
+               stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p class="text-sm text-red-800 dark:text-red-200">
+            Bitte alle Pflichtfelder ausfüllen – die fehlenden sind unten rot markiert.
+          </p>
         </div>
 
         <!-- Zwei Spalten wie beim Basis-Ticket: links Fortschritt + Beobachter,

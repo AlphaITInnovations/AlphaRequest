@@ -128,6 +128,7 @@ function pruefen(): boolean {
 
 async function erstellen() {
   if (!pruefen()) { showToast('Bitte die markierten Felder prüfen', false); return }
+  if (!confirm('Wollen Sie diesen Auftrag erstellen?')) return
   submitting.value = true
   try {
     const t = await createTicket({

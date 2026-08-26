@@ -165,6 +165,7 @@ async function submit() {
     showToast('Bitte die markierten Felder prüfen', false)
     return
   }
+  if (!confirm('Wollen Sie diesen Auftrag erstellen?')) return
   submitting.value = true
   try {
     // Anhänge einsammeln (je Feld können mehrere Dateien gewählt sein).
