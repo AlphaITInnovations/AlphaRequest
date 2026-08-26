@@ -32,8 +32,9 @@ class FakeRequests:
         self.exc = exc
         self.calls = []
 
-    def get(self, url, headers=None, params=None, timeout=None):
-        self.calls.append({"url": url, "headers": headers, "params": params, "timeout": timeout})
+    def get(self, url, headers=None, params=None, timeout=None, verify=None):
+        self.calls.append({"url": url, "headers": headers, "params": params,
+                           "timeout": timeout, "verify": verify})
         if self.exc:
             raise self.exc
         return self.resp
@@ -72,6 +73,28 @@ def test_request_builds_url_headers_params_and_unpacks(configured, monkeypatch):
     assert call["headers"]["Authorization"] == "Bearer tok"
     assert call["params"] == {"limit": 5}
     assert call["timeout"] == 7
+
+
+def test_verify_resolution(monkeypatch):
+    # CA-Bundle gewinnt (prüft weiter gegen die Datei) …
+    monkeypatch.setattr(dc.config, "DIRECTUS_CA_BUNDLE", "/etc/ssl/directus-ca.pem")
+    monkeypatch.setattr(dc.config, "DIRECTUS_VERIFY_SSL", False)
+    assert dc._verify() == "/etc/ssl/directus-ca.pem"
+    # … ohne Bundle steuert das Flag: False = Prüfung aus (self-signed), sonst True.
+    monkeypatch.setattr(dc.config, "DIRECTUS_CA_BUNDLE", "")
+    monkeypatch.setattr(dc.config, "DIRECTUS_VERIFY_SSL", False)
+    assert dc._verify() is False
+    monkeypatch.setattr(dc.config, "DIRECTUS_VERIFY_SSL", True)
+    assert dc._verify() is True
+
+
+def test_request_passes_verify(configured, monkeypatch):
+    monkeypatch.setattr(dc.config, "DIRECTUS_VERIFY_SSL", False)
+    monkeypatch.setattr(dc.config, "DIRECTUS_CA_BUNDLE", "")
+    fake = FakeRequests(FakeResp(200, {"data": []}))
+    monkeypatch.setattr(dc, "requests", fake)
+    dc._request("/items/x")
+    assert fake.calls[0]["verify"] is False
 
 
 def test_request_http_error_maps_message_and_status(configured, monkeypatch):

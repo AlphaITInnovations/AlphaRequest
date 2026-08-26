@@ -46,6 +46,23 @@ def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {config.DIRECTUS_TOKEN}", "Accept": "application/json"}
 
 
+def _verify():
+    """requests-`verify`: eine CA-Bundle-Datei, falls gesetzt (prüft weiter gegen
+    diese CA), sonst der Bool DIRECTUS_VERIFY_SSL. False = Prüfung aus (self-signed).
+    Bei ausgeschalteter Prüfung die urllib3-Warnung einmalig unterdrücken (kein
+    Log-Rauschen bei jeder Abfrage)."""
+    if config.DIRECTUS_CA_BUNDLE:
+        return config.DIRECTUS_CA_BUNDLE
+    if not config.DIRECTUS_VERIFY_SSL:
+        try:
+            from urllib3.exceptions import InsecureRequestWarning
+            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+        except Exception:
+            pass
+        return False
+    return True
+
+
 def _error_message(resp: "requests.Response") -> str:
     """Directus meldet Fehler als {"errors":[{"message": …}]} – die erste Meldung
     herausziehen, sonst den (gekürzten) Rohtext."""
@@ -70,7 +87,7 @@ def _request(path: str, params: Optional[dict] = None) -> Any:
     url = f"{config.DIRECTUS_URL}{path}"
     try:
         resp = requests.get(url, headers=_headers(), params=params or {},
-                            timeout=config.DIRECTUS_TIMEOUT)
+                            timeout=config.DIRECTUS_TIMEOUT, verify=_verify())
     except requests.RequestException as exc:
         raise DirectusError(f"Directus nicht erreichbar: {exc}") from exc
     if resp.status_code >= 400:

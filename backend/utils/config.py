@@ -66,6 +66,12 @@ class Config:
     DIRECTUS_URL: str = os.getenv("DIRECTUS_URL", "").rstrip("/")
     DIRECTUS_TOKEN: str = os.getenv("DIRECTUS_TOKEN", "")
     DIRECTUS_TIMEOUT: int = int(os.getenv("DIRECTUS_TIMEOUT", "15"))
+    # TLS-Prüfung gegen Directus. Bei selbst-signiertem Zertifikat entweder
+    # DIRECTUS_CA_BUNDLE auf die CA-Datei zeigen lassen (empfohlen, prüft weiter)
+    # ODER DIRECTUS_VERIFY_SSL=false setzen (Prüfung AUS – nur im vertrauenswürdigen
+    # internen Netz vertretbar).
+    DIRECTUS_VERIFY_SSL: bool = str_to_bool(os.getenv("DIRECTUS_VERIFY_SSL", "true"))
+    DIRECTUS_CA_BUNDLE: str = os.getenv("DIRECTUS_CA_BUNDLE", "")
 
     @property
     def COMPANIES(self):
