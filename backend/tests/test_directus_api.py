@@ -55,6 +55,25 @@ def test_fields_ok(monkeypatch):
     assert r.status_code == 200 and r.json()["data"][0]["field"] == "nummer"
 
 
+def test_fields_falls_back_to_sample_on_schema_error(monkeypatch):
+    c = _app(ADMIN, monkeypatch)
+
+    def boom(col):
+        raise dapi.dc.DirectusError("403 forbidden", status=403)
+    monkeypatch.setattr(dapi.dc, "list_fields", boom)
+    monkeypatch.setattr(dapi.dc, "sample_fields", lambda col: [{"field": "nummer"}])
+    r = c.get("/directus/collections/kst/fields")
+    assert r.status_code == 200 and r.json()["data"][0]["field"] == "nummer"
+
+
+def test_fields_falls_back_to_sample_when_empty(monkeypatch):
+    c = _app(ADMIN, monkeypatch)
+    monkeypatch.setattr(dapi.dc, "list_fields", lambda col: [])
+    monkeypatch.setattr(dapi.dc, "sample_fields", lambda col: [{"field": "x"}])
+    r = c.get("/directus/collections/kst/fields")
+    assert r.status_code == 200 and r.json()["data"][0]["field"] == "x"
+
+
 # ── Quellen verwalten ─────────────────────────────────────────────────────────
 
 def test_put_sources_saves_and_audits(monkeypatch):

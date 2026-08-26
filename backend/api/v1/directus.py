@@ -86,10 +86,20 @@ def directus_collections(user: dict = Depends(get_current_user)):
 @router.get("/directus/collections/{collection}/fields")
 def directus_fields(collection: str, user: dict = Depends(get_current_user)):
     _require_admin(user)
+    # Erst die echte Schema-Introspektion; wenn sie für das Token nicht verfügbar
+    # ist (Fehler ODER leer), Felder aus einem Beispiel-Datensatz ableiten – das
+    # braucht nur Leserechte.
+    schema_err = None
     try:
-        return DataResponse(data=dc.list_fields(collection))
+        fields = dc.list_fields(collection)
+        if fields:
+            return DataResponse(data=fields)
     except dc.DirectusError as exc:
-        raise api_error(502, _DIRECTUS_ERROR, str(exc))
+        schema_err = str(exc)
+    try:
+        return DataResponse(data=dc.sample_fields(collection))
+    except dc.DirectusError as exc:
+        raise api_error(502, _DIRECTUS_ERROR, schema_err or str(exc))
 
 
 # ── Quellen-Verwaltung (Admin) ────────────────────────────────────────────────

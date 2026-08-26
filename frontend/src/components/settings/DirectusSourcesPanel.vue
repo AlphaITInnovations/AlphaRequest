@@ -25,6 +25,8 @@ const loading = ref(true)
 const status = ref<DirectusStatus>({ configured: false, ok: false, error: null })
 const collections = ref<DirectusCollection[]>([])
 const fieldsByCollection = ref<Record<string, DirectusField[]>>({})
+const collectionsError = ref<string | null>(null)
+const fieldsError = ref<string | null>(null)
 
 const { selected, open, back } = useDetailNav(() => sources.value.length)
 
@@ -54,7 +56,14 @@ async function loadAll() {
     snapshot.value = serialize(sources.value)
     // Collections nur laden, wenn Directus antwortet – sonst bleibt die manuelle Eingabe.
     if (status.value.ok) {
-      collections.value = await listCollections().catch(() => [])
+      collectionsError.value = null
+      try {
+        collections.value = await listCollections()
+      } catch (e: any) {
+        collections.value = []
+        collectionsError.value = e?.response?.data?.error?.message
+          || 'Collections konnten nicht geladen werden.'
+      }
     }
   } finally {
     loading.value = false
@@ -63,9 +72,12 @@ async function loadAll() {
 
 async function ensureFields(collection: string) {
   if (!collection || fieldsByCollection.value[collection] || !status.value.ok) return
+  fieldsError.value = null
   try {
     fieldsByCollection.value = { ...fieldsByCollection.value, [collection]: await listFields(collection) }
-  } catch { /* Introspektion optional – manuelle Pfade bleiben möglich */ }
+  } catch (e: any) {
+    fieldsError.value = e?.response?.data?.error?.message || 'Felder konnten nicht geladen werden.'
+  }
 }
 
 function currentFields(s: DirectusSource): DirectusField[] {
@@ -258,12 +270,18 @@ onMounted(loadAll)
             </option>
           </select>
           <input v-else v-model="sources[selected].collection" @change="onCollectionChange(sources[selected])"
-                 class="set-input w-full" placeholder="Collection-Name (manuell, Directus nicht verbunden)" />
+                 class="set-input w-full" placeholder="Collection-Name eintippen (z. B. kostenstellen)" />
+          <p v-if="!collections.length && status.ok" class="text-xs text-gray-400 mt-1">
+            Keine Collections abrufbar (das Token hat evtl. keine Schema-Leserechte). Tippe den
+            Collection-Namen ein – die Felder werden dann aus einem Beispiel-Datensatz ermittelt.
+            <span v-if="collectionsError" class="text-amber-600 dark:text-amber-400">({{ collectionsError }})</span>
+          </p>
         </div>
 
         <!-- Felder, die geladen werden -->
         <div v-if="sources[selected].collection">
           <label class="lbl">Zu ladende Felder</label>
+          <p v-if="fieldsError" class="text-xs text-amber-600 dark:text-amber-400 mb-2">{{ fieldsError }}</p>
           <div v-if="currentFields(sources[selected]).length" class="flex flex-wrap gap-2 mb-2">
             <label v-for="f in currentFields(sources[selected])" :key="f.field"
                    class="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border cursor-pointer select-none"

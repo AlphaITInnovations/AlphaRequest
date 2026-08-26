@@ -121,7 +121,7 @@ def test_request_non_json_raises(configured, monkeypatch):
         dc._request("/x")
 
 
-def test_list_collections_filters_system_and_folders(configured, monkeypatch):
+def test_list_collections_filters_only_system(configured, monkeypatch):
     monkeypatch.setattr(dc, "_request", lambda path, params=None: [
         {"collection": "directus_users", "schema": {}, "meta": {}},
         {"collection": "ordner", "schema": None, "meta": {}},
@@ -129,8 +129,10 @@ def test_list_collections_filters_system_and_folders(configured, monkeypatch):
          "meta": {"note": "KST", "icon": "tag", "hidden": False}},
     ])
     cols = dc.list_collections()
-    assert [c["collection"] for c in cols] == ["kostenstellen"]
-    assert cols[0]["note"] == "KST"
+    # Nur System (directus_*) wird gefiltert; schema-None (z. B. Ordner) bleibt jetzt
+    # drin, damit eingeschränkte Tokens ihre echten Collections sehen.
+    assert [c["collection"] for c in cols] == ["kostenstellen", "ordner"]
+    assert next(c for c in cols if c["collection"] == "kostenstellen")["note"] == "KST"
 
 
 def test_list_fields_maps_type_and_relation(configured, monkeypatch):
@@ -165,6 +167,16 @@ def test_query_items_builds_params(configured, monkeypatch):
     assert p["search"] == "10"
     assert p["limit"] == 20
     assert json.loads(p["filter"]) == {"aktiv": {"_eq": True}}
+
+
+def test_sample_fields_from_item(configured, monkeypatch):
+    monkeypatch.setattr(dc, "_request", lambda path, params=None: [{"nummer": "1", "firma": 5}])
+    assert {f["field"] for f in dc.sample_fields("kst")} == {"nummer", "firma"}
+
+
+def test_sample_fields_empty(configured, monkeypatch):
+    monkeypatch.setattr(dc, "_request", lambda path, params=None: [])
+    assert dc.sample_fields("kst") == []
 
 
 def test_query_items_non_list_data_is_empty(configured, monkeypatch):

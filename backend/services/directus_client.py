@@ -112,8 +112,9 @@ def list_collections() -> list[dict]:
         name = c.get("collection")
         if not name or str(name).startswith(_SYSTEM_PREFIX):
             continue
-        if c.get("schema") is None:            # Ordner/Gruppe, keine Tabelle
-            continue
+        # `schema is None` NICHT herausfiltern: eingeschränkte Tokens bekommen für
+        # echte Tabellen oft kein Schema geliefert – ein zu strenger Filter ließe
+        # die Liste dann leer. Reine Ordner sind selten und stören kaum.
         meta = c.get("meta") or {}
         out.append({
             "collection": name,
@@ -123,6 +124,18 @@ def list_collections() -> list[dict]:
         })
     out.sort(key=lambda x: x["collection"])
     return out
+
+
+def sample_fields(collection: str) -> list[dict]:
+    """Feld-Kandidaten aus EINEM Beispiel-Datensatz ableiten – Fallback, wenn die
+    Schema-Introspektion (`/fields`) für das Token nicht verfügbar ist (nur
+    Datenlese-Rechte). Liefert die Top-Level-Schlüssel; Relationen erscheinen als
+    ihr Roh-Schlüssel (dot-Pfade fügt man bei Bedarf manuell hinzu)."""
+    recs = query_items(collection, limit=1)
+    if not recs or not isinstance(recs[0], dict):
+        return []
+    return [{"field": k, "type": None, "note": None, "primaryKey": False,
+             "relatedCollection": None} for k in recs[0].keys()]
 
 
 def list_fields(collection: str) -> list[dict]:
