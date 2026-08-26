@@ -72,6 +72,10 @@ class Config:
     # internen Netz vertretbar).
     DIRECTUS_VERIFY_SSL: bool = str_to_bool(os.getenv("DIRECTUS_VERIFY_SSL", "true"))
     DIRECTUS_CA_BUNDLE: str = os.getenv("DIRECTUS_CA_BUNDLE", "")
+    # Schreib-Token für Automations-Aktionen (Anlegen/Ändern/Löschen in Directus).
+    # Leer = derselbe Token wie zum Lesen (der braucht dann Schreibrechte auf die
+    # Ziel-Collection). Getrennt haltbar, um Lese- und Schreibrechte zu trennen.
+    DIRECTUS_WRITE_TOKEN: str = os.getenv("DIRECTUS_WRITE_TOKEN", "")
 
     @property
     def COMPANIES(self):

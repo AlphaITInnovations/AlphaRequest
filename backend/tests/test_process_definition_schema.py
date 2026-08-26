@@ -198,6 +198,62 @@ def test_directus_field_valid():
     ProcessDefinition.model_validate(d)   # valide
 
 
+def test_directus_write_requires_spec():
+    d = _base()
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+                                      "action": {"type": "directus_write"}}]
+    _reject(d)
+
+
+def test_directus_write_idfield_must_exist():
+    d = _base(fields=[{"key": "a", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "ghost", "fieldMap": [{"source": "a", "target": "t"}]}}}]
+    _reject(d)
+
+
+def test_on_department_done_needs_departments_phase():
+    d = {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "a", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"}, "fields": [{"ref": "a"}]},
+            {"key": "t", "kind": "task", "responsibility": {"kind": "group", "group": "g"},
+             "fields": [{"ref": "a", "mode": "readonly"}],
+             "automations": [{"id": "x", "trigger": {"type": "on_department_done", "group": "g"},
+                              "action": {"type": "notify", "to": "responsible"}}]},
+        ],
+    }
+    _reject(d)
+
+
+def _defn_with_review_automation(group, trigger_group):
+    return {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"}, "fields": [{"ref": "a"}]},
+            {"key": "rev", "kind": "review", "view": "review",
+             "responsibility": {"kind": "departments", "rule": [{"group": group, "required": True}]},
+             "fields": [{"ref": "a", "mode": "readonly"}],
+             "automations": [{"id": "anlegen", "trigger": {"type": "on_department_done", "group": trigger_group},
+                              "action": {"type": "directus_write", "directus": {"operation": "create",
+                                         "collection": "mitarbeiter", "idField": "mid",
+                                         "fieldMap": [{"source": "a", "target": "name"}]}}}]},
+        ],
+    }
+
+
+def test_on_department_done_valid_with_directus_write():
+    ProcessDefinition.model_validate(_defn_with_review_automation("g-it", "g-it"))
+
+
+def test_on_department_done_group_must_belong_to_phase():
+    _reject(_defn_with_review_automation("g-it", "g-andere"))
+
+
 def test_directus_readonly_target_is_allowed():
     # Read-only Ziel ist erlaubt: den Snapshot schreibt der Server autoritativ.
     d = _base(fields=[

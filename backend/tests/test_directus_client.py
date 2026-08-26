@@ -40,6 +40,18 @@ class FakeRequests:
         return self.resp
 
 
+class FakeWriteRequests:
+    RequestException = real_requests.RequestException
+
+    def __init__(self, resp):
+        self.resp = resp
+        self.calls = []
+
+    def request(self, method, url, headers=None, json=None, timeout=None, verify=None):
+        self.calls.append({"method": method, "url": url, "json": json, "verify": verify})
+        return self.resp
+
+
 @pytest.fixture
 def configured(monkeypatch):
     monkeypatch.setattr(dc.config, "DIRECTUS_URL", "https://directus.test")
@@ -182,6 +194,38 @@ def test_sample_fields_empty(configured, monkeypatch):
 def test_query_items_non_list_data_is_empty(configured, monkeypatch):
     monkeypatch.setattr(dc, "_request", lambda path, params=None: None)
     assert dc.query_items("x") == []
+
+
+def test_create_item_posts_and_unpacks(configured, monkeypatch):
+    fake = FakeWriteRequests(FakeResp(200, {"data": {"id": 7, "name": "Max"}}))
+    monkeypatch.setattr(dc, "requests", fake)
+    out = dc.create_item("mitarbeiter", {"name": "Max"})
+    assert out == {"id": 7, "name": "Max"}
+    assert fake.calls[0]["method"] == "POST"
+    assert fake.calls[0]["url"].endswith("/items/mitarbeiter")
+    assert fake.calls[0]["json"] == {"name": "Max"}
+
+
+def test_update_item_patches(configured, monkeypatch):
+    fake = FakeWriteRequests(FakeResp(200, {"data": {"id": 7}}))
+    monkeypatch.setattr(dc, "requests", fake)
+    dc.update_item("mitarbeiter", 7, {"name": "Neu"})
+    assert fake.calls[0]["method"] == "PATCH"
+    assert fake.calls[0]["url"].endswith("/items/mitarbeiter/7")
+
+
+def test_delete_item_handles_204(configured, monkeypatch):
+    fake = FakeWriteRequests(FakeResp(204, None))
+    monkeypatch.setattr(dc, "requests", fake)
+    dc.delete_item("mitarbeiter", 7)
+    assert fake.calls[0]["method"] == "DELETE"
+
+
+def test_write_http_error_maps(configured, monkeypatch):
+    fake = FakeWriteRequests(FakeResp(403, {"errors": [{"message": "Forbidden"}]}))
+    monkeypatch.setattr(dc, "requests", fake)
+    with pytest.raises(dc.DirectusError):
+        dc.create_item("x", {})
 
 
 def test_status_unconfigured(monkeypatch):

@@ -1060,6 +1060,15 @@ def _department_action(ticket_id: int, group_id: str, status: str,
                         "rejected": events.DEPARTMENT_REJECTED}[status],
                   actor_id=user.get("id"), actor_name=_actor_name(user),
                   body=note, details={"group": group_id})
+    # Hat eine Fachabteilung ihren Teil ABGESCHLOSSEN, feuern deren
+    # on_department_done-Automationen (z. B. Mitarbeiter in Directus anlegen).
+    if status == "done":
+        try:
+            cur_phase = pr.current_phase(defn, row.get("runtime") or {})
+            engine.run_department_done(row, defn, cur_phase, group_id)
+        except Exception:
+            logger.exception("on_department_done-Automationen für #%s (Gruppe %s) fehlgeschlagen",
+                             ticket_id, group_id)
     if status == "rejected":
         _melde_ablehnung(row, defn, note or "", _actor_name(user))
     return _out(row, defn, vis.build_viewer_ctx(user, row, defn, group_ids=gids),

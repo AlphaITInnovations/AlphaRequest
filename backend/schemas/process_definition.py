@@ -98,6 +98,9 @@ class TriggerType(str, Enum):
     on_exit = "on_exit"
     on_field_change = "on_field_change"
     timer = "timer"
+    #: Eine bestimmte Fachabteilung (Trigger.group) hat ihren Teil einer
+    #: department-Review-Phase abgeschlossen (Status „done“).
+    on_department_done = "on_department_done"
 
 
 class ActionType(str, Enum):
@@ -108,6 +111,14 @@ class ActionType(str, Enum):
     set_status = "set_status"
     assign_sequence = "assign_sequence"
     auto_advance = "auto_advance"
+    #: Datensatz in Directus anlegen/ändern/löschen (services/directus_write).
+    directus_write = "directus_write"
+
+
+class DirectusOperation(str, Enum):
+    create = "create"
+    update = "update"
+    delete = "delete"
 
 
 # Erlaubte enterStatus-Werte (Whitelist gegen Tippfehler). Bewusst als Menge
@@ -408,10 +419,13 @@ class Trigger(_Base):
     after: Optional[str] = None      # ISO-8601-Dauer (z.B. P7D) bei timer
     repeat: Optional[str] = None
     field: Optional[str] = None      # bei on_field_change
+    group: Optional[str] = None      # bei on_department_done: die Fachabteilung (Gruppen-ID)
 
     @model_validator(mode="after")
     def _trigger_rules(self) -> "Trigger":
         from backend.services.iso_duration import parse_duration
+        if self.type == TriggerType.on_department_done and not self.group:
+            raise ValueError("trigger on_department_done erfordert `group` (Fachabteilung)")
         if self.type == TriggerType.timer:
             if not self.after:
                 raise ValueError("trigger timer erfordert `after` (ISO-8601-Dauer)")
@@ -432,6 +446,26 @@ class Trigger(_Base):
         return self
 
 
+class DirectusWriteBinding(_Base):
+    """Eine Feld-Zuordnung fürs Schreiben nach Directus: der Wert des
+    Prozess-Felds `source` wird in das Directus-Feld `target` geschrieben."""
+    source: str
+    target: str
+
+
+class DirectusWriteSpec(_Base):
+    """Konfiguration der Aktion `directus_write`.
+
+    `idField` ist ein Prozess-Feld: bei `create` wird die vergebene Directus-id
+    DORTHIN zurückgeschrieben (und dient als Doppelanlage-Schutz); bei
+    `update`/`delete` wird die id VON DORT gelesen, um den Datensatz zu treffen.
+    """
+    operation: DirectusOperation
+    collection: str
+    fieldMap: list[DirectusWriteBinding] = Field(default_factory=list)
+    idField: str
+
+
 class Action(_Base):
     type: ActionType
     to: Optional[str] = None         # Empfänger-Resolver (notify/escalate)
@@ -439,10 +473,25 @@ class Action(_Base):
     field: Optional[str] = None
     value: Optional[Any] = None
     counter: Optional[str] = None    # bei assign_sequence
+    directus: Optional[DirectusWriteSpec] = None   # bei directus_write
 
     @model_validator(mode="after")
     def _action_rules(self) -> "Action":
         t = self.type
+        if t != ActionType.directus_write and self.directus is not None:
+            raise ValueError("`directus` ist nur bei action directus_write erlaubt")
+        if t == ActionType.directus_write:
+            d = self.directus
+            if d is None:
+                raise ValueError("action directus_write erfordert `directus` (Operation, Collection, …)")
+            if not d.collection.strip():
+                raise ValueError("action directus_write: `collection` fehlt")
+            if not d.idField.strip():
+                raise ValueError("action directus_write: `idField` fehlt "
+                                 "(Prozessfeld für die Directus-id)")
+            if d.operation in (DirectusOperation.create, DirectusOperation.update) and not d.fieldMap:
+                raise ValueError(f"action directus_write ({d.operation.value}) erfordert "
+                                 "mindestens eine Feld-Zuordnung")
         if t.value in UNIMPLEMENTED_ACTIONS:
             raise ValueError(f"action „{t.value}“ ist noch nicht implementiert und "
                              f"kann daher nicht veröffentlicht werden")
@@ -946,6 +995,8 @@ class ProcessDefinition(_Base):
                     for r in dsl_refs(dr.when):
                         _need(r, f"{p.key}.responsibility[{dr.group}].when")
 
+        wid_by_key = {f.key: f.widget for f in self.fields}
+        _id_field_forbidden = {Widget.collection, Widget.attachment, Widget.server_generated}
         for a in all_autos:
             if a.guard:
                 for r in dsl_refs(a.guard):
@@ -954,6 +1005,35 @@ class ProcessDefinition(_Base):
                 _need(a.trigger.field, f"automation[{a.id}].trigger.field")
             if a.action.field:
                 _need(a.action.field, f"automation[{a.id}].action.field")
+            if a.action.type == ActionType.directus_write and a.action.directus:
+                d = a.action.directus
+                _need(d.idField, f"automation[{a.id}].directus.idField")
+                if wid_by_key.get(d.idField) in _id_field_forbidden:
+                    raise ValueError(
+                        f"automation[{a.id}].directus.idField: „{d.idField}“ "
+                        f"(widget={wid_by_key[d.idField].value}) kann keine Directus-id tragen "
+                        "– ein einfaches Textfeld verwenden")
+                for j, b in enumerate(d.fieldMap):
+                    _need(b.source, f"automation[{a.id}].directus.fieldMap[{j}].source")
+
+        # on_department_done: nur als PHASEN-Automation einer Fachabteilungs-Phase,
+        # und die Gruppe muss eine Fachabteilung genau dieser Phase sein.
+        for a in self.automations:
+            if a.trigger.type == TriggerType.on_department_done:
+                raise ValueError(f"automation[{a.id}]: on_department_done ist nur als "
+                                 "Phasen-Automation zulässig, nicht prozessweit")
+        for p in self.phases:
+            dept_groups = ({dr.group for dr in p.responsibility.rule}
+                           if p.responsibility.kind == ResponsibilityKind.departments else set())
+            for a in p.automations:
+                if a.trigger.type != TriggerType.on_department_done:
+                    continue
+                if p.responsibility.kind != ResponsibilityKind.departments:
+                    raise ValueError(f"automation[{a.id}] (Phase „{p.key}“): on_department_done "
+                                     "gibt es nur in einer Fachabteilungs-Phase (responsibility=departments)")
+                if a.trigger.group not in dept_groups:
+                    raise ValueError(f"automation[{a.id}] (Phase „{p.key}“): trigger.group "
+                                     f"„{a.trigger.group}“ ist keine Fachabteilung dieser Phase")
 
         # Freigabe-Phasen: die Ziel-Felder müssen existieren, und ein Rücksprung
         # muss auf eine echte, FRÜHERE Phase zeigen (sonst läuft die Ablehnung ins

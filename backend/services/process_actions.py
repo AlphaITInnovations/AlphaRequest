@@ -226,6 +226,9 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
         changes["values"] = {action.field: action.value}
     elif t == ActionType.auto_advance:
         changes["advance"] = True
+    elif t == ActionType.directus_write:
+        from backend.services import directus_write_action as dwa
+        changes = dwa.execute(action, row, defn, phase)
     else:
         logger.info("Automation-Action „%s“ ist in Stufe 5 noch nicht umgesetzt (Ticket #%s)",
                     t.value, row.get("id"))

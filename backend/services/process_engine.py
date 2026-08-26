@@ -139,6 +139,24 @@ def run_inline(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
     return wants_advance
 
 
+def run_department_done(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
+                        group_id: str) -> None:
+    """Feuert die Phasen-Automationen mit Trigger on_department_done für GENAU diese
+    Fachabteilung (nachdem sie ihren Teil abgeschlossen hat). Wirft nicht –
+    Fehler auditiert `fire()`. Ein auto_advance wird hier bewusst ignoriert (der
+    Phasenabschluss läuft weiter über departments_complete/transition)."""
+    if phase is None:
+        return
+    for a in list(phase.automations):
+        if a.trigger.type != TriggerType.on_department_done:
+            continue
+        if a.trigger.group != group_id:
+            continue
+        if not guard_passes(a, row):
+            continue
+        fire(a, row, defn, phase)
+
+
 # ── Timer neu stempeln ────────────────────────────────────────────────────────
 
 def restamp(row: dict, defn: Optional[ProcessDefinition]) -> None:

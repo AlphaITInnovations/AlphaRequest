@@ -187,6 +187,54 @@ def query_items(collection: str, *, fields: Optional[list[str]] = None,
     return data if isinstance(data, list) else []
 
 
+# ── Schreiben (für Automations-Aktion directus_write) ────────────────────────
+
+def _write_token() -> str:
+    return config.DIRECTUS_WRITE_TOKEN or config.DIRECTUS_TOKEN
+
+
+def _write(method: str, path: str, json_body: Optional[dict] = None) -> Any:
+    """POST/PATCH/DELETE gegen Directus. Gibt den `data`-Teil zurück (None bei
+    204/leer). Wirft DirectusError bei Konfig-/Netz-/HTTP-Fehler."""
+    if not config.DIRECTUS_URL or not _write_token():
+        raise DirectusError("Directus ist nicht konfiguriert (DIRECTUS_URL/Token fehlen)")
+    url = f"{config.DIRECTUS_URL}{path}"
+    headers = {"Authorization": f"Bearer {_write_token()}", "Accept": "application/json",
+               "Content-Type": "application/json"}
+    try:
+        resp = requests.request(method, url, headers=headers, json=json_body,
+                                timeout=config.DIRECTUS_TIMEOUT, verify=_verify())
+    except requests.RequestException as exc:
+        raise DirectusError(f"Directus nicht erreichbar: {exc}") from exc
+    if resp.status_code == 204:
+        return None
+    if resp.status_code >= 400:
+        raise DirectusError(f"Directus {resp.status_code}: {_error_message(resp)}",
+                            status=resp.status_code)
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    return body.get("data") if isinstance(body, dict) else body
+
+
+def create_item(collection: str, payload: dict) -> dict:
+    """Neuen Datensatz anlegen; gibt den angelegten Datensatz (inkl. id) zurück."""
+    data = _write("POST", f"/items/{collection}", json_body=payload)
+    return data if isinstance(data, dict) else {}
+
+
+def update_item(collection: str, item_id: Any, payload: dict) -> dict:
+    """Datensatz aktualisieren; gibt den aktualisierten Datensatz zurück."""
+    data = _write("PATCH", f"/items/{collection}/{item_id}", json_body=payload)
+    return data if isinstance(data, dict) else {}
+
+
+def delete_item(collection: str, item_id: Any) -> None:
+    """Datensatz löschen."""
+    _write("DELETE", f"/items/{collection}/{item_id}")
+
+
 def status() -> dict:
     """Verbindungs-Status für die Verwaltungs-Oberfläche.
 
