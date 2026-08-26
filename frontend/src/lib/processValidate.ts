@@ -148,6 +148,28 @@ export function validateDefinition(
         `Abgeleitet aus „${f.computed.from}" – dieses Feld gibt es nicht.`))
     }
 
+    // ── Directus-Feld (widget=directus + Quelle + Auto-Fill-Zuordnungen) ──
+    if (f.widget === 'directus') {
+      if (!f.directusSource) {
+        out.push(err(`${p}.directusSource`, anchor, 'REQUIRED', 'Directus-Feld braucht eine Quelle.'))
+      }
+      f.directusFieldMap.forEach((b, j) => {
+        if (!b.source || !b.target) {
+          out.push(err(`${p}.directusFieldMap.${j}`, anchor, 'REQUIRED',
+            'Zuordnung braucht Quell-Pfad und Ziel-Feld.'))
+        } else if (b.target === f.key) {
+          out.push(err(`${p}.directusFieldMap.${j}`, anchor, 'INVALID',
+            'Das Ziel darf nicht das Feld selbst sein.'))
+        } else if (!catalog.has(b.target)) {
+          out.push(err(`${p}.directusFieldMap.${j}`, anchor, 'UNKNOWN_REF',
+            `Ziel-Feld „${b.target}" gibt es nicht.`))
+        }
+      })
+    } else if (f.directusSource || f.directusFieldMap.length) {
+      out.push(err(`${p}.directusSource`, anchor, 'INVALID',
+        'Directus-Zuordnung ist nur beim Feldtyp „Directus" möglich.'))
+    }
+
     // ── Vom Server vergebene Nummer (widget=server_generated + assign) ──
     if (f.widget === 'server_generated' && !f.assign) {
       out.push(err(`${p}.assign`, anchor, 'REQUIRED',

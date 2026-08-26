@@ -16,7 +16,7 @@
 export type Widget =
   | 'text' | 'textarea' | 'number' | 'date'
   | 'select' | 'multiselect' | 'checkbox' | 'checkbox-group'
-  | 'attachment' | 'user' | 'company' | 'group'
+  | 'attachment' | 'user' | 'company' | 'group' | 'directus'
   | 'collection' | 'server_generated' | 'server_stamped'
 
 export type OptionsSource = 'static' | 'groups' | 'companies' | 'users'
@@ -99,6 +99,15 @@ export interface FieldDef {
   mode: FieldMode | null
   /** Sub-Katalog – nicht leer genau dann, wenn widget='collection'. */
   item: SubField[]
+  /** widget='directus': Schlüssel der Directus-Quelle. */
+  directusSource: string | null
+  /** widget='directus': Auto-Fill-Zuordnungen Directus-Pfad → Ziel-Feld-Key. */
+  directusFieldMap: DirectusBinding[]
+}
+
+export interface DirectusBinding {
+  source: string   // Directus-Feldpfad, z. B. "firma.name"
+  target: string   // Prozess-Feld-Key
 }
 
 // ── Phasen (normalisiert) ─────────────────────────────────────────────────────

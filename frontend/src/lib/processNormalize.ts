@@ -83,6 +83,10 @@ export function normalizeField(v: any): FieldDef {
       : null,
     mode: v?.mode ?? null,
     item: arr(v?.item).map(normSubField),
+    directusSource: str(v?.directusSource),
+    directusFieldMap: arr(v?.directusFieldMap).map((b: any) => ({
+      source: String(b?.source ?? ''), target: String(b?.target ?? ''),
+    })),
   }
 }
 

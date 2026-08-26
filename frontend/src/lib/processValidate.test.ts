@@ -404,3 +404,34 @@ describe('DSL-Helfer', () => {
     expect(isWellFormedCondition({ '==': ['a', 1], or: [] })).toBe(false)
   })
 })
+
+describe('validateDefinition – Directus-Feld', () => {
+  const withField = (f: Record<string, unknown>, extra: Record<string, unknown>[] = []) =>
+    defn({
+      fields: [f, ...extra],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: (f as any).key }, ...extra.map((e) => ({ ref: (e as any).key, mode: 'readonly' }))] }],
+    })
+
+  it('verlangt eine Quelle bei widget=directus', () => {
+    expect(codes(withField({ key: 'kst', widget: 'directus' }))).toContain('REQUIRED')
+  })
+
+  it('meldet unbekanntes Ziel-Feld im Mapping', () => {
+    const d = withField({ key: 'kst', widget: 'directus', directusSource: 'kostenstelle',
+      directusFieldMap: [{ source: 'firma.name', target: 'ghost' }] })
+    expect(codes(d)).toContain('UNKNOWN_REF')
+  })
+
+  it('akzeptiert ein gültiges Directus-Feld mit Mapping', () => {
+    const d = withField(
+      { key: 'kst', widget: 'directus', directusSource: 'kostenstelle',
+        directusFieldMap: [{ source: 'firma.name', target: 'firma' }] },
+      [{ key: 'firma', widget: 'text' }])
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('lehnt Directus-Props bei anderem Feldtyp ab', () => {
+    expect(codes(withField({ key: 'a', widget: 'text', directusSource: 'x' }))).toContain('INVALID')
+  })
+})

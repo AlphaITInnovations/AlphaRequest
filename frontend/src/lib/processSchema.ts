@@ -22,7 +22,7 @@ import type {
 /** Widgets im Feld-Katalog: server_stamped gibt es nur in collection-Unterfeldern. */
 export const WIDGETS_TOP: readonly Widget[] = [
   'text', 'textarea', 'number', 'date', 'select', 'multiselect', 'checkbox',
-  'checkbox-group', 'attachment', 'user', 'company', 'group', 'collection',
+  'checkbox-group', 'attachment', 'user', 'company', 'group', 'directus', 'collection',
   'server_generated',
 ]
 
@@ -127,7 +127,7 @@ export const WIDGET_LABEL: Record<Widget, string> = {
   text: 'Text', textarea: 'Mehrzeiliger Text', number: 'Zahl', date: 'Datum',
   select: 'Auswahl', multiselect: 'Mehrfachauswahl', checkbox: 'Ja/Nein',
   'checkbox-group': 'Ankreuzliste', attachment: 'Datei-Anhang',
-  user: 'Person', company: 'Firma', group: 'Fachabteilung',
+  user: 'Person', company: 'Firma', group: 'Fachabteilung', directus: 'Directus-Auswahl',
   collection: 'Wiederholgruppe', server_generated: 'Vom System vergebene Nummer',
   server_stamped: 'Systemstempel',
 }
@@ -190,6 +190,7 @@ export function blankFieldDef(key = '', widget: Widget = 'text'): FieldDef {
     options: [], optionsSource: null, allowOther: false, valueShape: null,
     constraints: null, visibility: null, computed: null, overridable: false,
     assign: null, mode: null, item: [],
+    directusSource: null, directusFieldMap: [],
   }
 }
 

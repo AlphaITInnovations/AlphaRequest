@@ -10,17 +10,22 @@
  * visibility, computed): Der Server liefert genau diese Form zurück, und ein
  * leeres Objekt statt `null` würde den Entwurf dauerhaft als geändert zeigen.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type {
-  AssignSpec, FieldConstraints, FieldDef, FieldVisibility, OptionsSource, Widget,
+  AssignSpec, DirectusBinding, FieldConstraints, FieldDef, FieldVisibility, OptionsSource, Widget,
 } from '@/types/process'
 import {
   COUNTER_LABEL, OPTIONS_SOURCES, SEQUENCE_COUNTERS, WIDGETS_TOP, WIDGET_LABEL,
   blankAssign, blankConstraints, isValidFieldKey,
 } from '@/lib/processSchema'
+import { listSources, type DirectusSource } from '@/api/directus'
 import OptionListEditor from '@/components/process/editor/OptionListEditor.vue'
 import SubFieldEditor from '@/components/process/editor/SubFieldEditor.vue'
 import GroupMultiPicker from '@/components/process/editor/GroupMultiPicker.vue'
+
+// Directus-Quellen für die Feldtyp-Zuordnung (best-effort; ohne Directus leer).
+const directusSources = ref<DirectusSource[]>([])
+onMounted(async () => { try { directusSources.value = await listSources() } catch { /* egal */ } })
 
 const props = defineProps<{
   modelValue: FieldDef
@@ -56,7 +61,7 @@ const allKeys = computed(() => props.fieldKeys ?? [])
 
 // ── Aufklappbare Abschnitte: offen, wenn es dort schon etwas zu sehen gibt ────
 
-type SectionKey = 'options' | 'sub' | 'assign' | 'rules' | 'visibility' | 'computed'
+type SectionKey = 'options' | 'sub' | 'assign' | 'rules' | 'visibility' | 'computed' | 'directus'
 const open = ref<Record<SectionKey, boolean>>({
   options: opts.value.length > 0 || props.modelValue.optionsSource !== null,
   sub: items.value.length > 0,
@@ -64,6 +69,7 @@ const open = ref<Record<SectionKey, boolean>>({
   rules: props.modelValue.constraints !== null,
   visibility: props.modelValue.visibility !== null,
   computed: props.modelValue.computed !== null,
+  directus: props.modelValue.widget === 'directus',
 })
 function toggle(k: SectionKey) {
   open.value[k] = !open.value[k]
@@ -106,8 +112,35 @@ function setWidget(w: Widget) {
   } else if (next.assign) {
     next.assign = null
   }
+  // Directus-Zuordnung gibt es nur beim Feldtyp „Directus" (Server-Regel).
+  if (w === 'directus') {
+    open.value.directus = true
+  } else {
+    next.directusSource = null
+    next.directusFieldMap = []
+  }
   emit('update:modelValue', next)
 }
+
+// ── Directus-Feld ──────────────────────────────────────────────────────────────
+
+function setDirectusSource(key: string) {
+  patch({ directusSource: key || null })
+}
+function addMapping() {
+  patch({ directusFieldMap: [...props.modelValue.directusFieldMap, { source: '', target: '' }] })
+}
+function removeMapping(i: number) {
+  const next = props.modelValue.directusFieldMap.slice()
+  next.splice(i, 1)
+  patch({ directusFieldMap: next })
+}
+function setMapping(i: number, part: keyof DirectusBinding, val: string) {
+  const next = props.modelValue.directusFieldMap.map((b, j) => (j === i ? { ...b, [part]: val } : b))
+  patch({ directusFieldMap: next })
+}
+/** Ziel-Feld-Kandidaten: alle Katalog-Felder außer dem directus-Feld selbst. */
+const mapTargets = computed(() => allKeys.value.filter((k) => k && k !== props.modelValue.key))
 
 function setAssign(p: Partial<AssignSpec>) {
   patch({ assign: { ...(props.modelValue.assign ?? blankAssign()), ...p } })
@@ -572,6 +605,63 @@ const computedSummary = computed(() =>
             Vertrauliche Felder brauchen mindestens eine berechtigte Fachabteilung.
           </p>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Directus-Auswahl ─────────────────────────────────────────────────── -->
+    <div v-if="modelValue.widget === 'directus'" class="rounded-xl border border-gray-200 dark:border-white/10">
+      <button type="button" @click="toggle('directus')"
+              class="w-full flex items-center gap-2 px-3 py-2 text-left rounded-xl
+                     hover:bg-gray-50 dark:hover:bg-[#263040] transition">
+        <span class="w-3 text-xs text-gray-400">{{ open.directus ? '▾' : '▸' }}</span>
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Directus-Auswahl</span>
+        <span class="text-xs text-gray-400 truncate">{{ modelValue.directusSource || 'keine Quelle' }}</span>
+      </button>
+      <div v-if="open.directus" class="px-3 pb-3 pt-3 space-y-3 border-t border-gray-200 dark:border-white/10">
+        <div>
+          <label class="lbl">Quelle</label>
+          <select :value="modelValue.directusSource ?? ''"
+                  @change="setDirectusSource(($event.target as HTMLSelectElement).value)" class="pfi">
+            <option value="">— Quelle wählen —</option>
+            <option v-for="s in directusSources" :key="s.key" :value="s.key">{{ s.label }} ({{ s.key }})</option>
+            <option v-if="modelValue.directusSource && !directusSources.some((s) => s.key === modelValue.directusSource)"
+                    :value="modelValue.directusSource" class="text-red-600">
+              {{ modelValue.directusSource }} (nicht gefunden)
+            </option>
+          </select>
+          <p v-if="!directusSources.length" class="text-xs text-gray-400 mt-1">
+            Keine Quellen geladen – anlegen unter Einstellungen → Directus-Quellen.
+          </p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between">
+            <label class="lbl mb-0">Felder automatisch füllen</label>
+            <button type="button" @click="addMapping" class="text-xs text-[#3EAAB8] hover:underline">+ Zuordnung</button>
+          </div>
+          <p class="text-xs text-gray-400 mt-1 mb-2">
+            Bei Auswahl wird der Wert am Directus-Pfad (z. B. <code>firma.name</code>) in ein anderes
+            Prozess-Feld übernommen (Snapshot).
+          </p>
+          <div v-for="(b, i) in modelValue.directusFieldMap" :key="i" class="flex items-center gap-2 mb-2">
+            <input :value="b.source" @input="setMapping(i, 'source', ($event.target as HTMLInputElement).value)"
+                   class="pfi flex-1" placeholder="Directus-Pfad, z. B. firma.name" />
+            <span class="text-gray-400 text-sm">→</span>
+            <select :value="b.target" @change="setMapping(i, 'target', ($event.target as HTMLSelectElement).value)"
+                    class="pfi flex-1">
+              <option value="">Ziel-Feld …</option>
+              <option v-for="k in mapTargets" :key="k" :value="k">{{ k }}</option>
+            </select>
+            <button type="button" @click="removeMapping(i)" class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
+          </div>
+          <p v-if="!modelValue.directusFieldMap.length" class="text-xs text-gray-400">
+            Keine Zuordnungen – es wird nur der gewählte Wert gespeichert.
+          </p>
+        </div>
+        <p class="text-xs text-gray-400">
+          Hinweis: Die Ziel-Felder sollten in der Phase bearbeitbar sein, damit der übernommene Wert
+          auch gespeichert wird.
+        </p>
       </div>
     </div>
 

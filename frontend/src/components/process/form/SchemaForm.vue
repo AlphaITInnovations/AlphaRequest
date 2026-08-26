@@ -99,6 +99,36 @@ function errorFor(key: string): string | null {
 function setValue(key: string, value: unknown) {
   emit('update:modelValue', { ...values.value, [key]: value })
 }
+
+/** dot-Pfad im Directus-Datensatz auflösen (verzweigt nicht in Listen). */
+function resolvePath(record: any, path: string): unknown {
+  let cur = record
+  for (const part of path.split('.')) {
+    if (cur && typeof cur === 'object' && !Array.isArray(cur)) cur = cur[part]
+    else return null
+  }
+  return cur ?? null
+}
+function scalarize(v: unknown): unknown {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
+  if (typeof v === 'object') return null
+  return v
+}
+
+/**
+ * Directus-Auswahl: den Feldwert UND alle gemappten Zielfelder in EINEM Emit
+ * setzen (zwei getrennte Emits im selben Tick würden sich gegenseitig aus dem
+ * veralteten `values` überschreiben). Leeren (sel=null) setzt Feld + Ziele auf
+ * null zurück – der Snapshot stammte aus der Auswahl.
+ */
+function onDirectusPick(field: FieldDef, sel: { value: string; record: Record<string, any> } | null) {
+  const patch: Record<string, unknown> = { [field.key]: sel ? sel.value : null }
+  for (const b of field.directusFieldMap ?? []) {
+    patch[b.target] = sel?.record ? scalarize(resolvePath(sel.record, b.source)) : null
+  }
+  emit('update:modelValue', { ...values.value, ...patch })
+}
 </script>
 
 <template>
@@ -154,6 +184,7 @@ function setValue(key: string, value: unknown) {
               :invalid="!!errorFor(row.r.field.key)"
               :sources="sources"
               @update:model-value="setValue(row.r.field.key, $event)"
+              @directus-pick="onDirectusPick(row.r.field, $event)"
             />
 
             <p v-if="errorFor(row.r.field.key)" class="text-xs text-red-500 mt-1">

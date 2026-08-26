@@ -10,6 +10,7 @@
 import { computed, ref, watch } from 'vue'
 import type { FieldDef, OptionSources } from '@/types/process'
 import UserSelect from '@/components/UserSelect.vue'
+import DirectusSelect from './DirectusSelect.vue'
 
 const props = withDefaults(defineProps<{
   field: FieldDef
@@ -19,7 +20,12 @@ const props = withDefaults(defineProps<{
   sources?: OptionSources
 }>(), { disabled: false, invalid: false })
 
-const emit = defineEmits<{ 'update:modelValue': [value: unknown] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: unknown]
+  /** Directus-Auswahl: {value, record} (bzw. null); der Host schreibt Wert +
+   *  Feld-Mapping in EINEM Schritt (Snapshot). */
+  'directus-pick': [sel: { value: string; record: Record<string, any> } | null]
+}>()
 
 /** Sentinel für „Sonstiges" – kein gültiger Optionswert, daher kollisionsfrei. */
 const OTHER = '__sonstiges__'
@@ -262,6 +268,17 @@ const readonlyText = computed(() => {
       <option value="">{{ field.placeholder || 'Bitte wählen' }}</option>
       <option v-for="o in optionList" :key="o.value" :value="o.value">{{ o.label }}</option>
     </select>
+
+    <!-- Directus – suchbares Live-Dropdown; die Auswahl (Wert + Datensatz) geht
+         an den Host, der Wert und Feld-Mapping gemeinsam setzt. -->
+    <DirectusSelect
+      v-else-if="field.widget === 'directus'"
+      :field="field"
+      :model-value="textModel"
+      :disabled="disabled"
+      :invalid="invalid"
+      @select="(sel) => emit('directus-pick', sel)"
+    />
 
     <!-- Datei-Anhang: Stufe 6 speichert für dieses Widget bewusst NICHTS.
          Anhänge hängen am klassischen Ticket, nicht an den Prozess-Werten –
