@@ -33,6 +33,7 @@ from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
 from backend.services import process_access as acc
+from backend.services import directus_snapshot
 from backend.services import process_actions as pactions
 from backend.services import process_compute as compute
 from backend.services import process_engine as engine
@@ -402,8 +403,10 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     errs = pv.validate_values(defn, values)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig", fields=errs)
-    # Autor/Zeitstempel serverseitig setzen, dann abgeleitete Felder füllen.
+    # Autor/Zeitstempel serverseitig setzen, dann Directus-Snapshot der Auswahl,
+    # dann abgeleitete Felder füllen (computed darf auf Snapshot-Werte zugreifen).
     values = compute.stamp_server_fields(defn, values, {}, actor=_actor_name(user), now_iso=now)
+    values = directus_snapshot.apply_snapshots(defn, values, {})
     values = compute.apply_computed(defn, values)
 
     runtime = pr.initial_runtime(defn, now, values)
@@ -850,6 +853,7 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
 
     merged = compute.stamp_server_fields(defn, merged_raw, stored,
                                          actor=_actor_name(user), now_iso=utcnow_iso())
+    merged = directus_snapshot.apply_snapshots(defn, merged, stored)
     merged = compute.apply_computed(defn, merged)
     try:
         row = store.update_values(ticket_id, json.dumps(merged, ensure_ascii=False),

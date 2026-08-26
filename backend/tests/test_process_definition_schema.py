@@ -198,14 +198,14 @@ def test_directus_field_valid():
     ProcessDefinition.model_validate(d)   # valide
 
 
-def test_directus_field_map_target_must_be_writable():
+def test_directus_readonly_target_is_allowed():
+    # Read-only Ziel ist erlaubt: den Snapshot schreibt der Server autoritativ.
     d = _base(fields=[
         {"key": "kostenstelle", "widget": "directus", "directusSource": "kostenstelle",
          "directusFieldMap": [{"source": "firma.name", "target": "firma"}]},
         {"key": "firma", "widget": "text"}])
-    # directus-Feld editierbar, Ziel readonly → Snapshot würde still verworfen → ablehnen.
     d["phases"][0]["fields"] = [{"ref": "kostenstelle"}, {"ref": "firma", "mode": "readonly"}]
-    _reject(d)
+    ProcessDefinition.model_validate(d)   # valide
 
 
 def test_action_set_status_validated():

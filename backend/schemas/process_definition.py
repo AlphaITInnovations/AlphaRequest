@@ -905,27 +905,9 @@ class ProcessDefinition(_Base):
                     raise ValueError(
                         f"Feld „{f.key}“.directusFieldMap[{i}]: das Ziel darf nicht das Feld selbst sein")
                 _need(b.target, f"Feld „{f.key}“.directusFieldMap[{i}].target")
-
-        # Auto-Fill-Ziele müssen in JEDER Phase, in der das directus-Feld
-        # bearbeitbar ist, ebenfalls bearbeitbar sein. Sonst verwirft der Server
-        # den mitgeschickten Snapshot beim Speichern (writable_keys) – der Wert
-        # wäre still weg. Ehrlichkeits-Regel: lieber beim Veröffentlichen ablehnen.
-        _writable = {FieldMode.editable, FieldMode.append_only}
-        directus_targets = {f.key: [b.target for b in f.directusFieldMap]
-                            for f in self.fields
-                            if f.widget == Widget.directus and f.directusFieldMap}
-        if directus_targets:
-            for p in self.phases:
-                modes = {fr.ref: fr.mode for fr in p.fields}
-                for dkey, targets in directus_targets.items():
-                    if modes.get(dkey) not in _writable:
-                        continue        # directus-Feld hier nicht bearbeitbar → kein Auto-Fill
-                    for t in targets:
-                        if modes.get(t) not in _writable:
-                            raise ValueError(
-                                f"Phase „{p.key}“: Auto-Fill-Ziel „{t}“ des Directus-Felds "
-                                f"„{dkey}“ muss in dieser Phase bearbeitbar sein (sonst wird der "
-                                f"übernommene Wert beim Speichern verworfen)")
+        # Hinweis: Auto-Fill-Ziele müssen NICHT bearbeitbar sein – den Snapshot
+        # schreibt der Server autoritativ beim Speichern (services/directus_snapshot),
+        # unabhängig vom Phasen-mode. Deshalb sind read-only Ziele ausdrücklich erlaubt.
 
         for p in self.phases:
             for fr in p.fields:

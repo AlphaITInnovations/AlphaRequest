@@ -437,7 +437,7 @@ describe('validateDefinition – Directus-Feld', () => {
     expect(codes(withField({ key: 'a', widget: 'text', directusSource: 'x' }))).toContain('INVALID')
   })
 
-  it('meldet nicht-beschreibbares Auto-Fill-Ziel', () => {
+  it('erlaubt ein read-only Auto-Fill-Ziel (Snapshot schreibt der Server)', () => {
     const d = defn({
       fields: [
         { key: 'kst', widget: 'directus', directusSource: 'kostenstelle',
@@ -446,6 +446,6 @@ describe('validateDefinition – Directus-Feld', () => {
       phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
         fields: [{ ref: 'kst' }, { ref: 'firma', mode: 'readonly' }] }],
     })
-    expect(codes(d)).toContain('DIRECTUS_TARGET_NOT_WRITABLE')
+    expect(errorCount(validateDefinition(d))).toBe(0)
   })
 })

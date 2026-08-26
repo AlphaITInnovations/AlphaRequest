@@ -496,27 +496,6 @@ export function validateDefinition(
       }
     })
 
-    // Directus-Auto-Fill: die gemappten Zielfelder müssen dort bearbeitbar sein,
-    // wo das directus-Feld bearbeitbar ist – sonst verwirft der Server den
-    // Snapshot beim Speichern (writable_keys).
-    {
-      const modeByRef = new Map(ph.fields.map((fr) => [fr.ref, fr.mode]))
-      const writable = (ref: string) => {
-        const m = modeByRef.get(ref)
-        return m === 'editable' || m === 'append_only'
-      }
-      d.fields.forEach((f) => {
-        if (f.widget !== 'directus' || !f.directusFieldMap.length || !writable(f.key)) return
-        f.directusFieldMap.forEach((b) => {
-          if (b.target && !writable(b.target)) {
-            out.push(err(`${p}.fields`, anchor, 'DIRECTUS_TARGET_NOT_WRITABLE',
-              `Auto-Fill-Ziel „${b.target}" des Directus-Felds „${f.key}" muss in Phase `
-              + `„${ph.key}" bearbeitbar sein (sonst geht der Wert beim Speichern verloren).`))
-          }
-        })
-      })
-    }
-
     // Layout: darf nur Felder dieser Phase platzieren, jedes höchstens einmal.
     // Nicht platzierte Felder sind kein Fehler (sie landen im Sammel-Abschnitt),
     // aber ein Hinweis – sonst wundert sich später jemand über die Reihenfolge.

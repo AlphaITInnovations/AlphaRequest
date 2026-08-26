@@ -682,8 +682,8 @@ const computedSummary = computed(() =>
           </p>
         </div>
         <p class="text-xs text-gray-400">
-          Hinweis: Die Ziel-Felder sollten in der Phase bearbeitbar sein, damit der übernommene Wert
-          auch gespeichert wird.
+          Ziel-Felder dürfen auch „nur lesen" sein – der Server schreibt den Snapshot beim
+          Speichern autoritativ (anhand des gewählten Werts frisch aus Directus).
         </p>
       </div>
     </div>
