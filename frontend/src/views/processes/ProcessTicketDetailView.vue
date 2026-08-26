@@ -96,8 +96,13 @@ const weiterLabel = computed(() =>
  */
 const serverAbilities = computed(() => ticket.value?.abilities ?? {
   edit: false, internal_comment: false, manage_watchers: false, attach: false,
-  reopen: false, archive: false, delete: false,
+  reopen: false, archive: false, delete: false, export_document: false,
 })
+
+/** Darf diese Person das Dokument/den Vertrag der Dokument-Phase sehen? Nur
+ *  Vollsicht/Admin (Server). Beobachter:innen/Involvierte sehen stattdessen nur
+ *  einen Hinweis – der Vertrag trägt vertrauliche Angaben (Gehalt …). */
+const darfDokument = computed(() => !!serverAbilities.value.export_document)
 
 /** LESEN ist der Standard, Bearbeiten das Opt-in (?ansicht=bearbeiten): so gibt
  *  es keinen URL-Parameter, dessen ENTFERNEN mehr Oberfläche freischaltet. Den
@@ -497,11 +502,26 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               @exported="showToast('PDF erzeugt')"
               @failed="showToast($event, false)" />
             <!-- Dokument-Phase: Vertrag aus Vorlage, Inline-Editor + Word-Export.
-                 In der Leseansicht nur anzeigen (readonly). -->
-            <DocumentView
-              v-else-if="isDocumentPhase && phase"
-              :definition="definition" :ticket="ticket" :phase="phase"
-              :sources="sources" :readonly="!abilities.edit" />
+                 NUR Vollsicht/Admin sehen das Dokument (der Vertrag trägt
+                 vertrauliche Angaben); Beobachter:innen/Involvierte bekommen nur
+                 einen Hinweis. In der Leseansicht readonly. -->
+            <template v-else-if="isDocumentPhase && phase">
+              <DocumentView
+                v-if="darfDokument"
+                :definition="definition" :ticket="ticket" :phase="phase"
+                :sources="sources" :readonly="!abilities.edit" />
+              <div v-else class="card-section flex items-start gap-3">
+                <span class="text-xl leading-none">🔒</span>
+                <div>
+                  <h3 class="section-title mb-1">{{ ticket.current_phase_label || 'Dokument' }}</h3>
+                  <p class="text-sm text-gray-600 dark:text-gray-300">
+                    Das Dokument wird gerade in der Phase
+                    „{{ ticket.current_phase_label || 'Dokumenterstellung' }}“ erstellt und ist
+                    hier nicht einsehbar. Sobald diese Phase abgeschlossen ist, geht der Auftrag weiter.
+                  </p>
+                </div>
+              </div>
+            </template>
             <div v-else-if="!abilities.edit" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"

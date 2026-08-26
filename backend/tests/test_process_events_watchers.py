@@ -476,7 +476,7 @@ def test_abilities_fuer_zustaendige_fachabteilung(setup):
     a = client.get("/process-tickets/7").json()["data"]["abilities"]
     assert a == {"edit": True, "internal_comment": True, "manage_watchers": True,
                  "attach": True, "reopen": False, "archive": False, "delete": False,
-                 "completable_departments": ["g_it"]}
+                 "completable_departments": ["g_it"], "export_document": False}
 
 
 def test_abilities_fuer_den_ersteller(setup):
@@ -486,6 +486,8 @@ def test_abilities_fuer_den_ersteller(setup):
     a = client.get("/process-tickets/7").json()["data"]["abilities"]
     assert a["edit"] is False and a["internal_comment"] is False
     assert a["manage_watchers"] is False and a["reopen"] is False
+    # Owner hat Vollsicht (is_owner) → darf das Dokument sehen/exportieren.
+    assert a["export_document"] is True
 
 
 def test_abilities_reopen_nur_bei_fertigem_auftrag(setup):

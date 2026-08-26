@@ -99,6 +99,11 @@ class TicketAbilities(BaseModel):
     #: rein Mitgliedschaft (kein Admin-Override). Die Oberfläche zeigt den
     #: „Erledigt"-Knopf nur für diese; verbindlich bleibt der Endpunkt.
     completable_departments: list[str] = []
+    #: Darf den ausgefüllten Vertrag/das Dokument einer Dokument-Phase sehen und
+    #: exportieren (Vollsicht/Admin – spiegelt den Gate in _docx_fill_prep).
+    #: Beobachter:innen/Involvierte OHNE Vollsicht bekommen stattdessen nur einen
+    #: Hinweis, dass das Dokument gerade erstellt wird.
+    export_document: bool = False
 
 
 class ProcessTicketOut(BaseModel):
@@ -170,7 +175,8 @@ def _completable_departments(row: dict, defn: Optional[ProcessDefinition],
 
 
 def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict],
-               group_ids, completable_departments: Optional[list] = None) -> TicketAbilities:
+               group_ids, completable_departments: Optional[list] = None,
+               can_export_document: bool = False) -> TicketAbilities:
     if not user:
         return TicketAbilities()
     gids = set(group_ids or ())
@@ -190,6 +196,7 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
         archive=acc.may_force_archive(user) and not _is_terminal(row),
         delete=acc.is_admin(user),
         completable_departments=completable_departments or [],
+        export_document=can_export_document,
     )
 
 
@@ -234,7 +241,9 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
     data["responsibility"] = resp
     completable = _completable_departments(row, defn, user, group_ids, resp)
-    data["abilities"] = _abilities(row, defn, user, group_ids, completable)
+    # Dokument/Vertrag exportieren = Vollsicht/Admin (Gate von _docx_fill_prep).
+    can_export = bool(ctx.full_view or ctx.is_admin)
+    data["abilities"] = _abilities(row, defn, user, group_ids, completable, can_export)
     data["visible_fields"], data["editable_fields"] = _field_access(row, defn, cur, ctx)
     return ProcessTicketOut(**data)
 
