@@ -59,6 +59,14 @@ class Config:
     RUN_SCHEDULER: bool = str_to_bool(os.getenv("RUN_SCHEDULER", "true"))
     SCHEDULER_INTERVAL: int = int(os.getenv("SCHEDULER_INTERVAL", "900"))
 
+    # Directus (internes Stammdaten-System) – Quelle für Auswahl-Felder wie
+    # Kostenstelle/Niederlassung. Ohne URL+Token ist die Anbindung inaktiv
+    # (fail-soft: Directus-Felder zeigen dann eine leere Auswahl, kein Absturz).
+    # Der Token ist ein statischer Directus-Service-Token mit LESE-Rechten.
+    DIRECTUS_URL: str = os.getenv("DIRECTUS_URL", "").rstrip("/")
+    DIRECTUS_TOKEN: str = os.getenv("DIRECTUS_TOKEN", "")
+    DIRECTUS_TIMEOUT: int = int(os.getenv("DIRECTUS_TIMEOUT", "15"))
+
     @property
     def COMPANIES(self):
         return db.get_companies()
