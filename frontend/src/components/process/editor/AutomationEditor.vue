@@ -12,7 +12,7 @@
  * beim Aktionswechsel die nicht mehr passenden Action-Felder geleert, sonst
  * lehnt der Server die Definition ab.
  */
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   Action, ActionType, Automation, DirectusOperation, DirectusWriteSpec, Trigger, TriggerType,
 } from '@/types/process'
@@ -20,6 +20,8 @@ import {
   ACTION_LABEL, ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
   RECIPIENT_LABEL, SEQUENCE_COUNTERS, STATUS_LABEL, TRIGGER_LABEL, TRIGGER_TYPES,
 } from '@/lib/processSchema'
+import { listCollections, listFields } from '@/api/directus'
+import type { DirectusCollection, DirectusField } from '@/api/directus'
 import ConditionEditor from './ConditionEditor.vue'
 import DurationInput from './DurationInput.vue'
 
@@ -163,6 +165,60 @@ const actionValueText = computed(() => {
   const v = a.value.action.value
   return v === null || v === undefined ? '' : String(v)
 })
+
+// ── Directus-Introspektion: Dropdowns für Collection + Zielfelder ─────────────
+// Nur laden, wenn die Aktion „In Directus schreiben“ aktiv ist. Fail-soft: ist
+// Directus nicht erreichbar, bleibt der gespeicherte Wert als (unbekannt)-Option
+// erhalten, damit die Automation weiter bearbeitbar bleibt (+ „neu laden“).
+const isDirectusWrite = computed(() => a.value.action.type === 'directus_write')
+const dwCollection = computed(() => a.value.action.directus?.collection ?? '')
+
+const collections = ref<DirectusCollection[]>([])
+const collectionsError = ref<string | null>(null)
+const collectionsLoading = ref(false)
+const fields = ref<DirectusField[]>([])
+const fieldsError = ref<string | null>(null)
+const fieldsLoading = ref(false)
+const fieldsFor = ref('')
+
+async function loadCollections() {
+  collectionsLoading.value = true
+  collectionsError.value = null
+  try {
+    collections.value = await listCollections()
+  } catch {
+    collectionsError.value = 'Directus nicht erreichbar – Collections nicht geladen'
+    collections.value = []
+  } finally {
+    collectionsLoading.value = false
+  }
+}
+
+async function loadFields(collection: string) {
+  fieldsFor.value = collection
+  fieldsError.value = null
+  if (!collection) { fields.value = []; fieldsLoading.value = false; return }
+  fieldsLoading.value = true
+  try {
+    const res = await listFields(collection)
+    if (fieldsFor.value === collection) fields.value = res       // Rennen vermeiden
+  } catch {
+    if (fieldsFor.value === collection) {
+      fieldsError.value = 'Felder nicht geladen'
+      fields.value = []
+    }
+  } finally {
+    if (fieldsFor.value === collection) fieldsLoading.value = false
+  }
+}
+
+watch(isDirectusWrite, (on) => {
+  if (on && !collections.value.length && !collectionsLoading.value) loadCollections()
+}, { immediate: true })
+
+watch(dwCollection, (c) => {
+  if (isDirectusWrite.value) loadFields(c)
+}, { immediate: true })
 </script>
 
 <template>
@@ -386,9 +442,17 @@ const actionValueText = computed(() => {
           </div>
           <div>
             <label class="lbl">Collection</label>
-            <input class="afi w-full" :value="a.action.directus?.collection ?? ''"
-                   @input="patchDirectus({ collection: val($event) })"
-                   placeholder="z. B. mitarbeiter" />
+            <select class="afi w-full" :value="a.action.directus?.collection ?? ''"
+                    @change="patchDirectus({ collection: val($event) })">
+              <option value="">{{ collectionsLoading ? 'lädt…' : 'Collection wählen…' }}</option>
+              <option v-for="c in collections" :key="c.collection" :value="c.collection">{{ c.collection }}</option>
+              <option v-if="dwCollection && !collections.some((c) => c.collection === dwCollection)"
+                      :value="dwCollection">{{ dwCollection }} (unbekannt)</option>
+            </select>
+            <p v-if="collectionsError" class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              {{ collectionsError }} ·
+              <button type="button" class="underline" @click="loadCollections">neu laden</button>
+            </p>
           </div>
         </div>
 
@@ -421,12 +485,23 @@ const actionValueText = computed(() => {
               <option v-if="b.source && !keys.includes(b.source)" :value="b.source">{{ b.source }} (unbekannt)</option>
             </select>
             <span class="text-gray-400 text-sm">→</span>
-            <input class="afi flex-1" :value="b.target" @input="setDwMap(i, 'target', val($event))"
-                   placeholder="Directus-Feld, z. B. vorname" />
+            <select class="afi flex-1" :value="b.target" @change="setDwMap(i, 'target', val($event))">
+              <option value="">{{ fieldsLoading ? 'lädt…' : 'Directus-Feld…' }}</option>
+              <option v-for="f in fields" :key="f.field" :value="f.field">{{ f.field }}</option>
+              <option v-if="b.target && !fields.some((f) => f.field === b.target)"
+                      :value="b.target">{{ b.target }} (unbekannt)</option>
+            </select>
             <button type="button" @click="removeDwMap(i)"
                     class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
           </div>
-          <p v-if="!(a.action.directus?.fieldMap ?? []).length" class="text-xs text-gray-400 mt-2">
+          <p v-if="!dwCollection" class="text-xs text-gray-400 mt-2">
+            Zuerst oben eine Collection wählen – dann stehen die Directus-Felder zur Auswahl.
+          </p>
+          <p v-else-if="fieldsError" class="text-xs text-amber-600 dark:text-amber-400 mt-2">
+            {{ fieldsError }} ·
+            <button type="button" class="underline" @click="loadFields(dwCollection)">neu laden</button>
+          </p>
+          <p v-else-if="!(a.action.directus?.fieldMap ?? []).length" class="text-xs text-gray-400 mt-2">
             Noch keine Zuordnung – mindestens eine ist nötig.
           </p>
         </div>
