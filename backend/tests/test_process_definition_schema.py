@@ -274,6 +274,18 @@ def test_directus_write_matchfield_only_for_create():
     _reject(d)
 
 
+def test_directus_write_matchfield_not_on_resolved_target():
+    # Geschäftsschlüssel auf einem aufgelösten Feld (resolve) → verboten: der
+    # Suchwert (roh) passt nie zum gespeicherten (aufgelösten) Wert.
+    d = _base(fields=[{"key": "c", "widget": "company"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "c"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "k",
+                   "idField": "mid", "matchField": "firma",
+                   "fieldMap": [{"source": "c", "target": "firma", "resolve": "company_directus_id"}]}}}]
+    _reject(d)
+
+
 def test_directus_write_matchfield_and_block_ok():
     d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
     d["phases"][0]["fields"] = [{"ref": "a"}]

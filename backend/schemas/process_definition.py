@@ -1076,10 +1076,17 @@ class ProcessDefinition(_Base):
                         raise ValueError(
                             f"automation[{a.id}].directus.matchField: der Geschäftsschlüssel "
                             "(get-or-create) ist nur bei operation=create sinnvoll")
-                    if d.matchField not in {b.target for b in d.fieldMap}:
+                    _match_bindings = [b for b in d.fieldMap if b.target == d.matchField]
+                    if not _match_bindings:
                         raise ValueError(
                             f"automation[{a.id}].directus.matchField: „{d.matchField}“ muss ein "
                             "Directus-Zielfeld einer Feld-Zuordnung sein (liefert den Suchwert)")
+                    # Ein aufgelöstes Ziel (resolve) würde den ROHEN Wert suchen, aber den
+                    # AUFGELÖSTEN schreiben → nie ein Treffer → stille Doppelanlage.
+                    if any(b.resolve is not None for b in _match_bindings):
+                        raise ValueError(
+                            f"automation[{a.id}].directus.matchField: „{d.matchField}“ darf kein "
+                            "aufgelöstes Feld sein (Suchwert würde nicht zum gespeicherten passen)")
 
         # on_department_done: nur als PHASEN-Automation einer Fachabteilungs-Phase,
         # und die Gruppe muss eine Fachabteilung genau dieser Phase sein.

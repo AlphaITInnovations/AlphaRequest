@@ -1070,7 +1070,14 @@ def _department_action(ticket_id: int, group_id: str, status: str,
     # echten Übergang nach „done" feuern (ein erneutes :complete derselben
     # Abteilung würde sonst nicht-idempotente Aktionen doppelt auslösen).
     _prev = pr.department_entry(runtime, group_id)
-    prior_status = _prev.get("status") if _prev else None
+    # Teilnahme ZUERST prüfen – sonst könnte in einer Randlage (alle Abteilungs-
+    # Regeln bedingt, aktuell keine aktiv → leere Live-Liste, may_complete_department
+    # fällt auf die statischen Regeln zurück) die blockierende Directus-Anlage laufen,
+    # BEVOR set_department_status mit 409 ablehnt. Kein Seiteneffekt vor der Prüfung.
+    if _prev is None:
+        raise api_error(409, ErrorCode.DEPARTMENT_FORBIDDEN,
+                        "Diese Fachabteilung ist an der aktuellen Phase nicht beteiligt")
+    prior_status = _prev.get("status")
     ist_uebergang = status == "done" and prior_status != "done"
 
     # BLOCKIEREND ZUERST: directus_write mit onError=block (z. B. Mitarbeiter in

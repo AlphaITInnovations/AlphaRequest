@@ -504,6 +504,17 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(errorCount(validateDefinition(d))).toBe(0)
   })
 
+  it('lehnt matchField auf einem aufgelösten Feld ab', () => {
+    const d = defn({
+      fields: [{ key: 'base.firma', widget: 'company' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.firma' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'k', idField: 'mid', matchField: 'firma',
+            fieldMap: [{ source: 'base.firma', target: 'firma', resolve: 'company_directus_id' }] } } }] }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
   it('lehnt ein idField ab, das kein einfaches Textfeld ist', () => {
     const d = defn({
       fields: [{ key: 'base.name', widget: 'text' }, { key: 'anhang', widget: 'attachment' }],

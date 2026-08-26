@@ -125,6 +125,11 @@ function onTriggerType(t: TriggerType) {
 function patchDirectus(p: Partial<DirectusWriteSpec>) {
   patchAction({ directus: { ...(a.value.action.directus ?? blankDirectus()), ...p } })
 }
+function setDwOperation(op: DirectusOperation) {
+  // matchField (get-or-create) gibt es nur bei create – beim Wechsel weg davon
+  // aufräumen, sonst bliebe ein nicht mehr bedienbarer Validierungsfehler stehen.
+  patchDirectus(op === 'create' ? { operation: op } : { operation: op, matchField: null })
+}
 function addDwMap() {
   const cur = a.value.action.directus ?? blankDirectus()
   patchDirectus({ fieldMap: [...cur.fieldMap, { source: '', target: '' }] })
@@ -464,7 +469,7 @@ watch(dwCollection, (c) => {
           <div>
             <label class="lbl">Operation</label>
             <select class="afi w-full" :value="a.action.directus?.operation ?? 'create'"
-                    @change="patchDirectus({ operation: val($event) as DirectusOperation })">
+                    @change="setDwOperation(val($event) as DirectusOperation)">
               <option v-for="o in DIRECTUS_OPS" :key="o.value" :value="o.value">{{ o.label }}</option>
             </select>
           </div>

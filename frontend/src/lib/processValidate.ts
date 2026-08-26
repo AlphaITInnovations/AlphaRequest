@@ -682,12 +682,16 @@ export function validateDefinition(
         // Geschäftsschlüssel (get-or-create): nur bei create + nur auf ein gemapptes
         // Directus-Zielfeld (spiegelt die Server-Regel).
         if (dw.matchField) {
+          const matchBindings = dw.fieldMap.filter((b) => b.target === dw.matchField)
           if (dw.operation !== 'create') {
             out.push(err(`${path}.action`, anchor, 'INVALID',
               'Der Doppelanlage-Schutz (Geschäftsschlüssel) ist nur bei „Anlegen" möglich.'))
-          } else if (!dw.fieldMap.some((b) => b.target === dw.matchField)) {
+          } else if (!matchBindings.length) {
             out.push(err(`${path}.action`, anchor, 'INVALID',
               `Der Geschäftsschlüssel „${dw.matchField}" muss ein zugeordnetes Directus-Zielfeld sein.`))
+          } else if (matchBindings.some((b) => b.resolve)) {
+            out.push(err(`${path}.action`, anchor, 'INVALID',
+              `Der Geschäftsschlüssel „${dw.matchField}" darf kein aufgelöstes Feld sein.`))
           }
         }
       }
