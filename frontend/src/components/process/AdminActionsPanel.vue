@@ -14,6 +14,10 @@ import { useRouter } from 'vue-router'
 import UserSelect from '@/components/UserSelect.vue'
 import { useToast } from '@/composables/useToast'
 import { errorMessage } from '@/lib/processErrors'
+import {
+  departmentStatusLabel, departmentTone, isDepartmentPending,
+  requiredLabel, type DepartmentState,
+} from '@/lib/processDepartments'
 import * as ticketsApi from '@/api/processTickets'
 import { reopenTicket } from '@/api/processEvents'
 import type { OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
@@ -105,6 +109,44 @@ async function phaseSpeichern() {
     emit('reload')
   } catch (e) {
     fehler(e, 'Phase konnte nicht umgestellt werden')
+  } finally { busy.value = false }
+}
+
+// ── Fachabteilung abschließen (Admin-Override) ───────────────────────────────
+// Füllt die Lücke der normalen Ansicht: dort kann nur ein MITGLIED die eigene
+// Abteilung abschließen. Hier darf der Admin auch für eine andere Abteilung
+// quittieren (z. B. wenn sie keine erreichbaren Mitglieder hat). Der Endpunkt
+// erlaubt das per may_complete_department (Admin-Override).
+const showDept = ref(false)
+const deptGrund = ref('')
+
+const abteilungen = computed<DepartmentState[]>(() => {
+  const r = props.ticket.responsibility as { kind?: string; departments?: DepartmentState[] } | null
+  return r?.kind === 'departments' ? (r.departments ?? []) : []
+})
+
+const gruppenName = (gid: string) =>
+  props.sources.groups?.find((g) => g.id === gid)?.name || gid
+
+const DEPT_TONE: Record<string, string> = {
+  open: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  done: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  skipped: 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  unknown: 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+}
+const deptToneClass = (d: DepartmentState) => DEPT_TONE[departmentTone(d.status)]
+
+async function abteilungAbschliessen(gid: string) {
+  if (!deptGrund.value.trim()) { showToast('Bitte eine Begründung angeben', false); return }
+  busy.value = true
+  try {
+    await ticketsApi.completeDepartment(props.ticket.id, gid, deptGrund.value.trim())
+    showToast(`${gruppenName(gid)}: abgeschlossen`)
+    deptGrund.value = ''
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Fachabteilung konnte nicht abgeschlossen werden')
   } finally { busy.value = false }
 }
 
@@ -225,6 +267,11 @@ async function loeschen() {
                      bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition">
         {{ terminal ? '🔓 Wiedereröffnen' : '🔀 Phase wechseln' }}
       </button>
+      <button v-if="abteilungen.length && !terminal" @click="showDept = !showDept" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     bg-[#3EAAB8] hover:bg-[#2B7D89] text-white disabled:opacity-50 transition">
+        🏳️ Fachabteilung abschließen
+      </button>
       <button @click="rawOeffnen" :disabled="busy"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
                      border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
@@ -306,6 +353,43 @@ async function loeschen() {
                 class="btn-primary text-sm">
           {{ terminal ? 'Wiedereröffnen' : 'Phase setzen' }}
         </button>
+      </div>
+    </div>
+
+    <!-- Fachabteilung abschließen (ausklappbar) -->
+    <div v-if="showDept && abteilungen.length"
+         class="rounded-xl border border-gray-200 dark:border-white/10
+                bg-white dark:bg-[#212B3A] p-4 space-y-3">
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        Schließt eine Fachabteilung der aktuellen Phase in ihrem Namen ab
+        (Admin-Override – z. B. wenn die Abteilung keine erreichbaren Mitglieder hat).
+        Steht anschließend im Verlauf.
+      </p>
+      <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] rounded-xl
+                 border border-gray-200 dark:border-white/10 overflow-hidden">
+        <li v-for="d in abteilungen" :key="d.group"
+            class="px-3 py-2 flex items-center gap-2 flex-wrap">
+          <span class="text-sm text-gray-800 dark:text-gray-100 flex-1 min-w-0 truncate">
+            {{ gruppenName(d.group) }}
+          </span>
+          <span class="text-[11px] px-1.5 py-0.5 rounded-full whitespace-nowrap
+                       bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400">
+            {{ requiredLabel(d.required) }}
+          </span>
+          <span class="text-[11px] px-1.5 py-0.5 rounded-full whitespace-nowrap"
+                :class="deptToneClass(d)">{{ departmentStatusLabel(d.status) }}</span>
+          <button v-if="isDepartmentPending(d)" @click="abteilungAbschliessen(d.group)"
+                  :disabled="busy"
+                  class="px-2.5 py-1 rounded-lg text-xs text-white bg-[#3EAAB8] hover:bg-[#369aa7]
+                         disabled:opacity-40 transition">
+            Abschließen
+          </button>
+        </li>
+      </ul>
+      <input v-model="deptGrund" class="afi w-full" maxlength="500"
+             placeholder="Begründung (Pflicht – steht im Verlauf)" />
+      <div class="flex justify-end">
+        <button @click="showDept = false" class="btn-secondary text-sm">Schließen</button>
       </div>
     </div>
 
