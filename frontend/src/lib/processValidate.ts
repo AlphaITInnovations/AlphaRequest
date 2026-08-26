@@ -643,6 +643,61 @@ export function validateDefinition(
           `Unbekanntes Feld „${ac.field}".`))
       }
     }
+    if (ac.type === 'directus_write') {
+      const dw = ac.directus
+      if (!dw) {
+        out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-Konfiguration fehlt.'))
+      } else {
+        if (!dw.collection?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-Collection fehlt.'))
+        }
+        if (!dw.idField?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'id-Feld fehlt.'))
+        } else if (!catalog.has(dw.idField)) {
+          out.push(err(`${path}.action`, anchor, 'UNKNOWN_REF', `id-Feld „${dw.idField}" gibt es nicht.`))
+        }
+        if ((dw.operation === 'create' || dw.operation === 'update') && dw.fieldMap.length === 0) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED',
+            'Mindestens eine Feld-Zuordnung nötig.'))
+        }
+        dw.fieldMap.forEach((b, j) => {
+          if (!b.source || !catalog.has(b.source)) {
+            out.push(err(`${path}.action.directus.${j}`, anchor, 'UNKNOWN_REF',
+              `Quell-Feld „${b.source}" gibt es nicht.`))
+          }
+          if (!b.target?.trim()) {
+            out.push(err(`${path}.action.directus.${j}`, anchor, 'REQUIRED', 'Directus-Zielfeld fehlt.'))
+          }
+        })
+      }
+    }
+  })
+
+  // on_department_done: nur als Phasen-Automation einer Fachabteilungs-Phase; die
+  // Gruppe muss eine Fachabteilung genau dieser Phase sein.
+  d.automations.forEach((a, i) => {
+    if (a.trigger.type === 'on_department_done') {
+      out.push(err(`automations.${i}.trigger`, `pe-automation-${i}`, 'INVALID',
+        'on_department_done gibt es nur als Phasen-Automation.'))
+    }
+  })
+  d.phases.forEach((ph, i) => {
+    const isDept = ph.responsibility.kind === 'departments'
+    const deptGroups = new Set((ph.responsibility.rule ?? []).map((r) => r.group))
+    ph.automations.forEach((a, j) => {
+      if (a.trigger.type !== 'on_department_done') return
+      const anchor = `pe-phase-${i}`
+      const p = `phases.${i}.automations.${j}`
+      if (!isDept) {
+        out.push(err(`${p}.trigger`, anchor, 'INVALID',
+          'on_department_done gibt es nur in einer Fachabteilungs-Phase.'))
+      } else if (!a.trigger.group) {
+        out.push(err(`${p}.trigger.group`, anchor, 'REQUIRED', 'Fachabteilung fehlt.'))
+      } else if (!deptGroups.has(a.trigger.group)) {
+        out.push(err(`${p}.trigger.group`, anchor, 'INVALID',
+          'Diese Fachabteilung gehört nicht zur Phase.'))
+      }
+    })
   })
 
   return out

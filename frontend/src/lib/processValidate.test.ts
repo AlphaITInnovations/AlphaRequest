@@ -449,3 +449,38 @@ describe('validateDefinition – Directus-Feld', () => {
     expect(errorCount(validateDefinition(d))).toBe(0)
   })
 })
+
+describe('validateDefinition – directus_write & on_department_done', () => {
+  it('verlangt idField im Katalog beim directus_write', () => {
+    const d = defn({ phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+      fields: [{ ref: 'base.name' }],
+      automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+        directus: { operation: 'create', collection: 'c', idField: 'ghost',
+          fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+    expect(codes(d)).toContain('UNKNOWN_REF')
+  })
+
+  it('on_department_done nur in einer Fachabteilungs-Phase', () => {
+    const d = defn({ phases: [
+      { key: 'start', kind: 'start', responsibility: { kind: 'owner' }, fields: [{ ref: 'base.name' }] },
+      { key: 't', kind: 'task', responsibility: { kind: 'group', group: 'g' },
+        fields: [{ ref: 'base.name', mode: 'readonly' }],
+        automations: [{ id: 'x', trigger: { type: 'on_department_done', group: 'g' },
+          action: { type: 'notify', to: 'responsible' } }] }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
+  it('akzeptiert directus_write per on_department_done in einer review-Phase', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [
+        { key: 'start', kind: 'start', responsibility: { kind: 'owner' }, fields: [{ ref: 'base.name' }] },
+        { key: 'rev', kind: 'review', view: 'review',
+          responsibility: { kind: 'departments', rule: [{ group: 'g-it', required: true }] },
+          fields: [{ ref: 'base.name', mode: 'readonly' }],
+          automations: [{ id: 'anlegen', trigger: { type: 'on_department_done', group: 'g-it' },
+            action: { type: 'directus_write', directus: { operation: 'create', collection: 'mitarbeiter',
+              idField: 'mid', fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+})

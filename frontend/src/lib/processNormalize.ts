@@ -11,7 +11,8 @@
  * ausgegeben wird IMMER `from` (der Wire-Name).
  */
 import type {
-  Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions, LayoutItem,
+  Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions,
+  DirectusWriteSpec, LayoutItem,
   DocumentSpec, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger,
@@ -155,7 +156,19 @@ function normLayoutSection(v: any): LayoutSection {
 
 function normTrigger(v: any): Trigger {
   return { type: v?.type ?? 'on_enter', after: str(v?.after), repeat: str(v?.repeat),
-    field: str(v?.field) }
+    field: str(v?.field), group: str(v?.group) }
+}
+
+function normDirectusWrite(v: any): DirectusWriteSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return {
+    operation: (v.operation ?? 'create') as DirectusWriteSpec['operation'],
+    collection: String(v.collection ?? ''),
+    fieldMap: arr(v.fieldMap).map((b: any) => ({
+      source: String(b?.source ?? ''), target: String(b?.target ?? ''),
+    })),
+    idField: String(v.idField ?? ''),
+  }
 }
 
 function normAction(v: any): Action {
@@ -166,6 +179,7 @@ function normAction(v: any): Action {
     field: str(v?.field),
     value: v?.value === undefined ? null : v.value,
     counter: str(v?.counter),
+    directus: normDirectusWrite(v?.directus),
   }
 }
 

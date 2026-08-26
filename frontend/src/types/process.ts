@@ -29,10 +29,11 @@ export type ResponsibilityKind =
   /** Zuständige Fachabteilung steht in einem Gruppen-Feld des Auftrags (widget='group'). */
   | 'group_from_field'
 export type FieldMode = 'editable' | 'readonly' | 'hidden' | 'append_only'
-export type TriggerType = 'on_enter' | 'on_exit' | 'on_field_change' | 'timer'
+export type TriggerType = 'on_enter' | 'on_exit' | 'on_field_change' | 'timer' | 'on_department_done'
+export type DirectusOperation = 'create' | 'update' | 'delete'
 export type ActionType =
   | 'notify' | 'escalate' | 'set_field' | 'set_priority' | 'set_status'
-  | 'assign_sequence' | 'auto_advance'
+  | 'assign_sequence' | 'auto_advance' | 'directus_write'
 
 /** Genau EIN Operator-Key pro Objekt – Shapes siehe lib/conditionDsl.ts. */
 export type Condition = Record<string, any>
@@ -150,6 +151,21 @@ export interface Trigger {
   after: string | null
   repeat: string | null
   field: string | null
+  /** Bei type='on_department_done': die Fachabteilung (Gruppen-ID). */
+  group: string | null
+}
+
+export interface DirectusWriteBinding {
+  source: string   // Prozess-Feld-Key
+  target: string   // Directus-Feld
+}
+
+export interface DirectusWriteSpec {
+  operation: DirectusOperation
+  collection: string
+  fieldMap: DirectusWriteBinding[]
+  /** Prozess-Feld für die Directus-id (Ziel bei create, Quelle bei update/delete). */
+  idField: string
 }
 
 export interface Action {
@@ -160,6 +176,8 @@ export interface Action {
   value: unknown | null
   /** Bei type='assign_sequence': Name des Nummernkreises (Pflicht, wie `field`). */
   counter: string | null
+  /** Bei type='directus_write': Schreib-Konfiguration. */
+  directus: DirectusWriteSpec | null
 }
 
 export interface Automation {

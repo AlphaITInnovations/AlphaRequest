@@ -13,7 +13,9 @@
  * lehnt der Server die Definition ab.
  */
 import { computed } from 'vue'
-import type { Action, ActionType, Automation, Trigger, TriggerType } from '@/types/process'
+import type {
+  Action, ActionType, Automation, DirectusOperation, DirectusWriteSpec, Trigger, TriggerType,
+} from '@/types/process'
 import {
   ACTION_LABEL, ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
   RECIPIENT_LABEL, SEQUENCE_COUNTERS, STATUS_LABEL, TRIGGER_LABEL, TRIGGER_TYPES,
@@ -26,7 +28,18 @@ const props = defineProps<{
   fieldKeys: string[]
   fieldLabels?: Record<string, string>
   groups?: { id: string; name: string }[]
+  /** Fachabteilungen DIESER Phase (für den Trigger „Fachabteilung abgeschlossen“).
+   *  Fehlt sie, wird auf alle `groups` ausgewichen. */
+  departmentGroups?: { id: string; name: string }[]
 }>()
+
+const DIRECTUS_OPS: { value: DirectusOperation; label: string }[] = [
+  { value: 'create', label: 'Anlegen' },
+  { value: 'update', label: 'Ändern' },
+  { value: 'delete', label: 'Löschen' },
+]
+const deptGroups = computed(() =>
+  (props.departmentGroups?.length ? props.departmentGroups : props.groups) ?? [])
 
 const emit = defineEmits<{
   'update:modelValue': [value: Automation]
@@ -39,10 +52,13 @@ const PRIORITY_LABEL: Record<string, string> = {
 
 // ── Robuste Sicht auf den Wert (die Definition kann unvollständig sein) ───────
 
-const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null })
+const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null, group: null })
 const blankAction = (): Action => ({
   type: 'notify', to: 'responsible', template: null, field: null,
-  value: null, counter: null,
+  value: null, counter: null, directus: null,
+})
+const blankDirectus = (): DirectusWriteSpec => ({
+  operation: 'create', collection: '', fieldMap: [], idField: '',
 })
 
 const a = computed<Automation>(() => {
@@ -90,13 +106,35 @@ function onTriggerType(t: TriggerType) {
     after: t === 'timer' ? (a.value.trigger.after ?? 'P1D') : null,
     repeat: t === 'timer' ? a.value.trigger.repeat : null,
     field: t === 'on_field_change' ? a.value.trigger.field : null,
+    group: t === 'on_department_done'
+      ? (a.value.trigger.group ?? (deptGroups.value[0]?.id ?? null)) : null,
   })
+}
+
+// ── Directus-Schreiben ──────────────────────────────────────────────────────
+function patchDirectus(p: Partial<DirectusWriteSpec>) {
+  patchAction({ directus: { ...(a.value.action.directus ?? blankDirectus()), ...p } })
+}
+function addDwMap() {
+  const cur = a.value.action.directus ?? blankDirectus()
+  patchDirectus({ fieldMap: [...cur.fieldMap, { source: '', target: '' }] })
+}
+function removeDwMap(i: number) {
+  const cur = a.value.action.directus ?? blankDirectus()
+  patchDirectus({ fieldMap: cur.fieldMap.filter((_, j) => j !== i) })
+}
+function setDwMap(i: number, part: 'source' | 'target', value: string) {
+  const cur = a.value.action.directus ?? blankDirectus()
+  patchDirectus({ fieldMap: cur.fieldMap.map((b, j) => (j === i ? { ...b, [part]: value } : b)) })
 }
 
 function onActionType(t: ActionType) {
   const cur = a.value.action
   const next: Action = {
-    type: t, to: null, template: null, field: null, value: null, counter: null,
+    type: t, to: null, template: null, field: null, value: null, counter: null, directus: null,
+  }
+  if (t === 'directus_write') {
+    next.directus = cur.directus ?? blankDirectus()
   }
   if (t === 'notify' || t === 'escalate') {
     next.to = cur.to ?? 'responsible'
@@ -186,6 +224,21 @@ const actionValueText = computed(() => {
             {{ a.trigger.field }} (unbekannt)
           </option>
         </select>
+      </div>
+
+      <div v-else-if="a.trigger.type === 'on_department_done'">
+        <label class="lbl">Fachabteilung</label>
+        <select class="afi w-full" :value="a.trigger.group ?? ''"
+                @change="patchTrigger({ group: val($event) || null })">
+          <option value="">Fachabteilung wählen…</option>
+          <option v-for="g in deptGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+          <option v-if="a.trigger.group && !deptGroups.some((g) => g.id === a.trigger.group)"
+                  :value="a.trigger.group">{{ a.trigger.group }} (unbekannt)</option>
+        </select>
+        <p class="text-xs text-gray-400 mt-1">
+          Feuert, sobald diese Fachabteilung ihren Teil abgeschlossen hat (nur in einer
+          Fachabteilungs-Phase).
+        </p>
       </div>
     </div>
 
@@ -320,6 +373,70 @@ const actionValueText = computed(() => {
         Die Phase wird automatisch abgeschlossen, sobald der Auslöser greift und alle
         Pflichtangaben vorliegen. Es sind keine weiteren Angaben nötig.
       </p>
+
+      <!-- In Directus schreiben -->
+      <template v-else-if="a.action.type === 'directus_write'">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl">Operation</label>
+            <select class="afi w-full" :value="a.action.directus?.operation ?? 'create'"
+                    @change="patchDirectus({ operation: val($event) as DirectusOperation })">
+              <option v-for="o in DIRECTUS_OPS" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Collection</label>
+            <input class="afi w-full" :value="a.action.directus?.collection ?? ''"
+                   @input="patchDirectus({ collection: val($event) })"
+                   placeholder="z. B. mitarbeiter" />
+          </div>
+        </div>
+
+        <div>
+          <label class="lbl">Directus-id speichern in / lesen aus</label>
+          <select class="afi w-full" :value="a.action.directus?.idField ?? ''"
+                  @change="patchDirectus({ idField: val($event) })">
+            <option value="">Feld wählen…</option>
+            <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+            <option v-if="a.action.directus?.idField && !keys.includes(a.action.directus.idField)"
+                    :value="a.action.directus.idField">{{ a.action.directus.idField }} (unbekannt)</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">
+            Beim Anlegen wird die neue Directus-id hierhin geschrieben (und schützt vor
+            Doppelanlage); bei Ändern/Löschen wird sie von hier gelesen.
+          </p>
+        </div>
+
+        <div v-if="(a.action.directus?.operation ?? 'create') !== 'delete'">
+          <div class="flex items-center justify-between">
+            <label class="lbl mb-0">Feld-Zuordnung (Prozess → Directus)</label>
+            <button type="button" @click="addDwMap" class="text-xs text-[#3EAAB8] hover:underline">+ Zuordnung</button>
+          </div>
+          <div v-for="(b, i) in (a.action.directus?.fieldMap ?? [])" :key="i"
+               class="flex items-center gap-2 mt-2">
+            <select class="afi flex-1" :value="b.source"
+                    @change="setDwMap(i, 'source', val($event))">
+              <option value="">Prozess-Feld…</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+              <option v-if="b.source && !keys.includes(b.source)" :value="b.source">{{ b.source }} (unbekannt)</option>
+            </select>
+            <span class="text-gray-400 text-sm">→</span>
+            <input class="afi flex-1" :value="b.target" @input="setDwMap(i, 'target', val($event))"
+                   placeholder="Directus-Feld, z. B. vorname" />
+            <button type="button" @click="removeDwMap(i)"
+                    class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
+          </div>
+          <p v-if="!(a.action.directus?.fieldMap ?? []).length" class="text-xs text-gray-400 mt-2">
+            Noch keine Zuordnung – mindestens eine ist nötig.
+          </p>
+        </div>
+
+        <p class="text-xs text-gray-400">
+          Schreibt live nach Directus. Das braucht einen Directus-Token mit Schreibrechten
+          (env DIRECTUS_WRITE_TOKEN oder Schreibrecht des Lese-Tokens). Fehler blockieren den
+          Auftrag nicht – sie landen im Verlauf und als Mail an den Fehler-Empfänger.
+        </p>
+      </template>
     </div>
   </div>
 </template>

@@ -89,7 +89,7 @@ describe('normalizeDefinition', () => {
       automations: [{ id: 'a', trigger: { type: 'on_enter' },
         action: { type: 'notify', to: 'owner', process: 'alt' } }] })
     expect(Object.keys(d.automations[0].action).sort())
-      .toEqual(['counter', 'field', 'template', 'to', 'type', 'value'])
+      .toEqual(['counter', 'directus', 'field', 'template', 'to', 'type', 'value'])
   })
 
   it('ergänzt die einzig erlaubte assign.action', () => {

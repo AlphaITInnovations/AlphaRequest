@@ -41,11 +41,11 @@ export const RESPONSIBILITY_KINDS: readonly ResponsibilityKind[] =
   ['owner', 'assignable', 'group', 'group_from_field', 'departments', 'user']
 export const FIELD_MODES: readonly FieldMode[] = ['editable', 'readonly', 'hidden', 'append_only']
 export const OPTIONS_SOURCES: readonly OptionsSource[] = ['static', 'groups', 'companies', 'users']
-export const TRIGGER_TYPES = ['on_enter', 'on_exit', 'on_field_change', 'timer'] as const
+export const TRIGGER_TYPES = ['on_enter', 'on_exit', 'on_field_change', 'timer', 'on_department_done'] as const
 
 export const ACTION_TYPES: readonly ActionType[] = [
   'notify', 'escalate', 'set_field', 'set_priority', 'set_status', 'assign_sequence',
-  'auto_advance',
+  'auto_advance', 'directus_write',
 ]
 
 /**
@@ -159,6 +159,7 @@ export const FIELD_MODE_LABEL: Record<FieldMode, string> = {
 export const TRIGGER_LABEL: Record<string, string> = {
   on_enter: 'Beim Betreten der Phase', on_exit: 'Beim Verlassen der Phase',
   on_field_change: 'Bei Feldänderung', timer: 'Zeitgesteuert',
+  on_department_done: 'Wenn eine Fachabteilung abgeschlossen hat',
 }
 
 export const ACTION_LABEL: Record<string, string> = {
@@ -166,6 +167,7 @@ export const ACTION_LABEL: Record<string, string> = {
   set_priority: 'Priorität setzen', set_status: 'Status setzen',
   auto_advance: 'Automatisch weiterschalten',
   assign_sequence: 'Nummer aus Nummernkreis vergeben',
+  directus_write: 'In Directus schreiben',
 }
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -317,10 +319,10 @@ export function responsibilityKindPatch(
 export function blankAutomation(id: string): Automation {
   return {
     id,
-    trigger: { type: 'on_enter', after: null, repeat: null, field: null },
+    trigger: { type: 'on_enter', after: null, repeat: null, field: null, group: null },
     guard: null,
     action: { type: 'notify', to: 'responsible', template: null, field: null,
-      value: null, counter: null },
+      value: null, counter: null, directus: null },
   }
 }
 
