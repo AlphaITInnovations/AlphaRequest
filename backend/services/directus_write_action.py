@@ -34,9 +34,12 @@ def build_payload(spec, values: dict, *, companies=None) -> dict:
         try:
             from backend.database.settings import get_companies_full
             companies = get_companies_full()
-        except Exception:
-            logger.exception("Firmen für Directus-Auflösung nicht lesbar")
-            companies = []
+        except Exception as exc:
+            # NICHT auf [] zurückfallen: sonst löst _resolve_value für JEDE Firma
+            # still None auf und der Fremdschlüssel würde unbemerkt ausgelassen.
+            # Als DirectusError melden, damit execute() den Report-Pfad auslöst.
+            raise dc.DirectusError(
+                f"Firmen für die Directus-Auflösung nicht lesbar: {exc}") from exc
     out: dict = {}
     for b in spec.fieldMap:
         v = values.get(b.source)

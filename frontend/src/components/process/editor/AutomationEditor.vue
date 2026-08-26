@@ -514,12 +514,15 @@ watch(dwCollection, (c) => {
               <button type="button" @click="removeDwMap(i)"
                       class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
             </div>
-            <label v-if="fieldWidgets?.[b.source] === 'company'"
+            <label v-if="fieldWidgets?.[b.source] === 'company' || b.resolve === 'company_directus_id'"
                    class="mt-1 ml-1 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
               <input type="checkbox" :checked="b.resolve === 'company_directus_id'"
                      class="h-3.5 w-3.5 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]"
                      @change="setDwResolve(i, ($event.target as HTMLInputElement).checked)" />
               Als alphacore-Firmen-ID auflösen (statt Firmenname)
+              <span v-if="fieldWidgets?.[b.source] !== 'company'" class="text-amber-600 dark:text-amber-400">
+                – nur für ein Firmen-Feld gültig
+              </span>
             </label>
           </div>
           <p v-if="!dwCollection" class="text-xs text-gray-400 mt-2">

@@ -1,4 +1,6 @@
 """Ebene-1: Automations-Aktion directus_write (services/directus_write_action) – ohne Netz."""
+import pytest
+
 from backend.schemas.process_definition import (
     Action, DirectusOperation, DirectusWriteBinding, DirectusWriteSpec,
 )
@@ -76,6 +78,19 @@ def test_build_payload_resolve_company_without_id_skips():
     out = dwa.build_payload(spec, {"base.contract_company": "Alpha GmbH"},
                             companies=[{"name": "Alpha GmbH", "directus_firma_id": None}])
     assert out == {}
+
+
+def test_build_payload_raises_when_companies_unreadable(monkeypatch):
+    # Transienter Firmen-Ladefehler darf NICHT still zu „alle None" degradieren,
+    # sondern muss als DirectusError den Melde-Pfad auslösen.
+    import backend.database.settings as settings_mod
+
+    def boom():
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(settings_mod, "get_companies_full", boom)
+    with pytest.raises(dc.DirectusError):
+        dwa.build_payload(_resolve_spec(), {"base.contract_company": "Alpha GmbH"})
 
 
 def test_create_stores_id():

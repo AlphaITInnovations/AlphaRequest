@@ -672,6 +672,12 @@ export function validateDefinition(
           if (!b.target?.trim()) {
             out.push(err(`${path}.action.directus.${j}`, anchor, 'REQUIRED', 'Directus-Zielfeld fehlt.'))
           }
+          // Spiegelt die Server-Regel: „als Firmen-ID auflösen" nur bei widget=company.
+          // Fängt auch den Fall ab, dass das Quellfeld nachträglich den Typ wechselt.
+          if (b.resolve === 'company_directus_id' && widgetByKey.get(b.source) !== 'company') {
+            out.push(err(`${path}.action.directus.${j}`, anchor, 'INVALID',
+              '„Als alphacore-Firmen-ID auflösen" ist nur für ein Firmen-Feld erlaubt.'))
+          }
         })
       }
     }
