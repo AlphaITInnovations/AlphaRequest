@@ -470,6 +470,9 @@ export interface TicketAbilities {
   /** Notfalleingriffe (Admin): hängenden Auftrag zwangsweise abschließen bzw. löschen. */
   archive: boolean
   delete: boolean
+  /** Fachabteilungen der aktuellen Phase, die diese Person quittieren darf
+   *  (reine Mitgliedschaft). Steuert die „Erledigt"-Knöpfe. */
+  completable_departments?: string[]
 }
 
 export interface ProcessTicketOut {

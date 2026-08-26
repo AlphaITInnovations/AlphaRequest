@@ -475,7 +475,8 @@ def test_abilities_fuer_zustaendige_fachabteilung(setup):
     state["user"] = dict(ITLER)
     a = client.get("/process-tickets/7").json()["data"]["abilities"]
     assert a == {"edit": True, "internal_comment": True, "manage_watchers": True,
-                 "attach": True, "reopen": False, "archive": False, "delete": False}
+                 "attach": True, "reopen": False, "archive": False, "delete": False,
+                 "completable_departments": ["g_it"]}
 
 
 def test_abilities_fuer_den_ersteller(setup):

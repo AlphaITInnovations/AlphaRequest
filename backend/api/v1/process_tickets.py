@@ -95,6 +95,10 @@ class TicketAbilities(BaseModel):
     #: Notfalleingriffe (Admin): hängenden Auftrag zwangsweise abschließen bzw. löschen.
     archive: bool = False
     delete: bool = False
+    #: Fachabteilungen der AKTUELLEN Phase, die DIESE Person quittieren darf –
+    #: rein Mitgliedschaft (kein Admin-Override). Die Oberfläche zeigt den
+    #: „Erledigt"-Knopf nur für diese; verbindlich bleibt der Endpunkt.
+    completable_departments: list[str] = []
 
 
 class ProcessTicketOut(BaseModel):
@@ -148,8 +152,25 @@ def _is_terminal(row: dict) -> bool:
     return row["status"] in ("archived", "rejected") or bool((row.get("runtime") or {}).get("rejected"))
 
 
+def _completable_departments(row: dict, defn: Optional[ProcessDefinition],
+                             user: Optional[dict], group_ids, resp: Optional[dict]) -> list:
+    """Fachabteilungen der aktuellen Phase, in denen DIESE Person Mitglied ist.
+
+    Bewusst OHNE Admin-Override: die Oberfläche soll nur die eigene(n) Abteilung(en)
+    zum Quittieren anbieten. Der Admin-Notfalleingriff bleibt am Endpunkt möglich
+    (may_complete_department), taucht aber nicht als Normal-Knopf auf.
+    """
+    if not user or defn is None or _is_terminal(row):
+        return []
+    if not resp or resp.get("kind") != "departments":
+        return []
+    gset = set(group_ids or ())
+    return [d.get("group") for d in (resp.get("departments") or [])
+            if d.get("group") and d["group"] in gset]
+
+
 def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict],
-               group_ids) -> TicketAbilities:
+               group_ids, completable_departments: Optional[list] = None) -> TicketAbilities:
     if not user:
         return TicketAbilities()
     gids = set(group_ids or ())
@@ -168,6 +189,7 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
         # einzige Schreibaktion dieser Rolle, siehe acc.may_force_archive.
         archive=acc.may_force_archive(user) and not _is_terminal(row),
         delete=acc.is_admin(user),
+        completable_departments=completable_departments or [],
     )
 
 
@@ -211,7 +233,8 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
     data["current_phase"] = cur.key if cur else None
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
     data["responsibility"] = resp
-    data["abilities"] = _abilities(row, defn, user, group_ids)
+    completable = _completable_departments(row, defn, user, group_ids, resp)
+    data["abilities"] = _abilities(row, defn, user, group_ids, completable)
     data["visible_fields"], data["editable_fields"] = _field_access(row, defn, cur, ctx)
     return ProcessTicketOut(**data)
 

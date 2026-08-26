@@ -107,6 +107,14 @@ const serverAbilities = computed(() => ticket.value?.abilities ?? {
  *  „Beteiligt" und alle sonstigen Wege landen im Lesemodus. */
 const leseModus = computed(() => route.query.ansicht !== 'bearbeiten')
 
+/** Aus dem Dashboard (Reiter „Meine Abteilungen") kommt die aufgerufene Abteilung
+ *  als ?abteilung=<gruppen-id> mit – dann bietet die Fachabteilungs-Ansicht nur
+ *  DIESE zum Abschließen an (zusätzlich zur Mitgliedschaftsprüfung). */
+const focusDepartment = computed(() => {
+  const v = route.query.abteilung
+  return (typeof v === 'string' && v) ? v : null
+})
+
 /** Admin-Ansicht (?ansicht=admin, Einstieg über die Auftragsliste): Leseansicht
  *  PLUS Reparatur-Werkzeuge. Das isAdmin hier ist reine Anzeige – JEDER
  *  Admin-Endpunkt prüft die Rechte selbst und antwortet sonst mit 403. */
@@ -387,6 +395,8 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               :departments="ticket.responsibility.departments"
               :group-name="groupName"
               :terminal="terminal || (leseModus && !adminModus)"
+              :my-group-ids="ticket.abilities?.completable_departments ?? null"
+              :focus-department="focusDepartment"
               @updated="onDepartmentsUpdated" />
 
             <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->

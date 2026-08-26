@@ -668,6 +668,31 @@ def test_full_lifecycle_advance_and_archive(client):
     assert r3.status_code == 409
 
 
+def test_abilities_completable_departments_nur_eigene(client, monkeypatch):
+    # u1 als Mitglied von g_it ausweisen (die Fixture ist Admin OHNE Gruppen).
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
+                        lambda uid: ["g_it"])
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    # Erstellungs-Phase: keine Fachabteilung → leer.
+    ab0 = client.get(f"/process-tickets/{tid}").json()["data"]["abilities"]
+    assert ab0["completable_departments"] == []
+    client.post(f"/process-tickets/{tid}:advance")  # → review-Phase (Abteilung g_it)
+    ab = client.get(f"/process-tickets/{tid}").json()["data"]["abilities"]
+    assert ab["completable_departments"] == ["g_it"]
+
+
+def test_abilities_completable_departments_leer_ohne_mitgliedschaft(client, monkeypatch):
+    # Admin OHNE Gruppen-Mitgliedschaft bekommt KEINE Normal-Knöpfe (rein
+    # Mitgliedschaft, kein Admin-Override) – der Endpunkt erlaubt den Eingriff weiter.
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user", lambda uid: [])
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    client.post(f"/process-tickets/{tid}:advance")
+    ab = client.get(f"/process-tickets/{tid}").json()["data"]["abilities"]
+    assert ab["completable_departments"] == []
+
+
 def test_fachabteilung_ueberspringen_zaehlt_als_erledigt(client):
     tid = client.post("/process-tickets",
                       json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]

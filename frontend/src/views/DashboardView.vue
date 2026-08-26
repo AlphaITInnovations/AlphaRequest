@@ -248,7 +248,7 @@ const zeilen = computed<Zeile[]>(() => {
  */
 type AnzeigeElement =
   | { art: 'kopf'; key: string; id: string; name: string; anzahl: number; zu: boolean }
-  | { art: 'zeile'; key: string; z: Zeile }
+  | { art: 'zeile'; key: string; z: Zeile; dept?: string }
 
 /** Zugeklappte Abteilungs-Abschnitte – reiner Anzeige-Zustand dieses Besuchs. */
 const zugeklappt = ref<Record<string, boolean>>({})
@@ -266,7 +266,7 @@ const anzeige = computed<AnzeigeElement[]>(() => {
       { art: 'kopf', key: `kopf-${g.id}`, id: g.id, name: g.name,
         anzahl: g.zeilen.length, zu },
       ...(zu ? [] : g.zeilen.map((z): AnzeigeElement => (
-        { art: 'zeile', key: `${g.id}-${z.id}`, z }))),
+        { art: 'zeile', key: `${g.id}-${z.id}`, z, dept: g.id }))),
     ]
   })
 })
@@ -298,13 +298,17 @@ const listeAbgeschnitten = computed(() => rowsTotal.value > rows.value.length)
 
 // ── Aktionen ──────────────────────────────────────────────────────────────────
 
-function open(z: Zeile) {
+function open(z: Zeile, dept?: string) {
   // Lesen ist der STANDARD der Detailansicht (auch ganz ohne Parameter). Die
   // Arbeits-Reiter („Mir zugewiesen", „Meine Abteilungen") springen direkt in
   // die Bearbeitung, die Beobachtungs-Reiter benennen das Lesen explizit –
   // Rechte vergibt der Parameter nicht (abilities entscheiden, Server prüft).
   const arbeit = activeTab.value === 'assigned' || activeTab.value === 'departments'
-  router.push(`/prozess-auftraege/${z.id}?ansicht=${arbeit ? 'bearbeiten' : 'lesen'}`)
+  const params = new URLSearchParams({ ansicht: arbeit ? 'bearbeiten' : 'lesen' })
+  // Aus dem Abteilungs-Reiter die aufgerufene Abteilung mitgeben: die
+  // Detailansicht bietet dann nur DIESE zum Abschließen an.
+  if (dept && activeTab.value === 'departments') params.set('abteilung', dept)
+  router.push(`/prozess-auftraege/${z.id}?${params.toString()}`)
 }
 
 // ── Laden ─────────────────────────────────────────────────────────────────────
@@ -511,7 +515,7 @@ onMounted(async () => {
                   </span>
                 </button>
               </li>
-              <li v-else @click="open(el.z)" class="order-card group">
+              <li v-else @click="open(el.z, el.dept)" class="order-card group">
                 <div class="flex items-start gap-3.5 min-w-0">
                   <div class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" :class="dotClass(el.z.status)" />
                   <div class="min-w-0">
