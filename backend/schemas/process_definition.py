@@ -39,6 +39,7 @@ class Widget(str, Enum):
     user = "user"
     company = "company"
     group = "group"
+    directus = "directus"                # Auswahl aus einer Directus-Quelle (Live-Dropdown)
     collection = "collection"            # Wiederholgruppe (Array von Sub-Items)
     server_generated = "server_generated"  # kein Client-Input, per Action befüllt
     server_stamped = "server_stamped"       # nur innerhalb collection-Items
@@ -245,6 +246,14 @@ class ComputedSpec(_Base):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
+class DirectusBinding(_Base):
+    """Auto-Fill-Zuordnung eines directus-Felds: der Wert am dot-Pfad `source`
+    des gewählten Directus-Datensatzes wird beim Auswählen als Snapshot in das
+    Zielfeld `target` (Prozess-Feld-Key) geschrieben."""
+    source: str          # Directus-Feldpfad, z. B. "firma.name"
+    target: str          # Prozess-Feld-Key, z. B. "konditionen.firma"
+
+
 class AssignSpec(_Base):
     """Wie ein server_generated-Feld gefüllt wird.
 
@@ -303,6 +312,8 @@ class FieldDef(_Base):
     assign: Optional[AssignSpec] = None
     mode: Optional[FieldMode] = None            # z.B. append_only bei collection
     item: list[SubField] = Field(default_factory=list)  # Sub-Katalog für collection
+    directusSource: Optional[str] = None        # Schlüssel einer Directus-Quelle (bei widget=directus)
+    directusFieldMap: list[DirectusBinding] = Field(default_factory=list)  # Auto-Fill der Zielfelder
 
     @field_validator("key")
     @classmethod
@@ -325,6 +336,10 @@ class FieldDef(_Base):
             raise ValueError(f"Feld „{self.key}“: server_generated braucht `assign`")
         if self.widget == Widget.server_stamped:
             raise ValueError(f"Feld „{self.key}“: server_stamped ist nur innerhalb einer collection erlaubt")
+        if self.widget == Widget.directus and not self.directusSource:
+            raise ValueError(f"Feld „{self.key}“: widget=directus braucht `directusSource`")
+        if self.widget != Widget.directus and (self.directusSource or self.directusFieldMap):
+            raise ValueError(f"Feld „{self.key}“: `directusSource`/`directusFieldMap` nur bei widget=directus")
         return self
 
 
@@ -877,6 +892,19 @@ class ProcessDefinition(_Base):
                             f"Feld „{f.key}“.computed.map: Das Quellfeld "
                             f"„{f.computed.from_}“ (widget={src.widget.value}) ist nicht "
                             f"unterstützt – ein Lookup arbeitet nur mit Text-/Auswahl-Feldern.")
+
+        # directus-Felder: jedes Auto-Fill-Ziel muss ein Katalog-Feld sein und darf
+        # nicht auf das Feld selbst zeigen (Selbstbezug). Der Quell-Pfad (Directus)
+        # wird hier NICHT geprüft – das Schema kennt Directus nicht; das erledigt
+        # der Editor (bietet nur geladene Pfade an) bzw. der Live-Abgleich.
+        for f in self.fields:
+            if f.widget != Widget.directus:
+                continue
+            for i, b in enumerate(f.directusFieldMap):
+                if b.target == f.key:
+                    raise ValueError(
+                        f"Feld „{f.key}“.directusFieldMap[{i}]: das Ziel darf nicht das Feld selbst sein")
+                _need(b.target, f"Feld „{f.key}“.directusFieldMap[{i}].target")
 
         for p in self.phases:
             for fr in p.fields:

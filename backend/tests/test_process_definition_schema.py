@@ -167,6 +167,36 @@ def test_top_level_server_stamped_rejected():
     _reject(_base(fields=[{"key": "a", "widget": "server_stamped"}]))
 
 
+def test_directus_field_requires_source():
+    _reject(_base(fields=[{"key": "a", "widget": "directus"}]))
+
+
+def test_directus_props_only_on_directus_widget():
+    _reject(_base(fields=[{"key": "a", "widget": "text", "directusSource": "kostenstelle"}]))
+
+
+def test_directus_field_map_target_must_exist():
+    _reject(_base(fields=[
+        {"key": "a", "widget": "directus", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "ghost"}]},
+        {"key": "b", "widget": "text"}]))
+
+
+def test_directus_field_map_target_not_self():
+    _reject(_base(fields=[
+        {"key": "a", "widget": "directus", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "a"}]}]))
+
+
+def test_directus_field_valid():
+    d = _base(fields=[
+        {"key": "kostenstelle", "widget": "directus", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "firma"}]},
+        {"key": "firma", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "kostenstelle"}, {"ref": "firma", "mode": "readonly"}]
+    ProcessDefinition.model_validate(d)   # valide
+
+
 def test_action_set_status_validated():
     d = _base()
     d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
