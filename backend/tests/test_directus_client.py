@@ -228,6 +228,28 @@ def test_write_http_error_maps(configured, monkeypatch):
         dc.create_item("x", {})
 
 
+def test_find_one_id_returns_match(configured, monkeypatch):
+    fake = FakeRequests(FakeResp(200, {"data": [{"id": 7}]}))
+    monkeypatch.setattr(dc, "requests", fake)
+    assert dc.find_one_id("mitarbeiter", "personalnummer", "12345") == "7"
+    call = fake.calls[0]
+    assert call["url"].endswith("/items/mitarbeiter")
+    assert "personalnummer" in call["params"]["filter"]
+
+
+def test_find_one_id_none_when_empty_result(configured, monkeypatch):
+    fake = FakeRequests(FakeResp(200, {"data": []}))
+    monkeypatch.setattr(dc, "requests", fake)
+    assert dc.find_one_id("mitarbeiter", "personalnummer", "99999") is None
+
+
+def test_find_one_id_skips_empty_value(configured, monkeypatch):
+    fake = FakeRequests(FakeResp(200, {"data": [{"id": 7}]}))
+    monkeypatch.setattr(dc, "requests", fake)
+    assert dc.find_one_id("mitarbeiter", "personalnummer", "") is None
+    assert fake.calls == []          # kein Request bei leerem Suchwert
+
+
 def test_write_encodes_path_segments(configured, monkeypatch):
     # Eine item_id aus einem Nutzerfeld darf das Request-Ziel nicht verbiegen.
     fake = FakeWriteRequests(FakeResp(204, None))

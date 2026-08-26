@@ -254,6 +254,36 @@ def test_directus_write_resolve_on_company_ok():
     ProcessDefinition.model_validate(d)  # darf nicht werfen
 
 
+def test_directus_write_matchfield_must_be_a_target():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "matchField": "gibtsnicht",
+                   "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_matchfield_only_for_create():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "update", "collection": "c",
+                   "idField": "mid", "matchField": "name",
+                   "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_matchfield_and_block_ok():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "matchField": "name", "onError": "block",
+                   "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    ProcessDefinition.model_validate(d)  # darf nicht werfen
+
+
 def test_on_department_done_needs_departments_phase():
     d = {
         "schemaVersion": 1, "key": "k", "name": "N",

@@ -43,6 +43,10 @@ const DIRECTUS_OPS: { value: DirectusOperation; label: string }[] = [
   { value: 'update', label: 'Ändern' },
   { value: 'delete', label: 'Löschen' },
 ]
+const DIRECTUS_ONERROR: { value: 'continue' | 'block'; label: string }[] = [
+  { value: 'continue', label: 'Weiterlaufen + melden (Standard)' },
+  { value: 'block', label: 'Blockieren – Abschluss verhindern, bis es klappt' },
+]
 const deptGroups = computed(() =>
   (props.departmentGroups?.length ? props.departmentGroups : props.groups) ?? [])
 
@@ -64,6 +68,7 @@ const blankAction = (): Action => ({
 })
 const blankDirectus = (): DirectusWriteSpec => ({
   operation: 'create', collection: '', fieldMap: [], idField: '',
+  onError: 'continue', matchField: null,
 })
 
 const a = computed<Automation>(() => {
@@ -191,6 +196,9 @@ const actionValueText = computed(() => {
 // Directus nicht erreichbar, bleibt der gespeicherte Wert als (unbekannt)-Option
 // erhalten, damit die Automation weiter bearbeitbar bleibt (+ „neu laden“).
 const isDirectusWrite = computed(() => a.value.action.type === 'directus_write')
+/** Belegte Directus-Zielfelder – Auswahl für den Geschäftsschlüssel (get-or-create). */
+const dwTargets = computed(() =>
+  (a.value.action.directus?.fieldMap ?? []).map((b) => b.target).filter(Boolean))
 const dwCollection = computed(() => a.value.action.directus?.collection ?? '')
 
 const collections = ref<DirectusCollection[]>([])
@@ -488,6 +496,40 @@ watch(dwCollection, (c) => {
           <p class="text-xs text-gray-400 mt-1">
             Beim Anlegen wird die neue Directus-id hierhin geschrieben (und schützt vor
             Doppelanlage); bei Ändern/Löschen wird sie von hier gelesen.
+          </p>
+        </div>
+
+        <div>
+          <label class="lbl">Bei Fehler</label>
+          <select class="afi w-full" :value="a.action.directus?.onError ?? 'continue'"
+                  @change="patchDirectus({ onError: val($event) as 'continue' | 'block' })">
+            <option v-for="o in DIRECTUS_ONERROR" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">
+            <template v-if="(a.action.directus?.onError ?? 'continue') === 'block'">
+              Schlägt das Schreiben fehl, wird die auslösende Aktion (z. B. „Fachabteilung
+              abschließen“) abgebrochen – gilt erst als erledigt, wenn es wirklich klappt.
+            </template>
+            <template v-else>
+              Schlägt das Schreiben fehl, läuft der Auftrag weiter; der Fehler landet im
+              Verlauf und als Mail an den Fehler-Empfänger.
+            </template>
+          </p>
+        </div>
+
+        <div v-if="(a.action.directus?.operation ?? 'create') === 'create'">
+          <label class="lbl">Doppelanlage-Schutz per Feld <span class="text-gray-400 font-normal">(optional)</span></label>
+          <select class="afi w-full" :value="a.action.directus?.matchField ?? ''"
+                  @change="patchDirectus({ matchField: val($event) || null })">
+            <option value="">— kein Geschäftsschlüssel —</option>
+            <option v-for="t in dwTargets" :key="t" :value="t">{{ t }}</option>
+            <option v-if="a.action.directus?.matchField && !dwTargets.includes(a.action.directus.matchField)"
+                    :value="a.action.directus.matchField">{{ a.action.directus.matchField }} (kein Ziel)</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">
+            Vor dem Anlegen wird per diesem Directus-Feld gesucht (z. B. „personalnummer“);
+            existiert der Datensatz schon, wird dessen id übernommen statt ein Duplikat
+            anzulegen. Muss ein oben zugeordnetes Directus-Zielfeld sein.
           </p>
         </div>
 

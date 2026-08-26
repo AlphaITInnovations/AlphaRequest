@@ -84,6 +84,13 @@ def execute(action, row: dict, defn, phase, *, client=dc,
         if spec.operation == DirectusOperation.create:
             if current_id:                                # bereits angelegt → nichts tun
                 return {}
+            # get-or-create: existiert der Datensatz schon (Geschäftsschlüssel)?
+            match = getattr(spec, "matchField", None)
+            if match:
+                mval = _match_value(spec, match, values)
+                existing = client.find_one_id(spec.collection, match, mval)
+                if existing:
+                    return {"values": {id_field: str(existing)}}
             created = client.create_item(spec.collection, build_payload(spec, values))
             new_id = created.get("id") if isinstance(created, dict) else None
             if new_id in (None, ""):
@@ -102,9 +109,27 @@ def execute(action, row: dict, defn, phase, *, client=dc,
             client.delete_item(spec.collection, current_id)
             return {"values": {id_field: None}}            # id zurücksetzen (Datensatz existiert nicht mehr)
     except dc.DirectusError as exc:
+        # Block-Modus: Fehler DURCHREICHEN, damit die auslösende Aktion (Abschließen
+        # der Fachabteilung) abbricht – nichts wird als „erledigt“ vorgetäuscht.
+        if _blocks(spec):
+            raise
         report(row, phase, spec, exc)
         return {}
     return {}
+
+
+def _blocks(spec) -> bool:
+    oe = getattr(spec, "onError", None)
+    return str(getattr(oe, "value", oe)) == "block"
+
+
+def _match_value(spec, match: str, values: dict):
+    """Suchwert für get-or-create: der Prozesswert der Zuordnung, deren Ziel das
+    matchField ist (z. B. personalnummer)."""
+    for b in spec.fieldMap:
+        if b.target == match:
+            return values.get(b.source)
+    return None
 
 
 # ── Fehlermeldung: Verlauf + Audit + Mail an BUG_REPORT_MAIL ──────────────────

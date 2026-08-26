@@ -165,12 +165,19 @@ export interface DirectusWriteBinding {
   resolve?: DirectusWriteResolve | null
 }
 
+export type DirectusWriteOnError = 'continue' | 'block'
+
 export interface DirectusWriteSpec {
   operation: DirectusOperation
   collection: string
   fieldMap: DirectusWriteBinding[]
   /** Prozess-Feld für die Directus-id (Ziel bei create, Quelle bei update/delete). */
   idField: string
+  /** Fehlerverhalten: 'continue' (melden + weiter) oder 'block' (Abschluss abbrechen). */
+  onError?: DirectusWriteOnError
+  /** Geschäftsschlüssel (Directus-Feld, das auch fieldMap-Ziel ist) für get-or-create
+   *  bei create – vor dem Anlegen wird darauf gesucht. */
+  matchField?: string | null
 }
 
 export interface Action {

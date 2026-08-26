@@ -33,6 +33,7 @@ from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
 )
 from backend.services import process_access as acc
+from backend.services import directus_client as dc
 from backend.services import directus_snapshot
 from backend.services import process_actions as pactions
 from backend.services import process_compute as compute
@@ -1070,6 +1071,32 @@ def _department_action(ticket_id: int, group_id: str, status: str,
     # Abteilung würde sonst nicht-idempotente Aktionen doppelt auslösen).
     _prev = pr.department_entry(runtime, group_id)
     prior_status = _prev.get("status") if _prev else None
+    ist_uebergang = status == "done" and prior_status != "done"
+
+    # BLOCKIEREND ZUERST: directus_write mit onError=block (z. B. Mitarbeiter in
+    # Directus anlegen) läuft VOR dem Persistieren von „done". Scheitert es, wird
+    # der Abschluss ABGEBROCHEN – die Abteilung bleibt offen, nichts wird als
+    # erledigt gespeichert. Bei Erfolg wird die zurückgeschriebene id sofort
+    # persistiert (idempotent: ein Retry findet die id / den Datensatz und legt
+    # nicht doppelt an).
+    if ist_uebergang:
+        _cur_phase = pr.current_phase(defn, runtime)
+        try:
+            blk_changes = engine.run_department_done_blocking(row, defn, _cur_phase, group_id)
+        except dc.DirectusError as exc:
+            raise api_error(502, "DIRECTUS_WRITE_FAILED",
+                            f"Abschließen nicht möglich – der Datensatz konnte nicht in "
+                            f"Directus angelegt werden: {exc}. Bitte erneut versuchen.")
+        except Exception:
+            logger.exception("Blockierende Automation für #%s (Gruppe %s) fehlgeschlagen",
+                             ticket_id, group_id)
+            raise api_error(502, "DIRECTUS_WRITE_FAILED",
+                            "Abschließen nicht möglich – eine automatische Aktion ist "
+                            "fehlgeschlagen. Bitte erneut versuchen.")
+        if blk_changes:
+            pactions.apply_action_changes(row, defn, blk_changes, store)
+            runtime = row["runtime"]   # apply_action_changes kann row (rev/runtime) erneuern
+
     if not pr.set_department_status(runtime, group_id, status,
                                    by=user.get("id"), by_name=_actor_name(user),
                                    at=utcnow_iso(), note=note):
@@ -1097,10 +1124,10 @@ def _department_action(ticket_id: int, group_id: str, status: str,
                         "rejected": events.DEPARTMENT_REJECTED}[status],
                   actor_id=user.get("id"), actor_name=_actor_name(user),
                   body=note, details={"group": group_id})
-    # Hat eine Fachabteilung ihren Teil ABGESCHLOSSEN, feuern deren
-    # on_department_done-Automationen (z. B. Mitarbeiter in Directus anlegen) –
-    # nur beim echten Übergang nach „done", nicht bei erneutem Abschließen.
-    if status == "done" and prior_status != "done":
+    # Danach die NICHT-blockierenden on_department_done-Automationen (Benachrichtigen
+    # etc.) – nur beim echten Übergang nach „done". Die blockierenden liefen bereits
+    # oben (vor dem Persistieren von „done").
+    if ist_uebergang:
         try:
             cur_phase = pr.current_phase(defn, row.get("runtime") or {})
             engine.run_department_done(row, defn, cur_phase, group_id)

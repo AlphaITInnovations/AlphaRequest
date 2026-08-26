@@ -679,6 +679,17 @@ export function validateDefinition(
               '„Als alphacore-Firmen-ID auflösen" ist nur für ein Firmen-Feld erlaubt.'))
           }
         })
+        // Geschäftsschlüssel (get-or-create): nur bei create + nur auf ein gemapptes
+        // Directus-Zielfeld (spiegelt die Server-Regel).
+        if (dw.matchField) {
+          if (dw.operation !== 'create') {
+            out.push(err(`${path}.action`, anchor, 'INVALID',
+              'Der Doppelanlage-Schutz (Geschäftsschlüssel) ist nur bei „Anlegen" möglich.'))
+          } else if (!dw.fieldMap.some((b) => b.target === dw.matchField)) {
+            out.push(err(`${path}.action`, anchor, 'INVALID',
+              `Der Geschäftsschlüssel „${dw.matchField}" muss ein zugeordnetes Directus-Zielfeld sein.`))
+          }
+        }
       }
     }
   })

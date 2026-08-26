@@ -482,6 +482,28 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(errorCount(validateDefinition(d))).toBe(0)
   })
 
+  it('lehnt matchField ab, das kein gemapptes Directus-Zielfeld ist', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'k', idField: 'mid', matchField: 'gibtsnicht',
+            fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
+  it('akzeptiert matchField + onError=block auf einem gemappten Zielfeld', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'k', idField: 'mid', matchField: 'name',
+            onError: 'block', fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
   it('lehnt ein idField ab, das kein einfaches Textfeld ist', () => {
     const d = defn({
       fields: [{ key: 'base.name', widget: 'text' }, { key: 'anhang', widget: 'attachment' }],

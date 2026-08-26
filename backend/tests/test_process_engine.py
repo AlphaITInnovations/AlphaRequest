@@ -130,3 +130,76 @@ def test_enter_status_default_and_override():
     d = _defn()
     assert pr.enter_status_for(d.phases[1]) == "in_request"   # review
     assert pr.enter_status_for(d.phases[0]) == "in_progress"  # start/kein Override
+
+
+# ── on_department_done: blockierende vs. nicht-blockierende directus_write ────
+
+def _dept_defn(on_error):
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "d", "name": "D",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}]},
+            {"key": "rev", "kind": "review",
+             "responsibility": {"kind": "departments", "rule": [{"group": "g_it"}]},
+             "fields": [{"ref": "a", "mode": "readonly"}],
+             "automations": [{"id": "anlegen",
+                "trigger": {"type": "on_department_done", "group": "g_it"},
+                "action": {"type": "directus_write", "directus": {
+                    "operation": "create", "collection": "m", "idField": "mid",
+                    "onError": on_error,
+                    "fieldMap": [{"source": "a", "target": "name"}]}}}]},
+        ],
+    })
+
+
+def test_run_department_done_blocking_propagates(monkeypatch):
+    import pytest
+    from backend.services import process_engine as engine
+    from backend.services import directus_client as dc
+    defn = _dept_defn("block")
+    row = {"id": 1, "values": {}, "runtime": {}}
+    monkeypatch.setattr(engine, "_audit_fired", lambda *a, **k: None)
+
+    def boom(action, r, d, p, sender=None):
+        raise dc.DirectusError("down")
+
+    monkeypatch.setattr(engine.actions, "run_action", boom)
+    with pytest.raises(dc.DirectusError):
+        engine.run_department_done_blocking(row, defn, defn.phases[1], "g_it")
+
+
+def test_run_department_done_blocking_returns_changes(monkeypatch):
+    from backend.services import process_engine as engine
+    defn = _dept_defn("block")
+    row = {"id": 1, "values": {}, "runtime": {}}
+    monkeypatch.setattr(engine, "_audit_fired", lambda *a, **k: None)
+    monkeypatch.setattr(engine.actions, "run_action",
+                        lambda action, r, d, p, sender=None: {"values": {"mid": "42"}})
+    assert engine.run_department_done_blocking(
+        row, defn, defn.phases[1], "g_it") == {"values": {"mid": "42"}}
+
+
+def test_run_department_done_skips_blocking(monkeypatch):
+    # Die NICHT-blockierende Runde darf die blockierende Automation NICHT feuern
+    # (die lief bereits im synchronen Blockier-Pfad).
+    from backend.services import process_engine as engine
+    defn = _dept_defn("block")
+    row = {"id": 1, "values": {}, "runtime": {}}
+    fired = []
+    monkeypatch.setattr(engine, "fire",
+                        lambda a, r, d, p, occurrence=None: fired.append(a.id) or False)
+    engine.run_department_done(row, defn, defn.phases[1], "g_it")
+    assert fired == []
+
+
+def test_run_department_done_fires_nonblocking(monkeypatch):
+    from backend.services import process_engine as engine
+    defn = _dept_defn("continue")     # nicht blockierend → normale Runde feuert
+    row = {"id": 1, "values": {}, "runtime": {}}
+    fired = []
+    monkeypatch.setattr(engine, "fire",
+                        lambda a, r, d, p, occurrence=None: fired.append(a.id) or False)
+    engine.run_department_done(row, defn, defn.phases[1], "g_it")
+    assert fired == ["anlegen"]

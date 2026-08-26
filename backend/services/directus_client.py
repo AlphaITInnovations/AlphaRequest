@@ -242,6 +242,37 @@ def delete_item(collection: str, item_id: Any) -> None:
     _write("DELETE", f"/items/{_seg(collection)}/{_seg(item_id)}")
 
 
+def find_one_id(collection: str, field: str, value: Any) -> Optional[str]:
+    """Sucht einen Datensatz per Gleichheit auf `field` und gibt dessen id zurück
+    (oder None). Für get-or-create beim Anlegen; läuft im SCHREIB-Kontext, nutzt
+    also den Schreib-Token (der auf die Ziel-Collection Zugriff hat)."""
+    if value in (None, ""):
+        return None
+    if not config.DIRECTUS_URL or not _write_token():
+        raise DirectusError("Directus ist nicht konfiguriert (DIRECTUS_URL/Token fehlen)")
+    url = f"{config.DIRECTUS_URL}/items/{_seg(collection)}"
+    headers = {"Authorization": f"Bearer {_write_token()}", "Accept": "application/json"}
+    params = {"filter": json.dumps({field: {"_eq": value}}, ensure_ascii=False),
+              "fields": "id", "limit": 1}
+    try:
+        resp = requests.get(url, headers=headers, params=params,
+                            timeout=config.DIRECTUS_TIMEOUT, verify=_verify())
+    except requests.RequestException as exc:
+        raise DirectusError(f"Directus nicht erreichbar: {exc}") from exc
+    if resp.status_code >= 400:
+        raise DirectusError(f"Directus {resp.status_code}: {_error_message(resp)}",
+                            status=resp.status_code)
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    data = body.get("data") if isinstance(body, dict) else body
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        rid = data[0].get("id")
+        return str(rid) if rid not in (None, "") else None
+    return None
+
+
 def status() -> dict:
     """Verbindungs-Status für die Verwaltungs-Oberfläche.
 

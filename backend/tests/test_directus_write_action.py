@@ -11,10 +11,15 @@ from backend.services import directus_write_action as dwa
 class FakeClient:
     DirectusError = dc.DirectusError
 
-    def __init__(self, created=None, exc=None):
+    def __init__(self, created=None, exc=None, existing_id=None):
         self.created = created if created is not None else {"id": 99}
         self.exc = exc
+        self.existing_id = existing_id
         self.calls = []
+
+    def find_one_id(self, collection, field, value):
+        self.calls.append(("find", collection, field, value))
+        return self.existing_id
 
     def create_item(self, collection, payload):
         self.calls.append(("create", collection, payload))
@@ -34,11 +39,15 @@ class FakeClient:
             raise self.exc
 
 
-def _action(op, field_map, id_field="mitarbeiter.directus_id"):
-    return Action(type="directus_write", directus=DirectusWriteSpec(
-        operation=op, collection="mitarbeiter",
-        fieldMap=[DirectusWriteBinding(source=s, target=t) for s, t in field_map],
-        idField=id_field))
+def _action(op, field_map, id_field="mitarbeiter.directus_id", on_error=None, match_field=None):
+    kw = dict(operation=op, collection="mitarbeiter",
+              fieldMap=[DirectusWriteBinding(source=s, target=t) for s, t in field_map],
+              idField=id_field)
+    if on_error:
+        kw["onError"] = on_error
+    if match_field:
+        kw["matchField"] = match_field
+    return Action(type="directus_write", directus=DirectusWriteSpec(**kw))
 
 
 NOOP = lambda *a, **k: None  # noqa: E731
@@ -100,6 +109,53 @@ def test_create_stores_id():
                      row, None, None, client=client, on_error=NOOP)
     assert ch == {"values": {"mitarbeiter.directus_id": "42"}}
     assert client.calls[0] == ("create", "mitarbeiter", {"vorname": "Max"})
+
+
+def test_get_or_create_adopts_existing():
+    # Geschäftsschlüssel (Personalnummer) → bestehender Datensatz wird übernommen,
+    # KEIN zweiter angelegt.
+    client = FakeClient(existing_id="7")
+    row = {"id": 1, "values": {"base.first_name": "Max", "personal.personal_number": "12345"}}
+    act = _action(DirectusOperation.create,
+                  [("base.first_name", "vorname"), ("personal.personal_number", "personalnummer")],
+                  match_field="personalnummer")
+    ch = dwa.execute(act, row, None, None, client=client, on_error=NOOP)
+    assert ch == {"values": {"mitarbeiter.directus_id": "7"}}
+    assert ("find", "mitarbeiter", "personalnummer", "12345") in client.calls
+    assert not any(c[0] == "create" for c in client.calls)
+
+
+def test_get_or_create_creates_when_absent():
+    client = FakeClient(created={"id": 55}, existing_id=None)
+    row = {"id": 1, "values": {"base.first_name": "Max", "personal.personal_number": "12345"}}
+    act = _action(DirectusOperation.create,
+                  [("base.first_name", "vorname"), ("personal.personal_number", "personalnummer")],
+                  match_field="personalnummer")
+    ch = dwa.execute(act, row, None, None, client=client, on_error=NOOP)
+    assert ch == {"values": {"mitarbeiter.directus_id": "55"}}
+    assert any(c[0] == "create" for c in client.calls)
+
+
+def test_block_mode_reraises():
+    # onError=block → Fehler DURCHREICHEN (nicht schlucken), damit der Abschluss abbricht.
+    reported = []
+    client = FakeClient(exc=dc.DirectusError("Directus down"))
+    row = {"id": 1, "values": {"base.first_name": "Max"}}
+    act = _action(DirectusOperation.create, [("base.first_name", "vorname")], on_error="block")
+    with pytest.raises(dc.DirectusError):
+        dwa.execute(act, row, None, None, client=client,
+                    on_error=lambda *a, **k: reported.append(1))
+    assert reported == []            # im Block-Modus NICHT gemeldet, sondern geworfen
+
+
+def test_continue_mode_swallows_and_reports():
+    reported = []
+    client = FakeClient(exc=dc.DirectusError("down"))
+    row = {"id": 1, "values": {"base.first_name": "Max"}}
+    act = _action(DirectusOperation.create, [("base.first_name", "vorname")])  # default continue
+    ch = dwa.execute(act, row, None, None, client=client,
+                     on_error=lambda *a, **k: reported.append(1))
+    assert ch == {} and reported == [1]
 
 
 def test_create_skips_when_id_present():

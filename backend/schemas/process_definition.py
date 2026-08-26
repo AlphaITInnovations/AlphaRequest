@@ -121,6 +121,19 @@ class DirectusOperation(str, Enum):
     delete = "delete"
 
 
+class DirectusWriteOnError(str, Enum):
+    """Verhalten, wenn der Directus-Schreibvorgang fehlschlägt.
+
+    continue_ : Fehler protokollieren/melden, Ablauf läuft weiter (Default,
+                rückwärtskompatibel).
+    block     : Fehler durchreichen – die auslösende Aktion (z. B. das Abschließen
+                der Fachabteilung) wird abgebrochen. So gilt eine Fachabteilung erst
+                als erledigt, wenn der Datensatz WIRKLICH in Directus liegt.
+    """
+    continue_ = "continue"
+    block = "block"
+
+
 class DirectusWriteResolve(str, Enum):
     """Optionale Auflösung eines Zuordnungs-Quellwerts vor dem Schreiben.
 
@@ -479,6 +492,13 @@ class DirectusWriteSpec(_Base):
     collection: str
     fieldMap: list[DirectusWriteBinding] = Field(default_factory=list)
     idField: str
+    #: Fehlerverhalten (siehe DirectusWriteOnError). Default: weiterlaufen.
+    onError: DirectusWriteOnError = DirectusWriteOnError.continue_
+    #: Optionaler Geschäftsschlüssel für get-or-create (nur bei `create`): der Name
+    #: eines Directus-Felds, das AUCH `target` einer fieldMap-Zuordnung ist. Vor dem
+    #: Anlegen wird per Gleichheit auf diesem Feld gesucht; existiert der Datensatz
+    #: schon, wird dessen id übernommen statt ein Duplikat anzulegen.
+    matchField: Optional[str] = None
 
 
 class Action(_Base):
@@ -1049,6 +1069,17 @@ class ProcessDefinition(_Base):
                         raise ValueError(
                             f"automation[{a.id}].directus.fieldMap[{j}]: „als Firmen-ID auflösen“ "
                             "ist nur für ein Firmen-Feld (widget=company) erlaubt")
+                # Geschäftsschlüssel (get-or-create): nur bei create und nur auf ein
+                # tatsächlich gemapptes Directus-Feld (sonst gäbe es keinen Suchwert).
+                if d.matchField:
+                    if d.operation != DirectusOperation.create:
+                        raise ValueError(
+                            f"automation[{a.id}].directus.matchField: der Geschäftsschlüssel "
+                            "(get-or-create) ist nur bei operation=create sinnvoll")
+                    if d.matchField not in {b.target for b in d.fieldMap}:
+                        raise ValueError(
+                            f"automation[{a.id}].directus.matchField: „{d.matchField}“ muss ein "
+                            "Directus-Zielfeld einer Feld-Zuordnung sein (liefert den Suchwert)")
 
         # on_department_done: nur als PHASEN-Automation einer Fachabteilungs-Phase,
         # und die Gruppe muss eine Fachabteilung genau dieser Phase sein.

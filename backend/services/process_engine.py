@@ -139,12 +139,22 @@ def run_inline(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
     return wants_advance
 
 
+def _is_blocking_directus(a) -> bool:
+    """directus_write mit onError=block – läuft im SYNCHRONEN Blockier-Pfad, nicht
+    über das (fehlerschluckende) fire()."""
+    act = a.action
+    d = getattr(act, "directus", None)
+    if act.type != ActionType.directus_write or d is None:
+        return False
+    return str(getattr(d.onError, "value", d.onError)) == "block"
+
+
 def run_department_done(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
                         group_id: str) -> None:
-    """Feuert die Phasen-Automationen mit Trigger on_department_done für GENAU diese
-    Fachabteilung (nachdem sie ihren Teil abgeschlossen hat). Wirft nicht –
-    Fehler auditiert `fire()`. Ein auto_advance wird hier bewusst ignoriert (der
-    Phasenabschluss läuft weiter über departments_complete/transition)."""
+    """Feuert die NICHT-blockierenden Phasen-Automationen mit Trigger
+    on_department_done für GENAU diese Fachabteilung. Wirft nicht – Fehler
+    auditiert `fire()`. Blockierende directus_write-Automationen laufen separat
+    über run_department_done_blocking (VOR dem Persistieren von „done“)."""
     if phase is None:
         return
     for a in list(phase.automations):
@@ -152,9 +162,35 @@ def run_department_done(row: dict, defn: ProcessDefinition, phase: Optional[Phas
             continue
         if a.trigger.group != group_id:
             continue
+        if _is_blocking_directus(a):
+            continue
         if not guard_passes(a, row):
             continue
         fire(a, row, defn, phase)
+
+
+def run_department_done_blocking(row: dict, defn: ProcessDefinition,
+                                 phase: Optional[PhaseDef], group_id: str) -> dict:
+    """Führt die BLOCKIERENDEN on_department_done-Automationen (directus_write mit
+    onError=block) dieser Fachabteilung SYNCHRON aus und schluckt Fehler NICHT:
+    ein DirectusError propagiert, damit der Aufrufer (Abschluss der Fachabteilung)
+    abbricht und nichts als „erledigt“ persistiert. Gibt die gesammelten Änderungen
+    (z. B. die zurückgeschriebene id) zurück – der Aufrufer persistiert sie nach
+    Erfolg."""
+    changes: dict = {}
+    if phase is None:
+        return changes
+    for a in list(phase.automations):
+        if (a.trigger.type != TriggerType.on_department_done
+                or a.trigger.group != group_id or not _is_blocking_directus(a)):
+            continue
+        if not guard_passes(a, row):
+            continue
+        result = actions.run_action(a.action, row, defn, phase, sender=SENDER)
+        if result and result.get("values"):
+            changes.setdefault("values", {}).update(result["values"])
+        _audit_fired(row, phase, a, None)
+    return changes
 
 
 # ── Timer neu stempeln ────────────────────────────────────────────────────────

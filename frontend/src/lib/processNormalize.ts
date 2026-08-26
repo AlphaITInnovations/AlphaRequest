@@ -170,6 +170,8 @@ function normDirectusWrite(v: any): DirectusWriteSpec | null {
       return bind
     }),
     idField: String(v.idField ?? ''),
+    onError: v.onError === 'block' ? 'block' : 'continue',
+    matchField: v.matchField ? String(v.matchField) : null,
   }
 }
 
