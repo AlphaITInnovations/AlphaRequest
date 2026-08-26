@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from backend.schemas.process_definition import ProcessDefinition
 from backend.services import mail_template as mt
 from backend.services import process_actions as pa
+from backend.utils.mail_templates import render_corporate_email
 
 
 # ── reines Modul ───────────────────────────────────────────────────────────────
@@ -99,20 +100,21 @@ def test_feldkey_kollision_mit_spezialvariable_blockiert():
         ProcessDefinition.model_validate(_defn_mit_feld(feld, "Titel: {{title}}"))
 
 
-# ── gerendertes Mail-Fragment ────────────────────────────────────────────────
+# ── gerenderte Freigabe-Mail ─────────────────────────────────────────────────
 
-def test_approval_info_html_setzt_werte_ein_und_escaped():
+def test_freigabe_mail_setzt_werte_ein_und_escaped():
     d = ProcessDefinition.model_validate(_defn_with_body("Name: {{base.name}}\nNr: {{id}}"))
-    spec = d.phases[1].approval
+    phase = d.phases[1]
     row = {"id": 7, "title": "T", "values": {"base.name": "<b>Max</b>"}}
-    html = pa._approval_info_html(row, spec)
-    assert "&lt;b&gt;Max&lt;/b&gt;" in html      # Wert escaped
-    assert "<b>Max</b>" not in html              # kein roher HTML-Durchgriff
-    assert "<br>" in html                        # Zeilenumbruch übernommen
-    assert "Nr: 7" in html
+    _subject, body = pa._approval_message(row, phase, "T")
+    assert "&lt;b&gt;Max&lt;/b&gt;" in body      # Wert escaped
+    assert "<b>Max</b>" not in body              # kein roher HTML-Durchgriff
+    assert "<br>" in body                        # Zeilenumbruch übernommen
+    assert "Nr: 7" in body
+    assert "OK?" in body                         # die Freigabe-Frage steht drin
 
 
-def test_approval_info_html_leer_ohne_vorlage():
+def test_freigabe_mail_ohne_vorlage_rendert_trotzdem():
     d = ProcessDefinition.model_validate({
         "schemaVersion": 1, "key": "p", "name": "P",
         "fields": [{"key": "base.name", "widget": "text"}],
@@ -124,4 +126,31 @@ def test_approval_info_html_leer_ohne_vorlage():
              "approval": {"question": "OK?"}},
         ],
     })
-    assert pa._approval_info_html({"id": 1, "values": {}}, d.phases[1].approval) == ""
+    _subject, body = pa._approval_message({"id": 1, "title": "T", "values": {}},
+                                          d.phases[1], "T")
+    assert "OK?" in body            # Frage vorhanden
+    assert "{{" not in body         # keine unaufgelöste Vorlage im Text
+
+
+# ── Corporate-Template ───────────────────────────────────────────────────────
+
+def test_corporate_headline_ist_ohne_url_kein_link():
+    mit = render_corporate_email(subject="s", headline="Titel", intro="hi",
+                                 info_box_url="https://x/dashboard")
+    ohne = render_corporate_email(subject="s", headline="Titel", intro="hi")
+    assert 'href="https://x/dashboard"' in mit          # klickbare Headline
+    assert "href=" not in ohne                          # reine Text-Headline
+    assert "Titel" in ohne
+
+
+def test_corporate_info_rows_werden_escaped():
+    body = render_corporate_email(
+        subject="s", headline="H", info_box_url="https://x",
+        info_rows=[("Auftrag", "#7"), ("Wert", "<b>Max</b>")])
+    assert "Auftrag" in body and "#7" in body
+    assert "&lt;b&gt;Max&lt;/b&gt;" in body and "<b>Max</b>" not in body
+
+
+def test_corporate_bindet_logo_cid_ein():
+    body = render_corporate_email(subject="s", headline="H", info_box_url="https://x")
+    assert "cid:alpha_logo" in body

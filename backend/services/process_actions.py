@@ -33,6 +33,8 @@ from backend.schemas.process_definition import (
 from backend.services import process_runtime as pr
 from backend.utils.config import config
 from backend.utils.logger import logger
+from backend.utils.mail_templates import FONT as _MAIL_FONT
+from backend.utils.mail_templates import MailBranding, render_corporate_email
 
 
 def _user_email(user_id: Optional[str]) -> Optional[str]:
@@ -130,6 +132,38 @@ def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
     return sorted(emails)
 
 
+# Eine Instanz reicht – die Palette ist konstant und liefert die Marken-Farben
+# für die Mail-Bausteine (Button, Zitat-Block).
+_BRAND = MailBranding()
+
+
+def _primary_button_html(url: str, label: str = "Auftrag öffnen") -> str:
+    """Ein mailsicherer Haupt-Button (Türkis) – Tabelle statt Flexbox (Outlook)."""
+    href = html.escape(url, quote=True)
+    return f"""
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px;">
+      <tr><td style="border-radius:10px; background:{_BRAND.primary_color};">
+        <a href="{href}"
+           style="display:inline-block; color:#ffffff; font-family:{_MAIL_FONT};
+                  font-size:15px; font-weight:600; text-decoration:none; padding:13px 30px;
+                  border-radius:10px;">{html.escape(label)}</a>
+      </td></tr>
+    </table>
+    """
+
+
+def _quote_block(text: Optional[str]) -> str:
+    """Freitext (Begründung, Nachtrag) als abgesetzter Zitat-Block – escaped,
+    Zeilenumbrüche erhalten. Leerer Text → leerer String."""
+    inner = html.escape(text or "").replace("\n", "<br>")
+    if not inner.strip():
+        return ""
+    return (f'<div style="margin-top:16px; padding:14px 16px; background:{_BRAND.surface_subtle};'
+            f' border-left:3px solid {_BRAND.primary_color}; border-radius:10px;'
+            f' font-family:{_MAIL_FONT}; color:{_BRAND.text_color};'
+            f' font-size:14px; line-height:1.6;">{inner}</div>')
+
+
 def _build_message(action: Action, row: dict, phase: Optional[PhaseDef]) -> tuple[str, str]:
     title = str(row.get("title") or f"Auftrag #{row.get('id')}")
     # `template` ist der frei wählbare Anlass-Text der Automation. Ohne ihn steht
@@ -138,11 +172,19 @@ def _build_message(action: Action, row: dict, phase: Optional[PhaseDef]) -> tupl
     verb = (action.template or "").strip() or (
         "Eskalation" if action.type == ActionType.escalate else "Erinnerung")
     phase_lbl = str((phase.label or phase.key) if phase else "—")
-    # Betreff: keine Zeilenumbrüche (Header-Injection); Body: HTML escapen.
+    link = _ticket_link(row)
+    # Betreff: keine Zeilenumbrüche (Header-Injection).
     subject = f"[AlphaRequest] {verb}: {title}".replace("\r", " ").replace("\n", " ")[:200]
-    body = (f"<p><b>{html.escape(verb)}</b> für den Auftrag „{html.escape(title)}“ "
-            f"(Phase: {html.escape(phase_lbl)}).</p>"
-            f"<p>Bitte im System bearbeiten: {html.escape(config.FRONTEND_URL)}</p>")
+    body = render_corporate_email(
+        subject=subject,
+        header_subtitle=verb,
+        headline=title,
+        info_box_url=link,
+        intro="Dieser Auftrag wartet auf Ihre Bearbeitung.",
+        info_rows=[("Auftrag", f"#{row.get('id')}"), ("Phase", phase_lbl)],
+        action_html=_primary_button_html(link),
+        content="",
+    )
     return subject, body
 
 
@@ -150,11 +192,15 @@ def _default_sender(recipients: list[str], subject: str, body: str, kind: str = 
                     attachments: Optional[list] = None) -> None:
     if not recipients:
         return
-    from backend.services.microsoft_mail import send_mail_app_only
+    from backend.services.microsoft_mail import brand_logo_attachment, send_mail_app_only
+    # Das Logo IMMER mitschicken: das Corporate-Template referenziert es über
+    # cid:alpha_logo; ohne Inline-Anhang bliebe im Kopf ein kaputtes Bild.
+    logo = brand_logo_attachment()
+    alle = ([logo] if logo else []) + list(attachments or [])
     send_mail_app_only(
         sender_upn_or_id="alpharequest@alpha-it-innovations.org",
         subject=subject, body=body, to_recipients=list(recipients),
-        body_type="HTML", kind=kind, attachments=attachments,
+        body_type="HTML", kind=kind, attachments=alle or None,
     )
 
 
@@ -200,11 +246,6 @@ def _subject(text: str) -> str:
     return text.replace("\r", " ").replace("\n", " ")[:200]
 
 
-def _rich_text(text: Optional[str]) -> str:
-    """Freitext einer Person für den HTML-Body: escapen, Umbrüche erhalten."""
-    return html.escape(text or "").replace("\n", "<br>")
-
-
 def _duration_text(seconds: int) -> str:
     """„7 Tage“ / „12 Stunden“ – aus einer ISO-Dauer wird lesbarer Text."""
     if seconds % 86400 == 0:
@@ -239,21 +280,22 @@ def _approval_buttons_html(approve_url: str, reject_url: str,
     """Zwei mailsichere Aktions-Knöpfe (Tabelle statt Flexbox – Outlook)."""
     a_url, r_url = html.escape(approve_url, quote=True), html.escape(reject_url, quote=True)
     return f"""
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:20px;">
       <tr>
-        <td style="padding-right:12px;">
+        <td style="padding-right:10px;">
           <a href="{a_url}"
-             style="display:inline-block; background:#16A34A; color:#ffffff;
-                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
-                    text-decoration:none; padding:12px 28px; border-radius:10px;">
+             style="display:inline-block; background:#15A34A; color:#ffffff;
+                    font-family:{_MAIL_FONT}; font-size:15px; font-weight:600;
+                    text-decoration:none; padding:13px 28px; border-radius:10px;">
             &#10003;&nbsp; {html.escape(approve_label)}
           </a>
         </td>
         <td>
           <a href="{r_url}"
-             style="display:inline-block; background:#DC2626; color:#ffffff;
-                    font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700;
-                    text-decoration:none; padding:12px 28px; border-radius:10px;">
+             style="display:inline-block; background:{_BRAND.surface}; color:#C0392F;
+                    font-family:{_MAIL_FONT}; font-size:15px; font-weight:600;
+                    text-decoration:none; padding:12px 27px; border-radius:10px;
+                    border:1px solid #E7B8B4;">
             &#10007;&nbsp; {html.escape(reject_label)}
           </a>
         </td>
@@ -262,44 +304,18 @@ def _approval_buttons_html(approve_url: str, reject_url: str,
     """
 
 
-def _approval_info_html(row: dict, spec) -> str:
-    """Aus der Vorlage `approval.emailBody` den Info-Block der Freigabe-Mail bauen.
-
-    `{{feld.key}}` wird durch den Auftragswert ersetzt, zusätzlich {{title}} und
-    {{id}}. Erst NACH dem Einsetzen wird der ganze Text escaped (Werte stammen aus
-    Nutzereingaben) und Zeilenumbrüche werden zu <br>.
-    """
-    from backend.services import mail_template as mt
-    if not spec.emailBody:
-        return ""
-    values = row.get("values") or {}
-    title = str(row.get("title") or "")
-
-    def resolve(token: str) -> str:
-        if token == "title":
-            return title
-        if token == "id":
-            return str(row.get("id") or "")
-        return mt.format_value(values.get(token))
-
-    plain = mt.substitute(spec.emailBody, resolve)
-    if not plain.strip():
-        return ""
-    return (f"<div style=\"margin:12px 0;padding:12px 14px;background:#F3F4F6;"
-            f"border-radius:8px;font-size:14px;color:#111827;\">{_rich_text(plain)}</div>")
-
-
 def _attachment_note_html(n: int) -> str:
     """Kleiner Hinweis in der Freigabe-Mail, dass Dateien beigefügt sind."""
     if n <= 0:
         return ""
     was = "1 Datei ist" if n == 1 else f"{n} Dateien sind"
-    return (f"<p style=\"font-size:13px;color:#4B5563;\">&#128206; {was} dieser "
-            f"E-Mail beigefügt (z. B. Lebenslauf).</p>")
+    return (f'<p style="font-family:{_MAIL_FONT}; font-size:13px; color:{_BRAND.muted_text}; '
+            f'margin:14px 0 0 0;">&#128206; {was} dieser E-Mail beigefügt (z. B. Lebenslauf).</p>')
 
 
 def _approval_message(row: dict, phase: PhaseDef, title: str,
                       *, n_attachments: int = 0) -> tuple[str, str]:
+    from backend.services import mail_template as mt
     from backend.services.iso_duration import parse_duration
     spec = phase.approval
     approve_url, reject_url = approval_links(row, phase)
@@ -308,17 +324,43 @@ def _approval_message(row: dict, phase: PhaseDef, title: str,
     except Exception:
         gueltig = spec.linkMaxAge
     subject = _subject(f"[AlphaRequest] Freigabe erforderlich: {title}")
-    body = (
-        f"<p>Für den Auftrag „{html.escape(title)}“ (#{row.get('id')}) wird Ihre "
-        f"Entscheidung gebraucht.</p>"
-        + _approval_info_html(row, spec)
-        + _attachment_note_html(n_attachments)
-        + f"<p><b>{html.escape(spec.question)}</b></p>"
-        + _approval_buttons_html(approve_url, reject_url,
-                                 spec.approveLabel, spec.rejectLabel)
-        + f"<p style=\"font-size:12px;color:#4B5563;\">Der Link öffnet eine "
-          f"Bestätigungsseite – erst dort wird entschieden. Eine Anmeldung ist "
-          f"nicht nötig. Gültig {html.escape(gueltig)} ab Versand.</p>"
+
+    # Vorlagentext `approval.emailBody` mit Auftragswerten füllen (reiner Text –
+    # das Template escaped ihn als `content`). {{title}}/{{id}} zusätzlich.
+    values = row.get("values") or {}
+
+    def resolve(token: str) -> str:
+        if token == "title":
+            return title
+        if token == "id":
+            return str(row.get("id") or "")
+        return mt.format_value(values.get(token))
+
+    info_text = mt.substitute(spec.emailBody, resolve).strip() if spec.emailBody else ""
+
+    # Aktionsblock: Frage (fett) → Anhang-Hinweis → JA/NEIN-Knöpfe → Gültigkeit.
+    question_html = (
+        f'<div style="font-family:{_MAIL_FONT}; color:{_BRAND.heading_color};'
+        f' font-size:16px; font-weight:700; margin-top:20px;">{html.escape(spec.question)}</div>')
+    validity_html = (
+        f'<p style="font-family:{_MAIL_FONT}; font-size:12px;'
+        f' color:{_BRAND.muted_text}; line-height:1.6; margin-top:16px;">Der Link öffnet eine '
+        f'Bestätigungsseite – erst dort wird entschieden. Eine Anmeldung ist nicht nötig. '
+        f'Gültig {html.escape(gueltig)} ab Versand.</p>')
+    action_html = (question_html + _attachment_note_html(n_attachments)
+                   + _approval_buttons_html(approve_url, reject_url,
+                                            spec.approveLabel, spec.rejectLabel)
+                   + validity_html)
+
+    body = render_corporate_email(
+        subject=subject,
+        header_subtitle="Freigabe erforderlich",
+        headline=title,
+        info_box_url=None,        # externe Empfänger:innen haben keinen Zugang → nicht klickbar
+        intro=f"Für diesen Auftrag (#{row.get('id')}) wird Ihre Entscheidung gebraucht.",
+        info_rows=[("Auftrag", f"#{row.get('id')}")],
+        content=info_text,
+        action_html=action_html,
     )
     return subject, body
 
@@ -457,9 +499,16 @@ def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[Phase
                 sender(recips, subject, body, kind="approval_link", **extra)
         elif recips:
             subject = _subject(f"[AlphaRequest] Neue Aufgabe: {title}")
-            body = (f"<p>Der Auftrag „{html.escape(title)}“ liegt jetzt bei Ihnen "
-                    f"(Phase: {html.escape(phase_lbl)}).</p>"
-                    f"<p>Zum Bearbeiten: {html.escape(link)}</p>")
+            body = render_corporate_email(
+                subject=subject,
+                header_subtitle="Neue Aufgabe",
+                headline=title,
+                info_box_url=link,
+                intro="Dieser Auftrag liegt jetzt bei Ihnen zur Bearbeitung.",
+                info_rows=[("Auftrag", f"#{row.get('id')}"), ("Phase", phase_lbl)],
+                action_html=_primary_button_html(link),
+                content="",
+            )
             sender(recips, subject, body, kind="phase_entry")
 
         # KEINE Mail an Beobachter:innen. Beobachten heißt MITLESEN: der Auftrag
@@ -501,13 +550,17 @@ def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
         marker = "Interner Nachtrag" if internal else "Nachtrag"
         subject = (f"[AlphaRequest] {marker}: {title}"
                    .replace("\r", " ").replace("\n", " ")[:200])
-        # Freitext einer Person → konsequent escapen, Zeilenumbrüche erhalten.
-        text = html.escape(body_text or "").replace("\n", "<br>")
+        link = _ticket_link(row)
         out = sorted(recips)
-        mail_body = (f"<p><b>{html.escape(marker)}</b> von {html.escape(author_name)} "
-                     f"zum Auftrag „{html.escape(title)}“:</p>"
-                     f"<blockquote>{text}</blockquote>"
-                     f"<p>Zum Auftrag: {html.escape(_ticket_link(row))}</p>")
+        mail_body = render_corporate_email(
+            subject=subject,
+            header_subtitle=marker,
+            headline=title,
+            info_box_url=link,
+            intro=f"{author_name} hat einen {marker.lower()} zu diesem Auftrag hinterlassen:",
+            content="",
+            action_html=_quote_block(body_text) + _primary_button_html(link),
+        )
         sender(out, subject, mail_body, kind="comment")
         return out
     except Exception:
@@ -535,14 +588,20 @@ def notify_rejection(row: dict, defn: Optional[ProcessDefinition], *,
             return []
         title = str(row.get("title") or f"Auftrag #{row.get('id')}")
         subject = _subject(f"[AlphaRequest] Auftrag abgelehnt: {title}")
-        begruendung = (f"<p><b>Begründung</b> ({html.escape(by_name)}):</p>"
-                       f"<blockquote>{_rich_text(reason)}</blockquote>"
-                       if reason else
-                       f"<p>Eine Begründung wurde nicht angegeben "
-                       f"({html.escape(by_name)}).</p>")
-        body = (f"<p>Ihr Auftrag „{html.escape(title)}“ (#{row.get('id')}) wurde "
-                f"abgelehnt.</p>{begruendung}"
-                f"<p>Zum Auftrag: {html.escape(_ticket_link(row))}</p>")
+        link = _ticket_link(row)
+        info_rows = [("Auftrag", f"#{row.get('id')}"), ("Abgelehnt von", by_name)]
+        if not reason:
+            info_rows.append(("Begründung", "keine angegeben"))
+        body = render_corporate_email(
+            subject=subject,
+            header_subtitle="Auftrag abgelehnt",
+            headline=title,
+            info_box_url=link,
+            intro=f"Ihr Auftrag (#{row.get('id')}) wurde abgelehnt.",
+            info_rows=info_rows,
+            content="",
+            action_html=_quote_block(reason) + _primary_button_html(link),
+        )
         sender(recips, subject, body, kind="rejection")
         return list(recips)
     except Exception:
@@ -577,14 +636,20 @@ def notify_sent_back(row: dict, defn: Optional[ProcessDefinition],
         title = str(row.get("title") or f"Auftrag #{row.get('id')}")
         phase_lbl = str((phase.label or phase.key) if phase else "—")
         subject = _subject(f"[AlphaRequest] Nachbesserung nötig: {title}")
-        begruendung = (f"<blockquote>{_rich_text(reason)}</blockquote>" if reason
-                       else "<p>Eine Begründung wurde nicht angegeben.</p>")
+        link = _ticket_link(row)
         out = sorted(recips)
-        body = (f"<p>Der Auftrag „{html.escape(title)}“ (#{row.get('id')}) wurde in "
-                f"der Freigabe zurückgegeben und liegt wieder in der Phase "
-                f"„{html.escape(phase_lbl)}“.</p>"
-                f"<p><b>Rückmeldung</b> ({html.escape(by_name)}):</p>{begruendung}"
-                f"<p>Zum Auftrag: {html.escape(_ticket_link(row))}</p>")
+        info_rows = [("Auftrag", f"#{row.get('id')}"), ("Phase", phase_lbl),
+                     ("Zurückgegeben von", by_name)]
+        body = render_corporate_email(
+            subject=subject,
+            header_subtitle="Nachbesserung nötig",
+            headline=title,
+            info_box_url=link,
+            intro="Dieser Auftrag wurde in der Freigabe zurückgegeben und liegt wieder bei Ihnen.",
+            info_rows=info_rows,
+            content=("" if reason else "Eine Rückmeldung wurde nicht angegeben."),
+            action_html=_quote_block(reason) + _primary_button_html(link),
+        )
         sender(out, subject, body, kind="sent_back")
         return out
     except Exception:

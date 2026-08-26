@@ -96,6 +96,20 @@ def inline_attachment_from_path(path: str, *, content_id: str, filename: str | N
         content_id=content_id,
     )
 
+def brand_logo_attachment() -> Optional[EmailAttachment]:
+    """Alpha-Logo als Inline-Anhang (cid:alpha_logo) für render_corporate_email.
+
+    Das Corporate-Template referenziert den Kopf über `cid:alpha_logo`; ohne
+    diesen Inline-Anhang bliebe dort ein kaputtes Bild. Fehlt die Datei, wird
+    None geliefert – eine Mail darf am Logo nie scheitern.
+    """
+    try:
+        return inline_attachment_from_path("static/logo.png", content_id="alpha_logo")
+    except Exception:
+        logger.warning("Mail-Logo (static/logo.png) nicht einbettbar – Mail ohne Logo")
+        return None
+
+
 def _guess_content_type(path: str) -> str:
     ctype, _ = mimetypes.guess_type(path)
     return ctype or "application/octet-stream"
@@ -346,7 +360,7 @@ def send_test_mail(to: str):
         ),
         to_recipients=[to],
         body_type="HTML",
-        attachments=[inline_attachment_from_path("static/logo.png", content_id="alpha_logo")],
+        attachments=[a for a in [brand_logo_attachment()] if a],
     )
 
 
@@ -375,4 +389,5 @@ def send_personalnummer_warning_mail(company_name: str, remaining: int, pnr_to: 
         ),
         to_recipients=[to],
         body_type="HTML",
+        attachments=[a for a in [brand_logo_attachment()] if a],
     )
