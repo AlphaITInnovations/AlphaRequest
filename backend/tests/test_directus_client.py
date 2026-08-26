@@ -228,6 +228,14 @@ def test_write_http_error_maps(configured, monkeypatch):
         dc.create_item("x", {})
 
 
+def test_write_encodes_path_segments(configured, monkeypatch):
+    # Eine item_id aus einem Nutzerfeld darf das Request-Ziel nicht verbiegen.
+    fake = FakeWriteRequests(FakeResp(204, None))
+    monkeypatch.setattr(dc, "requests", fake)
+    dc.delete_item("mitarbeiter", "1/../users")
+    assert fake.calls[0]["url"].endswith("/items/mitarbeiter/1%2F..%2Fusers")
+
+
 def test_status_unconfigured(monkeypatch):
     monkeypatch.setattr(dc.config, "DIRECTUS_URL", "")
     monkeypatch.setattr(dc.config, "DIRECTUS_TOKEN", "")

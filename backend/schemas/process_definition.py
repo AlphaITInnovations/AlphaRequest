@@ -996,6 +996,7 @@ class ProcessDefinition(_Base):
                         _need(r, f"{p.key}.responsibility[{dr.group}].when")
 
         wid_by_key = {f.key: f.widget for f in self.fields}
+        fld_by_key = {f.key: f for f in self.fields}
         _id_field_forbidden = {Widget.collection, Widget.attachment, Widget.server_generated}
         for a in all_autos:
             if a.guard:
@@ -1013,8 +1014,21 @@ class ProcessDefinition(_Base):
                         f"automation[{a.id}].directus.idField: „{d.idField}“ "
                         f"(widget={wid_by_key[d.idField].value}) kann keine Directus-id tragen "
                         "– ein einfaches Textfeld verwenden")
+                # Ein non-overridable computed-Feld würde apply_computed bei jedem
+                # Speichern neu setzen und die zurückgeschriebene id überschreiben
+                # (Doppelanlage-Schutz + update/delete-Referenz gingen verloren).
+                _idf = fld_by_key.get(d.idField)
+                if _idf is not None and _idf.computed and not _idf.overridable:
+                    raise ValueError(
+                        f"automation[{a.id}].directus.idField: „{d.idField}“ ist ein berechnetes "
+                        "Feld – es würde die zurückgeschriebene Directus-id überschreiben. "
+                        "Ein einfaches, nicht berechnetes Textfeld verwenden")
                 for j, b in enumerate(d.fieldMap):
                     _need(b.source, f"automation[{a.id}].directus.fieldMap[{j}].source")
+                    if not b.target.strip():
+                        raise ValueError(
+                            f"automation[{a.id}].directus.fieldMap[{j}].target: "
+                            "das Directus-Zielfeld darf nicht leer sein")
 
         # on_department_done: nur als PHASEN-Automation einer Fachabteilungs-Phase,
         # und die Gruppe muss eine Fachabteilung genau dieser Phase sein.

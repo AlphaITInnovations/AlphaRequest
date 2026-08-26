@@ -90,6 +90,7 @@ export function validateDefinition(
   // ── Feld-Katalog ──
   const seenFieldKeys = new Set<string>()
   const catalog = new Set(d.fields.map((f) => f.key))
+  const widgetByKey = new Map(d.fields.map((f) => [f.key, f.widget]))
   d.fields.forEach((f, i) => {
     const anchor = `pe-catalog-${i}`
     const p = `fields.${i}`
@@ -655,6 +656,9 @@ export function validateDefinition(
           out.push(err(`${path}.action`, anchor, 'REQUIRED', 'id-Feld fehlt.'))
         } else if (!catalog.has(dw.idField)) {
           out.push(err(`${path}.action`, anchor, 'UNKNOWN_REF', `id-Feld „${dw.idField}" gibt es nicht.`))
+        } else if (['collection', 'attachment', 'server_generated'].includes(widgetByKey.get(dw.idField) ?? '')) {
+          out.push(err(`${path}.action`, anchor, 'INVALID',
+            'Das id-Feld muss ein einfaches Textfeld sein (kein Anhang/Wiederholgruppe/Systemnummer).'))
         }
         if ((dw.operation === 'create' || dw.operation === 'update') && dw.fieldMap.length === 0) {
           out.push(err(`${path}.action`, anchor, 'REQUIRED',

@@ -460,6 +460,17 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(codes(d)).toContain('UNKNOWN_REF')
   })
 
+  it('lehnt ein idField ab, das kein einfaches Textfeld ist', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'anhang', widget: 'attachment' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'c', idField: 'anhang',
+            fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
   it('on_department_done nur in einer Fachabteilungs-Phase', () => {
     const d = defn({ phases: [
       { key: 'start', kind: 'start', responsibility: { kind: 'owner' }, fields: [{ ref: 'base.name' }] },

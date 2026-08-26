@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Optional
+from urllib.parse import quote
 
 import requests
 
@@ -218,21 +219,27 @@ def _write(method: str, path: str, json_body: Optional[dict] = None) -> Any:
     return body.get("data") if isinstance(body, dict) else body
 
 
+def _seg(v: Any) -> str:
+    """Ein Pfad-Segment sicher kodieren – Sonderzeichen (/, ?, #, …) dürfen das
+    Request-Ziel NICHT verändern (item_id kann aus einem Nutzerfeld stammen)."""
+    return quote(str(v), safe="")
+
+
 def create_item(collection: str, payload: dict) -> dict:
     """Neuen Datensatz anlegen; gibt den angelegten Datensatz (inkl. id) zurück."""
-    data = _write("POST", f"/items/{collection}", json_body=payload)
+    data = _write("POST", f"/items/{_seg(collection)}", json_body=payload)
     return data if isinstance(data, dict) else {}
 
 
 def update_item(collection: str, item_id: Any, payload: dict) -> dict:
     """Datensatz aktualisieren; gibt den aktualisierten Datensatz zurück."""
-    data = _write("PATCH", f"/items/{collection}/{item_id}", json_body=payload)
+    data = _write("PATCH", f"/items/{_seg(collection)}/{_seg(item_id)}", json_body=payload)
     return data if isinstance(data, dict) else {}
 
 
 def delete_item(collection: str, item_id: Any) -> None:
     """Datensatz löschen."""
-    _write("DELETE", f"/items/{collection}/{item_id}")
+    _write("DELETE", f"/items/{_seg(collection)}/{_seg(item_id)}")
 
 
 def status() -> dict:

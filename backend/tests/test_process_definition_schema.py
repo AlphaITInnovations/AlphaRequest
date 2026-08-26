@@ -214,6 +214,25 @@ def test_directus_write_idfield_must_exist():
     _reject(d)
 
 
+def test_directus_write_empty_target_rejected():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [{"source": "a", "target": "  "}]}}}]
+    _reject(d)
+
+
+def test_directus_write_idfield_not_computed():
+    d = _base(fields=[{"key": "a", "widget": "text"},
+                      {"key": "mid", "widget": "text", "computed": {"from": "a"}}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    _reject(d)
+
+
 def test_on_department_done_needs_departments_phase():
     d = {
         "schemaVersion": 1, "key": "k", "name": "N",

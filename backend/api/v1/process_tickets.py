@@ -1033,6 +1033,11 @@ def _department_action(ticket_id: int, group_id: str, status: str,
                         "Nur Mitglieder dieser Fachabteilung können hier abschließen")
 
     runtime = row["runtime"]
+    # Vorherigen Status merken: on_department_done-Automationen dürfen NUR beim
+    # echten Übergang nach „done" feuern (ein erneutes :complete derselben
+    # Abteilung würde sonst nicht-idempotente Aktionen doppelt auslösen).
+    _prev = pr.department_entry(runtime, group_id)
+    prior_status = _prev.get("status") if _prev else None
     if not pr.set_department_status(runtime, group_id, status,
                                    by=user.get("id"), by_name=_actor_name(user),
                                    at=utcnow_iso(), note=note):
@@ -1061,8 +1066,9 @@ def _department_action(ticket_id: int, group_id: str, status: str,
                   actor_id=user.get("id"), actor_name=_actor_name(user),
                   body=note, details={"group": group_id})
     # Hat eine Fachabteilung ihren Teil ABGESCHLOSSEN, feuern deren
-    # on_department_done-Automationen (z. B. Mitarbeiter in Directus anlegen).
-    if status == "done":
+    # on_department_done-Automationen (z. B. Mitarbeiter in Directus anlegen) –
+    # nur beim echten Übergang nach „done", nicht bei erneutem Abschließen.
+    if status == "done" and prior_status != "done":
         try:
             cur_phase = pr.current_phase(defn, row.get("runtime") or {})
             engine.run_department_done(row, defn, cur_phase, group_id)
