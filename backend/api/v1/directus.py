@@ -150,6 +150,8 @@ def source_options(key: str, search: Optional[str] = None, limit: int = 50,
                                  filter=src["filter"], sort=src["sort"] or None,
                                  limit=eff_limit, search=search or None)
     except dc.DirectusError as exc:
+        # Details nur ins Log; nach außen eine neutrale Meldung (keine internen
+        # Directus-/Schema-Texte an Endnutzer:innen).
         logger.warning("Directus-Optionen „%s“: %s", key, exc)
-        return DataResponse(data={"options": [], "error": str(exc)})
+        return DataResponse(data={"options": [], "error": "Directus ist derzeit nicht erreichbar."})
     return DataResponse(data={"options": store.build_options(records, src), "error": None})

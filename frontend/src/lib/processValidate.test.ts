@@ -406,11 +406,13 @@ describe('DSL-Helfer', () => {
 })
 
 describe('validateDefinition – Directus-Feld', () => {
+  // Zusatzfelder bearbeitbar einbinden: Auto-Fill-Ziele müssen dort beschreibbar
+  // sein, wo das directus-Feld beschreibbar ist (sonst greift die Writable-Regel).
   const withField = (f: Record<string, unknown>, extra: Record<string, unknown>[] = []) =>
     defn({
       fields: [f, ...extra],
       phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
-        fields: [{ ref: (f as any).key }, ...extra.map((e) => ({ ref: (e as any).key, mode: 'readonly' }))] }],
+        fields: [{ ref: (f as any).key }, ...extra.map((e) => ({ ref: (e as any).key }))] }],
     })
 
   it('verlangt eine Quelle bei widget=directus', () => {
@@ -433,5 +435,17 @@ describe('validateDefinition – Directus-Feld', () => {
 
   it('lehnt Directus-Props bei anderem Feldtyp ab', () => {
     expect(codes(withField({ key: 'a', widget: 'text', directusSource: 'x' }))).toContain('INVALID')
+  })
+
+  it('meldet nicht-beschreibbares Auto-Fill-Ziel', () => {
+    const d = defn({
+      fields: [
+        { key: 'kst', widget: 'directus', directusSource: 'kostenstelle',
+          directusFieldMap: [{ source: 'firma.name', target: 'firma' }] },
+        { key: 'firma', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'kst' }, { ref: 'firma', mode: 'readonly' }] }],
+    })
+    expect(codes(d)).toContain('DIRECTUS_TARGET_NOT_WRITABLE')
   })
 })

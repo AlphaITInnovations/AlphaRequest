@@ -34,7 +34,8 @@ def _err(path: str, code: str, message: str) -> dict:
 # ── Pass 1: Wert-Form ─────────────────────────────────────────────────────────
 
 _SCALAR_TEXT = {Widget.text, Widget.textarea, Widget.date, Widget.select,
-                Widget.user, Widget.company, Widget.group, Widget.server_generated}
+                Widget.user, Widget.company, Widget.group, Widget.directus,
+                Widget.server_generated}
 _LIST_WIDGETS = {Widget.multiselect, Widget.checkbox_group, Widget.collection}
 
 

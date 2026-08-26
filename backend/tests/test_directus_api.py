@@ -127,4 +127,6 @@ def test_options_failsoft_on_directus_error(monkeypatch):
     monkeypatch.setattr(dapi.dc, "query_items", boom)
     r = c.get("/directus/sources/kostenstelle/options")
     assert r.status_code == 200 and r.json()["data"]["options"] == []
-    assert "timeout" in r.json()["data"]["error"]
+    # Nach außen eine neutrale Meldung – die rohe Directus-Fehlermeldung leakt nicht.
+    assert "nicht erreichbar" in r.json()["data"]["error"]
+    assert "timeout" not in r.json()["data"]["error"]

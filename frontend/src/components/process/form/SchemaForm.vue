@@ -109,11 +109,16 @@ function resolvePath(record: any, path: string): unknown {
   }
   return cur ?? null
 }
-function scalarize(v: unknown): unknown {
+/** Directus-Wert typgerecht für das Zielfeld aufbereiten: Zahl-Felder bekommen
+ *  eine Zahl, alle anderen einen String (wie der Server-Optionswert) – sonst
+ *  scheitert die Typprüfung beim Speichern. */
+function coerceForTarget(targetKey: string, v: unknown): unknown {
   if (v === null || v === undefined) return null
-  if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
-  if (typeof v === 'object') return null
-  return v
+  const scalar = typeof v === 'boolean' ? (v ? 'Ja' : 'Nein') : (typeof v === 'object' ? null : v)
+  if (scalar === null) return null
+  const tf = props.definition?.fields.find((f) => f.key === targetKey)
+  if (tf?.widget === 'number') { const n = Number(scalar); return Number.isNaN(n) ? null : n }
+  return String(scalar)
 }
 
 /**
@@ -125,7 +130,7 @@ function scalarize(v: unknown): unknown {
 function onDirectusPick(field: FieldDef, sel: { value: string; record: Record<string, any> } | null) {
   const patch: Record<string, unknown> = { [field.key]: sel ? sel.value : null }
   for (const b of field.directusFieldMap ?? []) {
-    patch[b.target] = sel?.record ? scalarize(resolvePath(sel.record, b.source)) : null
+    patch[b.target] = sel?.record ? coerceForTarget(b.target, resolvePath(sel.record, b.source)) : null
   }
   emit('update:modelValue', { ...values.value, ...patch })
 }

@@ -30,11 +30,20 @@ const boxRef = ref<HTMLElement | null>(null)
 let timer: ReturnType<typeof setTimeout> | null = null
 let seq = 0
 
-// Anzeige-Text: der aktuelle Wert als Fallback, bis eine Auswahl getroffen wird
-// (das Label wird beim Picken gesetzt; nach Reload steht der rohe Wert – die
-// gemappten Zielfelder tragen ohnehin die lesbaren Snapshots).
-const display = ref(props.modelValue ? String(props.modelValue) : '')
-watch(() => props.modelValue, (v) => { if (!open.value) display.value = v ? String(v) : '' })
+// Anzeige-Text. Wir merken uns das zuletzt gewählte Label samt zugehörigem Wert:
+// nach dem Picken wechselt props.modelValue (asynchron) auf den rohen Wert; ohne
+// dieses Merken würde der Watcher das gerade gesetzte Label mit dem Rohwert
+// überschreiben. Passt der aktuelle Wert zum gemerkten Label, zeigen wir das
+// Label, sonst den Rohwert (z. B. nach Reload – die gemappten Zielfelder tragen
+// ohnehin die lesbaren Snapshots).
+const display = ref('')
+const selValue = ref('')
+const selLabel = ref('')
+function syncDisplay(v: string) {
+  display.value = v && v === selValue.value && selLabel.value ? selLabel.value : (v ? String(v) : '')
+}
+syncDisplay(props.modelValue ? String(props.modelValue) : '')
+watch(() => props.modelValue, (v) => { if (!open.value) syncDisplay(v ? String(v) : '') })
 
 const sourceKey = () => props.field.directusSource || ''
 
@@ -70,19 +79,27 @@ function onInput(e: Event) {
   timer = setTimeout(() => fetchOptions(query.value), 250)
 }
 function pick(o: DirectusOption) {
+  selValue.value = o.value
+  selLabel.value = o.label
   emit('select', { value: o.value, record: o.record })
   display.value = o.label
   query.value = ''
   open.value = false
 }
 function clear() {
+  selValue.value = ''
+  selLabel.value = ''
   emit('select', null)
   display.value = ''
   query.value = ''
   options.value = []
 }
 function onClickOutside(e: MouseEvent) {
-  if (boxRef.value && !boxRef.value.contains(e.target as Node)) open.value = false
+  if (boxRef.value && !boxRef.value.contains(e.target as Node) && open.value) {
+    open.value = false
+    // Abgebrochene Sucheingabe verwerfen und wieder den echten Wert anzeigen.
+    syncDisplay(props.modelValue ? String(props.modelValue) : '')
+  }
 }
 onMounted(() => document.addEventListener('click', onClickOutside))
 onBeforeUnmount(() => {

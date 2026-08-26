@@ -142,6 +142,20 @@ function setMapping(i: number, part: keyof DirectusBinding, val: string) {
 /** Ziel-Feld-Kandidaten: alle Katalog-Felder außer dem directus-Feld selbst. */
 const mapTargets = computed(() => allKeys.value.filter((k) => k && k !== props.modelValue.key))
 
+/** Die aktuell gewählte Directus-Quelle (für die wählbaren Quell-Pfade). */
+const selectedDirectusSource = computed(() =>
+  directusSources.value.find((s) => s.key === props.modelValue.directusSource) ?? null)
+
+/** Pfade, die die Quelle tatsächlich lädt (Wert-Feld + Label-Pfade + Felder).
+ *  Nur diese sind im Datensatz vorhanden – ein Mapping auf einen ungeladenen
+ *  Pfad ergäbe beim Auswählen still `null`. */
+function sourcePaths(): string[] {
+  const s = selectedDirectusSource.value
+  if (!s) return []
+  const tpl = (s.labelTemplate.match(/\{\{\s*([\w.]+)\s*\}\}/g) ?? []).map((m) => m.replace(/[{}\s]/g, ''))
+  return [...new Set([s.valueField, ...tpl, ...s.fields].filter(Boolean))]
+}
+
 function setAssign(p: Partial<AssignSpec>) {
   patch({ assign: { ...(props.modelValue.assign ?? blankAssign()), ...p } })
 }
@@ -640,11 +654,20 @@ const computedSummary = computed(() =>
             <button type="button" @click="addMapping" class="text-xs text-[#3EAAB8] hover:underline">+ Zuordnung</button>
           </div>
           <p class="text-xs text-gray-400 mt-1 mb-2">
-            Bei Auswahl wird der Wert am Directus-Pfad (z. B. <code>firma.name</code>) in ein anderes
-            Prozess-Feld übernommen (Snapshot).
+            Bei Auswahl wird der Wert eines geladenen Quell-Felds (z. B. <code>firma.name</code>) in ein
+            anderes Prozess-Feld übernommen (Snapshot). Wählbar sind nur Felder, die die Quelle lädt –
+            fehlt eines, unter Einstellungen → Directus-Quellen ergänzen.
           </p>
           <div v-for="(b, i) in modelValue.directusFieldMap" :key="i" class="flex items-center gap-2 mb-2">
-            <input :value="b.source" @input="setMapping(i, 'source', ($event.target as HTMLInputElement).value)"
+            <select v-if="sourcePaths().length" :value="b.source"
+                    @change="setMapping(i, 'source', ($event.target as HTMLSelectElement).value)" class="pfi flex-1">
+              <option value="">Directus-Feld …</option>
+              <option v-for="p in sourcePaths()" :key="p" :value="p">{{ p }}</option>
+              <option v-if="b.source && !sourcePaths().includes(b.source)" :value="b.source" class="text-red-600">
+                {{ b.source }} (nicht geladen)
+              </option>
+            </select>
+            <input v-else :value="b.source" @input="setMapping(i, 'source', ($event.target as HTMLInputElement).value)"
                    class="pfi flex-1" placeholder="Directus-Pfad, z. B. firma.name" />
             <span class="text-gray-400 text-sm">→</span>
             <select :value="b.target" @change="setMapping(i, 'target', ($event.target as HTMLSelectElement).value)"
