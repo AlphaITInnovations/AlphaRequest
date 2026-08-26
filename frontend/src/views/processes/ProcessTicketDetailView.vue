@@ -267,6 +267,7 @@ async function fachabteilungAbschliessen() {
   if (!definition.value || !meineOffeneAbteilungen.value.length) return
   const shape = validateValues(definition.value, values.value)
   if (shape.length) { errors.value = shape; showToast('Bitte Eingaben prüfen', false); return }
+  if (!confirm('Wirklich abschließen? Ein Bearbeiten ist danach nicht mehr möglich.')) return
   busy.value = true
   try {
     // Etwaige Feld-Eingaben der Abteilung zuerst sichern.
