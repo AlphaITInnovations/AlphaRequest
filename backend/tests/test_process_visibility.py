@@ -118,6 +118,30 @@ def test_computed_mirror_inherits_source_visibility():
     assert filter_values(CONF_MIRROR, vals, outsider) == {}
 
 
+# ── Fuhrpark-Fall: computed aus NICHT-vertraulicher, nur gruppen-eingeschränkter
+#    Quelle ist über die EIGENE Sichtbarkeit des computed-Felds erreichbar ──
+
+GRP_MIRROR = ProcessDefinition.model_validate({
+    "schemaVersion": 1, "key": "k", "name": "N",
+    "fields": [
+        {"key": "position", "widget": "text",
+         "visibility": {"confidential": False, "visibleToGroups": ["g_hr"]}},
+        {"key": "car_class", "widget": "text", "computed": {"from": "position"},
+         "visibility": {"confidential": False, "visibleToGroups": ["g_fp"]}},
+    ],
+    "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                "fields": [{"ref": "position", "mode": "editable"}]}],
+})
+
+
+def test_computed_from_nonconfidential_source_visible_via_own_groups():
+    vals = {"position": "Disposition", "car_class": "1"}
+    fp = ViewerCtx(full_view=False, is_admin=False, group_ids={"g_fp"})   # Fuhrpark
+    # Fuhrpark ist NICHT in g_hr (sieht die Quelle „position" nicht), aber die
+    # abgeleitete „car_class" (eigene Gruppe g_fp) SCHON – nicht-vertrauliche Quelle sperrt nicht.
+    assert filter_values(GRP_MIRROR, vals, fp) == {"car_class": "1"}
+
+
 def test_writable_keys_no_unlock_via_noneditable_body():
     # secret nur sichtbar/pflicht, wenn ctrl=='x'; ctrl ist readonly in dieser Phase
     defn = ProcessDefinition.model_validate({

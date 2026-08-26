@@ -43,20 +43,36 @@ def can_see_field(f: FieldDef, ctx: ViewerCtx) -> bool:
     return ctx.full_view or bool(ctx.group_ids & groups)
 
 
+def _mirrors_hidden_confidential(f: FieldDef, ctx: ViewerCtx, fmap: dict, seen: set) -> bool:
+    """Leitet `f` (transitiv) aus einem VERTRAULICHEN Quellfeld ab, das der
+    Betrachter nicht sehen darf? NUR das sperrt ein Spiegelfeld – der Zweck des
+    Gates ist, keinen vertraulichen Wert über ein computed-Feld offenzulegen.
+    Eine bloß gruppen-eingeschränkte, NICHT-vertrauliche Quelle sperrt NICHT
+    (das computed-Feld hat seine eigene visibleToGroups; z. B. Fahrzeugklasse für
+    den Fuhrpark, abgeleitet aus der – nur der Personalabteilung sichtbaren –
+    Position)."""
+    if not f.computed:
+        return False
+    src = fmap.get(f.computed.from_)
+    if src is None or src.key in seen:
+        return False
+    seen.add(src.key)
+    src_conf = bool(src.visibility and src.visibility.confidential)
+    if src_conf and not can_see_field(src, ctx):
+        return True
+    return _mirrors_hidden_confidential(src, ctx, fmap, seen)
+
+
 def _effective_can_see(f: FieldDef, ctx: ViewerCtx, fmap: dict, _seen: Optional[set] = None) -> bool:
-    """Sichtbarkeit inkl. Quelle: ein computed-Feld ist nur sichtbar, wenn der
-    Betrachter AUCH sein Quellfeld sehen darf – sonst würde ein Spiegelfeld einen
-    vertraulichen Wert offenlegen (§5, hartes Gate darf nicht umgangen werden)."""
+    """Sichtbarkeit inkl. Quelle: ein computed-Feld ist sichtbar, wenn der
+    Betrachter es selbst sehen darf UND es nicht (transitiv) einen VERTRAULICHEN
+    Wert spiegelt, den er nicht sehen darf (§5, hartes Gate darf nicht umgangen
+    werden). Eine nur gruppen-eingeschränkte (nicht-vertrauliche) Quelle sperrt
+    das Spiegelfeld NICHT."""
     if not can_see_field(f, ctx):
         return False
-    if f.computed:
-        _seen = _seen or set()
-        if f.key in _seen:
-            return True                       # Zyklus-Schutz
-        _seen.add(f.key)
-        src = fmap.get(f.computed.from_)
-        if src is not None and not _effective_can_see(src, ctx, fmap, _seen):
-            return False
+    if f.computed and _mirrors_hidden_confidential(f, ctx, fmap, set()):
+        return False
     return True
 
 
