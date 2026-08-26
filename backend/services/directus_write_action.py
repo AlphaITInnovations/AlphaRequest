@@ -21,16 +21,48 @@ from backend.services import directus_client as dc
 from backend.utils.logger import logger
 
 
-def build_payload(spec, values: dict) -> dict:
+def build_payload(spec, values: dict, *, companies=None) -> dict:
     """Directus-Payload aus dem Feld-Mapping. Leere Werte (None/"") werden
-    ausgelassen – so überschreibt ein leeres Prozess-Feld nichts unbeabsichtigt."""
+    ausgelassen – so überschreibt ein leeres Prozess-Feld nichts unbeabsichtigt.
+
+    Trägt eine Zuordnung `resolve`, wird der Quellwert zuvor übersetzt (z. B.
+    Firmenname → alphacore-Firmen-ID). `companies` ist injizierbar (Tests); sonst
+    werden die lokalen Firmen einmalig aus den Settings gelesen, aber nur wenn eine
+    Zuordnung das überhaupt braucht."""
+    need_companies = any(getattr(b, "resolve", None) for b in spec.fieldMap)
+    if need_companies and companies is None:
+        try:
+            from backend.database.settings import get_companies_full
+            companies = get_companies_full()
+        except Exception:
+            logger.exception("Firmen für Directus-Auflösung nicht lesbar")
+            companies = []
     out: dict = {}
     for b in spec.fieldMap:
         v = values.get(b.source)
+        resolve = getattr(b, "resolve", None)
+        if resolve is not None:
+            v = _resolve_value(resolve, v, companies or [])
         if v is None or v == "":
             continue
         out[b.target] = v
     return out
+
+
+def _resolve_value(resolve, raw, companies: list) -> Optional[str]:
+    """Quellwert vor dem Schreiben übersetzen. Aktuell nur company_directus_id:
+    Firmenname → an der lokalen Firma hinterlegte alphacore-Firmen-ID
+    (None, wenn Firma unbekannt oder keine id gepflegt)."""
+    kind = getattr(resolve, "value", resolve)
+    if kind == "company_directus_id":
+        if not raw:
+            return None
+        for c in companies:
+            if c.get("name") == raw:
+                fid = c.get("directus_firma_id")
+                return str(fid) if fid not in (None, "") else None
+        return None
+    return raw
 
 
 def execute(action, row: dict, defn, phase, *, client=dc,

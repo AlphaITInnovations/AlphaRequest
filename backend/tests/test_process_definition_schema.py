@@ -233,6 +233,27 @@ def test_directus_write_idfield_not_computed():
     _reject(d)
 
 
+def test_directus_write_resolve_requires_company_source():
+    # resolve=company_directus_id an einem Text-Feld → abgelehnt.
+    d = _base(fields=[{"key": "c", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "c"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "k",
+                   "idField": "mid",
+                   "fieldMap": [{"source": "c", "target": "firma", "resolve": "company_directus_id"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_resolve_on_company_ok():
+    d = _base(fields=[{"key": "c", "widget": "company"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "c"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "k",
+                   "idField": "mid",
+                   "fieldMap": [{"source": "c", "target": "firma", "resolve": "company_directus_id"}]}}}]
+    ProcessDefinition.model_validate(d)  # darf nicht werfen
+
+
 def test_on_department_done_needs_departments_phase():
     d = {
         "schemaVersion": 1, "key": "k", "name": "N",

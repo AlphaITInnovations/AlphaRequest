@@ -29,6 +29,9 @@ const props = defineProps<{
   modelValue: Automation
   fieldKeys: string[]
   fieldLabels?: Record<string, string>
+  /** Feld-Key → Widget; nötig, um „als Firmen-ID auflösen“ nur bei company-Feldern
+   *  anzubieten. */
+  fieldWidgets?: Record<string, string>
   groups?: { id: string; name: string }[]
   /** Fachabteilungen DIESER Phase (für den Trigger „Fachabteilung abgeschlossen“).
    *  Fehlt sie, wird auf alle `groups` ausgewichen. */
@@ -127,7 +130,24 @@ function removeDwMap(i: number) {
 }
 function setDwMap(i: number, part: 'source' | 'target', value: string) {
   const cur = a.value.action.directus ?? blankDirectus()
-  patchDirectus({ fieldMap: cur.fieldMap.map((b, j) => (j === i ? { ...b, [part]: value } : b)) })
+  patchDirectus({ fieldMap: cur.fieldMap.map((b, j) => {
+    if (j !== i) return b
+    const next: any = { ...b, [part]: value }
+    // resolve ist nur für ein Firmen-Feld gültig – bei Quellwechsel weg damit,
+    // sonst lehnt der Server die Definition ab.
+    if (part === 'source' && props.fieldWidgets?.[value] !== 'company') delete next.resolve
+    return next
+  }) })
+}
+function setDwResolve(i: number, on: boolean) {
+  const cur = a.value.action.directus ?? blankDirectus()
+  patchDirectus({ fieldMap: cur.fieldMap.map((b, j) => {
+    if (j !== i) return b
+    const next: any = { ...b }
+    if (on) next.resolve = 'company_directus_id'
+    else delete next.resolve
+    return next
+  }) })
 }
 
 function onActionType(t: ActionType) {
@@ -476,23 +496,31 @@ watch(dwCollection, (c) => {
             <label class="lbl mb-0">Feld-Zuordnung (Prozess → Directus)</label>
             <button type="button" @click="addDwMap" class="text-xs text-[#3EAAB8] hover:underline">+ Zuordnung</button>
           </div>
-          <div v-for="(b, i) in (a.action.directus?.fieldMap ?? [])" :key="i"
-               class="flex items-center gap-2 mt-2">
-            <select class="afi flex-1" :value="b.source"
-                    @change="setDwMap(i, 'source', val($event))">
-              <option value="">Prozess-Feld…</option>
-              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
-              <option v-if="b.source && !keys.includes(b.source)" :value="b.source">{{ b.source }} (unbekannt)</option>
-            </select>
-            <span class="text-gray-400 text-sm">→</span>
-            <select class="afi flex-1" :value="b.target" @change="setDwMap(i, 'target', val($event))">
-              <option value="">{{ fieldsLoading ? 'lädt…' : 'Directus-Feld…' }}</option>
-              <option v-for="f in fields" :key="f.field" :value="f.field">{{ f.field }}</option>
-              <option v-if="b.target && !fields.some((f) => f.field === b.target)"
-                      :value="b.target">{{ b.target }} (unbekannt)</option>
-            </select>
-            <button type="button" @click="removeDwMap(i)"
-                    class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
+          <div v-for="(b, i) in (a.action.directus?.fieldMap ?? [])" :key="i" class="mt-2">
+            <div class="flex items-center gap-2">
+              <select class="afi flex-1" :value="b.source"
+                      @change="setDwMap(i, 'source', val($event))">
+                <option value="">Prozess-Feld…</option>
+                <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+                <option v-if="b.source && !keys.includes(b.source)" :value="b.source">{{ b.source }} (unbekannt)</option>
+              </select>
+              <span class="text-gray-400 text-sm">→</span>
+              <select class="afi flex-1" :value="b.target" @change="setDwMap(i, 'target', val($event))">
+                <option value="">{{ fieldsLoading ? 'lädt…' : 'Directus-Feld…' }}</option>
+                <option v-for="f in fields" :key="f.field" :value="f.field">{{ f.field }}</option>
+                <option v-if="b.target && !fields.some((f) => f.field === b.target)"
+                        :value="b.target">{{ b.target }} (unbekannt)</option>
+              </select>
+              <button type="button" @click="removeDwMap(i)"
+                      class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
+            </div>
+            <label v-if="fieldWidgets?.[b.source] === 'company'"
+                   class="mt-1 ml-1 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+              <input type="checkbox" :checked="b.resolve === 'company_directus_id'"
+                     class="h-3.5 w-3.5 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]"
+                     @change="setDwResolve(i, ($event.target as HTMLInputElement).checked)" />
+              Als alphacore-Firmen-ID auflösen (statt Firmenname)
+            </label>
           </div>
           <p v-if="!dwCollection" class="text-xs text-gray-400 mt-2">
             Zuerst oben eine Collection wählen – dann stehen die Directus-Felder zur Auswahl.

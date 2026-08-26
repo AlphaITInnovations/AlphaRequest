@@ -326,7 +326,8 @@ onUnmounted(() => {
                 <PhaseInspector :model-value="currentPhase" :index="selectedPhase"
                                 :catalog="ed.draft.value.fields" :groups="ed.sources.groups"
                                 :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
-                                :field-labels="ed.fieldLabels.value" :taken-ids="ed.automationIds.value"
+                                :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
+                                :taken-ids="ed.automationIds.value"
                                 :phases="ed.draft.value.phases"
                                 :process-key="ed.draft.value.key"
                                 :readonly="ed.readonly.value"
@@ -353,7 +354,8 @@ onUnmounted(() => {
             </p>
             <fieldset :disabled="ed.readonly.value" class="contents">
               <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
-                              :field-labels="ed.fieldLabels.value" :groups="ed.sources.groups"
+                              :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
+                              :groups="ed.sources.groups"
                               title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
                               @update:model-value="setDefinition({ automations: $event })" />
             </fieldset>

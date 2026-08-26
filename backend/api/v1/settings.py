@@ -152,7 +152,8 @@ def _diff_companies(old_list, new_list):
     created = [n for n in new_by if n not in old_by]
     deleted = [n for n in old_by if n not in new_by]
     modified = []
-    fields = [("pnr_from", "Von"), ("pnr_to", "Bis"), ("mandant", "Mandant"), ("pnr_shared_with", "geteilt mit")]
+    fields = [("pnr_from", "Von"), ("pnr_to", "Bis"), ("mandant", "Mandant"),
+              ("pnr_shared_with", "geteilt mit"), ("directus_firma_id", "alphacore-Firmen-ID")]
     for name, nc in new_by.items():
         oc = old_by.get(name)
         if not oc:
@@ -328,6 +329,8 @@ class CompanyItem(BaseModel):
     mandant: Optional[str] = None
     # Teilt sich den Zähler mit dieser Firma (dann kein eigener Bereich).
     pnr_shared_with: Optional[str] = None
+    # alphacore-Firmen-ID (Directus-Fremdschlüssel), optional gepflegt.
+    directus_firma_id: Optional[str] = None
     # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
     pnr_current: Optional[int] = None
     pnr_warned: bool = False
@@ -361,6 +364,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         seen.add(name.casefold())
         mandant = (c.mandant or "").strip() or None
         shared = (c.pnr_shared_with or "").strip() or None
+        firma_id = (c.directus_firma_id or "").strip() or None
 
         if shared:
             # Teilt den Zähler → kein eigener Bereich.
@@ -369,6 +373,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
             cleaned.append({
                 "name": name, "pnr_from": None, "pnr_to": None,
                 "mandant": mandant, "pnr_shared_with": shared,
+                "directus_firma_id": firma_id,
             })
             continue
 
@@ -385,6 +390,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         cleaned.append({
             "name": name, "pnr_from": pf, "pnr_to": pt,
             "mandant": mandant, "pnr_shared_with": None,
+            "directus_firma_id": firma_id,
         })
 
     if not cleaned:

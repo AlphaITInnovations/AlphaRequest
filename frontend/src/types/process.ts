@@ -155,9 +155,14 @@ export interface Trigger {
   group: string | null
 }
 
+/** Optionale Auflösung des Quellwerts vor dem Schreiben. company_directus_id:
+ *  Firmenname → an der lokalen Firma hinterlegte alphacore-Firmen-ID. */
+export type DirectusWriteResolve = 'company_directus_id'
+
 export interface DirectusWriteBinding {
   source: string   // Prozess-Feld-Key
   target: string   // Directus-Feld
+  resolve?: DirectusWriteResolve | null
 }
 
 export interface DirectusWriteSpec {

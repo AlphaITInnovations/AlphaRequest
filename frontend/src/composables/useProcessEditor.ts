@@ -61,6 +61,14 @@ export function useProcessEditor() {
     return out
   })
 
+  /** Feld-Key → Widget (für Editoren, die den Feldtyp brauchen, z. B. „Firma
+   *  als alphacore-ID auflösen“ nur bei widget=company). */
+  const fieldWidgets = computed(() => {
+    const out: Record<string, string> = {}
+    for (const f of draft.value?.fields ?? []) out[f.key] = f.widget
+    return out
+  })
+
   async function loadSources() {
     // Admin-Variante: /settings/groups liefert auch versteckte Gruppen – sonst
     // sähen gültige Gruppen im Editor wie Tippfehler aus.
@@ -167,7 +175,7 @@ export function useProcessEditor() {
   return {
     loading, saving, meta, draft, dirty, readonly, isDraft, conflict, loadError,
     issues, clientIssues, serverIssues, errors, warnings, canSave, canPublish,
-    sources, fieldKeys, fieldLabels, automationIds,
+    sources, fieldKeys, fieldLabels, fieldWidgets, automationIds,
     load, loadSources, update, renameFieldKey, save, publish, reloadFromServer, revert,
   }
 }

@@ -15,6 +15,7 @@ const props = defineProps<{
   modelValue: Automation[]
   fieldKeys: string[]
   fieldLabels?: Record<string, string>
+  fieldWidgets?: Record<string, string>
   groups?: { id: string; name: string }[]
   title?: string
   /** ALLE Automations-IDs des Prozesses – IDs müssen prozessweit eindeutig sein,
@@ -123,6 +124,7 @@ function add() {
           :model-value="a"
           :field-keys="fieldKeys ?? []"
           :field-labels="fieldLabels"
+          :field-widgets="fieldWidgets"
           :groups="groups"
           @update:model-value="(v) => update(i, v)"
           @remove="remove(i)"

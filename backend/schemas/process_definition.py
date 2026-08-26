@@ -121,6 +121,17 @@ class DirectusOperation(str, Enum):
     delete = "delete"
 
 
+class DirectusWriteResolve(str, Enum):
+    """Optionale Auflösung eines Zuordnungs-Quellwerts vor dem Schreiben.
+
+    company_directus_id: Die Quelle ist ein Firmen-Feld (widget=company) und trägt
+    den Firmennamen. Statt des Namens wird die an der lokalen Firma hinterlegte
+    alphacore-Firmen-ID geschrieben – so trifft der Directus-Fremdschlüssel `firma`,
+    während die Personalnummer-Logik weiterhin am Firmennamen hängt.
+    """
+    company_directus_id = "company_directus_id"
+
+
 # Erlaubte enterStatus-Werte (Whitelist gegen Tippfehler). Bewusst als Menge
 # gepflegt statt an das alte RequestStatus-Enum gekoppelt.
 ALLOWED_ENTER_STATUS = {
@@ -448,9 +459,13 @@ class Trigger(_Base):
 
 class DirectusWriteBinding(_Base):
     """Eine Feld-Zuordnung fürs Schreiben nach Directus: der Wert des
-    Prozess-Felds `source` wird in das Directus-Feld `target` geschrieben."""
+    Prozess-Felds `source` wird in das Directus-Feld `target` geschrieben.
+
+    `resolve` übersetzt den Quellwert optional vor dem Schreiben (siehe
+    DirectusWriteResolve) – z. B. Firmenname → alphacore-Firmen-ID."""
     source: str
     target: str
+    resolve: Optional[DirectusWriteResolve] = None
 
 
 class DirectusWriteSpec(_Base):
@@ -1029,6 +1044,11 @@ class ProcessDefinition(_Base):
                         raise ValueError(
                             f"automation[{a.id}].directus.fieldMap[{j}].target: "
                             "das Directus-Zielfeld darf nicht leer sein")
+                    if (b.resolve == DirectusWriteResolve.company_directus_id
+                            and wid_by_key.get(b.source) != Widget.company):
+                        raise ValueError(
+                            f"automation[{a.id}].directus.fieldMap[{j}]: „als Firmen-ID auflösen“ "
+                            "ist nur für ein Firmen-Feld (widget=company) erlaubt")
 
         # on_department_done: nur als PHASEN-Automation einer Fachabteilungs-Phase,
         # und die Gruppe muss eine Fachabteilung genau dieser Phase sein.

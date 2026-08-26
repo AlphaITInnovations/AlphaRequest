@@ -24,6 +24,15 @@ class TestMergeCompanies:
         assert merged[0]["pnr_current"] is None
         assert merged[0]["pnr_warned"] is False
 
+    def test_directus_firma_id_roundtrips(self):
+        merged = merge_companies(
+            [{"name": "A", "pnr_from": "1", "pnr_to": "9", "directus_firma_id": "42"}], [])
+        assert merged[0]["directus_firma_id"] == "42"
+
+    def test_directus_firma_id_defaults_none(self):
+        assert normalize_company({"name": "A"})["directus_firma_id"] is None
+        assert normalize_company("A")["directus_firma_id"] is None
+
     def test_sharer_clears_range_and_counter(self):
         merged = merge_companies(
             [{"name": "B", "pnr_shared_with": "A", "pnr_from": "1", "pnr_to": "9", "pnr_current": 5}], [])

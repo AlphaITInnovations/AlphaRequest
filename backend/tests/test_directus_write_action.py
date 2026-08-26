@@ -48,6 +48,36 @@ def test_build_payload_skips_empty():
     assert dwa.build_payload(spec, {"base.first_name": "Max", "base.x": ""}) == {"vorname": "Max"}
 
 
+def _resolve_spec():
+    return DirectusWriteSpec(
+        operation=DirectusOperation.create, collection="mitarbeiter",
+        fieldMap=[DirectusWriteBinding(source="base.contract_company", target="firma",
+                                       resolve="company_directus_id")],
+        idField="it.directus_id")
+
+
+def test_build_payload_resolves_company_id():
+    spec = _resolve_spec()
+    companies = [{"name": "Alpha GmbH", "directus_firma_id": "42"},
+                 {"name": "Beta AG", "directus_firma_id": "7"}]
+    out = dwa.build_payload(spec, {"base.contract_company": "Beta AG"}, companies=companies)
+    assert out == {"firma": "7"}
+
+
+def test_build_payload_resolve_unknown_company_skips():
+    spec = _resolve_spec()
+    out = dwa.build_payload(spec, {"base.contract_company": "Gamma KG"},
+                            companies=[{"name": "Alpha GmbH", "directus_firma_id": "42"}])
+    assert out == {}
+
+
+def test_build_payload_resolve_company_without_id_skips():
+    spec = _resolve_spec()
+    out = dwa.build_payload(spec, {"base.contract_company": "Alpha GmbH"},
+                            companies=[{"name": "Alpha GmbH", "directus_firma_id": None}])
+    assert out == {}
+
+
 def test_create_stores_id():
     client = FakeClient(created={"id": 42})
     row = {"id": 1, "values": {"base.first_name": "Max"}}

@@ -164,9 +164,11 @@ function normDirectusWrite(v: any): DirectusWriteSpec | null {
   return {
     operation: (v.operation ?? 'create') as DirectusWriteSpec['operation'],
     collection: String(v.collection ?? ''),
-    fieldMap: arr(v.fieldMap).map((b: any) => ({
-      source: String(b?.source ?? ''), target: String(b?.target ?? ''),
-    })),
+    fieldMap: arr(v.fieldMap).map((b: any) => {
+      const bind: any = { source: String(b?.source ?? ''), target: String(b?.target ?? '') }
+      if (b?.resolve === 'company_directus_id') bind.resolve = 'company_directus_id'
+      return bind
+    }),
     idField: String(v.idField ?? ''),
   }
 }

@@ -52,7 +52,7 @@ class TestNormalizeCompany:
         assert normalize_company("  AlphaConsult  ") == {
             "name": "AlphaConsult", "pnr_from": None, "pnr_to": None,
             "pnr_current": None, "pnr_warned": False, "mandant": None,
-            "pnr_shared_with": None,
+            "pnr_shared_with": None, "directus_firma_id": None,
         }
 
     def test_full_dict_keeps_leading_zeros(self):
