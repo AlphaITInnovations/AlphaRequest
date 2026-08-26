@@ -17,6 +17,7 @@ import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
+import { departmentProgress, isDepartmentPending } from '@/lib/processDepartments'
 import * as ticketsApi from '@/api/processTickets'
 import { useAuthStore } from '@/stores/authStore'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
@@ -115,6 +116,23 @@ const focusDepartment = computed(() => {
   return (typeof v === 'string' && v) ? v : null
 })
 
+const istFachabteilungsPhase = computed(() => ticket.value?.responsibility?.kind === 'departments')
+
+/** Offene Fachabteilungen der aktuellen Phase, in denen ICH Mitglied bin
+ *  (abilities.completable_departments), optional auf die per URL aufgerufene
+ *  verengt. Der grüne Knopf unten schließt genau diese ab. */
+const meineOffeneAbteilungen = computed<string[]>(() => {
+  const t = ticket.value
+  const resp = t?.responsibility
+  if (!t || !resp || resp.kind !== 'departments') return []
+  const meine = new Set(t.abilities?.completable_departments ?? [])
+  const fokus = focusDepartment.value
+  return (resp.departments ?? [])
+    .filter((d) => isDepartmentPending(d) && meine.has(d.group))
+    .filter((d) => !fokus || d.group === fokus)
+    .map((d) => d.group)
+})
+
 /** Admin-Ansicht (?ansicht=admin, Einstieg über die Auftragsliste): Leseansicht
  *  PLUS Reparatur-Werkzeuge. Das isAdmin hier ist reine Anzeige – JEDER
  *  Admin-Endpunkt prüft die Rechte selbst und antwortet sonst mit 403. */
@@ -146,25 +164,10 @@ const phaseLabels = computed<Record<string, string>>(() => {
 /** Verlauf nach jeder Aktion neu laden (Referenz auf die Komponente). */
 const timeline = ref<{ reload: () => void } | null>(null)
 
-/** Terminal = abgelehnt/archiviert (Spiegel von process_tickets._is_terminal):
- *  dann gibt es nichts mehr zu quittieren. */
-const terminal = computed(() => {
-  const t = ticket.value
-  return !!t && (t.status === 'archived' || t.status === 'rejected' || !!t.runtime?.rejected)
-})
-
 /** Phasen mit view='export' zeigen die Druckansicht statt der Gesamtansicht. */
 const isExportPhase = computed(() => phase.value?.view === 'export')
 /** Dokument-Phase (view=document): Vertrag/Dokument aus Vorlage, Inline-Editor + Word-Export. */
 const isDocumentPhase = computed(() => phase.value?.view === 'document')
-
-/** Nach einer Fachabteilungs-Quittierung: Auftrag, Werte und Verlauf nachziehen –
- *  die Aktion kann den GANZEN Auftrag ablehnen (Status und Zuständigkeit ändern sich). */
-function onDepartmentsUpdated(next: ProcessTicketOut) {
-  ticket.value = next
-  values.value = { ...(next.values || {}) }
-  timeline.value?.reload()
-}
 
 const dirty = computed(() =>
   JSON.stringify(values.value) !== JSON.stringify(ticket.value?.values ?? {}))
@@ -251,6 +254,47 @@ async function advance() {
   } catch (e) {
     errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
     showToast(errorMessage(e, 'Weiterschalten fehlgeschlagen'), false)
+  } finally { busy.value = false }
+}
+
+/**
+ * Fachabteilungs-Phase: der grüne Knopf schließt die EIGENE Abteilung ab (die
+ * obere Fachabteilungs-Anzeige ist reine Info). Sind damit alle Pflicht-
+ * Abteilungen fertig, wird die Phase gleich weitergeschaltet – so muss niemand
+ * separat „abschließen". Danach zurück aufs Dashboard.
+ */
+async function fachabteilungAbschliessen() {
+  if (!definition.value || !meineOffeneAbteilungen.value.length) return
+  const shape = validateValues(definition.value, values.value)
+  if (shape.length) { errors.value = shape; showToast('Bitte Eingaben prüfen', false); return }
+  busy.value = true
+  try {
+    // Etwaige Feld-Eingaben der Abteilung zuerst sichern.
+    if (dirty.value) {
+      ticket.value = await ticketsApi.patchTicket(id.value, { values: values.value })
+      values.value = { ...(ticket.value.values || {}) }
+    }
+    // Eigene Abteilung(en) abschließen (i. d. R. genau eine).
+    for (const gid of meineOffeneAbteilungen.value) {
+      ticket.value = await ticketsApi.completeDepartment(id.value, gid, null)
+    }
+    errors.value = []
+    // War es die letzte Pflicht-Abteilung? Dann die Phase weiterschalten – aber
+    // BEST-EFFORT: scheitert das (z. B. an fehlenden Pflichtfeldern einer anderen
+    // Stelle), bleibt der eigene Abschluss trotzdem gültig und es geht zurück
+    // aufs Dashboard; der Phasen-Abschluss wird dann separat nachgeholt.
+    const resp = ticket.value?.responsibility
+    const deps = resp && resp.kind === 'departments' ? resp.departments : []
+    if (departmentProgress(deps).ready) {
+      try {
+        ticket.value = await ticketsApi.advanceTicket(id.value)
+      } catch { /* eigener Abschluss steht; Weiterschalten separat */ }
+    }
+    showToast('Fachabteilung abgeschlossen')
+    router.push('/dashboard')
+  } catch (e) {
+    errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
+    showToast(errorMessage(e, 'Abschließen fehlgeschlagen'), false)
   } finally { busy.value = false }
 }
 
@@ -391,13 +435,8 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                  in der Leseansicht und bei abgeschlossenen Aufträgen. -->
             <ProcessDepartments
               v-if="ticket.responsibility?.kind === 'departments'"
-              :ticket-id="ticket.id"
               :departments="ticket.responsibility.departments"
-              :group-name="groupName"
-              :terminal="terminal || (leseModus && !adminModus)"
-              :my-group-ids="ticket.abilities?.completable_departments ?? null"
-              :focus-department="focusDepartment"
-              @updated="onDepartmentsUpdated" />
+              :group-name="groupName" />
 
             <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
             <template v-if="abilities.edit && phase && !isExportPhase && !isDocumentPhase">
@@ -457,7 +496,16 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                            disabled:opacity-40 transition">
               Speichern &amp; später weiterbearbeiten
             </button>
-            <button @click="advance" :disabled="busy"
+            <!-- Fachabteilungs-Phase: der grüne Knopf schließt die EIGENE Abteilung
+                 ab (die Fachabteilungs-Anzeige oben ist reine Info). -->
+            <button v-if="istFachabteilungsPhase && meineOffeneAbteilungen.length"
+                    @click="fachabteilungAbschliessen" :disabled="busy"
+                    class="px-4 py-2 rounded-xl text-sm text-white bg-green-600 hover:bg-green-700
+                           disabled:opacity-40 transition">
+              Fachabteilung abschließen
+            </button>
+            <!-- Alle übrigen Phasen: normale Weitergabe/Abschluss. -->
+            <button v-else-if="!istFachabteilungsPhase" @click="advance" :disabled="busy"
                     class="px-4 py-2 rounded-xl text-sm text-white bg-green-600 hover:bg-green-700
                            disabled:opacity-40 transition">
               {{ weiterLabel }}
