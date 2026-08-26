@@ -5,7 +5,7 @@
  * Definition. Ablehnen, Zwangsabschluss, Wiederaufnahme und Löschen sind
  * Admin-Werkzeuge und leben im AdminActionsPanel (?ansicht=admin).
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
@@ -189,6 +189,13 @@ const generalErrors = computed(() => {
 const hatPflichtfehler = computed(() => {
   const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
   return errors.value.some((e) => fieldKeys.has(e.path))
+})
+
+// Bei fehlenden/roten Pflichtfeldern nach OBEN scrollen, damit der Hinweis-Banner
+// sichtbar wird (jeder Weitergeben-/Speichern-/Abschließen-Versuch setzt `errors`
+// neu, deshalb greift der Watch auch bei wiederholten Fehlversuchen).
+watch(errors, () => {
+  if (hatPflichtfehler.value) window.scrollTo({ top: 0, behavior: 'smooth' })
 })
 
 /** Nach Admin-Eingriffen: Auftrag UND Verlauf nachziehen. */
