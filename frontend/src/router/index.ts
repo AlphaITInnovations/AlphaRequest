@@ -24,6 +24,15 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Persönliches Archiv: alle Aufträge, an denen man je beteiligt war (jeder
+      // Status). Für ALLE – kein Rechte-Gate: der Server entscheidet je Auftrag,
+      // was sichtbar ist (may_view / archive_involved), und die Liste trägt keine
+      // Feldwerte.
+      path: '/archiv',
+      component: () => import('@/views/ArchiveView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       // Übersicht: alle Aufträge mit Suche, Filtern und Blätterung. NUR für die
       // Aufsichts-Rollen (Alt-System-Regel): viewer liest, manager darf
       // zusätzlich archivieren, admin alles. Alle anderen arbeiten über die

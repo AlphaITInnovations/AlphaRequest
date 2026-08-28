@@ -36,6 +36,7 @@ const isProzessTicketActive = computed(
 // Seite zu legen hatte beiden die Aussage genommen. In der Einzelansicht
 // (/prozess-auftraege/:id) leuchtet bewusst KEIN Menüpunkt.
 const isUebersichtActive = computed(() => route.path === '/dashboard')
+const isArchivActive = computed(() => route.path === '/archiv')
 const isAuftraegeActive = computed(() => route.path === '/auftraege')
 
 // „Alle Aufträge" ist eine Aufsichts-Seite (Alt-System-Regel): nur viewer/
@@ -179,6 +180,22 @@ defineProps<{ title?: string }>()
             <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6"/>
           </svg>
           <span v-if="sidebarOpen" class="truncate">Übersicht</span>
+        </a>
+
+        <!-- Archiv: für ALLE (kein Gate) – der Server entscheidet je Auftrag, was
+             sichtbar ist. Alle Aufträge, an denen man je beteiligt war. -->
+        <a @click.prevent="navigate('/archiv')"
+           href="/archiv"
+           class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
+           :class="[
+             isArchivActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
+             sidebarOpen ? '' : 'justify-center'
+           ]">
+          <div v-if="isArchivActive" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
+          <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
+          </svg>
+          <span v-if="sidebarOpen" class="truncate">Archiv</span>
         </a>
 
         <a v-if="hatAufsicht"

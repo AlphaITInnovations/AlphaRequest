@@ -501,6 +501,107 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
                                   user, group_ids))
 
 
+class ArchiveRow(BaseModel):
+    """Archiv-Zeile: bewusst OHNE Werte (§5.1) – nur Titel/Status/Phase/Datum."""
+    id: int
+    process_key: str
+    process_version: int
+    title: str
+    status: str
+    priority: str = "normal"
+    phase: Optional[str] = None
+    phase_label: Optional[str] = None
+    is_owner: bool = False
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class ArchivePage(BaseModel):
+    items: list[ArchiveRow] = []
+    total: int = 0
+    limit: int = 25
+    offset: int = 0
+    #: Scan-Obergrenze erreicht – die Liste ist evtl. NICHT vollständig (kein
+    #: stilles Kürzen: das Frontend weist darauf hin).
+    truncated: bool = False
+
+
+#: Harte Scan-Obergrenze fürs Archiv: die Beteiligungsprüfung läuft je Zeile in
+#: Python, deshalb wird nicht die ganze Tabelle geladen.
+_ARCHIVE_SCAN_CAP = 2000
+
+
+@router.get("/process-tickets/archive", response_model=DataResponse[ArchivePage])
+def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Query(None),
+                 limit: int = Query(25, ge=1, le=100), offset: int = Query(0, ge=0)):
+    """Persönliches Archiv: alle Aufträge (jeder Status), an denen die Person je
+    beteiligt war – Aufsicht · Ersteller:in · Beobachter:in · Mitglied einer je
+    zuständigen Gruppe/Fachabteilung (bedingte Regeln gegen die Werte geprüft).
+    Exaktes Paging über den GEFILTERTEN Satz. Keine Feldwerte (die gibt es nur in
+    der Detail-Ansicht, dort gefiltert)."""
+    uid = user.get("id")
+    gids = set(vis.user_group_ids(user))
+    oversight = acc.has_oversight(user)
+    watched: set = set()
+    if uid:
+        try:
+            watched = set(watchers.ticket_ids_for_watcher(uid))
+        except Exception:
+            logger.warning("Beobachtungen fürs Archiv nicht ladbar – fail-closed")
+
+    rows = store.list_all_lightweight(limit=_ARCHIVE_SCAN_CAP)
+    truncated = len(rows) >= _ARCHIVE_SCAN_CAP
+    if q:
+        ql = q.lower()
+        rows = [r for r in rows if ql in (r.get("title") or "").lower()]
+
+    defn_cache: dict = {}
+    included: set = set()
+    needs_values: list = []           # (row, defn) – bedingte Regel prüfen
+    for r in rows:
+        try:
+            defn = _load_pinned_defn(r, defn_cache)
+        except Exception:
+            defn = None
+        if oversight or (uid and r.get("owner_id") == uid) or (r["id"] in watched):
+            included.add(r["id"])
+            continue
+        if defn is None:
+            continue                  # kaputter Pin: default-deny (Aufsicht ist oben)
+        uncond, cond = acc.responsible_group_refs(defn)
+        if (gids & uncond) or acc.is_responsible(defn, r, user, gids):
+            included.add(r["id"])
+            continue
+        if any(g in gids for g, _w in cond):
+            needs_values.append((r, defn))
+
+    # Nur für die bedingten Kandidaten die Werte laden (eine Abfrage) und prüfen.
+    if needs_values:
+        vals = store.values_for_tickets([r["id"] for r, _ in needs_values])
+        for r, defn in needs_values:
+            if acc.archive_involved(defn, r, user, gids, values=vals.get(r["id"], {})):
+                included.add(r["id"])
+
+    filtered = [r for r in rows if r["id"] in included]   # bewahrt updated_at-DESC
+    total = len(filtered)
+    page = filtered[offset:offset + limit]
+    items: list[ArchiveRow] = []
+    for r in page:
+        defn = defn_cache.get((r["process_key"], r["process_version"]))
+        phase = pr.current_phase(defn, r.get("runtime") or {}) if defn else None
+        items.append(ArchiveRow(
+            id=r["id"], process_key=r["process_key"], process_version=r["process_version"],
+            title=r.get("title") or "", status=r["status"],
+            priority=r.get("priority") or "normal",
+            phase=phase.key if phase else None,
+            phase_label=(phase.label or phase.key) if phase else None,
+            is_owner=bool(uid and r.get("owner_id") == uid),
+            created_at=(r.get("created_at") or "")[:10],
+            updated_at=(r.get("updated_at") or "")[:10]))
+    return DataResponse(data=ArchivePage(items=items, total=total, limit=limit,
+                                         offset=offset, truncated=truncated))
+
+
 @router.get("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
 def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     row = store.get(ticket_id)
@@ -510,7 +611,15 @@ def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
-    gids = _assert_view(row, defn, user)
+    gids = vis.user_group_ids(user)
+    # Sehen darf: aktive Sicht (Aufsicht/Ersteller/Beobachter/aktuell zuständig)
+    # ODER Archiv-Beteiligung (Mitglied einer je zuständigen Gruppe; bedingte
+    # Fachabteilungen gegen die Werte geprüft) – so öffnen Archiv-Links auch
+    # ABGESCHLOSSENE Aufträge. Feld-Sichtbarkeit, Dokument-Gate und „kein Verlauf"
+    # bleiben: Verlauf-/Anhang-/Bearbeiten-Routen behalten das strenge _assert_view.
+    if not (acc.may_view(defn, row, user, gids, _watcher_ids(ticket_id))
+            or acc.archive_involved(defn, row, user, gids, values=row.get("values") or {})):
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
     return DataResponse(data=_out(row, defn,
                                   vis.build_viewer_ctx(user, row, defn, group_ids=gids),
                                   user, gids))

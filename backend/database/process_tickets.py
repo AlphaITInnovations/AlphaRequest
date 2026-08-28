@@ -289,6 +289,49 @@ def list_for_owner(owner_id: str, limit: int = 25, *, active_only: bool = True,
     return [_row_to_list_dict(r) for r in rows]
 
 
+def list_all_lightweight(limit: int = 2000, *, include_runtime: bool = True) -> list[dict]:
+    """ALLE Aufträge (jeder Status) leichtgewichtig (OHNE Werte), neueste zuerst –
+    Basis fürs persönliche Archiv. Die Beteiligungs-/Sichtbarkeitsprüfung läuft je
+    Zeile in Python, deshalb ein `limit` als harte Scan-Obergrenze (der Aufrufer
+    meldet, wenn sie greift – keine stille Kürzung)."""
+    cols = _LIST_COLS_RUNTIME if include_runtime else _LIST_COLS
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            f"SELECT {cols} FROM process_tickets ORDER BY updated_at DESC LIMIT %s",
+            (limit,),
+        )
+    finally:
+        conn.close()
+    return [_row_to_list_dict(r) for r in rows]
+
+
+def values_for_tickets(ids: list[int]) -> dict[int, dict]:
+    """Feldwerte für mehrere Aufträge in EINER Abfrage (id → values-dict) – für die
+    bedingte Beteiligungs-Prüfung im Archiv, damit nicht je Zeile geladen wird."""
+    ids = [int(i) for i in ids]
+    if not ids:
+        return {}
+    placeholders = ", ".join(["%s"] * len(ids))
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            f"SELECT id, values_json FROM process_tickets WHERE id IN ({placeholders})",
+            tuple(ids),
+        )
+    finally:
+        conn.close()
+    out: dict[int, dict] = {}
+    for r in rows:
+        try:
+            out[int(r["id"])] = json.loads(r["values_json"]) if r.get("values_json") else {}
+        except Exception:
+            out[int(r["id"])] = {}
+    return out
+
+
 def list_active(limit: int = 200, *, include_runtime: bool = True) -> list[dict]:
     """Nicht-terminale Aufträge (weder archiviert noch abgelehnt), neueste zuerst.
 

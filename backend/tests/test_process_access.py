@@ -138,3 +138,49 @@ def test_phasenwechsel_setzt_abteilungen_neu():
     # final-Phase hat keine Abteilungen → nichts blockiert
     assert pr.current_departments(rt) == []
     assert pr.departments_complete(rt) is True
+
+
+# ── Archiv-Beteiligung (persönliches Archiv, alle Status) ─────────────────────
+
+def _arch(status="archived", values=None):
+    return {"id": 9, "owner_id": "u_owner", "status": status,
+            "values": values or {}, "runtime": {}}
+
+
+def test_responsible_group_refs_trennt_bedingt():
+    uncond, cond = acc.responsible_group_refs(DEFN)
+    assert uncond == {"g_it", "g_opt", "g_lead"}
+    assert [g for g, _w in cond] == ["g_fp"]
+
+
+def test_archive_unbedingte_abteilung_sieht_alle_status_ohne_werte():
+    # g_it ist unbedingt zuständig → sieht auch abgeschlossene Aufträge, ohne Werte.
+    assert acc.archive_involved(DEFN, _arch(), IT, ["g_it"]) is True
+
+
+def test_archive_gruppen_phase_mitglied_sieht():
+    lead = {"id": "u_lead", "permissions": []}
+    assert acc.archive_involved(DEFN, _arch(), lead, ["g_lead"]) is True
+
+
+def test_archive_bedingte_abteilung_nur_wenn_bedingung_zutrifft():
+    fp = {"id": "u_fp", "permissions": []}
+    ja = _arch(values={"fuhrpark.car": "Ja"})
+    nein = _arch(values={"fuhrpark.car": "Nein"})
+    assert acc.archive_involved(DEFN, ja, fp, ["g_fp"], values=ja["values"]) is True
+    assert acc.archive_involved(DEFN, nein, fp, ["g_fp"], values=nein["values"]) is False
+    # Ohne Werte wird der bedingte Teil übersprungen (Endpunkt lädt sie nur bei Bedarf).
+    assert acc.archive_involved(DEFN, ja, fp, ["g_fp"], values=None) is False
+
+
+def test_archive_owner_beobachter_aufsicht():
+    assert acc.archive_involved(DEFN, _arch(), OWNER, []) is True
+    assert acc.archive_involved(DEFN, _arch(), FREMD, [], is_watcher=True) is True
+    assert acc.archive_involved(DEFN, _arch(), AUFSICHT, []) is True
+
+
+def test_archive_echte_unbeteiligte_abgelehnt():
+    assert acc.archive_involved(DEFN, _arch(), FREMD, ["g_andere"]) is False
+    # Nicht-Mitglied der bedingten Abteilung: auch bei zutreffender Bedingung nein.
+    ja = _arch(values={"fuhrpark.car": "Ja"})
+    assert acc.archive_involved(DEFN, ja, FREMD, ["g_andere"], values=ja["values"]) is False

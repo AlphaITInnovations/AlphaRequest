@@ -169,6 +169,12 @@ class FakeStore:
         rows = [dict(r) for r in self.rows.values()]
         return rows, len(rows)
 
+    def list_all_lightweight(self, limit=2000, include_runtime=True):
+        return [dict(r) for r in self.rows.values()][:limit]
+
+    def values_for_tickets(self, ids):
+        return {int(i): dict(self.rows[int(i)]["values"]) for i in ids if int(i) in self.rows}
+
 
 #: Wie DEFN, aber mit festem Titel (titleEditable=false – wie das Basis-Ticket).
 DEFN_FIXED = {**DEFN, "key": "fix", "titleEditable": False}
@@ -928,3 +934,52 @@ def test_unbekannte_prioritaet_wird_abgelehnt(client):
     assert r.json()["error"]["fields"][0]["path"] == "priority"
     # Der Auftrag ist unverändert.
     assert client.get(f"/process-tickets/{tid}").json()["data"]["priority"] == "normal"
+
+
+# ── Persönliches Archiv ───────────────────────────────────────────────────────
+
+def test_archive_admin_sees_all_and_pages(client):
+    for i in range(3):
+        client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": f"N{i}"}})
+    d = client.get("/process-tickets/archive?limit=2&offset=0").json()["data"]
+    assert d["total"] == 3 and len(d["items"]) == 2 and d["truncated"] is False
+    d2 = client.get("/process-tickets/archive?limit=2&offset=2").json()["data"]
+    assert len(d2["items"]) == 1
+
+
+def test_archive_list_department_member_vs_outsider(client, monkeypatch):
+    from backend.core.dependencies import get_current_user
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    # g_it ist unbedingte Fachabteilung des demo-Prozesses → Mitglied sieht ihn.
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
+                        lambda uid: ["g_it"] if uid == "u_it" else [])
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_it", "permissions": []}
+    d = client.get("/process-tickets/archive").json()["data"]
+    assert any(it["id"] == tid for it in d["items"])
+    # Echte Unbeteiligte sehen ihn NICHT.
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_out", "permissions": []}
+    d2 = client.get("/process-tickets/archive").json()["data"]
+    assert all(it["id"] != tid for it in d2["items"])
+
+
+def test_archive_detail_widening_but_no_history(client, monkeypatch):
+    import backend.api.v1.process_tickets as pt
+    from backend.core.dependencies import get_current_user
+    tid = client.post("/process-tickets",
+                      json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
+    client.post(f"/process-tickets/{tid}:advance")                    # → review (g_it)
+    client.post(f"/process-tickets/{tid}/departments/g_it:complete")  # Admin-Override
+    client.post(f"/process-tickets/{tid}:advance")                    # → archiviert
+    assert pt.store.rows[tid]["status"] == "archived"
+
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
+                        lambda uid: ["g_it"] if uid == "u_it" else [])
+    # g_it-Mitglied: darf das ARCHIVIERTE Ticket über die Archiv-Beteiligung öffnen …
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_it", "permissions": []}
+    assert client.get(f"/process-tickets/{tid}").status_code == 200
+    # … aber KEINEN Verlauf sehen (Events-Route bleibt streng: may_view, hier False).
+    assert client.get(f"/process-tickets/{tid}/events").status_code in (403, 404)
+    # Echte Unbeteiligte: 404 (verrät nicht mal die Existenz).
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_out", "permissions": []}
+    assert client.get(f"/process-tickets/{tid}").status_code == 404

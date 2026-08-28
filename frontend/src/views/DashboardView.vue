@@ -79,7 +79,7 @@ const rowsTotal = ref(0)
 
 // ── Reiter ────────────────────────────────────────────────────────────────────
 
-type Tab = 'assigned' | 'departments' | 'watched' | 'involved'
+type Tab = 'assigned' | 'departments' | 'watched'
 const activeTab = ref<Tab>('assigned')
 
 function selectTab(tab: Tab) {
@@ -221,12 +221,6 @@ const abteilungenMitAufgaben = computed(() =>
 
 const zeilenAssigned = computed(() => mirZugewiesen.value.map(zeileAusRow))
 
-const zeilenInvolved = computed(() =>
-  block.value.involved.map((o) => ({
-    ...zeileAusBlock(o),
-    badge: { text: 'Beteiligt', class: 'bg-[#3EAAB8]/15 text-[#3EAAB8] dark:bg-[#3EAAB8]/20' },
-  })))
-
 const zeilenWatched = computed(() =>
   block.value.watched.map((o) => ({
     ...zeileAusBlock(o),
@@ -235,9 +229,9 @@ const zeilenWatched = computed(() =>
 
 const zeilen = computed<Zeile[]>(() => {
   switch (activeTab.value) {
-    case 'assigned':    return zeilenAssigned.value
     case 'watched':     return zeilenWatched.value
-    default:            return zeilenInvolved.value
+    // 'departments' rendert über `anzeige` (gruppiert), nutzt `zeilen` nicht.
+    default:            return zeilenAssigned.value
   }
 })
 
@@ -275,7 +269,6 @@ const anzeige = computed<AnzeigeElement[]>(() => {
 
 const countAssigned    = computed(() => mirZugewiesen.value.length)
 const countDepartments = computed(() => meineAbteilungen.value.length)
-const countInvolved    = computed(() => block.value.involved.length)
 const countWatched     = computed(() => block.value.watched.length)
 const offeneAufgaben   = computed(() => countAssigned.value + countDepartments.value)
 
@@ -352,7 +345,6 @@ onMounted(async () => {
   if (countAssigned.value > 0) activeTab.value = 'assigned'
   else if (countDepartments.value > 0) activeTab.value = 'departments'
   else if (countWatched.value > 0) activeTab.value = 'watched'
-  else if (countInvolved.value > 0) activeTab.value = 'involved'
 })
 </script>
 
@@ -393,7 +385,7 @@ onMounted(async () => {
         <p v-if="blockError"
            class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50
                   dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-          {{ blockError }} – „Beobachtet“ und „Beteiligt“ sind unvollständig.
+          {{ blockError }} – die Liste „Beobachtet“ ist evtl. unvollständig.
         </p>
       </div>
 
@@ -447,21 +439,6 @@ onMounted(async () => {
           </p>
         </button>
 
-        <button @click="selectTab('involved')" class="stat" :class="activeTab === 'involved' ? 'stat-on' : ''">
-          <div class="flex items-center justify-between">
-            <span class="stat-icon bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-            </span>
-            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{{ countInvolved }}</span>
-          </div>
-          <p class="stat-label inline-flex items-center gap-1">
-            Beteiligt
-            <span class="hint" @click.stop>
-              <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
-              <span class="bubble">Aktive Aufträge anderer, die du sehen darfst – weil du zuständig bist oder Aufsichtsrecht hast. Beobachtete stehen in ihrer eigenen Kachel.</span>
-            </span>
-          </p>
-        </button>
       </div>
 
       <!-- ── Liste ── -->
@@ -544,8 +521,7 @@ onMounted(async () => {
             <li v-if="anzeige.length === 0" class="empty">
               <template v-if="activeTab === 'assigned'">Keine dir persönlich zugewiesenen Aufträge.</template>
               <template v-else-if="activeTab === 'departments'">Keine Aufträge für deine Fachabteilungen.</template>
-              <template v-else-if="activeTab === 'watched'">Du beobachtest gerade keinen Auftrag.</template>
-              <template v-else>Keine Aufträge, an denen du beteiligt bist.</template>
+              <template v-else>Du beobachtest gerade keinen Auftrag.</template>
             </li>
           </ul>
 

@@ -97,6 +97,60 @@ def is_process_staff(defn: Optional[ProcessDefinition], user: dict,
     return bool(set(group_ids or ()) & staff_groups(defn))
 
 
+def responsible_group_refs(defn: Optional[ProcessDefinition]) -> tuple[set, list]:
+    """(unbedingte Gruppen, bedingte Regeln) über ALLE Phasen.
+
+    unbedingt = immer zuständig (group-Phase oder departments-Regel ohne `when`).
+    bedingt   = Liste von (group, when) für bedingte departments-Regeln – erst
+    gegen die Auftragswerte auszuwerten. group_from_field bleibt außen vor (die
+    Gruppe steht erst zur Laufzeit im Auftrag, nicht in der Definition)."""
+    uncond: set = set()
+    cond: list = []
+    if defn is None:
+        return uncond, cond
+    for p in defn.phases:
+        r = p.responsibility
+        if r.kind == ResponsibilityKind.group and r.group:
+            uncond.add(r.group)
+        elif r.kind == ResponsibilityKind.departments:
+            for dr in r.rule:
+                if not dr.group:
+                    continue
+                if dr.when is None:
+                    uncond.add(dr.group)
+                else:
+                    cond.append((dr.group, dr.when))
+    return uncond, cond
+
+
+def archive_involved(defn: Optional[ProcessDefinition], row: dict, user: dict,
+                     group_ids: Iterable[str], *, is_watcher: bool = False,
+                     values: Optional[dict] = None) -> bool:
+    """War/ist der/die Nutzende an DIESEM Auftrag beteiligt – fürs persönliche
+    Archiv (ALLE Status). Aufsicht · Ersteller:in · Beobachter:in · Mitglied einer
+    Gruppe, die im Prozess zuständig ist. Bedingte Fachabteilungs-Regeln zählen nur,
+    wenn ihr `when` gegen `values` zutrifft (fehlt `values`, wird der bedingte Teil
+    übersprungen). Bewusst über die AKTUELLE Mitgliedschaft – neue Mitglieder sehen
+    die Vergangenheit. NICHT für aktive Bearbeitung/Verlauf gedacht (nur Lese-Archiv)."""
+    if has_oversight(user):
+        return True
+    uid = user.get("id")
+    if uid and row.get("owner_id") == uid:
+        return True
+    if is_watcher:
+        return True
+    gset = set(group_ids or ())
+    uncond, cond = responsible_group_refs(defn)
+    if gset & uncond:
+        return True
+    if cond and values is not None:
+        from backend.services.condition_dsl import evaluate
+        for grp, when in cond:
+            if grp in gset and evaluate(when, values):
+                return True
+    return False
+
+
 def is_responsible(defn: Optional[ProcessDefinition], row: dict, user: dict,
                    group_ids: Iterable[str]) -> bool:
     """Ist der/die Nutzende für die aktuelle Phase zuständig?"""
