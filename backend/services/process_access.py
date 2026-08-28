@@ -127,13 +127,17 @@ def archive_involved(defn: Optional[ProcessDefinition], row: dict, user: dict,
                      group_ids: Iterable[str], *, is_watcher: bool = False,
                      values: Optional[dict] = None) -> bool:
     """War/ist der/die Nutzende an DIESEM Auftrag beteiligt – fürs persönliche
-    Archiv (ALLE Status). Aufsicht · Ersteller:in · Beobachter:in · Mitglied einer
-    Gruppe, die im Prozess zuständig ist. Bedingte Fachabteilungs-Regeln zählen nur,
-    wenn ihr `when` gegen `values` zutrifft (fehlt `values`, wird der bedingte Teil
+    Archiv (ALLE Status). Ersteller:in · Beobachter:in · Mitglied einer Gruppe, die
+    im Prozess zuständig ist. Bedingte Fachabteilungs-Regeln zählen nur, wenn ihr
+    `when` gegen `values` zutrifft (fehlt `values`, wird der bedingte Teil
     übersprungen). Bewusst über die AKTUELLE Mitgliedschaft – neue Mitglieder sehen
-    die Vergangenheit. NICHT für aktive Bearbeitung/Verlauf gedacht (nur Lese-Archiv)."""
-    if has_oversight(user):
-        return True
+    die Vergangenheit.
+
+    BEWUSST OHNE Aufsichts-Kurzschluss: die Aufsichtsrolle (view/manage/admin) ist
+    Sache der Übersicht „Alle Aufträge", NICHT des persönlichen Archivs. Ein Admin
+    sieht im Archiv nur, woran er selbst beteiligt war. (Das Detail-Lesen erlaubt
+    der Aufsicht trotzdem der Zugriff – über may_view, nicht über diese Funktion.)
+    NICHT für aktive Bearbeitung/Verlauf gedacht (nur Lese-Archiv)."""
     uid = user.get("id")
     if uid and row.get("owner_id") == uid:
         return True

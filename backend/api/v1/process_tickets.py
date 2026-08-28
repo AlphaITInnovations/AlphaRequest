@@ -550,14 +550,17 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
                  status: Optional[str] = Query(None), process_key: Optional[str] = Query(None),
                  limit: int = Query(25, ge=1, le=100), offset: int = Query(0, ge=0)):
     """Persönliches Archiv: alle Aufträge (jeder Status), an denen die Person je
-    beteiligt war – Aufsicht · Ersteller:in · Beobachter:in · Mitglied einer je
-    zuständigen Gruppe/Fachabteilung (bedingte Regeln gegen die Werte geprüft).
+    beteiligt war – Ersteller:in · Beobachter:in · Mitglied einer je zuständigen
+    Gruppe/Fachabteilung (bedingte Regeln gegen die Werte geprüft). OHNE Aufsichts-
+    Kurzschluss: die Aufsichtsrolle gehört zur Übersicht „Alle Aufträge", nicht hierher.
     Filter: `q` (Titel), `status` (komma-separiert, mehrere möglich), `process_key`.
     Exaktes Paging über den GEFILTERTEN Satz. Keine Feldwerte (die gibt es nur in
     der Detail-Ansicht, dort gefiltert)."""
+    # Aufsichtsrolle (view/manage/admin) gilt NICHT im persönlichen Archiv – die
+    # ungefilterte Gesamtliste ist die Übersicht „Alle Aufträge". Hier zählt nur
+    # echte Beteiligung (Ersteller/Beobachter/zuständige Gruppe/Fachabteilung).
     uid = user.get("id")
     gids = set(vis.user_group_ids(user))
-    oversight = acc.has_oversight(user)
     watched: set = set()
     if uid:
         try:
@@ -589,7 +592,7 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
             defn = _load_pinned_defn(r, defn_cache)
         except Exception:
             defn = None
-        if oversight or (uid and r.get("owner_id") == uid) or (r["id"] in watched):
+        if (uid and r.get("owner_id") == uid) or (r["id"] in watched):
             included.add(r["id"])
             continue
         if defn is None:

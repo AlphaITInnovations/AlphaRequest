@@ -173,10 +173,16 @@ def test_archive_bedingte_abteilung_nur_wenn_bedingung_zutrifft():
     assert acc.archive_involved(DEFN, ja, fp, ["g_fp"], values=None) is False
 
 
-def test_archive_owner_beobachter_aufsicht():
+def test_archive_owner_und_beobachter():
     assert acc.archive_involved(DEFN, _arch(), OWNER, []) is True
     assert acc.archive_involved(DEFN, _arch(), FREMD, [], is_watcher=True) is True
-    assert acc.archive_involved(DEFN, _arch(), AUFSICHT, []) is True
+
+
+def test_archive_aufsicht_allein_zaehlt_nicht():
+    # Aufsicht/Admin ist Sache der Übersicht „Alle Aufträge", nicht des Archivs:
+    # ohne echte Beteiligung sehen sie hier nichts.
+    assert acc.archive_involved(DEFN, _arch(), AUFSICHT, []) is False
+    assert acc.archive_involved(DEFN, _arch(), ADMIN, []) is False
 
 
 def test_archive_echte_unbeteiligte_abgelehnt():
