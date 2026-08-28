@@ -66,7 +66,11 @@ const bis = computed(() => Math.min(offset.value + PAGE, total.value))
 const hatVor = computed(() => offset.value > 0)
 const hatWeiter = computed(() => offset.value + PAGE < total.value)
 
+// Anti-Stale-Guard: bei schnellem Wechsel (Scope/Filter) dürfen überholte
+// Antworten die neueren nicht überschreiben.
+let reqSeq = 0
 async function load() {
+  const mine = ++reqSeq
   loading.value = true
   try {
     const page = await listArchive({
@@ -76,15 +80,17 @@ async function load() {
       process_key: processKey.value || undefined,
       limit: PAGE, offset: offset.value,
     })
+    if (mine !== reqSeq) return
     items.value = page.items
     total.value = page.total
     truncated.value = page.truncated
   } catch (e) {
+    if (mine !== reqSeq) return
     showToast(errorMessage(e, 'Archiv konnte nicht geladen werden'), false)
     items.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    if (mine === reqSeq) loading.value = false
   }
 }
 
@@ -107,6 +113,16 @@ watch(q, () => {
 })
 // Status/Prozess: sofort neu laden (zurück auf Seite 1).
 watch([statuses, processKey], () => { offset.value = 0; load() })
+// Reichweite gewechselt (persönlich ↔ global): Vue Router verwendet DIESELBE
+// Komponente wieder, onMounted läuft nicht erneut. Beide Archive sind unabhängig →
+// Filter/Seite zurücksetzen und mit dem neuen Scope frisch laden.
+watch(() => props.scope, () => {
+  statuses.value = []
+  processKey.value = ''
+  q.value = ''
+  offset.value = 0
+  load()
+})
 
 onMounted(async () => {
   // Prozess-Dropdown befüllen (fail-soft: ohne Katalog bleibt nur „Alle Prozesse").
