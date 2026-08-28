@@ -13,6 +13,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/authStore'
 import { listArchive, type ArchiveRow } from '@/api/archive'
 import { listProcesses } from '@/api/processes'
 import { STATUS_LABEL } from '@/lib/processSchema'
@@ -23,6 +24,7 @@ const isGlobal = computed(() => props.scope === 'global')
 
 const router = useRouter()
 const { showToast } = useToast()
+const auth = useAuthStore()
 
 const PAGE = 25
 const items = ref<ArchiveRow[]>([])
@@ -87,8 +89,11 @@ async function load() {
 }
 
 function open(row: ArchiveRow) {
-  // Archiv = Lesen. Rechte vergibt der Parameter nicht (der Server prüft je Auftrag).
-  router.push(`/prozess-auftraege/${row.id}?ansicht=lesen`)
+  // Archiv = Lesen. Im GLOBALEN Archiv öffnen Admins die Admin-Ansicht (Lesen +
+  // Reparatur-Werkzeuge), viewer/manager die normale Leseansicht (wie das alte
+  // „Alle Aufträge"). Rechte vergibt der Parameter nicht – der Server prüft je Auftrag.
+  const ansicht = isGlobal.value && auth.isAdmin ? 'admin' : 'lesen'
+  router.push(`/prozess-auftraege/${row.id}?ansicht=${ansicht}`)
 }
 
 function vor() { if (hatVor.value) { offset.value = Math.max(0, offset.value - PAGE); load() } }
