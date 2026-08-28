@@ -978,8 +978,11 @@ def test_archive_detail_widening_but_no_history(client, monkeypatch):
     # g_it-Mitglied: darf das ARCHIVIERTE Ticket über die Archiv-Beteiligung öffnen …
     client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_it", "permissions": []}
     assert client.get(f"/process-tickets/{tid}").status_code == 200
+    # Die Definition MUSS mitkommen – sonst bricht die Leseansicht (braucht beide).
+    assert client.get(f"/process-tickets/{tid}/definition").status_code == 200
     # … aber KEINEN Verlauf sehen (Events-Route bleibt streng: may_view, hier False).
     assert client.get(f"/process-tickets/{tid}/events").status_code in (403, 404)
-    # Echte Unbeteiligte: 404 (verrät nicht mal die Existenz).
+    # Echte Unbeteiligte: 404 (verrät nicht mal die Existenz) – Detail UND Definition.
     client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_out", "permissions": []}
     assert client.get(f"/process-tickets/{tid}").status_code == 404
+    assert client.get(f"/process-tickets/{tid}/definition").status_code == 404

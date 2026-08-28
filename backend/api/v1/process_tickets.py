@@ -326,6 +326,20 @@ def _assert_view(row: dict, defn, user: dict) -> list:
     return gids
 
 
+def _assert_view_or_archive(row: dict, defn, user: dict) -> list:
+    """Lesen für Detail UND gepinnte Definition: aktive Sicht ODER Archiv-
+    Beteiligung (Mitglied einer je zuständigen Gruppe/Fachabteilung, bedingte gegen
+    die Werte geprüft). Bewusst breiter als _assert_view, damit Archiv-Links auch
+    abgeschlossene Aufträge öffnen. Verlauf/Events, Anhänge und Bearbeiten bleiben
+    beim strengen _assert_view. Die gelieferten Feldwerte filtert weiterhin die
+    Feld-Sichtbarkeit; die Definition trägt ohnehin keine Werte."""
+    gids = vis.user_group_ids(user)
+    if (acc.may_view(defn, row, user, gids, _watcher_ids(row["id"]))
+            or acc.archive_involved(defn, row, user, gids, values=row.get("values") or {})):
+        return gids
+    raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+
+
 def _assert_edit(row: dict, defn, user: dict) -> list:
     """Zusätzlich: nur die aktuell zuständige Stelle (und Admin) darf eingreifen."""
     gids = _assert_view(row, defn, user)
@@ -549,8 +563,11 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
         except Exception:
             logger.warning("Beobachtungen fürs Archiv nicht ladbar – fail-closed")
 
-    rows = store.list_all_lightweight(limit=_ARCHIVE_SCAN_CAP)
-    truncated = len(rows) >= _ARCHIVE_SCAN_CAP
+    # Eine Zeile MEHR holen, um „genau cap" (vollständig) von „> cap" (gekürzt) zu
+    # unterscheiden – sonst meldete es bei exakt cap Aufträgen fälschlich truncated.
+    rows = store.list_all_lightweight(limit=_ARCHIVE_SCAN_CAP + 1)
+    truncated = len(rows) > _ARCHIVE_SCAN_CAP
+    rows = rows[:_ARCHIVE_SCAN_CAP]
     if q:
         ql = q.lower()
         rows = [r for r in rows if ql in (r.get("title") or "").lower()]
@@ -611,15 +628,9 @@ def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
-    gids = vis.user_group_ids(user)
-    # Sehen darf: aktive Sicht (Aufsicht/Ersteller/Beobachter/aktuell zuständig)
-    # ODER Archiv-Beteiligung (Mitglied einer je zuständigen Gruppe; bedingte
-    # Fachabteilungen gegen die Werte geprüft) – so öffnen Archiv-Links auch
-    # ABGESCHLOSSENE Aufträge. Feld-Sichtbarkeit, Dokument-Gate und „kein Verlauf"
-    # bleiben: Verlauf-/Anhang-/Bearbeiten-Routen behalten das strenge _assert_view.
-    if not (acc.may_view(defn, row, user, gids, _watcher_ids(ticket_id))
-            or acc.archive_involved(defn, row, user, gids, values=row.get("values") or {})):
-        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    # Aktive Sicht ODER Archiv-Beteiligung – so öffnen Archiv-Links auch
+    # abgeschlossene Aufträge (Feld-Sichtbarkeit/Dokument-Gate greifen weiter).
+    gids = _assert_view_or_archive(row, defn, user)
     return DataResponse(data=_out(row, defn,
                                   vis.build_viewer_ctx(user, row, defn, group_ids=gids),
                                   user, gids))
@@ -641,7 +652,9 @@ def get_pinned_definition(ticket_id: int, user: dict = Depends(get_current_user)
         defn = _load_pinned_defn(row)
     except Exception:
         defn = None
-    _assert_view(row, defn, user)
+    # Companion zum aufgeweiteten Detail-GET: wer den Auftrag (auch übers Archiv)
+    # sehen darf, darf auch seine Struktur laden – sonst bricht die Leseansicht.
+    _assert_view_or_archive(row, defn, user)
     if defn is None:
         raise api_error(500, "PROCESS_DEFINITION_MISSING",
                         f"Gepinnte Definition {row['process_key']} "

@@ -299,7 +299,10 @@ def list_all_lightweight(limit: int = 2000, *, include_runtime: bool = True) -> 
     try:
         rows = _fetchall(
             conn,
-            f"SELECT {cols} FROM process_tickets ORDER BY updated_at DESC LIMIT %s",
+            # id als eindeutiger Tiebreaker: bei gleicher updated_at (1s-Auflösung,
+            # z. B. Seed/Import) sonst keine stabile Reihenfolge → flackernde
+            # Seiten/Scan-Grenze im Archiv.
+            f"SELECT {cols} FROM process_tickets ORDER BY updated_at DESC, id DESC LIMIT %s",
             (limit,),
         )
     finally:
