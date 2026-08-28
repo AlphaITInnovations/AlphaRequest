@@ -114,12 +114,27 @@ onMounted(async () => {
       <div class="flex items-end justify-between gap-3 flex-wrap mb-4">
         <div>
           <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100">Archiv</h1>
-          <p class="text-sm text-gray-500 dark:text-gray-400">
-            Alle Aufträge, an denen du beteiligt warst – auch abgeschlossene.
-          </p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">Deine Auftrags-Historie.</p>
         </div>
         <input v-model="q" type="search" placeholder="Nach Titel suchen…"
                class="afi w-full sm:w-64" />
+      </div>
+
+      <!-- Kompakte Info: welche Aufträge hier erscheinen. -->
+      <div class="mb-4 rounded-xl border border-gray-200/80 dark:border-white/[0.09]
+                  bg-gray-50 dark:bg-white/[0.03] px-4 py-2.5 flex items-start gap-2">
+        <svg class="w-4 h-4 flex-shrink-0 text-[#3EAAB8] mt-0.5" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/>
+          <line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/>
+        </svg>
+        <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+          Hier stehen alle Aufträge, an denen <strong>du</strong> beteiligt warst – als
+          <strong>Ersteller:in</strong>, <strong>Beobachter:in</strong>,
+          <strong>zuständige Stelle</strong> oder als Mitglied einer beteiligten
+          <strong>Fachabteilung</strong> (auch rückwirkend). Du siehst nur die Abschnitte,
+          für die du berechtigt bist.
+        </p>
       </div>
 
       <!-- Filter wie „Alle Aufträge": Status-Chips (keiner aktiv = alle) + Prozess. -->
