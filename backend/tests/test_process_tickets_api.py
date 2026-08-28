@@ -1003,3 +1003,17 @@ def test_archive_filters_status_and_process(client):
     # Prozess-Filter.
     assert {a, b} <= {it["id"] for it in client.get("/process-tickets/archive?process_key=demo").json()["data"]["items"]}
     assert client.get("/process-tickets/archive?process_key=gibtsnicht").json()["data"]["total"] == 0
+
+
+def test_archive_global_scope_requires_oversight(client):
+    from backend.core.dependencies import get_current_user
+    for i in range(2):
+        client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": f"N{i}"}})
+    # Aufsicht (Admin-Fixture) sieht im globalen Archiv ALLES.
+    d = client.get("/process-tickets/archive?scope=all").json()["data"]
+    assert d["total"] == 2
+    # Ohne Aufsicht: globales Archiv verboten (403) …
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_norm", "permissions": []}
+    assert client.get("/process-tickets/archive?scope=all").status_code == 403
+    # … das persönliche Archiv bleibt für alle offen.
+    assert client.get("/process-tickets/archive").status_code == 200

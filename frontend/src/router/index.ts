@@ -33,14 +33,14 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      // Übersicht: alle Aufträge mit Suche, Filtern und Blätterung. NUR für die
-      // Aufsichts-Rollen (Alt-System-Regel): viewer liest, manager darf
-      // zusätzlich archivieren, admin alles. Alle anderen arbeiten über die
-      // Startseite (/dashboard). Das Gate hier ist Komfort – die Daten schützt
-      // der Server ohnehin pro Auftrag (may_view), die Liste zeigte einem
-      // normalen User nie mehr als seine eigenen.
+      // Globales Archiv: ALLE Aufträge (jeder Status), gleiche Struktur/UI wie das
+      // persönliche Archiv (dieselbe ArchiveView, scope=global). NUR für die
+      // Aufsichts-Rollen (viewer/manager/admin); der Endpunkt prüft die Rolle
+      // zusätzlich (scope=all → 403 ohne Aufsicht). Feld-Sichtbarkeit greift auch
+      // hier pro Auftrag.
       path: '/auftraege',
-      component: () => import('@/views/OverviewView.vue'),
+      component: () => import('@/views/ArchiveView.vue'),
+      props: { scope: 'global' },
       meta: { requiresAuth: true, requiresPermission: ['view', 'manage', 'admin'] },
     },
 

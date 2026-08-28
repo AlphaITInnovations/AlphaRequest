@@ -195,7 +195,7 @@ defineProps<{ title?: string }>()
           <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
           </svg>
-          <span v-if="sidebarOpen" class="truncate">Archiv</span>
+          <span v-if="sidebarOpen" class="truncate">Persönliches Archiv</span>
         </a>
 
         <a v-if="hatAufsicht"
@@ -211,7 +211,7 @@ defineProps<{ title?: string }>()
             <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
           </svg>
-          <span v-if="sidebarOpen" class="truncate">Alle Aufträge</span>
+          <span v-if="sidebarOpen" class="truncate">Globales Archiv</span>
         </a>
 
         <!-- Admin -->

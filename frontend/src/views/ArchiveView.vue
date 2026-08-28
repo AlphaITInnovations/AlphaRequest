@@ -18,6 +18,9 @@ import { listProcesses } from '@/api/processes'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { errorMessage } from '@/lib/processErrors'
 
+const props = withDefaults(defineProps<{ scope?: 'mine' | 'global' }>(), { scope: 'mine' })
+const isGlobal = computed(() => props.scope === 'global')
+
 const router = useRouter()
 const { showToast } = useToast()
 
@@ -65,6 +68,7 @@ async function load() {
   loading.value = true
   try {
     const page = await listArchive({
+      scope: props.scope,
       q: q.value.trim() || undefined,
       status: statuses.value.length ? statuses.value : undefined,
       process_key: processKey.value || undefined,
@@ -113,8 +117,12 @@ onMounted(async () => {
     <div class="max-w-5xl mx-auto px-4 py-6">
       <div class="flex items-end justify-between gap-3 flex-wrap mb-4">
         <div>
-          <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100">Archiv</h1>
-          <p class="text-sm text-gray-500 dark:text-gray-400">Deine Auftrags-Historie.</p>
+          <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100">
+            {{ isGlobal ? 'Globales Archiv' : 'Persönliches Archiv' }}
+          </h1>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            {{ isGlobal ? 'Alle Aufträge im System.' : 'Deine Auftrags-Historie.' }}
+          </p>
         </div>
         <input v-model="q" type="search" placeholder="Nach Titel suchen…"
                class="afi w-full sm:w-64" />
@@ -128,7 +136,11 @@ onMounted(async () => {
           <circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/>
           <line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/>
         </svg>
-        <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+        <p v-if="isGlobal" class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+          <strong>Alle Aufträge im System</strong> (Aufsicht). Du siehst nur die Abschnitte,
+          für die du berechtigt bist – die Feld-Sichtbarkeit gilt auch hier.
+        </p>
+        <p v-else class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
           Hier stehen alle Aufträge, an denen <strong>du</strong> beteiligt warst – als
           <strong>Ersteller:in</strong>, <strong>Beobachter:in</strong>,
           <strong>zuständige Stelle</strong> oder als Mitglied einer beteiligten
@@ -169,7 +181,8 @@ onMounted(async () => {
 
       <template v-else>
         <p v-if="!items.length" class="text-sm text-gray-400 italic py-10 text-center">
-          {{ hatFilter ? 'Keine Treffer für diese Filter.' : 'Du warst bisher an keinem Auftrag beteiligt.' }}
+          {{ hatFilter ? 'Keine Treffer für diese Filter.'
+             : (isGlobal ? 'Noch keine Aufträge im System.' : 'Du warst bisher an keinem Auftrag beteiligt.') }}
         </p>
 
         <ul v-else class="flex flex-col gap-2">

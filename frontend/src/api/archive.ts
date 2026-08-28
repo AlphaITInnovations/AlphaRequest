@@ -33,9 +33,14 @@ export interface ArchivePage {
 }
 
 export async function listArchive(
-  params: { q?: string; status?: string[]; process_key?: string; limit?: number; offset?: number } = {},
+  params: {
+    q?: string; status?: string[]; process_key?: string
+    scope?: 'mine' | 'global'; limit?: number; offset?: number
+  } = {},
 ): Promise<ArchivePage> {
-  const { status, ...rest } = params
+  const { status, scope, ...rest } = params
+  // Backend erwartet scope=all fürs globale Archiv (Aufsicht); Default = persönlich.
+  if (scope === 'global') (rest as Record<string, unknown>).scope = 'all'
   const query: Record<string, unknown> = { ...rest }
   // Mehrere Status komma-separiert (der Server splittet) – vermeidet die
   // uneinheitliche Array-Serialisierung von axios.

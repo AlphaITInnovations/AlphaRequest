@@ -548,21 +548,27 @@ _ARCHIVE_SCAN_CAP = 2000
 @router.get("/process-tickets/archive", response_model=DataResponse[ArchivePage])
 def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Query(None),
                  status: Optional[str] = Query(None), process_key: Optional[str] = Query(None),
-                 limit: int = Query(25, ge=1, le=100), offset: int = Query(0, ge=0)):
-    """Persönliches Archiv: alle Aufträge (jeder Status), an denen die Person je
-    beteiligt war – Ersteller:in · Beobachter:in · Mitglied einer je zuständigen
-    Gruppe/Fachabteilung (bedingte Regeln gegen die Werte geprüft). OHNE Aufsichts-
-    Kurzschluss: die Aufsichtsrolle gehört zur Übersicht „Alle Aufträge", nicht hierher.
-    Filter: `q` (Titel), `status` (komma-separiert, mehrere möglich), `process_key`.
-    Exaktes Paging über den GEFILTERTEN Satz. Keine Feldwerte (die gibt es nur in
-    der Detail-Ansicht, dort gefiltert)."""
-    # Aufsichtsrolle (view/manage/admin) gilt NICHT im persönlichen Archiv – die
-    # ungefilterte Gesamtliste ist die Übersicht „Alle Aufträge". Hier zählt nur
-    # echte Beteiligung (Ersteller/Beobachter/zuständige Gruppe/Fachabteilung).
+                 scope: str = Query("mine"), limit: int = Query(25, ge=1, le=100),
+                 offset: int = Query(0, ge=0)):
+    """Archiv (jeder Status), gleiche Struktur für zwei Reichweiten:
+
+    - `scope=mine` (Default): PERSÖNLICH – nur Aufträge, an denen die Person je
+      beteiligt war (Ersteller:in · Beobachter:in · Mitglied einer je zuständigen
+      Gruppe/Fachabteilung; bedingte Regeln gegen die Werte geprüft). OHNE
+      Aufsichts-Kurzschluss.
+    - `scope=all`: GLOBAL – alle Aufträge. Verlangt eine Aufsichtsrolle
+      (view/manage/admin), sonst 403.
+
+    Filter: `q` (Titel), `status` (komma-separiert), `process_key`. Exaktes Paging
+    über den gefilterten Satz. Keine Feldwerte (die gibt es nur im Detail, gefiltert)."""
+    global_scope = scope == "all"
+    if global_scope and not acc.has_oversight(user):
+        raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
+                        "Das globale Archiv ist der Aufsicht vorbehalten")
     uid = user.get("id")
     gids = set(vis.user_group_ids(user))
     watched: set = set()
-    if uid:
+    if uid and not global_scope:
         try:
             watched = set(watchers.ticket_ids_for_watcher(uid))
         except Exception:
@@ -585,38 +591,44 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
         rows = [r for r in rows if r.get("process_key") == process_key]
 
     defn_cache: dict = {}
-    included: set = set()
-    needs_values: list = []           # (row, defn) – bedingte Regel prüfen
-    for r in rows:
-        try:
-            defn = _load_pinned_defn(r, defn_cache)
-        except Exception:
-            defn = None
-        if (uid and r.get("owner_id") == uid) or (r["id"] in watched):
-            included.add(r["id"])
-            continue
-        if defn is None:
-            continue                  # kaputter Pin: default-deny (Aufsicht ist oben)
-        uncond, cond = acc.responsible_group_refs(defn)
-        if (gids & uncond) or acc.is_responsible(defn, r, user, gids):
-            included.add(r["id"])
-            continue
-        if any(g in gids for g, _w in cond):
-            needs_values.append((r, defn))
-
-    # Nur für die bedingten Kandidaten die Werte laden (eine Abfrage) und prüfen.
-    if needs_values:
-        vals = store.values_for_tickets([r["id"] for r, _ in needs_values])
-        for r, defn in needs_values:
-            if acc.archive_involved(defn, r, user, gids, values=vals.get(r["id"], {})):
+    if global_scope:
+        # Aufsicht sieht ALLES – keine Beteiligungsprüfung.
+        included: set = {r["id"] for r in rows}
+    else:
+        included = set()
+        needs_values: list = []       # (row, defn) – bedingte Regel prüfen
+        for r in rows:
+            try:
+                defn = _load_pinned_defn(r, defn_cache)
+            except Exception:
+                defn = None
+            if (uid and r.get("owner_id") == uid) or (r["id"] in watched):
                 included.add(r["id"])
+                continue
+            if defn is None:
+                continue              # kaputter Pin: default-deny
+            uncond, cond = acc.responsible_group_refs(defn)
+            if (gids & uncond) or acc.is_responsible(defn, r, user, gids):
+                included.add(r["id"])
+                continue
+            if any(g in gids for g, _w in cond):
+                needs_values.append((r, defn))
+        # Nur für die bedingten Kandidaten die Werte laden (eine Abfrage) und prüfen.
+        if needs_values:
+            vals = store.values_for_tickets([r["id"] for r, _ in needs_values])
+            for r, defn in needs_values:
+                if acc.archive_involved(defn, r, user, gids, values=vals.get(r["id"], {})):
+                    included.add(r["id"])
 
     filtered = [r for r in rows if r["id"] in included]   # bewahrt updated_at-DESC
     total = len(filtered)
     page = filtered[offset:offset + limit]
     items: list[ArchiveRow] = []
     for r in page:
-        defn = defn_cache.get((r["process_key"], r["process_version"]))
+        try:
+            defn = _load_pinned_defn(r, defn_cache)       # on demand (global: erst hier)
+        except Exception:
+            defn = None
         phase = pr.current_phase(defn, r.get("runtime") or {}) if defn else None
         items.append(ArchiveRow(
             id=r["id"], process_key=r["process_key"], process_version=r["process_version"],
