@@ -24,8 +24,20 @@ export async function listTickets(
   return { items: data.data, total: data.meta?.total ?? data.data.length }
 }
 
-export async function getTicket(id: number): Promise<ProcessTicketOut> {
-  const { data } = await client.get(`/process-tickets/${id}`)
+/**
+ * Einen Auftrag laden. `view`/`department` steuern serverseitig die FELD-Sicht
+ * nach Entry-Modus (nicht den Zugriff): `view=admin` (nur Admin) zeigt alles,
+ * `view=department` mit `department`=Gruppe nur Basis + genau diese Fachabteilung
+ * (für alle gleich), sonst die normale Sicht ohne Admin-Gottmodus.
+ */
+export async function getTicket(
+  id: number,
+  opts: { view?: 'admin' | 'department'; department?: string } = {},
+): Promise<ProcessTicketOut> {
+  const params: Record<string, string> = {}
+  if (opts.view) params.view = opts.view
+  if (opts.department) params.department = opts.department
+  const { data } = await client.get(`/process-tickets/${id}`, { params })
   return data.data
 }
 

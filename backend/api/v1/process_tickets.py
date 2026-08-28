@@ -249,6 +249,38 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
     return ProcessTicketOut(**data)
 
 
+def _view_ctx(row: dict, defn, user: dict, gids, view: Optional[str],
+              department: Optional[str]) -> vis.ViewerCtx:
+    """Feld-Sicht nach ENTRY-Modus, nicht nur nach Rolle (bewusst entkoppelt):
+
+    - `view=admin` (nur Admin): voller Blick – der EINZIGE Ort, an dem der Admin
+      wirklich ALLE Felder sieht.
+    - `view=department` (Fachabteilungs-Link, `department`=Gruppe): NUR Basis +
+      genau diese Fachabteilung – für jede:n gleich, damit die Abteilungsansicht
+      über Nutzer/Gruppen hinweg identisch aussieht. Scope-DOWN: die Abteilungs-
+      felder gibt es nur, wenn man WIRKLICH Mitglied dieser Gruppe ist (sonst nur
+      Basis). Der Link weitet NIE über die echte Berechtigung hinaus aus.
+    - sonst (Normal/Lesen): die eigene Sicht OHNE reinen Admin-Bonus – view/manage-
+      Aufsicht, Owner- und Phasen-Vollsicht bleiben, der Admin-Gottmodus nicht.
+    """
+    gset = set(gids or ())
+    if view == "admin" and acc.is_admin(user):
+        return vis.build_viewer_ctx(user, row, defn, group_ids=gset)
+    if view == "department" and department:
+        return vis.ViewerCtx(full_view=False, is_admin=False,
+                             group_ids=(gset & {department}))
+    return _read_ctx(user, row, defn, gset)
+
+
+def _read_ctx(user: dict, row: dict, defn, gids=None) -> vis.ViewerCtx:
+    """Sicht für ALLE Antwort-Objekte AUSSERHALB der ausdrücklichen Admin-Ansicht
+    (Liste, Mutationen, Erstellen). Der reine Admin-Bonus bleibt hier IMMER aus –
+    alle Felder zeigt einzig der Detail-GET mit ?view=admin. Für Nicht-Admins ein
+    No-Op (view/manage-Aufsicht, Owner- und Phasen-Vollsicht bleiben). BEWUSST NICHT
+    im Dokument-Export (_docx_fill_prep) – das ist ein eigenes, ungefiltertes Gate."""
+    return vis.build_viewer_ctx(user, row, defn, group_ids=gids, suppress_admin=True)
+
+
 def _actor_name(user: dict) -> str:
     return user.get("displayName") or user.get("email") or user.get("id") or "System"
 
@@ -387,7 +419,7 @@ def list_process_tickets(
         if not oversight and not acc.may_view(d, r, user, gids, watch_map.get(r["id"], ())):
             hidden += 1
             continue
-        out.append(_out(r, d, vis.build_viewer_ctx(user, r, d, group_ids=gids),
+        out.append(_out(r, d, _read_ctx(user, r, d, gids),
                         user, gids))
     return ListResponse(data=out,
                         meta=Meta(total=max(0, total - hidden), limit=limit, offset=offset))
@@ -440,7 +472,7 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     # ihre bedingten Fachabteilungen korrekt bestimmen.
     provisional = {"owner_id": user.get("id"), "status": "in_progress",
                    "runtime": pr.initial_runtime(defn, now), "values": {}}
-    ctx = vis.build_viewer_ctx(user, provisional, defn)
+    ctx = _read_ctx(user, provisional, defn)
     try:
         values = vis.apply_writes(defn, start_phase, {}, submitted, ctx)
     except vis.AppendOnlyViolation as exc:
@@ -487,7 +519,7 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         # on_enter-auto_advance sofort und die Mail ginge ohne Anhänge raus.
         # :advance prüft die Pflichtangaben erneut, bevor es weiterschaltet.
         _safe_restamp(row, defn)
-        return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn),
+        return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn),
                                       user, group_ids))
     # Ein `auto_advance` aus den on_enter-Automationen wurde hier bisher
     # STILLSCHWEIGEND verworfen (der Rückgabewert wurde ignoriert). Prozesse, die
@@ -511,7 +543,7 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
             raise _sequence_error(exc)
     else:
         _safe_restamp(row, defn)
-    return DataResponse(data=_out(row, defn, vis.build_viewer_ctx(user, row, defn),
+    return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn),
                                   user, group_ids))
 
 
@@ -644,7 +676,13 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
 
 
 @router.get("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
-def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
+def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user),
+                       view: Optional[str] = Query(None),
+                       department: Optional[str] = Query(None)):
+    """`view`/`department` steuern die FELD-Sicht nach Entry-Modus (siehe
+    `_view_ctx`) – NICHT den Zugriff: den prüft `_assert_view_or_archive`
+    unverändert. So sieht der Admin nur in der Admin-Ansicht alles, und der
+    Fachabteilungs-Link zeigt für alle nur Basis + die eine Abteilung."""
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
@@ -655,9 +693,8 @@ def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     # Aktive Sicht ODER Archiv-Beteiligung – so öffnen Archiv-Links auch
     # abgeschlossene Aufträge (Feld-Sichtbarkeit/Dokument-Gate greifen weiter).
     gids = _assert_view_or_archive(row, defn, user)
-    return DataResponse(data=_out(row, defn,
-                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
-                                  user, gids))
+    ctx = _view_ctx(row, defn, user, gids, view, department)
+    return DataResponse(data=_out(row, defn, ctx, user, gids))
 
 
 @router.get("/process-tickets/{ticket_id}/definition")
@@ -977,7 +1014,7 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     gids = _assert_edit(row, defn, user)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Ticket ist abgeschlossen/abgelehnt")
-    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
+    ctx = _read_ctx(user, row, defn, gids)
     phase = pr.current_phase(defn, row["runtime"])
     if phase is None:
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Keine aktive Phase")
@@ -1111,7 +1148,7 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
         raise _sequence_error(exc)
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
-                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  _read_ctx(user, row, defn, gids),
                                   user, gids))
 
 
@@ -1182,7 +1219,7 @@ def reject_process_ticket(ticket_id: int, body: RejectRequest,
     _melde_ablehnung(row, defn, grund, _actor_name(user))
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
-                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  _read_ctx(user, row, defn, gids),
                                   user, gids))
 
 
@@ -1289,7 +1326,7 @@ def _department_action(ticket_id: int, group_id: str, status: str,
                              ticket_id, group_id)
     if status == "rejected":
         _melde_ablehnung(row, defn, note or "", _actor_name(user))
-    return _out(row, defn, vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+    return _out(row, defn, _read_ctx(user, row, defn, gids),
                 user, gids)
 
 
@@ -1467,7 +1504,7 @@ def archive_process_ticket(ticket_id: int, body: RejectRequest,
     _safe_restamp(row, defn) if defn else store.set_next_timer(ticket_id, None)
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
-                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  _read_ctx(user, row, defn, gids),
                                   user, gids))
 
 
@@ -1548,7 +1585,7 @@ def reopen_process_ticket(ticket_id: int, body: ReopenRequest,
     _safe_restamp(row, defn)
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
-                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  _read_ctx(user, row, defn, gids),
                                   user, gids))
 
 
@@ -1612,7 +1649,7 @@ def set_process_ticket_phase(ticket_id: int, body: SetPhaseRequest,
     _safe_restamp(row, defn)
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
-                                  vis.build_viewer_ctx(user, row, defn, group_ids=gids),
+                                  _read_ctx(user, row, defn, gids),
                                   user, gids))
 
 

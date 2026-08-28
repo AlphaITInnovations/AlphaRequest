@@ -199,12 +199,22 @@ def user_group_ids(user: dict) -> set:
 
 
 def build_viewer_ctx(user: dict, ticket_row: dict, defn: Optional[ProcessDefinition],
-                     group_ids: Optional[set] = None) -> ViewerCtx:
+                     group_ids: Optional[set] = None,
+                     suppress_admin: bool = False) -> ViewerCtx:
+    """Sicht-Kontext für die Feld-Sichtbarkeit.
+
+    `suppress_admin=True` blendet den reinen Admin-Bonus aus: der Admin sieht dann
+    nur, was er OHNE Admin-Recht sähe (view/manage-Aufsicht, Owner- und Phasen-
+    Vollsicht bleiben erhalten). Genutzt in der Normal-/Leseansicht – der volle
+    Admin-Blick ist der ausdrücklichen Admin-Ansicht (`?ansicht=admin`) vorbehalten.
+    """
     from backend.database.users import PERM_VIEW, PERM_MANAGE, PERM_ADMIN
 
     perms = set(user.get("permissions") or [])
-    is_admin = PERM_ADMIN in perms
-    oversight = bool(perms & {PERM_VIEW, PERM_MANAGE, PERM_ADMIN})
+    is_admin = (PERM_ADMIN in perms) and not suppress_admin
+    oversight_perms = {PERM_VIEW, PERM_MANAGE} if suppress_admin \
+        else {PERM_VIEW, PERM_MANAGE, PERM_ADMIN}
+    oversight = bool(perms & oversight_perms)
     uid = user.get("id")
     group_ids = user_group_ids(user) if group_ids is None else group_ids
     is_owner = ticket_row.get("owner_id") == uid and uid is not None

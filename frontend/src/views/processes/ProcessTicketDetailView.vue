@@ -143,6 +143,17 @@ const meineOffeneAbteilungen = computed<string[]>(() => {
  *  Admin-Endpunkt prüft die Rechte selbst und antwortet sonst mit 403. */
 const adminModus = computed(() => route.query.ansicht === 'admin' && auth.isAdmin)
 
+/** Die FELD-Sicht des Servers hängt am Entry-Modus, nicht nur an der Rolle:
+ *  Admin-Ansicht → alle Felder; Fachabteilungs-Link → nur Basis + genau diese
+ *  Abteilung (für alle gleich); sonst die normale Sicht OHNE Admin-Gottmodus.
+ *  Wir geben den Modus explizit mit, damit dieselbe Abteilungsansicht über
+ *  verschiedene Nutzer/Gruppen hinweg identisch aussieht. */
+const viewParams = computed<{ view?: 'admin' | 'department'; department?: string }>(() => {
+  if (adminModus.value) return { view: 'admin' }
+  if (focusDepartment.value) return { view: 'department', department: focusDepartment.value }
+  return {}
+})
+
 // Die Admin-Ansicht rendert eine EIGENE Komponente (AdminTicketDetail) – die
 // abilities hier steuern nur noch die Lese-/Bearbeitungsansicht.
 const abilities = computed(() => (leseModus.value
@@ -213,7 +224,7 @@ async function load() {
   loading.value = true
   loadError.value = null
   try {
-    const t = await ticketsApi.getTicket(id.value)
+    const t = await ticketsApi.getTicket(id.value, viewParams.value)
     ticket.value = t
     values.value = { ...(t.values || {}) }
     // Die GEPINNTE Definition über den Ticket-Endpunkt: der Verwaltungs-Endpunkt

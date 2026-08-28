@@ -196,6 +196,28 @@ DEFN_FLOW = {
 }
 
 
+#: Für das View-Scoping (Sicht nach Entry-Modus): base.name = Basis (jede:r),
+#: it.note = nur g_it, it.secret = vertraulich + nur g_it. review-Phase = g_it.
+DEFN_VIS = {
+    "schemaVersion": 1, "key": "vis", "name": "Vis-Flow",
+    "fields": [
+        {"key": "base.name", "widget": "text"},
+        {"key": "it.note", "widget": "text", "visibility": {"visibleToGroups": ["g_it"]}},
+        {"key": "it.secret", "widget": "text",
+         "visibility": {"confidential": True, "visibleToGroups": ["g_it"]}},
+    ],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "base.name", "required": True},
+                    {"ref": "it.note", "mode": "editable"},
+                    {"ref": "it.secret", "mode": "editable"}]},
+        {"key": "review", "kind": "review",
+         "responsibility": {"kind": "departments", "rule": [{"group": "g_it"}]},
+         "fields": [{"ref": "base.name", "mode": "readonly"}]},
+    ],
+}
+
+
 class FakeDefs:
     def __init__(self):
         self.definition_loads = 0
@@ -219,6 +241,8 @@ class FakeDefs:
             return {"version": 1, "definition": DEFN_CONF}
         if key == "calc":
             return {"version": 1, "definition": DEFN_CALC}
+        if key == "vis":
+            return {"version": 1, "definition": DEFN_VIS}
         return None
 
     def get_definition(self, key, ver):
@@ -237,6 +261,8 @@ class FakeDefs:
             return {"version": ver, "definition": DEFN_CONF}
         if key == "calc":
             return {"version": ver, "definition": DEFN_CALC}
+        if key == "vis":
+            return {"version": ver, "definition": DEFN_VIS}
         return None
 
 
@@ -1017,3 +1043,106 @@ def test_archive_global_scope_requires_oversight(client):
     assert client.get("/process-tickets/archive?scope=all").status_code == 403
     # … das persönliche Archiv bleibt für alle offen.
     assert client.get("/process-tickets/archive").status_code == 200
+
+
+# ── View-Scoping: Feld-Sicht nach Entry-Modus (?view / ?department) ───────────
+
+def _vis_ticket(client):
+    """vis-Ticket (Basis + IT + vertrauliches IT-Feld), erstellt vom Admin-Owner
+    u1 und in die review-Phase (Zuständigkeit g_it) gebracht."""
+    tid = client.post("/process-tickets", json={"processKey": "vis", "values": {
+        "base.name": "Max", "it.note": "N", "it.secret": "S"}}).json()["data"]["id"]
+    assert client.post(f"/process-tickets/{tid}:advance").status_code == 200
+    return tid
+
+
+def _as(client, uid, perms):
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "id": uid, "displayName": uid, "permissions": list(perms)}
+
+
+def test_view_normal_admin_sieht_nur_basis(client, monkeypatch):
+    """Ein Admin, der NICHT beteiligt ist, sieht in der Normal-/Leseansicht nur die
+    Basisdaten – der volle Admin-Blick ist der Admin-Ansicht vorbehalten."""
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user", lambda uid: [])
+    tid = _vis_ticket(client)
+    _as(client, "u_admin2", ["admin"])          # Admin, nicht Owner, ohne Gruppen
+    vis = client.get(f"/process-tickets/{tid}").json()["data"]["visible_fields"]
+    assert vis == ["base.name"]
+
+
+def test_view_admin_modus_sieht_alles(client, monkeypatch):
+    """Erst über ?view=admin sieht der Admin ALLE Felder – auch vertrauliche."""
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user", lambda uid: [])
+    tid = _vis_ticket(client)
+    _as(client, "u_admin2", ["admin"])
+    vis = client.get(f"/process-tickets/{tid}?view=admin").json()["data"]["visible_fields"]
+    assert vis == ["base.name", "it.note", "it.secret"]
+    # Nicht-Admin kann sich diese Sicht NICHT über den Parameter erschleichen.
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
+                        lambda uid: ["g_it"] if uid == "u_it" else [])
+    _as(client, "u_it", [])
+    vis2 = client.get(f"/process-tickets/{tid}?view=admin").json()["data"]["visible_fields"]
+    assert "it.secret" in vis2  # u_it ist g_it-Mitglied → sieht es ohnehin …
+    _as(client, "u_out", [])    # … ein Fremder aber nicht (kein Admin, keine Gruppe)
+    # u_out hat gar keinen Zugriff (kein may_view) → 404, kein Sicht-Leak.
+    assert client.get(f"/process-tickets/{tid}?view=admin").status_code == 404
+
+
+def test_view_department_scoped_auf_mitglied(client, monkeypatch):
+    """Fachabteilungs-Link (?view=department&department=g_it): Mitglied sieht Basis
+    + genau diese Abteilung (inkl. vertraulich); Reichweite unabhängig vom Modus."""
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
+                        lambda uid: ["g_it"] if uid == "u_it" else [])
+    tid = _vis_ticket(client)
+    _as(client, "u_it", [])
+    vis = client.get(
+        f"/process-tickets/{tid}?view=department&department=g_it").json()["data"]["visible_fields"]
+    assert vis == ["base.name", "it.note", "it.secret"]
+
+
+def test_view_department_kein_leak_fuer_nichtmitglied(client, monkeypatch):
+    """Scope-DOWN: Wer über den g_it-Link reingeht, aber NICHT Mitglied von g_it ist
+    (hier ein Admin), sieht nur die Basisdaten – der Link weitet nie über die echte
+    Berechtigung hinaus aus."""
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
+                        lambda uid: ["g_it"] if uid == "u_it" else [])
+    tid = _vis_ticket(client)
+    _as(client, "u_admin2", ["admin"])           # Zugriff via Aufsicht, aber kein g_it
+    vis = client.get(
+        f"/process-tickets/{tid}?view=department&department=g_it").json()["data"]["visible_fields"]
+    assert vis == ["base.name"]
+    # Und ein g_it-Mitglied, das den FALSCHEN Abteilungslink (g_hr) nutzt, sieht auch
+    # nur Basis – die eigene g_it-Sicht wird über den Link nicht „mitgenommen".
+    _as(client, "u_it", [])
+    vis2 = client.get(
+        f"/process-tickets/{tid}?view=department&department=g_hr").json()["data"]["visible_fields"]
+    assert vis2 == ["base.name"]
+
+
+def test_view_mutation_antwort_widert_nicht_auf(client, monkeypatch):
+    """Befund 1: Eine Mutations-Antwort (hier PATCH) zeigt einem Admin NICHT mehr
+    als der Detail-GET in der Normalansicht – der Admin-Bonus bleibt aus, die
+    Antwort weitet die Sicht nicht wieder auf."""
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user", lambda uid: [])
+    tid = client.post("/process-tickets", json={"processKey": "vis", "values": {
+        "base.name": "Max", "it.note": "N", "it.secret": "S"}}).json()["data"]["id"]
+    _as(client, "u_admin2", ["admin"])           # Admin, nicht Owner, ohne Gruppen
+    r = client.patch(f"/process-tickets/{tid}", json={"values": {"base.name": "Y"}})
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert "it.secret" not in d["visible_fields"]
+    assert "it.secret" not in d["values"]
+
+
+def test_view_liste_kein_admin_bonus(client, monkeypatch):
+    """Befund 3: Die Auftrags-Liste zeigt einem Admin OHNE ?view=admin keine
+    vertraulichen Felder – der volle Admin-Blick gilt nur im Detail mit ?view=admin."""
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user", lambda uid: [])
+    tid = client.post("/process-tickets", json={"processKey": "vis", "values": {
+        "base.name": "Max", "it.note": "N", "it.secret": "S"}}).json()["data"]["id"]
+    _as(client, "u_admin2", ["admin"])
+    rows = client.get("/process-tickets").json()["data"]
+    row = next(r for r in rows if r["id"] == tid)
+    assert "it.secret" not in row["visible_fields"]
+    assert "it.secret" not in row["values"]
