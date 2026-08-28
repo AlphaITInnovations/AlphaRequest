@@ -52,17 +52,33 @@ export function canSeeField(f: FieldDef, ctx: SimViewer): boolean {
   return ctx.fullView || groups.some((g) => ctx.groupIds.includes(g))
 }
 
-/** Ein berechnetes Feld ist nur sichtbar, wenn auch seine Quelle sichtbar ist. */
-export function effectiveCanSee(
+/** Leitet `f` (transitiv) aus einer VERTRAULICHEN Quelle ab, die der Betrachter
+ *  nicht sehen darf? Nur das versteckt ein computed-Spiegelfeld – eine bloß
+ *  gruppen-eingeschränkte, nicht-vertrauliche Quelle (z. B. „Position") nicht.
+ *  Spiegelt backend/services/process_visibility._mirrors_hidden_confidential. */
+function mirrorsHiddenConfidential(
   f: FieldDef, ctx: SimViewer, byKey: Map<string, FieldDef>, seen = new Set<string>(),
 ): boolean {
+  if (!f.computed) return false
+  const src = byKey.get(f.computed.from)
+  if (!src || seen.has(src.key)) return false
+  seen.add(src.key)
+  if (src.visibility?.confidential && !canSeeField(src, ctx)) return true
+  return mirrorsHiddenConfidential(src, ctx, byKey, seen)
+}
+
+/** Sichtbarkeit inkl. Quelle. Kommt die Sichtbarkeit vom Server (`visibleKeys`),
+ *  ist sie bereits vollständig berechnet – dann NICHT erneut über die Quelle
+ *  ableiten (sonst würde ein vom Server freigegebenes computed-Feld, dessen
+ *  nicht-vertrauliche Quelle der Betrachter nicht sieht, fälschlich versteckt).
+ *  Ohne `visibleKeys` (reine Client-Simulation) gilt die Regel wie im Backend:
+ *  nur eine VERTRAULICHE Quelle versteckt das Spiegelfeld. */
+export function effectiveCanSee(
+  f: FieldDef, ctx: SimViewer, byKey: Map<string, FieldDef>,
+): boolean {
   if (!canSeeField(f, ctx)) return false
-  if (f.computed) {
-    if (seen.has(f.key)) return true
-    seen.add(f.key)
-    const src = byKey.get(f.computed.from)
-    if (src && !effectiveCanSee(src, ctx, byKey, seen)) return false
-  }
+  if (ctx.visibleKeys) return true
+  if (f.computed && mirrorsHiddenConfidential(f, ctx, byKey)) return false
   return true
 }
 

@@ -70,6 +70,19 @@ describe('Sichtbarkeit (Spiegel des Servers)', () => {
     expect(visibleFieldKeys(DEFN, HR).has('salary_copy')).toBe(true)
   })
 
+  it('server-Sichtbarkeit (visibleKeys) wird NICHT über die Quelle nachgerechnet', () => {
+    // Fuhrpark-Bug: der Server gibt ein berechnetes Feld frei, dessen (nur
+    // gruppen-eingeschränkte) Quelle der Betrachter nicht sieht. Die UI muss der
+    // Server-Liste vertrauen und darf das Feld nicht erneut über die Quelle verstecken.
+    const viewer: SimViewer = {
+      fullView: false, isAdmin: false, groupIds: [],
+      visibleKeys: new Set(['base.name', 'salary_copy']),
+    }
+    const keys = visibleFieldKeys(DEFN, viewer)
+    expect(keys.has('salary_copy')).toBe(true)          // sichtbar, obwohl Quelle nicht in visibleKeys
+    expect(keys.has('personal.salary')).toBe(false)
+  })
+
   it('filterValues gibt nur Sichtbares zurück', () => {
     const values = { 'base.name': 'Max', 'it.host': 'PC-1', 'personal.salary': '50k' }
     expect(filterValues(DEFN, values, IT)).toEqual({ 'base.name': 'Max', 'it.host': 'PC-1' })
