@@ -390,7 +390,7 @@ onMounted(async () => {
       </div>
 
       <!-- ── Kacheln ── -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button @click="selectTab('assigned')" class="stat" :class="activeTab === 'assigned' ? 'stat-on' : ''">
           <div class="flex items-center justify-between">
             <span class="stat-icon bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
