@@ -14,6 +14,7 @@ import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import { listArchive, type ArchiveRow } from '@/api/archive'
+import { listProcesses } from '@/api/processes'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { errorMessage } from '@/lib/processErrors'
 
@@ -27,6 +28,20 @@ const offset = ref(0)
 const truncated = ref(false)
 const loading = ref(true)
 const q = ref('')
+
+/** Filter (wie „Alle Aufträge"): Status-Chips (leer = alle), Prozess-Dropdown. */
+const ARCHIVE_STATUSES = ['in_progress', 'in_request', 'waiting_contract', 'archived', 'rejected']
+const statuses = ref<string[]>([])
+const processKey = ref('')
+const katalog = ref<{ key: string; name: string }[]>([])
+
+function toggleStatus(s: string) {
+  statuses.value = statuses.value.includes(s)
+    ? statuses.value.filter((x) => x !== s)
+    : [...statuses.value, s]
+}
+function reset() { statuses.value = []; processKey.value = ''; q.value = '' }
+const hatFilter = computed(() => !!(statuses.value.length || processKey.value || q.value.trim()))
 
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
@@ -49,7 +64,12 @@ const hatWeiter = computed(() => offset.value + PAGE < total.value)
 async function load() {
   loading.value = true
   try {
-    const page = await listArchive({ q: q.value.trim() || undefined, limit: PAGE, offset: offset.value })
+    const page = await listArchive({
+      q: q.value.trim() || undefined,
+      status: statuses.value.length ? statuses.value : undefined,
+      process_key: processKey.value || undefined,
+      limit: PAGE, offset: offset.value,
+    })
     items.value = page.items
     total.value = page.total
     truncated.value = page.truncated
@@ -76,8 +96,16 @@ watch(q, () => {
   if (suchTimer) clearTimeout(suchTimer)
   suchTimer = setTimeout(() => { offset.value = 0; load() }, 300)
 })
+// Status/Prozess: sofort neu laden (zurück auf Seite 1).
+watch([statuses, processKey], () => { offset.value = 0; load() })
 
-onMounted(load)
+onMounted(async () => {
+  // Prozess-Dropdown befüllen (fail-soft: ohne Katalog bleibt nur „Alle Prozesse").
+  try {
+    katalog.value = (await listProcesses()).map((p) => ({ key: p.key, name: p.name }))
+  } catch { /* Prozess-Filter bleibt leer */ }
+  await load()
+})
 </script>
 
 <template>
@@ -94,6 +122,25 @@ onMounted(load)
                class="afi w-full sm:w-64" />
       </div>
 
+      <!-- Filter wie „Alle Aufträge": Status-Chips (keiner aktiv = alle) + Prozess. -->
+      <div class="flex items-center gap-2 flex-wrap mb-4">
+        <button v-for="s in ARCHIVE_STATUSES" :key="s" type="button" @click="toggleStatus(s)"
+                class="text-xs font-medium px-2.5 py-1 rounded-full border transition"
+                :class="statuses.includes(s)
+                  ? 'bg-[#3EAAB8] text-white border-[#3EAAB8]'
+                  : 'border-gray-200 dark:border-white/15 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5'">
+          {{ statusLabel(s) }}
+        </button>
+        <select v-model="processKey" class="afi !py-1 text-sm w-auto ml-auto">
+          <option value="">Alle Prozesse</option>
+          <option v-for="p in katalog" :key="p.key" :value="p.key">{{ p.name }}</option>
+        </select>
+        <button v-if="hatFilter" type="button" @click="reset"
+                class="text-xs text-gray-500 dark:text-gray-400 hover:underline">
+          Filter zurücksetzen
+        </button>
+      </div>
+
       <div v-if="truncated"
            class="mb-3 rounded-xl border border-amber-200 dark:border-amber-500/30
                   bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
@@ -107,7 +154,7 @@ onMounted(load)
 
       <template v-else>
         <p v-if="!items.length" class="text-sm text-gray-400 italic py-10 text-center">
-          {{ q.trim() ? 'Keine Treffer.' : 'Du warst bisher an keinem Auftrag beteiligt.' }}
+          {{ hatFilter ? 'Keine Treffer für diese Filter.' : 'Du warst bisher an keinem Auftrag beteiligt.' }}
         </p>
 
         <ul v-else class="flex flex-col gap-2">

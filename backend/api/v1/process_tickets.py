@@ -547,10 +547,12 @@ _ARCHIVE_SCAN_CAP = 2000
 
 @router.get("/process-tickets/archive", response_model=DataResponse[ArchivePage])
 def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Query(None),
+                 status: Optional[str] = Query(None), process_key: Optional[str] = Query(None),
                  limit: int = Query(25, ge=1, le=100), offset: int = Query(0, ge=0)):
     """Persönliches Archiv: alle Aufträge (jeder Status), an denen die Person je
     beteiligt war – Aufsicht · Ersteller:in · Beobachter:in · Mitglied einer je
     zuständigen Gruppe/Fachabteilung (bedingte Regeln gegen die Werte geprüft).
+    Filter: `q` (Titel), `status` (komma-separiert, mehrere möglich), `process_key`.
     Exaktes Paging über den GEFILTERTEN Satz. Keine Feldwerte (die gibt es nur in
     der Detail-Ansicht, dort gefiltert)."""
     uid = user.get("id")
@@ -568,9 +570,16 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
     rows = store.list_all_lightweight(limit=_ARCHIVE_SCAN_CAP + 1)
     truncated = len(rows) > _ARCHIVE_SCAN_CAP
     rows = rows[:_ARCHIVE_SCAN_CAP]
+    # Günstige Vorfilter (reduzieren die Zeilen VOR der Beteiligungsprüfung).
     if q:
         ql = q.lower()
         rows = [r for r in rows if ql in (r.get("title") or "").lower()]
+    if status:
+        sset = {s.strip() for s in status.split(",") if s.strip()}
+        if sset:
+            rows = [r for r in rows if r.get("status") in sset]
+    if process_key:
+        rows = [r for r in rows if r.get("process_key") == process_key]
 
     defn_cache: dict = {}
     included: set = set()

@@ -986,3 +986,20 @@ def test_archive_detail_widening_but_no_history(client, monkeypatch):
     client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_out", "permissions": []}
     assert client.get(f"/process-tickets/{tid}").status_code == 404
     assert client.get(f"/process-tickets/{tid}/definition").status_code == 404
+
+
+def test_archive_filters_status_and_process(client):
+    import backend.api.v1.process_tickets as pt
+    a = client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": "A"}}).json()["data"]["id"]
+    b = client.post("/process-tickets", json={"processKey": "demo", "values": {"base.name": "B"}}).json()["data"]["id"]
+    pt.store.rows[b]["status"] = "archived"
+    # Status-Filter (Admin sieht alles): nur archivierte.
+    d = client.get("/process-tickets/archive?status=archived").json()["data"]
+    ids = {it["id"] for it in d["items"]}
+    assert b in ids and a not in ids
+    # Komma-separierte Mehrfachauswahl schließt beide ein.
+    both = client.get(f"/process-tickets/archive?status=archived,{pt.store.rows[a]['status']}").json()["data"]
+    assert {a, b} <= {it["id"] for it in both["items"]}
+    # Prozess-Filter.
+    assert {a, b} <= {it["id"] for it in client.get("/process-tickets/archive?process_key=demo").json()["data"]["items"]}
+    assert client.get("/process-tickets/archive?process_key=gibtsnicht").json()["data"]["total"] == 0

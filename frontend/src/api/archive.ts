@@ -33,8 +33,13 @@ export interface ArchivePage {
 }
 
 export async function listArchive(
-  params: { q?: string; limit?: number; offset?: number } = {},
+  params: { q?: string; status?: string[]; process_key?: string; limit?: number; offset?: number } = {},
 ): Promise<ArchivePage> {
-  const { data } = await client.get('/process-tickets/archive', { params })
+  const { status, ...rest } = params
+  const query: Record<string, unknown> = { ...rest }
+  // Mehrere Status komma-separiert (der Server splittet) – vermeidet die
+  // uneinheitliche Array-Serialisierung von axios.
+  if (status && status.length) query.status = status.join(',')
+  const { data } = await client.get('/process-tickets/archive', { params: query })
   return data.data
 }
