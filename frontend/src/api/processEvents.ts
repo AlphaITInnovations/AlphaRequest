@@ -39,7 +39,7 @@ export interface ProcessWatcher {
 }
 
 export async function listEvents(
-  ticketId: number, params: { limit?: number; offset?: number } = {},
+  ticketId: number, params: { limit?: number; offset?: number; view?: string } = {},
 ): Promise<{ items: ProcessEvent[]; total: number }> {
   const { data } = await client.get(`/process-tickets/${ticketId}/events`, { params })
   return { items: data.data, total: data.meta?.total ?? data.data.length }

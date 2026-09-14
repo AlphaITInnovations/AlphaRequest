@@ -365,7 +365,12 @@ def test_verlauf_ist_redigiert(setup):
     evstore.add_event(ticket_id=7, action="updated", actor_id="u_it", actor_name="IT",
                       details={"fields": ["name"]})
     state["user"] = dict(ADMIN)
-    assert len(client.get("/process-tickets/7/events").json()["data"]) == 2
+    # Ohne ausdrückliche Admin-Ansicht bleibt der reine Admin-Bonus aus: der
+    # Eintrag über das vertrauliche gehalt-Feld entfällt (wie im Detail), nur name.
+    d = client.get("/process-tickets/7/events").json()["data"]
+    assert [e["details"]["fields"] for e in d] == [["name"]]
+    # Mit ?view=admin: voller Blick auf den Verlauf → beide Einträge.
+    assert len(client.get("/process-tickets/7/events?view=admin").json()["data"]) == 2
     state["user"] = dict(OWNER)
     d = client.get("/process-tickets/7/events").json()["data"]
     assert [e["details"]["fields"] for e in d] == [["name"]]

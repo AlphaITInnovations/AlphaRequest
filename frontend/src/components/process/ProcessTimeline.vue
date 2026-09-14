@@ -29,6 +29,9 @@ const props = withDefaults(defineProps<{
   /** Ruht mit der Nachtrags-Eingabe (siehe Docstring) – bleibt für die Rückkehr. */
   canComment?: boolean
   canBeInternal?: boolean
+  /** Entry-Modus für die Feld-Sicht des Verlaufs (wie beim Detail-GET). `admin`
+   *  löst den vollen Admin-Blick – der Verlauf wird nur in der Admin-Ansicht gezeigt. */
+  view?: string
 }>(), { canComment: true, canBeInternal: false })
 
 const items = ref<ProcessEvent[]>([])
@@ -73,7 +76,7 @@ async function load() {
   loading.value = true
   fehler.value = null
   try {
-    const res = await listEvents(props.ticketId, { limit: 500 })
+    const res = await listEvents(props.ticketId, { limit: 500, view: props.view })
     items.value = res.items
   } catch (e) {
     fehler.value = errorMessage(e, 'Verlauf konnte nicht geladen werden')

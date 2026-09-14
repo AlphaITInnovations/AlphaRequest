@@ -1407,11 +1407,16 @@ def _load_for_view(ticket_id: int, user: dict) -> tuple[dict, Optional[ProcessDe
 @router.get("/process-tickets/{ticket_id}/events", response_model=ListResponse[EventOut])
 def list_ticket_events(ticket_id: int, user: dict = Depends(get_current_user),
                        limit: int = Query(200, ge=1, le=500),
-                       offset: int = Query(0, ge=0)):
+                       offset: int = Query(0, ge=0),
+                       view: Optional[str] = None):
     """Verlauf eines Auftrags – redigiert: Einträge über nicht sichtbare Felder
-    entfallen, interne Nachträge sieht nur die bearbeitende Seite."""
+    entfallen, interne Nachträge sieht nur die bearbeitende Seite. Der reine
+    Admin-Bonus bleibt wie überall aus – ALLE vertraulichen Feld-Metadaten sieht
+    ein Admin nur über die ausdrückliche Admin-Ansicht (?view=admin)."""
     row, defn, gids = _load_for_view(ticket_id, user)
-    evs, total = events.for_viewer(row, defn, user, gids, limit=limit, offset=offset)
+    suppress = not (view == "admin" and acc.is_admin(user))
+    evs, total = events.for_viewer(row, defn, user, gids, limit=limit, offset=offset,
+                                   suppress_admin=suppress)
     return ListResponse(data=[EventOut(**e) for e in evs],
                         meta=Meta(total=total, limit=limit, offset=offset))
 

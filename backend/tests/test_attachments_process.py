@@ -530,3 +530,28 @@ def test_anhang_feld_sichtbarkeit_gilt_fuer_liste_und_download(ctx, tmp_path):
     assert any(a["field_key"] == "vertrag"
                for a in plain.get("/process-tickets/7/attachments").json()["data"])
     assert plain.get(f"/attachments/{up2.json()['data']['id']}/download").status_code == 200
+
+
+def test_admin_bonus_bei_anhaengen_nur_in_admin_ansicht(ctx, tmp_path):
+    """Der reine Admin-Bonus greift auch bei Anhängen nur in der ausdrücklichen
+    Admin-Ansicht: ein Admin (nicht Feld-Gruppe) sieht/lädt ein feldgebundenes
+    Attachment erst mit ?view=admin – außerhalb bleibt es verborgen, konsistent zu
+    den Feldwerten im Detail (suppress_admin)."""
+    owner = make_client(OWNER)
+    up = upload(owner, field_key="docs_hr")        # Owner=Vollsicht → darf ans Feld
+    assert up.status_code == 200
+    att_id = up.json()["data"]["id"]
+    blob = tmp_path / "d.pdf"
+    blob.write_bytes(b"PDF")
+    att_api.storage.full_path = lambda sp: blob
+
+    admin = make_client({"id": "u_admin", "displayName": "Admin",
+                         "permissions": ["admin"], "groups": []})
+    # Ohne ?view=admin: reiner Admin-Bonus aus → Feld-Attachment unsichtbar/nicht ladbar.
+    liste = admin.get("/process-tickets/7/attachments").json()["data"]
+    assert not any(a["field_key"] == "docs_hr" for a in liste)
+    assert admin.get(f"/attachments/{att_id}/download").status_code == 404
+    # Mit ?view=admin: voller Blick → sichtbar und ladbar.
+    liste_a = admin.get("/process-tickets/7/attachments?view=admin").json()["data"]
+    assert any(a["field_key"] == "docs_hr" for a in liste_a)
+    assert admin.get(f"/attachments/{att_id}/download?view=admin").status_code == 200

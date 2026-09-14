@@ -39,6 +39,8 @@ const props = defineProps<{
   phase?: PhaseDef | null
   /** Bestehendes Ticket – nötig, um Anhang-Felder (Download-Liste) zu laden. */
   ticketId?: number | null
+  /** Entry-Modus für die Feld-Sicht der Anhänge (`admin` = voller Blick). */
+  view?: string | null
 }>()
 
 const catalog = computed<FieldDef[]>(() => props.definition?.fields ?? [])
@@ -157,7 +159,8 @@ const subText = (v: unknown): string => subValueText(v)
             <!-- Anhang-Feld: die Datei-Liste des Auftrags (nur Ansicht/Download). -->
             <div v-if="row.f.widget === 'attachment' && ticketId">
               <div class="label mb-1">{{ row.f.label || row.f.key }}</div>
-              <ProcessAttachments :ticket-id="ticketId" :field-key="row.f.key" :can-edit="false" />
+              <ProcessAttachments :ticket-id="ticketId" :field-key="row.f.key" :can-edit="false"
+                                  :view="view" />
             </div>
             <!-- Wiederholgruppe als kleine Tabelle -->
             <ReadonlyField v-else-if="isCollection(row.f)" :label="row.f.label || row.f.key">

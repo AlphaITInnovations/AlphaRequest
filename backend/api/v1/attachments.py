@@ -129,19 +129,25 @@ def _may_view(row: dict, defn: Optional[ProcessDefinition], user: dict) -> bool:
 
 
 def _may_see_attachment_field(row: dict, defn: Optional[ProcessDefinition], user: dict,
-                              field_key: Optional[str]) -> bool:
+                              field_key: Optional[str], *, suppress_admin: bool = True) -> bool:
     """Zusätzlich zur Ticket-Sicht die FELD-Sichtbarkeit des Anhang-Felds prüfen:
     einen Anhang sieht/lädt nur, wer das zugehörige Feld sehen darf (z. B.
     `dokumente.uploads` nur die Personalabteilung). Anhänge OHNE `field_key`
     (Alt-/Basis-Ticket) sind nicht feldgebunden und bleiben wie `may_view`
     sichtbar. Unbekannter field_key (defn fehlt/gelöscht): nicht enger sperren als
-    may_view – die Existenz-Prüfung macht `_assert_attachment_field`."""
+    may_view – die Existenz-Prüfung macht `_assert_attachment_field`.
+
+    `suppress_admin=True` (Default fürs LESEN): der reine Admin-Bonus bleibt aus –
+    ein Admin lädt vertrauliche/gruppen-gebundene Anhänge nur über die ausdrückliche
+    Admin-Ansicht (?view=admin), wie die zugehörigen Feldwerte im Detail. Beim
+    SCHREIBEN (Upload/Version) wird False übergeben, damit Admin-Uploads bleiben."""
     if not field_key or defn is None:
         return True
     f = next((fd for fd in defn.fields if fd.key == field_key), None)
     if f is None:
         return True
-    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=vis.user_group_ids(user))
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=vis.user_group_ids(user),
+                               suppress_admin=suppress_admin)
     return vis.can_see_field(f, ctx)
 
 
@@ -213,7 +219,8 @@ async def upload_process_attachment(
     field_key = field_key or None
     _assert_attachment_field(defn, field_key)
     # An ein Feld gebunden, das man nicht sehen darf? Dann auch nicht hochladen.
-    if not _may_see_attachment_field(row, defn, user, field_key):
+    # SCHREIBEN: Admin-Bonus bleibt (suppress_admin=False) – Admin-Uploads sollen gehen.
+    if not _may_see_attachment_field(row, defn, user, field_key, suppress_admin=False):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                         "Für dieses Anhang-Feld fehlt die Berechtigung")
 
@@ -280,6 +287,7 @@ def list_process_attachments(
     ticket_id: int,
     include_versions: bool = Query(False),
     field_key: Optional[str] = Query(None),
+    view: Optional[str] = Query(None),
     user: dict = Depends(get_current_user),
 ):
     row, defn = _process_ticket_or_404(ticket_id)
@@ -291,8 +299,11 @@ def list_process_attachments(
                                   entity_type=att_db.ENTITY_PROCESS_TICKET,
                                   field_key=(field_key or None))
     # Nur Anhänge zeigen, deren zugehöriges Feld die Person sehen darf (z. B.
-    # dokumente.uploads nur die Personalabteilung).
-    rows = [r for r in rows if _may_see_attachment_field(row, defn, user, r.get("field_key"))]
+    # dokumente.uploads nur die Personalabteilung). Der reine Admin-Bonus greift
+    # nur in der ausdrücklichen Admin-Ansicht (?view=admin), wie bei den Feldwerten.
+    suppress = not (view == "admin" and acc.is_admin(user))
+    rows = [r for r in rows
+            if _may_see_attachment_field(row, defn, user, r.get("field_key"), suppress_admin=suppress)]
     return DataResponse(data=[_to_process_out(r) for r in rows])
 
 
@@ -309,7 +320,8 @@ def _entity_label(att: dict) -> str:
             else "Alt-Ticket")
 
 
-def _assert_attachment_access(att: dict, user: dict, *, write: bool) -> None:
+def _assert_attachment_access(att: dict, user: dict, *, write: bool,
+                              view: Optional[str] = None) -> None:
     """Zugriff auf einen Anhang über services.process_access (may_view zum Lesen,
     may_edit zum Ändern – die Ersteller:in darf zusätzlich EIGENE Dateien
     löschen, solange der Auftrag läuft: wer nachreichen darf, muss eine
@@ -324,14 +336,18 @@ def _assert_attachment_access(att: dict, user: dict, *, write: bool) -> None:
         row, defn = _process_ticket_or_404(att["ticket_id"])
         if not write:
             _assert_process_view(row, defn, user)
-            if not _may_see_attachment_field(row, defn, user, att.get("field_key")):
+            # LESEN: reiner Admin-Bonus nur in der Admin-Ansicht (?view=admin).
+            suppress = not (view == "admin" and acc.is_admin(user))
+            if not _may_see_attachment_field(row, defn, user, att.get("field_key"),
+                                             suppress_admin=suppress):
                 # Bewusst 404: die Datei existiert, ist für diese Rolle aber unsichtbar.
                 raise api_error(404, "NOT_FOUND", "Anhang nicht gefunden")
             return
         if not _may_view(row, defn, user):
             # Bewusst 404: nicht verraten, dass es den Auftrag gibt.
             raise api_error(404, ErrorCode.TICKET_NOT_FOUND, "Ticket nicht gefunden")
-        if not _may_see_attachment_field(row, defn, user, att.get("field_key")):
+        # SCHREIBEN: Admin-Bonus bleibt (suppress_admin=False) – Admin-Änderungen sollen gehen.
+        if not _may_see_attachment_field(row, defn, user, att.get("field_key"), suppress_admin=False):
             raise api_error(404, "NOT_FOUND", "Anhang nicht gefunden")
         if acc.may_edit(defn, row, user, vis.user_group_ids(user)):
             return
@@ -345,11 +361,12 @@ def _assert_attachment_access(att: dict, user: dict, *, write: bool) -> None:
 
 
 @router.get("/attachments/{attachment_id}/download")
-def download_attachment(attachment_id: int, user: dict = Depends(get_current_user)):
+def download_attachment(attachment_id: int, view: Optional[str] = None,
+                        user: dict = Depends(get_current_user)):
     att = att_db.get_attachment(attachment_id)
     if not att or att.get("deleted_at"):
         raise api_error(404, "NOT_FOUND", "Anhang nicht gefunden")
-    _assert_attachment_access(att, user, write=False)
+    _assert_attachment_access(att, user, write=False, view=view)
     try:
         path = storage.full_path(att["stored_path"])
     except ValueError:

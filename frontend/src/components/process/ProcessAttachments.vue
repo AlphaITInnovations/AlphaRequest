@@ -33,7 +33,9 @@ const props = withDefaults(defineProps<{
   canEdit?: boolean
   canAttach?: boolean
   currentUserId?: string | null
-}>(), { fieldKey: null, canEdit: false, canAttach: false, currentUserId: null })
+  /** Entry-Modus für die Feld-Sicht (`admin` = voller Blick in der Admin-Ansicht). */
+  view?: string | null
+}>(), { fieldKey: null, canEdit: false, canAttach: false, currentUserId: null, view: null })
 
 /** Darf überhaupt hochladen (Button „Datei hochladen"). */
 const darfHochladen = computed(() => props.canEdit || props.canAttach)
@@ -72,7 +74,8 @@ async function load() {
   loading.value = true
   fehler.value = null
   try {
-    const rows = await listAttachments(props.ticketId, { fieldKey: props.fieldKey })
+    const rows = await listAttachments(props.ticketId,
+      { fieldKey: props.fieldKey, view: props.view || undefined })
     if (my !== reqId) return
     items.value = rows
   } catch (e) {
@@ -188,7 +191,7 @@ function formatDate(ts: string | null) {
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <a
-              :href="downloadUrl(a.id)"
+              :href="downloadUrl(a.id, props.view || undefined)"
               class="truncate text-sm text-[#3EAAB8] hover:underline"
               :title="a.original_filename"
             >{{ a.original_filename }}</a>

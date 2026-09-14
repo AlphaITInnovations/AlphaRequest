@@ -36,6 +36,8 @@ export interface ListAttachmentsParams {
   includeVersions?: boolean
   /** Nur Dateien dieses Anhang-Feldes; ohne Angabe alle des Auftrags. */
   fieldKey?: string | null
+  /** Entry-Modus für die Feld-Sicht (`admin` = voller Blick, nur in der Admin-Ansicht). */
+  view?: string
 }
 
 export async function listAttachments(
@@ -45,6 +47,7 @@ export async function listAttachments(
     params: {
       include_versions: params.includeVersions ? true : undefined,
       field_key: params.fieldKey || undefined,
+      view: params.view || undefined,
     },
   })
   return data.data
@@ -73,9 +76,11 @@ export async function uploadAttachment(
   return data.data
 }
 
-/** Direkter Link (kein XHR) – der Browser lädt mit den Session-Cookies. */
-export function downloadUrl(attachmentId: number): string {
-  return `/api/v1/attachments/${attachmentId}/download`
+/** Direkter Link (kein XHR) – der Browser lädt mit den Session-Cookies. `view`
+ *  reicht den Entry-Modus mit (admin = voller Blick in der Admin-Ansicht). */
+export function downloadUrl(attachmentId: number, view?: string): string {
+  const q = view ? `?view=${encodeURIComponent(view)}` : ''
+  return `/api/v1/attachments/${attachmentId}/download${q}`
 }
 
 export async function deleteAttachment(attachmentId: number): Promise<void> {

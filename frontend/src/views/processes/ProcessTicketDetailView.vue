@@ -540,7 +540,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             <div v-else-if="!abilities.edit" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
-                                  :sources="sources" :ticket-id="ticket.id" />
+                                  :sources="sources" :ticket-id="ticket.id" :view="viewParams.view" />
             </div>
 
             <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen
@@ -584,7 +584,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
         <!-- Rechte Verlauf-Spalte der Admin-Ansicht (klebt beim Scrollen,
              scrollt bei langem Verlauf in sich selbst). -->
         <ProcessTimeline v-if="adminModus && ticket && definition"
-                         ref="timeline" :ticket-id="ticket.id"
+                         ref="timeline" :ticket-id="ticket.id" view="admin"
                          :field-labels="fieldLabels" :phase-labels="phaseLabels"
                          :group-name="groupName" :can-be-internal="true"
                          class="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" />

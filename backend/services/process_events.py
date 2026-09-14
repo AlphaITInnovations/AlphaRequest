@@ -144,14 +144,20 @@ def redact(events: Iterable[dict], defn: Optional[ProcessDefinition],
 
 def for_viewer(row: dict, defn: Optional[ProcessDefinition], user: dict,
                group_ids: Iterable[str], *, limit: int = 100, offset: int = 0,
-               ) -> tuple[list[dict], int]:
+               suppress_admin: bool = True) -> tuple[list[dict], int]:
     """Verlauf eines Auftrags für eine bestimmte Person laden (redigiert).
 
     `total` ist die UNGEFILTERTE Gesamtzahl – die Blätterung arbeitet auf der
     DB-Reihenfolge, sonst müsste man den ganzen Verlauf lesen, um zu zählen.
     Die Oberfläche zeigt deshalb „x von y" nicht als exakte Sichtbarkeits-Zahl.
+
+    `suppress_admin=True` (Default, wie überall außerhalb der ausdrücklichen
+    Admin-Ansicht): der reine Admin-Bonus bleibt aus – ein Admin sieht auch im
+    Verlauf keine vertraulichen Feld-Metadaten, außer über ?view=admin. So folgt
+    der Verlauf derselben Feld-Sicht wie das Detail (kein Metadaten-Leck).
     """
     events, total = store.list_for_ticket(row["id"], limit=limit, offset=offset)
-    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=set(group_ids))
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=set(group_ids),
+                               suppress_admin=suppress_admin)
     staff = acc.is_process_staff(defn, user, group_ids)
     return redact(events, defn, ctx, staff=staff), total
