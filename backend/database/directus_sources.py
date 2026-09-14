@@ -88,9 +88,6 @@ def normalize_source(raw: dict) -> dict:
         "collection": collection,
         "valueField": value_field,
         "labelTemplate": label_template,
-        # Optionale ANZEIGE-Vorlage: so erscheint der gewählte Wert in den Ticket-
-        # Ansichten (Lesen/Detail). Leer ⇒ es gilt die Label-Vorlage (Dropdown).
-        "displayTemplate": _str(raw.get("displayTemplate")),
         "fields": _str_list(raw.get("fields")),
         "filter": flt or None,
         "sort": _str_list(raw.get("sort")),
@@ -137,34 +134,14 @@ def template_paths(template: str) -> list[str]:
 
 
 def query_fields(source: dict) -> list[str]:
-    """Directus-Feldliste, die für Optionen/Snapshot/Anzeige geladen werden muss:
-    Wert-Feld + Label-Pfade + Anzeige-Pfade + explizit konfigurierte Felder."""
+    """Directus-Feldliste, die für Optionen/Snapshot geladen werden muss:
+    Wert-Feld + Label-Pfade + explizit konfigurierte Felder (dedupliziert)."""
     fields: list[str] = []
-    for f in [source.get("valueField", ""),
-              *template_paths(source.get("labelTemplate", "")),
-              *template_paths(source.get("displayTemplate", "")),
+    for f in [source.get("valueField", ""), *template_paths(source.get("labelTemplate", "")),
               *source.get("fields", [])]:
         if f and f not in fields:
             fields.append(f)
     return fields
-
-
-def display_label(record: dict, source: dict) -> str:
-    """Anzeige-Label für die Ticket-Ansichten: rendert die ANZEIGE-Vorlage
-    (`displayTemplate`), fällt bei leerer Vorlage auf die Label-Vorlage zurück;
-    letzter Fallback ist der rohe Wert."""
-    tmpl = source.get("displayTemplate") or source.get("labelTemplate", "")
-    value = _scalar(resolve_path(record, source["valueField"]))
-    return render_label(tmpl, record).strip() or value
-
-
-def build_display_map(records: list[dict], source: dict) -> dict[str, str]:
-    """{value → Anzeige-Label} für die ID-Auflösung der Ticket-Ansichten."""
-    out: dict[str, str] = {}
-    for r in records:
-        if isinstance(r, dict):
-            out[_scalar(resolve_path(r, source["valueField"]))] = display_label(r, source)
-    return out
 
 
 def build_option(record: dict, source: dict) -> dict:

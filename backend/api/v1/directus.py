@@ -56,8 +56,6 @@ class SourceIn(BaseModel):
     collection: str
     valueField: str
     labelTemplate: str
-    #: Anzeige-Vorlage für die Ticket-Ansichten (leer ⇒ Label-Vorlage).
-    displayTemplate: Optional[str] = None
     fields: list[str] = []
     filter: Optional[dict] = None
     sort: list[str] = []
@@ -191,6 +189,5 @@ def resolve_labels(key: str, values: str = "", user: dict = Depends(get_current_
     except dc.DirectusError as exc:
         logger.warning("Directus-Label-Auflösung „%s“: %s", key, exc)
         return DataResponse(data={"labels": {}})
-    # Anzeige-Vorlage (displayTemplate) für die Ticket-Ansichten – Fallback Label-Vorlage.
-    labels = {str(k): v for k, v in store.build_display_map(records, src).items()}
+    labels = {str(o["value"]): o["label"] for o in store.build_options(records, src)}
     return DataResponse(data={"labels": labels})

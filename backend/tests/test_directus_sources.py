@@ -84,30 +84,3 @@ def test_get_all_skips_invalid(monkeypatch):
         {"key": "BAD KEY", "collection": "c", "valueField": "v", "labelTemplate": "t"},
     ])
     assert [s["key"] for s in ds.get_all()] == ["ok"]
-
-
-# ── Anzeige-Vorlage (displayTemplate) ─────────────────────────────────────────
-
-def test_display_template_normalisiert_und_query_fields():
-    s = ds.normalize_source({"key": "nl", "collection": "niederlassung",
-                             "valueField": "id", "labelTemplate": "{{name}}",
-                             "displayTemplate": "{{name}} ({{ort}})"})
-    assert s["displayTemplate"] == "{{name}} ({{ort}})"
-    # query_fields lädt auch die Pfade der Anzeige-Vorlage (id, name, ort).
-    assert set(ds.query_fields(s)) == {"id", "name", "ort"}
-
-
-def test_build_display_map_nutzt_display_template():
-    s = ds.normalize_source({"key": "nl", "collection": "n", "valueField": "id",
-                             "labelTemplate": "{{name}}", "displayTemplate": "{{name}} – {{ort}}"})
-    recs = [{"id": "1", "name": "Alpha", "ort": "Nürnberg"}]
-    assert ds.build_display_map(recs, s) == {"1": "Alpha – Nürnberg"}
-    # Dropdown-Optionen bleiben bei der Label-Vorlage.
-    assert ds.build_options(recs, s)[0]["label"] == "Alpha"
-
-
-def test_display_template_faellt_auf_label_zurueck():
-    s = ds.normalize_source({"key": "nl", "collection": "n", "valueField": "id",
-                             "labelTemplate": "{{name}}"})   # keine Anzeige-Vorlage
-    recs = [{"id": "1", "name": "Alpha"}]
-    assert ds.build_display_map(recs, s) == {"1": "Alpha"}

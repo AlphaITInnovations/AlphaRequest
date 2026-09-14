@@ -10,8 +10,6 @@ export interface DirectusSource {
   collection: string
   valueField: string
   labelTemplate: string
-  /** Anzeige-Vorlage für die Ticket-Ansichten (leer ⇒ Label-Vorlage). */
-  displayTemplate: string
   fields: string[]
   filter: Record<string, unknown> | null
   sort: string[]
