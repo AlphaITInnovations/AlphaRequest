@@ -13,9 +13,11 @@
  *
  * Ob jemand anlegen darf, entscheidet AUSSCHLIESSLICH der Server (`may_create`
  * je Prozess, gespeist aus `createPermissions` der Definition). Das Frontend
- * kennt die Gruppen-Mitgliedschaft nicht und darf es nicht nachbauen. Kacheln
- * ohne Recht bleiben sichtbar, aber deaktiviert – so ist erkennbar, dass es den
- * Prozess gibt und man ihn beantragen kann, statt dass er unerklärlich fehlt.
+ * kennt die Gruppen-Mitgliedschaft nicht und darf es nicht nachbauen. Prozesse
+ * OHNE Anlege-Recht werden AUSGEBLENDET (nicht ausgegraut) – wer sie ohnehin
+ * nicht anlegen kann, soll nicht daran vorbeiscrollen. Deaktivierte-aber-
+ * berechtigte Prozesse bleiben sichtbar (mit „Deaktiviert"), damit erkennbar
+ * ist, dass es sie gibt und sie nur vorübergehend zu sind.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -43,7 +45,13 @@ function darfAnlegen(p: ProcessOut): boolean {
 }
 
 /** Alles außer dem Basis-Ticket – das hat seinen eigenen Einstieg. */
-const prozesse = computed(() => withoutBasisTicket(catalog.value))
+const alleProzesse = computed(() => withoutBasisTicket(catalog.value))
+
+/** Sichtbar sind nur Prozesse, für die man das Anlege-Recht hat: ohne Recht wird
+ *  die Kachel AUSGEBLENDET (nicht ausgegraut). Deaktivierte-aber-berechtigte
+ *  bleiben sichtbar (mit „Deaktiviert"). Fehlt `may_create` (älteres Backend),
+ *  gilt der Prozess als sichtbar – der Server weist es notfalls mit 403 ab. */
+const prozesse = computed(() => alleProzesse.value.filter((p) => p.may_create !== false))
 
 const gefiltert = computed(() => {
   const q = search.value.toLowerCase().trim()
@@ -58,8 +66,10 @@ const kacheln = computed(() =>
   [...gefiltert.value].sort((a, b) => Number(darfAnlegen(b)) - Number(darfAnlegen(a))),
 )
 
-const keinesAnlegbar = computed(
-  () => prozesse.value.length > 0 && !prozesse.value.some(darfAnlegen),
+/** Es gibt veröffentlichte Prozesse, aber für keinen liegt das Anlege-Recht vor
+ *  → die gefilterte (sichtbare) Liste ist leer. */
+const keineBerechtigung = computed(
+  () => alleProzesse.value.length > 0 && prozesse.value.length === 0,
 )
 
 function oeffnen(p: ProcessOut) {
@@ -126,8 +136,9 @@ onMounted(async () => {
                       focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition" />
       </div>
 
-      <!-- Hinweis, wenn es gar keine Kachel zum Klicken gibt -->
-      <p v-if="keinesAnlegbar" class="text-sm text-gray-500 dark:text-gray-400">
+      <!-- Es gibt Prozesse, aber für keinen hat man das Anlege-Recht (alle
+           ausgeblendet). Sonst stünde hier nur eine leere Fläche. -->
+      <p v-if="keineBerechtigung" class="text-sm text-gray-500 dark:text-gray-400">
         Für keinen der veröffentlichten Prozesse liegt bei dir das Recht zum Anlegen.
         Wende dich an die Administration, wenn du einen davon brauchst.
       </p>
@@ -160,13 +171,11 @@ onMounted(async () => {
                                       : 'text-gray-400 dark:text-gray-600'">
               {{ p.description }}
             </p>
+            <!-- Nur noch „Deaktiviert" möglich: Prozesse ohne Anlege-Recht sind
+                 ausgeblendet, tauchen hier also gar nicht erst auf. -->
             <p v-if="p.disabled"
                class="text-[10px] text-red-400 dark:text-red-400/70 mt-1.5 uppercase tracking-wider font-medium">
               Deaktiviert
-            </p>
-            <p v-else-if="!darfAnlegen(p)"
-               class="text-[10px] text-gray-400 dark:text-gray-600 mt-1.5 uppercase tracking-wider font-medium">
-              Keine Berechtigung
             </p>
           </div>
           <svg v-if="darfAnlegen(p)"
@@ -182,7 +191,7 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div v-if="!prozesse.length && !loadError" class="text-center py-8">
+      <div v-if="!alleProzesse.length && !loadError" class="text-center py-8">
         <p class="text-sm text-gray-400 italic">
           Es ist noch kein Prozess mit festem Ablauf veröffentlicht.
         </p>
@@ -202,7 +211,7 @@ onMounted(async () => {
           </button>
         </template>
       </div>
-      <p v-else-if="!kacheln.length" class="text-center text-sm text-gray-400 italic py-8">
+      <p v-else-if="!kacheln.length && prozesse.length" class="text-center text-sm text-gray-400 italic py-8">
         Kein passender Prozess gefunden.
       </p>
     </div>
