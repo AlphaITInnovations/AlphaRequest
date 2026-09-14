@@ -977,9 +977,16 @@ def test_archive_list_department_member_vs_outsider(client, monkeypatch):
     from backend.core.dependencies import get_current_user
     tid = client.post("/process-tickets",
                       json={"processKey": "demo", "values": {"base.name": "Max"}}).json()["data"]["id"]
-    # g_it ist unbedingte Fachabteilung des demo-Prozesses → Mitglied sieht ihn.
     monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
                         lambda uid: ["g_it"] if uid == "u_it" else [])
+    # g_it ist erst in der review-Phase zuständig: SOLANGE der Auftrag in der Start-
+    # Phase steht, taucht er beim g_it-Mitglied NICHT im Archiv auf.
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_it", "permissions": []}
+    d0 = client.get("/process-tickets/archive").json()["data"]
+    assert all(it["id"] != tid for it in d0["items"])
+    # Sobald der Auftrag die review-Phase (g_it) ERREICHT, erscheint er.
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "permissions": ["admin"]}
+    client.post(f"/process-tickets/{tid}:advance")                    # → review (g_it)
     client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_it", "permissions": []}
     d = client.get("/process-tickets/archive").json()["data"]
     assert any(it["id"] == tid for it in d["items"])

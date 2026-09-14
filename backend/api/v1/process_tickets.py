@@ -360,14 +360,16 @@ def _assert_view(row: dict, defn, user: dict) -> list:
 
 def _assert_view_or_archive(row: dict, defn, user: dict) -> list:
     """Lesen für Detail UND gepinnte Definition: aktive Sicht ODER Archiv-
-    Beteiligung (Mitglied einer je zuständigen Gruppe/Fachabteilung, bedingte gegen
-    die Werte geprüft). Bewusst breiter als _assert_view, damit Archiv-Links auch
-    abgeschlossene Aufträge öffnen. Verlauf/Events, Anhänge und Bearbeiten bleiben
-    beim strengen _assert_view. Die gelieferten Feldwerte filtert weiterhin die
-    Feld-Sichtbarkeit; die Definition trägt ohnehin keine Werte."""
+    Beteiligung (Mitglied einer Gruppe/Fachabteilung, die in einer vom Auftrag
+    ERREICHTEN Phase zuständig ist/war). Bewusst breiter als _assert_view, damit
+    Archiv-Links auch abgeschlossene Aufträge öffnen. Verlauf/Events, Anhänge und
+    Bearbeiten bleiben beim strengen _assert_view. Die gelieferten Feldwerte filtert
+    weiterhin die Feld-Sichtbarkeit; die Definition trägt ohnehin keine Werte."""
     gids = vis.user_group_ids(user)
+    # may_view deckt Owner/Beobachter/aktuell-Zuständige/Aufsicht schon ab – hier
+    # nur noch die frühere Beteiligung an einer erreichten Phase ergänzen.
     if (acc.may_view(defn, row, user, gids, _watcher_ids(row["id"]))
-            or acc.archive_involved(defn, row, user, gids, values=row.get("values") or {})):
+            or acc.archive_involved(defn, row, user, gids)):
         return gids
     raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
 
@@ -627,30 +629,17 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
         # Aufsicht sieht ALLES – keine Beteiligungsprüfung.
         included: set = {r["id"] for r in rows}
     else:
+        # Beteiligung je Auftrag: Ersteller/Beobachter/aktuell zuständig ODER Gruppe/
+        # Fachabteilung in einer bereits ERREICHTEN Phase (nicht schon, weil sie laut
+        # Definition irgendwann zuständig wäre – archive_involved wertet die Runtime aus).
         included = set()
-        needs_values: list = []       # (row, defn) – bedingte Regel prüfen
         for r in rows:
             try:
                 defn = _load_pinned_defn(r, defn_cache)
             except Exception:
                 defn = None
-            if (uid and r.get("owner_id") == uid) or (r["id"] in watched):
+            if acc.archive_involved(defn, r, user, gids, is_watcher=(r["id"] in watched)):
                 included.add(r["id"])
-                continue
-            if defn is None:
-                continue              # kaputter Pin: default-deny
-            uncond, cond = acc.responsible_group_refs(defn)
-            if (gids & uncond) or acc.is_responsible(defn, r, user, gids):
-                included.add(r["id"])
-                continue
-            if any(g in gids for g, _w in cond):
-                needs_values.append((r, defn))
-        # Nur für die bedingten Kandidaten die Werte laden (eine Abfrage) und prüfen.
-        if needs_values:
-            vals = store.values_for_tickets([r["id"] for r, _ in needs_values])
-            for r, defn in needs_values:
-                if acc.archive_involved(defn, r, user, gids, values=vals.get(r["id"], {})):
-                    included.add(r["id"])
 
     filtered = [r for r in rows if r["id"] in included]   # bewahrt updated_at-DESC
     total = len(filtered)

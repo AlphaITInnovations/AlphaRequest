@@ -123,36 +123,67 @@ def responsible_group_refs(defn: Optional[ProcessDefinition]) -> tuple[set, list
     return uncond, cond
 
 
+def _phase_reached(pe: dict) -> bool:
+    """Wurde diese Runtime-Phase schon BETRETEN? `pending` ohne `entered_at` = noch
+    nicht (spätere Phase); alles andere (open/done bzw. `entered_at` gesetzt) = ja.
+    Rücksprung (reopen/send_back) setzt Phasen VOR dem Ziel auf `done` (erreicht)
+    und dahinter zurück auf `pending` (gilt dann wieder als nicht erreicht)."""
+    return pe.get("status") != "pending" or bool(pe.get("entered_at"))
+
+
+def group_in_reached_phase(defn: Optional[ProcessDefinition], runtime: dict,
+                           gset: set) -> bool:
+    """Ist eine der Gruppen `gset` in einer vom Auftrag WIRKLICH BETRETENEN Phase
+    (aktuell oder abgeschlossen) zuständig – Fachabteilung ODER group-Phase?
+
+    Fachabteilungen zählen über den beim Eintritt geseedeten Abteilungs-Stand der
+    Phase (`runtime.phases[i].departments`): dort ist die bedingte Regel bereits
+    aufgelöst (z. B. Fuhrpark nur bei Dienstwagen=Ja). So erscheint ein Auftrag im
+    persönlichen Archiv erst, wenn er die Phase der Abteilung ERREICHT hat – nicht
+    schon, weil sie laut Definition irgendwann einmal zuständig wäre."""
+    if defn is None or not gset:
+        return False
+    phases = defn.phases
+    for i, pe in enumerate(runtime.get("phases") or []):
+        if i >= len(phases) or not _phase_reached(pe):
+            continue
+        r = phases[i].responsibility
+        if r.kind == ResponsibilityKind.group and r.group in gset:
+            return True
+        if r.kind == ResponsibilityKind.departments \
+                and any(d.get("group") in gset for d in (pe.get("departments") or [])):
+            return True
+    return False
+
+
 def archive_involved(defn: Optional[ProcessDefinition], row: dict, user: dict,
-                     group_ids: Iterable[str], *, is_watcher: bool = False,
-                     values: Optional[dict] = None) -> bool:
+                     group_ids: Iterable[str], *, is_watcher: bool = False) -> bool:
     """War/ist der/die Nutzende an DIESEM Auftrag beteiligt – fürs persönliche
-    Archiv (ALLE Status). Ersteller:in · Beobachter:in · Mitglied einer Gruppe, die
-    im Prozess zuständig ist. Bedingte Fachabteilungs-Regeln zählen nur, wenn ihr
-    `when` gegen `values` zutrifft (fehlt `values`, wird der bedingte Teil
-    übersprungen). Bewusst über die AKTUELLE Mitgliedschaft – neue Mitglieder sehen
-    die Vergangenheit.
+    Archiv (ALLE Status): Ersteller:in · Beobachter:in · aktuell Zuständige:r ·
+    Mitglied einer Gruppe/Fachabteilung, die in einer vom Auftrag TATSÄCHLICH
+    ERREICHTEN Phase zuständig ist/war.
+
+    WICHTIG: Eine Fachabteilung sieht den Auftrag erst, wenn er ihre Phase erreicht
+    hat (oder hatte) – NICHT schon, weil die Abteilung laut Definition später einmal
+    zuständig wäre. Ein Onboarding mit Dienstwagen taucht beim Fuhrpark also erst
+    auf, wenn es in der Durchführung ist; wird es vorher abgelehnt/gelöscht, bekommt
+    die noch nicht beteiligte Abteilung nichts davon mit. Über die AKTUELLE
+    Mitgliedschaft (neue Mitglieder sehen die erreichte Vergangenheit).
 
     BEWUSST OHNE Aufsichts-Kurzschluss: die Aufsichtsrolle (view/manage/admin) ist
-    Sache der Übersicht „Alle Aufträge", NICHT des persönlichen Archivs. Ein Admin
-    sieht im Archiv nur, woran er selbst beteiligt war. (Das Detail-Lesen erlaubt
-    der Aufsicht trotzdem der Zugriff – über may_view, nicht über diese Funktion.)
-    NICHT für aktive Bearbeitung/Verlauf gedacht (nur Lese-Archiv)."""
+    Sache der Übersicht „Alle Aufträge", NICHT des persönlichen Archivs. (Das
+    Detail-Lesen erlaubt der Aufsicht trotzdem der Zugriff – über may_view.)"""
     uid = user.get("id")
     if uid and row.get("owner_id") == uid:
         return True
     if is_watcher:
         return True
     gset = set(group_ids or ())
-    uncond, cond = responsible_group_refs(defn)
-    if gset & uncond:
+    # Aktuell zuständig (deckt owner/user/assignable/group/departments der AKTIVEN Phase).
+    if is_responsible(defn, row, user, gset):
         return True
-    if cond and values is not None:
-        from backend.services.condition_dsl import evaluate
-        for grp, when in cond:
-            if grp in gset and evaluate(when, values):
-                return True
-    return False
+    # ODER Gruppe/Fachabteilung in einer bereits erreichten Phase (Vergangenheit).
+    return group_in_reached_phase(defn, row.get("runtime") or {}, gset)
 
 
 def is_responsible(defn: Optional[ProcessDefinition], row: dict, user: dict,

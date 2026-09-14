@@ -142,9 +142,18 @@ def test_phasenwechsel_setzt_abteilungen_neu():
 
 # ── Archiv-Beteiligung (persönliches Archiv, alle Status) ─────────────────────
 
-def _arch(status="archived", values=None):
-    return {"id": 9, "owner_id": "u_owner", "status": status,
-            "values": values or {}, "runtime": {}}
+FP = {"id": "u_fp", "permissions": []}
+LEAD = {"id": "u_lead", "permissions": []}
+
+
+def _arch(phase_index=1, values=None, status="in_progress", rejected=False):
+    """Auftrag mit ECHTER Runtime, die bis `phase_index` fortgeschritten ist."""
+    t = ticket(values=values, phase_index=phase_index)
+    t["id"] = 9
+    t["status"] = status
+    if rejected:
+        t["runtime"]["rejected"] = True
+    return t
 
 
 def test_responsible_group_refs_trennt_bedingt():
@@ -153,40 +162,44 @@ def test_responsible_group_refs_trennt_bedingt():
     assert [g for g, _w in cond] == ["g_fp"]
 
 
-def test_archive_unbedingte_abteilung_sieht_alle_status_ohne_werte():
-    # g_it ist unbedingt zuständig → sieht auch abgeschlossene Aufträge, ohne Werte.
-    assert acc.archive_involved(DEFN, _arch(), IT, ["g_it"]) is True
+def test_archive_abteilung_erst_ab_erreichter_phase():
+    # g_it ist erst in der review-Phase (Fachabteilung, phase 1) zuständig – vorher
+    # (start, phase 0) taucht der Auftrag im persönlichen Archiv NICHT auf.
+    assert acc.archive_involved(DEFN, _arch(phase_index=0), IT, ["g_it"]) is False
+    assert acc.archive_involved(DEFN, _arch(phase_index=1), IT, ["g_it"]) is True
 
 
-def test_archive_gruppen_phase_mitglied_sieht():
-    lead = {"id": "u_lead", "permissions": []}
-    assert acc.archive_involved(DEFN, _arch(), lead, ["g_lead"]) is True
+def test_archive_gruppen_phase_erst_ab_erreicht():
+    # g_lead ist erst in der final-Phase (phase 2) zuständig.
+    assert acc.archive_involved(DEFN, _arch(phase_index=1), LEAD, ["g_lead"]) is False
+    assert acc.archive_involved(DEFN, _arch(phase_index=2), LEAD, ["g_lead"]) is True
 
 
-def test_archive_bedingte_abteilung_nur_wenn_bedingung_zutrifft():
-    fp = {"id": "u_fp", "permissions": []}
-    ja = _arch(values={"fuhrpark.car": "Ja"})
-    nein = _arch(values={"fuhrpark.car": "Nein"})
-    assert acc.archive_involved(DEFN, ja, fp, ["g_fp"], values=ja["values"]) is True
-    assert acc.archive_involved(DEFN, nein, fp, ["g_fp"], values=nein["values"]) is False
-    # Ohne Werte wird der bedingte Teil übersprungen (Endpunkt lädt sie nur bei Bedarf).
-    assert acc.archive_involved(DEFN, ja, fp, ["g_fp"], values=None) is False
+def test_archive_bedingte_abteilung_phase_und_bedingung():
+    # g_fp nur bei Dienstwagen=Ja – UND erst, wenn die review-Phase erreicht ist.
+    assert acc.archive_involved(DEFN, _arch(1, {"fuhrpark.car": "Ja"}), FP, ["g_fp"]) is True
+    assert acc.archive_involved(DEFN, _arch(1, {"fuhrpark.car": "Nein"}), FP, ["g_fp"]) is False
+    # Bedingung erfüllt, aber Phase noch nicht erreicht → nein.
+    assert acc.archive_involved(DEFN, _arch(0, {"fuhrpark.car": "Ja"}), FP, ["g_fp"]) is False
+
+
+def test_archive_abgelehnt_vor_erreichen_bleibt_unsichtbar():
+    # Schon in der start-Phase abgelehnt – die review-Fachabteilungen waren nie dran.
+    weg = _arch(0, {"fuhrpark.car": "Ja"}, status="rejected", rejected=True)
+    assert acc.archive_involved(DEFN, weg, FP, ["g_fp"]) is False
+    assert acc.archive_involved(DEFN, weg, IT, ["g_it"]) is False
 
 
 def test_archive_owner_und_beobachter():
-    assert acc.archive_involved(DEFN, _arch(), OWNER, []) is True
-    assert acc.archive_involved(DEFN, _arch(), FREMD, [], is_watcher=True) is True
+    assert acc.archive_involved(DEFN, _arch(0), OWNER, []) is True
+    assert acc.archive_involved(DEFN, _arch(0), FREMD, [], is_watcher=True) is True
 
 
 def test_archive_aufsicht_allein_zaehlt_nicht():
-    # Aufsicht/Admin ist Sache der Übersicht „Alle Aufträge", nicht des Archivs:
-    # ohne echte Beteiligung sehen sie hier nichts.
-    assert acc.archive_involved(DEFN, _arch(), AUFSICHT, []) is False
-    assert acc.archive_involved(DEFN, _arch(), ADMIN, []) is False
+    # Aufsicht/Admin ist Sache der Übersicht „Alle Aufträge", nicht des Archivs.
+    assert acc.archive_involved(DEFN, _arch(1), AUFSICHT, []) is False
+    assert acc.archive_involved(DEFN, _arch(1), ADMIN, []) is False
 
 
-def test_archive_echte_unbeteiligte_abgelehnt():
-    assert acc.archive_involved(DEFN, _arch(), FREMD, ["g_andere"]) is False
-    # Nicht-Mitglied der bedingten Abteilung: auch bei zutreffender Bedingung nein.
-    ja = _arch(values={"fuhrpark.car": "Ja"})
-    assert acc.archive_involved(DEFN, ja, FREMD, ["g_andere"], values=ja["values"]) is False
+def test_archive_echte_unbeteiligte():
+    assert acc.archive_involved(DEFN, _arch(1, {"fuhrpark.car": "Ja"}), FREMD, ["g_andere"]) is False
