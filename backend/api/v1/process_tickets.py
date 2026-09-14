@@ -289,32 +289,16 @@ def _view_ctx(row: dict, defn, user: dict, gids, view: Optional[str],
     return _read_ctx(user, row, defn, gset)
 
 
-def _is_watcher(row: dict, user: dict) -> bool:
-    """Beobachtet DIESE Person den Auftrag? (Beobachten = alle Angaben mitlesen.)"""
-    uid = user.get("id")
-    rid = row.get("id")
-    if not uid or rid is None:
-        return False
-    try:
-        return uid in watchers.watcher_ids(int(rid))
-    except Exception:
-        logger.warning("Beobachter-Status für #%s nicht ladbar – fail-closed", rid)
-        return False
-
-
-def _read_ctx(user: dict, row: dict, defn, gids=None,
-              is_watcher: Optional[bool] = None) -> vis.ViewerCtx:
+def _read_ctx(user: dict, row: dict, defn, gids=None) -> vis.ViewerCtx:
     """Sicht für ALLE Antwort-Objekte AUSSERHALB der ausdrücklichen Admin-Ansicht
     (Liste, Mutationen, Erstellen). Der reine Admin-Bonus bleibt hier IMMER aus –
     alle Felder zeigt einzig der Detail-GET mit ?view=admin. Für Nicht-Admins ein
     No-Op (view/manage-Aufsicht, Owner- und Phasen-Vollsicht bleiben). BEWUSST NICHT
     im Dokument-Export (_docx_fill_prep) – das ist ein eigenes, ungefiltertes Gate.
 
-    Beobachter:innen sehen alle Angaben: `is_watcher` wird durchgereicht (der
-    Aufrufer kann ihn bündeln, um N+1 zu sparen) oder – wenn None – hier ermittelt."""
-    watcher = _is_watcher(row, user) if is_watcher is None else is_watcher
-    return vis.build_viewer_ctx(user, row, defn, group_ids=gids,
-                                suppress_admin=True, is_watcher=watcher)
+    Beobachter:innen bekommen hier KEINE Vollsicht: sie sehen die Felder nur im
+    Rahmen ihrer eigenen Berechtigung (Gruppen-Sicht)."""
+    return vis.build_viewer_ctx(user, row, defn, group_ids=gids, suppress_admin=True)
 
 
 def _actor_name(user: dict) -> str:
@@ -457,8 +441,7 @@ def list_process_tickets(
         if not oversight and not acc.may_view(d, r, user, gids, watch_map.get(r["id"], ())):
             hidden += 1
             continue
-        out.append(_out(r, d, _read_ctx(user, r, d, gids,
-                                        is_watcher=user.get("id") in watch_map.get(r["id"], ())),
+        out.append(_out(r, d, _read_ctx(user, r, d, gids),
                         user, gids))
     return ListResponse(data=out,
                         meta=Meta(total=max(0, total - hidden), limit=limit, offset=offset))
@@ -1428,8 +1411,7 @@ def list_ticket_events(ticket_id: int, user: dict = Depends(get_current_user),
     """Verlauf eines Auftrags – redigiert: Einträge über nicht sichtbare Felder
     entfallen, interne Nachträge sieht nur die bearbeitende Seite."""
     row, defn, gids = _load_for_view(ticket_id, user)
-    evs, total = events.for_viewer(row, defn, user, gids, limit=limit, offset=offset,
-                                   is_watcher=_is_watcher(row, user))
+    evs, total = events.for_viewer(row, defn, user, gids, limit=limit, offset=offset)
     return ListResponse(data=[EventOut(**e) for e in evs],
                         meta=Meta(total=total, limit=limit, offset=offset))
 

@@ -141,12 +141,7 @@ def _may_see_attachment_field(row: dict, defn: Optional[ProcessDefinition], user
     f = next((fd for fd in defn.fields if fd.key == field_key), None)
     if f is None:
         return True
-    # Beobachten heißt mitlesen: Beobachter:innen sehen alle Angaben – auch die
-    # zugehörigen Anhang-Felder (nur confidential bleibt gesperrt).
-    uid = user.get("id")
-    is_watcher = bool(uid) and row.get("id") is not None and uid in watchers.watcher_ids(int(row["id"]))
-    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=vis.user_group_ids(user),
-                               is_watcher=is_watcher)
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=vis.user_group_ids(user))
     return vis.can_see_field(f, ctx)
 
 
