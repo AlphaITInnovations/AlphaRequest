@@ -234,7 +234,7 @@
       "key": "base.cost_center",
       "label": "Kostenstelle",
       "widget": "directus",
-      "help": "Nur Ziffern (im Alt-Formular wurden Nicht-Ziffern beim Tippen entfernt).",
+      "help": "Nur Ziffern.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -394,7 +394,7 @@
       "key": "personal.private_zip",
       "label": "Postleitzahl (privat)",
       "widget": "text",
-      "help": "Im Alt-Formular wurde daraus per OpenPLZ-API automatisch das Bundesland ermittelt – diese Ableitung gibt es im neuen Format nicht, bitte manuell wählen.",
+      "help": null,
       "placeholder": "12345",
       "options": [],
       "optionsSource": null,
@@ -688,7 +688,7 @@
       "key": "personal.department_other",
       "label": "Fachabteilung angeben",
       "widget": "text",
-      "help": "Nur noch für Alt-Daten relevant: im neuen Formular wird „Sonstige“ direkt als Freitext in „Fachabteilung“ erfasst.",
+      "help": null,
       "placeholder": "Abteilungsname eingeben",
       "options": [],
       "optionsSource": null,
@@ -1385,45 +1385,8 @@
       "directusFieldMap": []
     },
     {
-      "key": "fuhrpark.car_class",
-      "label": "Fahrzeuggruppe (BLP)",
-      "widget": "text",
-      "help": "Wird automatisch aus der Position ermittelt und ist nicht manuell änderbar.",
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "8b71e13442814e519068cf3fce470559"
-        ]
-      },
-      "computed": {
-        "from": "personal.position",
-        "map": {
-          "Disposition": "Disposition (BLP 40.000 €)",
-          "Niederlassungsleitung": "Niederlassungsleitung (BLP 50.000 €)",
-          "Abteilungsleitung / Verwaltung": "Abteilungsleitung / Verwaltung (BLP 50.000 €)",
-          "Regionalleitung": "Regionalleitung (BLP 60.000 €)",
-          "Regionaldirektion": "Regionaldirektion (BLP 70.000 €)",
-          "Geschäftsbereichsleitung": "Geschäftsbereichsleitung (BLP 80.000–90.000 €)",
-          "C-Level": "C-Level (BLP 100.000 €)",
-          "Geschäftsführung": "Geschäftsführung (BLP 100.000 €)"
-        }
-      },
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": []
-    },
-    {
       "key": "fuhrpark.car_class_number",
-      "label": "Fahrzeugklasse (Nr.)",
+      "label": "Fahrzeuggruppe",
       "widget": "text",
       "help": "Wird automatisch aus der Position ermittelt (Gruppe 1–7) und ist nicht manuell änderbar.",
       "placeholder": null,
@@ -2007,18 +1970,6 @@
           }
         },
         {
-          "ref": "fuhrpark.car_class",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          }
-        },
-        {
           "ref": "fuhrpark.car_class_number",
           "mode": "readonly",
           "required": false,
@@ -2224,11 +2175,6 @@
             },
             {
               "type": "field",
-              "ref": "fuhrpark.car_class",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "fuhrpark.car_class_number",
               "width": "half"
             }
@@ -2281,7 +2227,7 @@
         "approveLabel": "Einstellung freigeben",
         "rejectLabel": "Ablehnen",
         "externalLink": true,
-        "emailBody": "Es liegt eine neue Einstellung zur Freigabe vor:\n\nAnrede: {{base.salutation}}\nName: {{base.first_name}} {{base.last_name}}\nTitel: {{base.title}}\nFirma lt. Arbeitsvertrag: {{base.contract_company}}\nNiederlassung: {{base.location_name}}\nKostenstelle: {{base.cost_center_nr}}\nArbeitsbeginn: {{base.start_date}}\nDienstwagen: {{fuhrpark.car}}\nFahrzeuggruppe: {{fuhrpark.car_class}}\n\nKonditionen:\nGehalt: {{konditionen.gehalt}}\n13. Gehalt: {{konditionen.dreizehntes}}\nArt (13. Gehalt): {{konditionen.dreizehntes_art}}\nAuszahlung halbes 13.: {{konditionen.halb_wahl}}\nAuszahlung ganzes 13.: {{konditionen.ganz_wahl}}\nSonderkonditionen: {{konditionen.sonderkonditionen}}",
+        "emailBody": "Es liegt eine neue Einstellung zur Freigabe vor:\n\nAnrede: {{base.salutation}}\nName: {{base.first_name}} {{base.last_name}}\nTitel: {{base.title}}\nFirma lt. Arbeitsvertrag: {{base.contract_company}}\nNiederlassung: {{base.location_name}}\nKostenstelle: {{base.cost_center_nr}}\nArbeitsbeginn: {{base.start_date}}\nDienstwagen: {{fuhrpark.car}}\nFahrzeuggruppe: {{fuhrpark.car_class_number}}\n\nKonditionen:\nGehalt: {{konditionen.gehalt}}\n13. Gehalt: {{konditionen.dreizehntes}}\nArt (13. Gehalt): {{konditionen.dreizehntes_art}}\nAuszahlung halbes 13.: {{konditionen.halb_wahl}}\nAuszahlung ganzes 13.: {{konditionen.ganz_wahl}}\nSonderkonditionen: {{konditionen.sonderkonditionen}}",
         "linkMaxAge": "P7D",
         "requireReason": true,
         "decisionField": null,
@@ -3106,18 +3052,6 @@
           "visibleWhen": null
         },
         {
-          "ref": "fuhrpark.car_class",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": {
-            "==": [
-              "fuhrpark.car",
-              "Ja"
-            ]
-          }
-        },
-        {
           "ref": "fuhrpark.car_class_number",
           "mode": "readonly",
           "required": false,
@@ -3484,11 +3418,6 @@
             {
               "type": "field",
               "ref": "fuhrpark.car",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "fuhrpark.car_class",
               "width": "half"
             },
             {
@@ -4014,13 +3943,6 @@
           "visibleWhen": null
         },
         {
-          "ref": "fuhrpark.car_class",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
           "ref": "fuhrpark.car_class_number",
           "mode": "readonly",
           "required": false,
@@ -4324,11 +4246,6 @@
             {
               "type": "field",
               "ref": "fuhrpark.car",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "fuhrpark.car_class",
               "width": "half"
             },
             {
