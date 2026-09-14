@@ -29,10 +29,13 @@ DEFN_DICT = {
     "fields": [
         {"key": "vertrag", "widget": "attachment"},
         {"key": "base.name", "widget": "text"},
+        # Anhang-Feld mit eingeschränkter Sichtbarkeit (nur g_hr) – für den Feld-Gate-Test.
+        {"key": "docs_hr", "widget": "attachment",
+         "visibility": {"confidential": False, "visibleToGroups": ["g_hr"]}},
     ],
     "phases": [
         {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
-         "fields": [{"ref": "vertrag"}, {"ref": "base.name"}]},
+         "fields": [{"ref": "vertrag"}, {"ref": "base.name"}, {"ref": "docs_hr"}]},
         {"key": "review", "kind": "review",
          "responsibility": {"kind": "departments", "rule": [{"group": "g_it"}]},
          "fields": [{"ref": "base.name", "mode": "readonly"}]},
@@ -202,11 +205,16 @@ class FakeStorage:
 
 
 class FakeVis:
-    """Gruppen-Mitgliedschaft ohne DB (aus dem User-Dict)."""
+    """Gruppen-Mitgliedschaft ohne DB (aus dem User-Dict); die reine Sicht-Logik
+    (build_viewer_ctx/can_see_field) kommt echt aus process_visibility."""
+    from backend.services import process_visibility as _real
 
     @staticmethod
     def user_group_ids(user):
         return set(user.get("groups") or [])
+
+    build_viewer_ctx = staticmethod(_real.build_viewer_ctx)
+    can_see_field = staticmethod(_real.can_see_field)
 
 
 class FakeWatchers:
@@ -485,3 +493,40 @@ def test_beobachter_liest_dateien_aber_ruehrt_nichts_an(ctx, owner_client):
     r = upload(beob)
     assert r.status_code == 403                  # sehen ja, anfassen nein
     assert beob.delete("/attachments/1").status_code == 403
+
+
+def test_anhang_feld_sichtbarkeit_gilt_fuer_liste_und_download(ctx, tmp_path):
+    """Anhänge an einem Feld mit visibleToGroups sieht/lädt nur, wer das Feld
+    sehen darf – auch wenn man den Auftrag ansonsten sehen darf (Beobachter)."""
+    owner = make_client(OWNER)                     # Owner = Voll-Sicht → darf ans Feld
+    up = upload(owner, field_key="docs_hr")
+    assert up.status_code == 200
+    att_id = up.json()["data"]["id"]
+
+    # Der Storage-Stub hat keinen echten Blob → für den Download-Pfad einen echten
+    # unterschieben, damit „erlaubt" (200) von „gesperrt" (404, Gate VOR Storage)
+    # unterscheidbar ist.
+    blob = tmp_path / "docs.pdf"
+    blob.write_bytes(b"PDF")
+    att_api.storage.full_path = lambda sp: blob
+
+    # Beobachter machen may_view möglich, ohne zuständig/Mitglied zu sein.
+    ctx["watchers"].ids[7] = {"w_hr", "w_plain"}
+    hr = make_client({"id": "w_hr", "displayName": "HR", "permissions": [], "groups": ["g_hr"]})
+    plain = make_client({"id": "w_plain", "displayName": "X", "permissions": [], "groups": []})
+
+    # g_hr-Mitglied: sieht das Feld-Attachment in der Liste UND lädt es.
+    liste_hr = hr.get("/process-tickets/7/attachments").json()["data"]
+    assert any(a["field_key"] == "docs_hr" for a in liste_hr)
+    assert hr.get(f"/attachments/{att_id}/download").status_code == 200
+
+    # Beteiligt, aber nicht g_hr: weder in der Liste noch ladbar (404, Existenz verdeckt).
+    liste_plain = plain.get("/process-tickets/7/attachments").json()["data"]
+    assert not any(a["field_key"] == "docs_hr" for a in liste_plain)
+    assert plain.get(f"/attachments/{att_id}/download").status_code == 404
+
+    # Nicht-feldgebundene/normale Anhänge bleiben für Beteiligte sichtbar.
+    up2 = upload(owner, field_key="vertrag")
+    assert any(a["field_key"] == "vertrag"
+               for a in plain.get("/process-tickets/7/attachments").json()["data"])
+    assert plain.get(f"/attachments/{up2.json()['data']['id']}/download").status_code == 200
