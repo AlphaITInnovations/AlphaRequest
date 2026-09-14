@@ -195,15 +195,13 @@ onMounted(async () => {
         <p class="text-sm text-gray-400 italic">
           Es ist noch kein Prozess mit festem Ablauf veröffentlicht.
         </p>
-        <!-- Admins bekommen den konkreten Schritt: die Definitionen liegen im
-             Paket, müssen aber je Installation eingespielt werden. Ohne den
-             Hinweis sucht man den Fehler in der Oberfläche. Das geht in den
-             Einstellungen – ein Server-Zugang ist dafür nicht nötig. -->
+        <!-- Admins bekommen den konkreten Schritt: eine Prozess-Definition wird in
+             den Einstellungen über „Importieren" (JSON) angelegt oder dort neu
+             gebaut – ein Server-Zugang ist dafür nicht nötig. -->
         <template v-if="auth.isAdmin">
           <p class="text-xs text-gray-400 mt-2 max-w-xl mx-auto">
-            Die mitgelieferten Definitionen sind noch nicht eingespielt. Das geht in den
-            Einstellungen unter „Prozesse“ mit „Mitgelieferte Prozesse einspielen“ –
-            erst als Trockenlauf, dann nach Bestätigung.
+            Noch keine Prozess-Definition angelegt. In den Einstellungen unter „Prozesse“
+            lässt sich eine über „Importieren“ (JSON) einspielen oder neu bauen.
           </p>
           <button @click="router.push('/settings?section=processes')"
                   class="text-sm text-[#3EAAB8] hover:underline mt-2">

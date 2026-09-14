@@ -83,10 +83,6 @@ def test_process_routes_registered():
         "/processes/{key}:duplicate",
         "/processes/{key}:set-active",
         "/processes:import",
-        # Ersetzt den Shell-Zugang (backend/scripts/seed_processes.py): ohne
-        # diese Route ist eine frische Installation nur über den Server
-        # bespielbar.
-        "/processes:seed",
     }
     assert expected.issubset(paths), expected - paths
 

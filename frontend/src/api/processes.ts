@@ -180,23 +180,3 @@ export async function confirmProcessDelete(
 export async function deleteVersion(key: string, version: number): Promise<void> {
   await client.delete(`/processes/${encodeURIComponent(key)}/versions/${version}`)
 }
-
-/**
- * Mitgelieferte Definitionen einspielen (nur Admin, auditiert).
- *
- * `commit: false` ist der TROCKENLAUF und schreibt nichts – er ist der Sinn der
- * Sache und wird immer zuerst gefahren. Die Antwort ist der Bericht des Laufs.
- *
- * OHNE Oberfläche: der Seed-Dialog in den Einstellungen ist bewusst entfernt –
- * Prozesse kommen manuell über „Importieren" (JSON aus dem Repo). Der Endpunkt
- * bleibt für Notfälle per API erreichbar.
- */
-export async function seedProcesses(
-  opts: { commit: boolean; skipPermissions?: boolean },
-): Promise<unknown> {
-  const { data } = await client.post('/processes:seed', {
-    commit: opts.commit,
-    skipPermissions: !!opts.skipPermissions,
-  })
-  return data?.data ?? data
-}

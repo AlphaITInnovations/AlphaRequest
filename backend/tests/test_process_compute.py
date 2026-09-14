@@ -1,9 +1,7 @@
 """Ebene-1: Wert-Ausdrücke / computed-Felder (services/process_compute)."""
 
-import json
 
 from backend.schemas.process_definition import ProcessDefinition
-from backend.seeds import PROCESS_SEED_DIR
 from backend.services.process_compute import apply_computed
 
 
@@ -75,13 +73,24 @@ def test_computed_from_computed_resolves_regardless_of_order():
     assert out["a"] == "X" and out["b"] == "X"
 
 
-def test_zugang_beantragen_fahrzeugklasse_nummer():
-    """Regressionsschutz für die Geschäftsregel: fuhrpark.car_class_number wird
-    non-overridable (read-only) aus personal.position abgeleitet und stempelt die
-    Fahrzeugklasse 1–7. Positionen ohne Dienstwagen-Gruppe bleiben leer."""
-    roh = json.loads(
-        (PROCESS_SEED_DIR / "prozess-zugang-beantragen.json").read_text(encoding="utf-8"))
-    defn = ProcessDefinition.model_validate(roh)
+def test_computed_map_leitet_fahrzeugklasse_aus_position_ab():
+    """Regressionsschutz für die Geschäftsregel (früher aus dem Onboarding-Seed):
+    ein non-overridable computed-Feld mit `map` leitet die Fahrzeugklasse 1–7 aus
+    personal.position ab; Positionen ohne Eintrag in der Map bleiben leer."""
+    defn = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "demo", "name": "Demo",
+        "fields": [
+            {"key": "personal.position", "widget": "text"},
+            {"key": "fuhrpark.car_class_number", "widget": "text", "overridable": False,
+             "computed": {"from": "personal.position", "map": {
+                 "Disposition": "1", "Niederlassungsleitung": "2",
+                 "Abteilungsleitung / Verwaltung": "2", "Regionalleitung": "3",
+                 "Regionaldirektion": "4", "Geschäftsbereichsleitung": "5",
+                 "Geschäftsführung": "6", "C-Level": "7"}}},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "personal.position"}]}],
+    })
 
     feld = next(f for f in defn.fields if f.key == "fuhrpark.car_class_number")
     assert feld.computed is not None and feld.computed.from_ == "personal.position"

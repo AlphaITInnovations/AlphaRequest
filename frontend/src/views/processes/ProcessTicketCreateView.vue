@@ -275,10 +275,8 @@ onMounted(async () => {
                den Einstellungen – ein Server-Zugang ist dafür nicht nötig. -->
           <p v-if="nichtVeroeffentlicht && auth.isAdmin"
              class="text-xs text-amber-800 dark:text-amber-300/90 mt-2">
-            Die mitgelieferten Prozess-Definitionen sind noch nicht eingespielt. Das geht in den
-            Einstellungen unter „Prozesse“ mit „Mitgelieferte Prozesse einspielen“: erst ein
-            Trockenlauf, der nichts schreibt, dann das Einspielen nach Bestätigung. Vorhandene
-            Prozesse werden dabei übersprungen.
+            Noch keine Prozess-Definition angelegt. In den Einstellungen unter „Prozesse“
+            lässt sich eine über „Importieren“ (JSON) einspielen oder neu bauen.
           </p>
           <div class="flex items-center gap-3 mt-3">
             <button @click="router.push('/prozess-auftraege/neu')"

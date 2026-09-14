@@ -15,7 +15,6 @@ from fastapi.testclient import TestClient
 from backend.api.v1 import processes as papi
 from backend.core.dependencies import get_current_user
 from backend.main import _install_error_handlers
-from backend.seeds import PROCESS_SEED_DIR
 
 ADMIN = {"id": "u_admin", "displayName": "Admin", "permissions": ["admin"]}
 
@@ -59,8 +58,39 @@ def ctx(monkeypatch):
 
 
 def _onboarding_roh() -> dict:
-    return json.loads((PROCESS_SEED_DIR / "prozess-zugang-beantragen.json")
-                      .read_text(encoding="utf-8"))
+    """Minimal-Definition mit Gruppen-Platzhaltern (HIER_..._EINSETZEN) – bewusst
+    INLINE (entkoppelt von den entfernten Fach-Seeds): geprüft wird nur die
+    Platzhalter-Auflösung des Imports, nicht die Struktur eines konkreten Prozesses."""
+    return {
+        "schemaVersion": 1, "key": "zugang-beantragen", "name": "Onboarding",
+        "fields": [
+            {"key": "base.name", "widget": "text"},
+            {"key": "personal.private_street", "widget": "text",
+             "visibility": {"confidential": False,
+                            "visibleToGroups": ["HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"]}},
+            {"key": "it.note", "widget": "text",
+             "visibility": {"confidential": False,
+                            "visibleToGroups": ["HIER_GRUPPEN_ID_IT_EINSETZEN"]}},
+        ],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "base.name", "required": True}]},
+            {"key": "freigabe", "kind": "review",
+             "responsibility": {"kind": "group",
+                                "group": "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN"},
+             "fields": [{"ref": "base.name", "mode": "readonly"}]},
+            {"key": "arbeitsvertrag", "kind": "task",
+             "responsibility": {"kind": "group",
+                                "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"},
+             "fields": [{"ref": "base.name", "mode": "readonly"}]},
+            {"key": "durchfuehrung", "kind": "review",
+             "responsibility": {"kind": "departments", "rule": [
+                 {"group": "HIER_GRUPPEN_ID_IT_EINSETZEN", "required": True},
+                 {"group": "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN", "required": True},
+                 {"group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN", "required": False}]},
+             "fields": [{"ref": "base.name", "mode": "readonly"}]},
+        ],
+    }
 
 
 def test_import_loest_platzhalter_auf(ctx):
@@ -108,53 +138,3 @@ def test_import_erlaubt_unbekannte_echte_ids(ctx):
                            json={"targetKey": "zugang-beantragen",
                                  "definition": json.loads(text)})
     assert r.status_code == 200, r.text
-
-
-def test_onboarding_seed_nutzt_die_neue_laufzeit():
-    """Der Härtetest-Prozess muss die inzwischen gebauten Mechaniken nutzen –
-    nicht die Behelfe aus der Cutover-Zeit."""
-    defn = _onboarding_roh()
-    felder = {f["key"]: f for f in defn["fields"]}
-    # Personalnummer: automatisch aus dem Nummernkreis der Vertragsfirma.
-    pnr = felder["personal.personal_number"]
-    assert pnr["widget"] == "server_generated"
-    assert pnr["assign"] == {"action": "assign_sequence", "counter": "personalnummer",
-                             "companyRef": "base.contract_company"}
-    # Vergeben beim Abschluss der Rest-Erfassung durch die/den Ersteller:in –
-    # das ist die ERSTE Phase, die die Personalnummer führt (keine SGL-Phase mehr).
-    erste = next(p["key"] for p in defn["phases"]
-                 if any(fr["ref"] == "personal.personal_number" for fr in p["fields"]))
-    assert erste == "bearbeitung"
-    # Die Sekretariat-GL-Erfassungsphase gibt es nicht mehr; die/der Ersteller:in
-    # füllt nach der Freigabe die restlichen Felder selbst aus.
-    assert not any(p["key"] == "bearbeitung_sgl" for p in defn["phases"])
-    assert not any(f["key"] == "ablauf.naechster_bearbeiter" for f in defn["fields"])
-    bearbeitung = next(p for p in defn["phases"] if p["key"] == "bearbeitung")
-    assert bearbeitung["responsibility"]["kind"] == "owner"
-    # Signatur-Titel: vorbefüllt aus base.title, manuell übersteuerbar.
-    sig = felder["it.signature.title"]
-    assert sig["computed"] == {"from": "base.title"} and sig["overridable"] is True
-    # Start-Phase = reine Erfassung: nach dem Anlegen schaltet der Auftrag ohne
-    # liegenzubleiben direkt in Phase 2 (on_enter + auto_advance), statt mit dem
-    # /der Ersteller:in als Bearbeiter:in in der Start-Phase zu warten.
-    start = next(p for p in defn["phases"] if p["kind"] == "start")
-    assert any(a["trigger"]["type"] == "on_enter"
-               and a["action"]["type"] == "auto_advance"
-               for a in start["automations"]), "Start-Phase muss direkt weiterschalten"
-    # Freigabe durch Herrn Lutz liegt direkt nach der Erstellung und vor der
-    # Rest-Erfassung; entscheidet per Mail-Link und trägt die Basisdaten mit.
-    keys = [p["key"] for p in defn["phases"]]
-    assert keys.index("freigabe") == keys.index("erstellung") + 1
-    assert keys.index("freigabe") < keys.index("bearbeitung")
-    frei = next(p for p in defn["phases"] if p["key"] == "freigabe")
-    assert frei["kind"] == "approval" and frei["approval"]["externalLink"] is True
-    assert frei["responsibility"]["group"] == "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN"
-    assert "{{base.first_name}}" in frei["approval"]["emailBody"]
-    # Arbeitsvertrag-Dokument-Phase (Sekretariat GL) liegt vor der Durchführung.
-    assert keys.index("arbeitsvertrag") < keys.index("durchfuehrung")
-    doc = next(p for p in defn["phases"] if p["key"] == "arbeitsvertrag")
-    assert doc["view"] == "document"
-    assert doc["responsibility"]["group"] == "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
-    # Neuer .docx-Weg: KEINE HTML-Vorlage mehr im Seed. Die echte .docx wird pro
-    # Installation im Editor hochgeladen und die {{marker}} dort zugeordnet.
-    assert doc["document"]["templateHtml"] == ""

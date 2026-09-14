@@ -32,15 +32,13 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from backend.database import groups as groupsdb
 from backend.database import process_definitions as defstore
 from backend.schemas.process_definition import ProcessDefinition
 from backend.seeds import process_seed_files
-from backend.services import create_permissions_backfill as backfill
 from backend.utils.logger import logger
 
 
@@ -91,11 +89,6 @@ SYSTEM_ACTOR_NAME = "System (Auslieferung)"
 
 #: Erkennt einen Platzhalter, der (noch) nicht aufgelöst ist.
 _PLACEHOLDER_RE = re.compile(r"HIER_[A-Z0-9_]*_EINSETZEN")
-
-#: Kennzeichnung im Trockenlauf für Gruppen, die es noch nicht gibt. Muss keine
-#: echte ID sein – im Trockenlauf wird nichts geschrieben, geprüft wird nur die
-#: Struktur.
-_DRY_RUN_ID_PREFIX = "DRYRUN-NEUE-GRUPPE:"
 
 
 def is_system_process(key: Optional[str]) -> bool:
@@ -243,50 +236,6 @@ def unresolved_placeholders(defn: dict) -> list[tuple[str, str]]:
     Editor repariert), ein stehen gebliebener Platzhalter aber nie."""
     return [(pfad, wert) for pfad, wert in collect_group_refs(defn)
             if _PLACEHOLDER_RE.fullmatch(wert)]
-
-
-# ── Ergebnis-Berichte ────────────────────────────────────────────────────────
-
-@dataclass
-class SeedOutcome:
-    """Was mit EINEM Seed passiert ist."""
-    datei: str
-    key: Optional[str]
-    aktion: str                    # created | would_create | skipped | error
-    meldung: str = ""
-    warnungen: list[str] = field(default_factory=list)
-    #: Erstellrechte, die aus dem Alt-System übernommen wurden.
-    create_permissions: Optional[dict] = None
-    #: Alt-Gruppen-IDs, die `may_create` nie zu sehen bekommt (siehe Modul
-    #: create_permissions_backfill) – übernommen wird nur, was auch wirkt.
-    wirkungslose_gruppen: list[str] = field(default_factory=list)
-
-
-@dataclass
-class SeedReport:
-    commit: bool
-    outcomes: list[SeedOutcome] = field(default_factory=list)
-    #: Gruppen, die der Lauf angelegt hat (nur bei commit).
-    angelegte_gruppen: list[str] = field(default_factory=list)
-    #: Pflichtgruppen, die im Trockenlauf noch fehlen.
-    fehlende_gruppen: list[str] = field(default_factory=list)
-
-    def _n(self, aktion: str) -> int:
-        return sum(1 for o in self.outcomes if o.aktion == aktion)
-
-    @property
-    def erstellt(self) -> int:
-        return self._n("created") + self._n("would_create")
-
-    @property
-    def uebersprungen(self) -> int:
-        return self._n("skipped")
-
-    @property
-    def fehler(self) -> int:
-        return self._n("error")
-
-
 # ── Hauptlauf ────────────────────────────────────────────────────────────────
 
 def _lade_seed(pfad: Path) -> dict:
@@ -302,149 +251,6 @@ def build_placeholder_mapping(index: dict[str, str]) -> dict[str, str]:
         if gid:
             mapping[ph] = gid
     return mapping
-
-
-def seed_processes(*, commit: bool = False,
-                   with_permissions: bool = True,
-                   publish: bool = True,
-                   only: Optional[set[str]] = None,
-                   actor: str = "seed_processes",
-                   actor_name: str = "Seeder") -> SeedReport:
-    """Spielt die ausgelieferten Prozesse ein.
-
-    `commit=False` (Standard) schreibt NICHTS – weder Prozesse noch Gruppen.
-    """
-    report = SeedReport(commit=commit)
-
-    # 1. Gruppen. Fehlende Pflichtgruppen entstehen nur mit `commit`; im
-    #    Trockenlauf treten Ersatz-IDs an ihre Stelle (siehe unten).
-    vorher = build_group_index(groupsdb.get_groups())
-    if commit:
-        report.angelegte_gruppen = groupsdb.ensure_required_groups(
-            required_group_names(), hidden_names=AUTO_ASSIGNED_GROUP_NAMES)
-        if report.angelegte_gruppen:
-            logger.info("Pflichtgruppen angelegt: %s", ", ".join(report.angelegte_gruppen))
-        index = build_group_index(groupsdb.get_groups())
-    else:
-        index = dict(vorher)
-        for name in required_group_names():
-            if name.strip().lower() not in index:
-                report.fehlende_gruppen.append(name)
-                # Ersatz-ID nur für den Trockenlauf: sonst meldete die
-                # Fail-closed-Prüfung auf einer frischen DB zehnmal „Platzhalter“,
-                # obwohl `--commit` die Gruppe angelegt hätte.
-                index[name.strip().lower()] = _DRY_RUN_ID_PREFIX + name
-
-    mapping = build_placeholder_mapping(index)
-    bekannte_ids = set(index.values())
-
-    # 2. Erstellrechte aus dem Alt-System (einmal laden, nicht je Prozess).
-    #    Maßstab sind die Gruppen VOR dem Anlegen: nur auf die kann eine
-    #    Alt-Berechtigung überhaupt zeigen.
-    rechte = None
-    if with_permissions:
-        alt_user, alt_gruppen = backfill.load_legacy_permissions()
-        rechte = backfill.build_create_permissions(
-            alt_user, alt_gruppen, department_group_ids=set(vorher.values()))
-
-    # 3. Seeds der Reihe nach.
-    for pfad in process_seed_files():
-        outcome = _seed_one(pfad, mapping=mapping, bekannte_ids=bekannte_ids,
-                            rechte=rechte, only=only, commit=commit, publish=publish,
-                            actor=actor, actor_name=actor_name)
-        if outcome is not None:
-            report.outcomes.append(outcome)
-
-    return report
-
-
-def _seed_one(pfad: Path, *, mapping: dict[str, str], bekannte_ids: set[str],
-              rechte, only: Optional[set[str]], commit: bool, publish: bool,
-              actor: str, actor_name: str) -> Optional[SeedOutcome]:
-    datei = pfad.name
-    try:
-        roh = _lade_seed(pfad)
-    except Exception as e:
-        return SeedOutcome(datei, None, "error", f"nicht lesbar: {e}")
-
-    key = roh.get("key")
-    if only and key not in only:
-        return None
-    if not key:
-        return SeedOutcome(datei, None, "error", "Definition hat keinen `key`")
-
-    if is_system_process(key):
-        # System-Prozesse pflegt `ensure_system_processes` bei jedem Start. Ein
-        # zweiter Weg in die DB könnte nur abweichen – und weil dieser Lauf
-        # vorhandene Schlüssel überspringt, wäre er ohnehin wirkungslos. Also
-        # ausdrücklich sagen, dass hier nichts zu tun ist.
-        return SeedOutcome(datei, key, "skipped",
-                           "System-Prozess – wird beim Start automatisch angelegt und "
-                           "aktuell gehalten, dieser Lauf fasst ihn nicht an")
-
-    defn_dict = replace_placeholders(roh, mapping)
-
-    outcome = SeedOutcome(datei, key, "error")
-    if rechte is not None:
-        defn_dict = backfill.merge_into_definition(defn_dict, rechte.permissions.get(key))
-
-    probleme = check_group_refs(defn_dict, bekannte_ids)
-    if probleme:
-        outcome.meldung = "Gruppen-Referenzen kaputt – nicht eingespielt: " + "; ".join(probleme)
-        logger.error("Seed %s: %s", datei, outcome.meldung)
-        return outcome
-
-    for stelle, text in find_stray_placeholders(defn_dict):
-        # Kein Abbruch: an dieser Stelle steht keine Gruppen-ID, sondern Text.
-        outcome.warnungen.append(f"Platzhalter im Text bei {stelle}: „{text}“")
-
-    try:
-        defn = ProcessDefinition.model_validate(defn_dict)
-    except Exception as e:
-        outcome.meldung = f"validiert nicht gegen ProcessDefinition: {e}"
-        logger.error("Seed %s: %s", datei, outcome.meldung)
-        return outcome
-
-    vorhanden = defstore.list_versions(key)
-    if vorhanden:
-        zustaende = ", ".join(f"v{v['version']}/{v['status']}" for v in vorhanden)
-        # An diesem Prozess wird NICHTS angefasst; die berechneten Erstellrechte
-        # bleiben deshalb bewusst aus dem Bericht (sonst läse es sich, als wären
-        # sie gesetzt worden).
-        outcome.aktion = "skipped"
-        outcome.meldung = f"Schlüssel existiert bereits ({zustaende}) – nichts überschrieben"
-        logger.info("Seed %s übersprungen: %s", key, outcome.meldung)
-        return outcome
-
-    # Ab hier wird der Prozess (mindestens gedanklich) angelegt – erst jetzt sind
-    # die Erstellrechte eine Aussage über den Zielzustand.
-    if rechte is not None:
-        outcome.create_permissions = defn_dict.get("createPermissions")
-        outcome.wirkungslose_gruppen = list(rechte.ineffective_groups.get(key, []))
-
-    if not commit:
-        outcome.aktion = "would_create"
-        outcome.meldung = "würde angelegt" + (" und veröffentlicht" if publish else " (nur Entwurf)")
-        return outcome
-
-    # Exakt wie der Import-Endpunkt serialisieren (api/v1/processes._dump), damit
-    # geseedete und importierte Definitionen in der DB identisch aussehen.
-    definition_json = json.dumps(defn.model_dump(by_alias=True), ensure_ascii=False)
-    try:
-        defstore.create_process(key, defn.name, definition_json, actor, actor_name)
-        if publish:
-            defstore.publish(key, 1)
-    except defstore.ProcessKeyExists:
-        outcome.aktion = "skipped"
-        outcome.meldung = "Schlüssel wurde parallel angelegt – nichts überschrieben"
-        return outcome
-
-    outcome.aktion = "created"
-    outcome.meldung = "angelegt" + (" und veröffentlicht" if publish else " (Entwurf v1)")
-    logger.info("Seed %s: %s", key, outcome.meldung)
-    return outcome
-
-
 # ── System-Prozesse: beim Start sicherstellen ────────────────────────────────
 
 @dataclass

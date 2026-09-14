@@ -587,12 +587,11 @@ onMounted(load)
             <tr v-if="filtered.length === 0 && !loading">
               <td colspan="6" class="px-4 py-12 text-center text-sm">
                 <p class="text-gray-400 italic">Keine Prozesse gefunden</p>
-                <!-- Leerer Katalog ist meist eine frische Installation: die
-                     mitgelieferten Definitionen sind noch nicht eingespielt.
-                     Der nächste Schritt gehört hierher, nicht in eine Server-Shell. -->
+                <!-- Leerer Katalog: über „Importieren“ eine Prozess-Definition
+                     (JSON) einspielen oder mit „Neuer Prozess“ eine bauen. -->
                 <p v-if="!search.trim() && rows.length === 0" class="text-gray-400 mt-2 max-w-lg mx-auto">
-                  Mit „Mitgelieferte Prozesse einspielen“ lassen sich die ausgelieferten
-                  Definitionen anlegen – erst als Trockenlauf, dann nach Bestätigung.
+                  Noch keine Prozesse. Über „Importieren“ eine Definition (JSON) einspielen
+                  oder mit „Neuer Prozess“ eine anlegen.
                 </p>
               </td>
             </tr>
