@@ -255,7 +255,7 @@
       "directusSource": "kostenstelle",
       "directusFieldMap": [
         {
-          "source": "kostenstelle",
+          "source": "cost_center_number",
           "target": "base.cost_center_nr"
         }
       ]
