@@ -6,9 +6,10 @@
  * Es gehen KEINE Mails an Beobachter:innen – der Auftrag erscheint in der
  * Übersicht und zeigt dort den aktuellen Bearbeitungsstand.
  *
- * Sich selbst darf jede Person mit Leserecht ein-/austragen. FREMDE einzutragen
- * ist eine Rechte-Vergabe und daher der zuständigen Stelle vorbehalten
- * (`canManage` blendet die Auswahl aus; verbindlich prüft der Server).
+ * Beobachten gibt dauerhaften Lesezugriff (Rechte-Vergabe) – EINTRAGEN dürfen
+ * daher nur die Ersteller:in und Admins (`canManage`), prozessübergreifend, NICHT
+ * die zuständige Stelle. Sich selbst wieder AUStragen darf jede:r (verbindlich
+ * prüft der Server).
  *
  * `embedded` ist die Panel-Optik: ohne eigene Karte und mit kleiner Überschrift,
  * damit die Liste als Abschnitt in `ProcessDetailsPanel.vue` sitzt. Sonst bliebe
@@ -24,9 +25,9 @@ import UserSelect from '@/components/UserSelect.vue'
 
 const props = withDefaults(defineProps<{
   ticketId: number
-  /** Angemeldete Person – darf sich selbst ein-/austragen (ohne `canManage`). */
+  /** Angemeldete Person – darf sich selbst wieder AUStragen (ohne `canManage`). */
   currentUserId?: string | null
-  /** Darf FREMDE Personen ein-/austragen? */
+  /** Darf Beobachter:innen ein-/austragen? (Ersteller:in + Admins) */
   canManage?: boolean
   /** Auswahlliste für das Eintragen (Suche im Dropdown). */
   users?: { id: string; displayName: string }[]
@@ -46,16 +47,15 @@ const fehler = ref<string | null>(null)
 const auswahl = ref<{ id: string; name: string } | null>(null)
 
 /**
- * Wer im Dropdown gefunden werden kann: mit Verwaltungsrecht ALLE noch nicht
- * eingetragenen Personen; ohne Recht ausschließlich man selbst (jede Person
- * darf sich selbst eintragen – durch Suche nach dem eigenen Namen). Bereits
- * Eingetragene fallen raus.
+ * Wer im Dropdown eingetragen werden kann: NUR mit Verwaltungsrecht (Ersteller:in
+ * + Admins) und dann alle noch nicht Eingetragenen. Ohne Recht kann niemand mehr
+ * jemanden eintragen – auch nicht sich selbst (Beobachten = dauerhafter Lesezugriff).
+ * Sich selbst wieder AUStragen bleibt möglich (siehe Chip-✕ im Template).
  */
 const auswaehlbar = computed(() => {
+  if (!props.canManage) return []
   const drin = new Set(items.value.map((w) => w.id))
-  const offen = props.users.filter((u) => !drin.has(u.id))
-  if (props.canManage) return offen
-  return props.currentUserId ? offen.filter((u) => u.id === props.currentUserId) : []
+  return props.users.filter((u) => !drin.has(u.id))
 })
 
 const nameVon = (w: ProcessWatcher) =>
@@ -125,10 +125,10 @@ watch(() => props.ticketId, load)
     </ul>
 
     <!-- Eintragen per Suche: beim Auswählen wird sofort hinzugefügt (kein extra
-         Knopf). Ohne Verwaltungsrecht findet man ausschließlich sich selbst. -->
+         Knopf). Nur Ersteller:in + Admins (canManage) sehen die Auswahl. -->
     <div v-if="auswaehlbar.length" class="mt-3">
       <UserSelect :model-value="auswahl" label=""
-                  :placeholder="canManage ? 'Person suchen und hinzufügen…' : 'Nach eigenem Namen suchen…'"
+                  placeholder="Person suchen und hinzufügen…"
                   :show-users="true" :show-groups="false"
                   :users="auswaehlbar" :disabled="busy"
                   @update:model-value="onAuswahl" />

@@ -175,6 +175,17 @@ def _completable_departments(row: dict, defn: Optional[ProcessDefinition],
             if d.get("group") and d["group"] in gset]
 
 
+def _may_manage_watchers(row: dict, user: Optional[dict]) -> bool:
+    """Beobachter:innen EINTRAGEN (und fremde austragen) dürfen NUR die Ersteller:in
+    und Admins – prozessübergreifend. Bewusst NICHT die zuständige Stelle: das
+    Beobachten gibt dauerhaften Lesezugriff, den soll nur die anlegende Person bzw.
+    ein Admin vergeben. (Sich selbst wieder AUSTRAGEN darf jede:r – siehe Endpunkt.)"""
+    if not user:
+        return False
+    uid = user.get("id")
+    return acc.is_admin(user) or (bool(uid) and row.get("owner_id") == uid)
+
+
 def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict],
                group_ids, completable_departments: Optional[list] = None,
                can_export_document: bool = False) -> TicketAbilities:
@@ -186,7 +197,7 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
     return TicketAbilities(
         edit=darf_bearbeiten,
         internal_comment=acc.is_process_staff(defn, user, gids),
-        manage_watchers=acc.may_edit(defn, row, user, gids),
+        manage_watchers=_may_manage_watchers(row, user),
         # Muss die Regel in attachments._assert_process_attach spiegeln.
         attach=(acc.may_edit(defn, row, user, gids)
                 or (ist_owner and not _is_terminal(row))),
@@ -1761,18 +1772,18 @@ def add_ticket_watcher(ticket_id: int, body: Optional[WatcherRequest] = None,
                        user: dict = Depends(get_current_user)):
     """Beobachter:in eintragen.
 
-    Sich selbst darf jede Person mit Leserecht. FREMDE einzutragen ist eine
-    Rechte-Vergabe (der/die Eingetragene darf den Auftrag danach lesen) – das
-    dürfen nur die zuständige Stelle und Admins.
+    Beobachten gibt dauerhaften Lesezugriff (Rechte-Vergabe) – daher dürfen NUR
+    die Ersteller:in und Admins jemanden eintragen (auch sich selbst), NICHT die
+    zuständige Stelle. Prozessübergreifend.
     """
     row, defn, gids = _load_for_view(ticket_id, user)
     target = (body.userId if body else None) or user.get("id")
     if not target:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Keine Person angegeben",
                         fields=[{"path": "userId", "code": "REQUIRED", "message": "Pflichtfeld"}])
-    if target != user.get("id") and not acc.may_edit(defn, row, user, gids):
+    if not _may_manage_watchers(row, user):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
-                        "Nur die zuständige Stelle kann andere Personen als Beobachter:in eintragen")
+                        "Nur die Ersteller:in und Admins können Beobachter:innen eintragen")
 
     name = (_actor_name(user) if target == user.get("id") else _display_name(target))
     if watchers.add_watcher(row["id"], target, name, added_by=user.get("id")):
@@ -1788,11 +1799,11 @@ def add_ticket_watcher(ticket_id: int, body: Optional[WatcherRequest] = None,
                response_model=ListResponse[WatcherOut])
 def remove_ticket_watcher(ticket_id: int, watcher_id: str,
                           user: dict = Depends(get_current_user)):
-    """Beobachtung beenden. Sich selbst immer; andere nur die zuständige Stelle."""
+    """Beobachtung beenden. Sich selbst immer; andere nur die Ersteller:in + Admins."""
     row, defn, gids = _load_for_view(ticket_id, user)
-    if watcher_id != user.get("id") and not acc.may_edit(defn, row, user, gids):
+    if watcher_id != user.get("id") and not _may_manage_watchers(row, user):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
-                        "Nur die zuständige Stelle kann andere Beobachter:innen entfernen")
+                        "Nur die Ersteller:in und Admins können andere Beobachter:innen entfernen")
     if watchers.remove_watcher(row["id"], watcher_id):
         events.record(row, events.WATCHER_REMOVED, actor_id=user.get("id"),
                       actor_name=_actor_name(user), details={"watcher": watcher_id})

@@ -479,7 +479,9 @@ def test_abilities_fuer_zustaendige_fachabteilung(setup):
     client, state, *_ = setup
     state["user"] = dict(ITLER)
     a = client.get("/process-tickets/7").json()["data"]["abilities"]
-    assert a == {"edit": True, "internal_comment": True, "manage_watchers": True,
+    # manage_watchers False: Beobachter verwalten dürfen nur Ersteller:in + Admins,
+    # NICHT die zuständige Fachabteilung.
+    assert a == {"edit": True, "internal_comment": True, "manage_watchers": False,
                  "attach": True, "reopen": False, "archive": False, "delete": False,
                  "completable_departments": ["g_it"], "export_document": False}
 
@@ -490,7 +492,9 @@ def test_abilities_fuer_den_ersteller(setup):
     state["user"] = dict(OWNER)
     a = client.get("/process-tickets/7").json()["data"]["abilities"]
     assert a["edit"] is False and a["internal_comment"] is False
-    assert a["manage_watchers"] is False and a["reopen"] is False
+    # Ersteller:in darf Beobachter:innen verwalten (prozessübergreifend), auch wenn
+    # gerade eine Fachabteilung zuständig ist.
+    assert a["manage_watchers"] is True and a["reopen"] is False
     # Owner hat Vollsicht (is_owner) → darf das Dokument sehen/exportieren.
     assert a["export_document"] is True
 
@@ -505,12 +509,14 @@ def test_abilities_reopen_nur_bei_fertigem_auftrag(setup):
 
 # ── Beobachter:innen ─────────────────────────────────────────────────────────
 
-def test_sich_selbst_eintragen_und_wieder_austragen(setup):
+def test_selbst_eintragen_gesperrt_austragen_bleibt(setup):
+    """Eintragen dürfen nur Ersteller:in + Admins – wer weder das eine noch das
+    andere ist, kann sich NICHT mehr selbst eintragen, sich aber (falls von einem
+    Admin eingetragen) wieder selbst austragen."""
     client, state, store, _e, watch = setup
     state["user"] = dict(ITLER)
-    r = client.post("/process-tickets/7/watchers", json={})
-    assert r.status_code == 200
-    assert [w["id"] for w in r.json()["data"]] == ["u_it"]
+    assert client.post("/process-tickets/7/watchers", json={}).status_code == 403
+    watch.add_watcher(7, "u_it", "IT-Mensch")     # von einem Admin eingetragen
     r2 = client.delete("/process-tickets/7/watchers/u_it")
     assert r2.status_code == 200 and r2.json()["data"] == []
 
@@ -526,22 +532,27 @@ def test_beobachten_gibt_leserecht(setup):
     assert "gehalt" not in client.get("/process-tickets/7").json()["data"]["values"]
 
 
-def test_fremde_eintragen_darf_nur_die_zustaendige_stelle(setup):
+def test_eintragen_nur_ersteller_und_admins(setup):
     client, state, store, _e, watch = setup
     watch.add_watcher(7, "u_x", "Fremd")          # damit u_x überhaupt lesen darf
     state["user"] = dict(FREMD)
-    r = client.post("/process-tickets/7/watchers", json={"userId": "u_neu"})
-    assert r.status_code == 403
-    state["user"] = dict(ITLER)                   # zuständige Fachabteilung
+    assert client.post("/process-tickets/7/watchers",
+                       json={"userId": "u_neu"}).status_code == 403
+    state["user"] = dict(ITLER)                   # zuständige Fachabteilung – NICHT mehr erlaubt
+    assert client.post("/process-tickets/7/watchers",
+                       json={"userId": "u_neu"}).status_code == 403
+    state["user"] = dict(OWNER)                   # Ersteller:in – erlaubt
     assert client.post("/process-tickets/7/watchers",
                        json={"userId": "u_neu"}).status_code == 200
 
 
-def test_fremde_austragen_darf_nur_die_zustaendige_stelle(setup):
+def test_fremde_austragen_nur_ersteller_und_admins(setup):
     client, state, store, _e, watch = setup
     watch.add_watcher(7, "u_x", "Fremd")
     watch.add_watcher(7, "u_andere", "Andere")
     state["user"] = dict(FREMD)
+    assert client.delete("/process-tickets/7/watchers/u_andere").status_code == 403
+    state["user"] = dict(ITLER)                   # zuständige Stelle – NICHT mehr erlaubt
     assert client.delete("/process-tickets/7/watchers/u_andere").status_code == 403
     state["user"] = dict(ADMIN)
     assert client.delete("/process-tickets/7/watchers/u_andere").status_code == 200
@@ -549,7 +560,7 @@ def test_fremde_austragen_darf_nur_die_zustaendige_stelle(setup):
 
 def test_beobachter_eintragen_landet_im_verlauf(setup):
     client, state, store, evstore, _w = setup
-    state["user"] = dict(ITLER)
+    state["user"] = dict(OWNER)                    # Ersteller:in darf eintragen
     client.post("/process-tickets/7/watchers", json={})
     assert any(e["action"] == "watcher_added" for e in evstore.rows)
     # Zweimal eintragen erzeugt keinen zweiten Eintrag (idempotent).
