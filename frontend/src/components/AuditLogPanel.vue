@@ -87,11 +87,11 @@ const ACTION_LABEL: Record<string, string> = {
   process_ticket_priority_changed: 'Priorität geändert',
   process_ticket_approval_decided: 'Freigabe entschieden',
   process_ticket_approval_sent_back: 'Zur Nachbesserung zurück',
-  process_ticket_approval_no_recipient: 'Freigabe-Mail ohne Empfänger',
+  process_ticket_approval_no_recipient: 'Freigabe-Mail ohne Empfänger:in',
   process_ticket_deleted: 'Auftrag gelöscht',
   // Direkte Audit-Einträge ohne Verlaufs-Eintrag (System-Pfade)
   process_approval_decided: 'Freigabe entschieden (Mail-Link)',
-  process_approval_no_recipient: 'Freigabe-Mail ohne Empfänger',
+  process_approval_no_recipient: 'Freigabe-Mail ohne Empfänger:in',
   process_phase_notified: 'Phase benachrichtigt',
   process_automation_fired: 'Automation ausgeführt',
   process_automation_failed: 'Automation fehlgeschlagen',
@@ -371,7 +371,7 @@ onUnmounted(() => {
         <option value="process_ticket">Prozess-Aufträge</option>
         <option value="process_definition">Prozesse</option>
         <option value="auth">Auth</option>
-        <option value="user">Benutzer</option>
+        <option value="user">Nutzende</option>
         <option value="settings">Einstellungen</option>
         <option value="group">Gruppen</option>
         <option value="ticket">Alt-System (Archiv)</option>

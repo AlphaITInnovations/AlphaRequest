@@ -434,7 +434,7 @@ onMounted(async () => {
             Beobachtet
             <span class="hint" @click.stop>
               <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16" stroke-linecap="round"/><line x1="12" y1="7.6" x2="12.01" y2="7.6" stroke-linecap="round"/></svg>
-              <span class="bubble">Aktive Aufträge, die du beobachtest. Als Ersteller bist du automatisch Beobachter. Du bekommst dafür keine Mails – du kannst den Auftrag öffnen und den aktuellen Bearbeitungsstand sehen.</span>
+              <span class="bubble">Aktive Aufträge, die du beobachtest. Als Ersteller:in bist du automatisch Beobachter:in. Du bekommst dafür keine Mails – du kannst den Auftrag öffnen und den aktuellen Bearbeitungsstand sehen.</span>
             </span>
           </p>
         </button>

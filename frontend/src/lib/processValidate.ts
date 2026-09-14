@@ -607,7 +607,7 @@ export function validateDefinition(
         `Aktion „${ac.type}" ist nicht verfügbar.`))
     }
     if ((ac.type === 'notify' || ac.type === 'escalate')) {
-      if (!ac.to) out.push(err(`${path}.action.to`, anchor, 'REQUIRED', 'Empfänger fehlt.'))
+      if (!ac.to) out.push(err(`${path}.action.to`, anchor, 'REQUIRED', 'Empfänger:in fehlt.'))
       else if (!RECIPIENTS.includes(ac.to) && !ac.to.startsWith('group:')) {
         out.push(err(`${path}.action.to`, anchor, 'INVALID', `Unbekanntes Ziel „${ac.to}".`))
       } else if (knownGroupIds && ac.to.startsWith('group:')

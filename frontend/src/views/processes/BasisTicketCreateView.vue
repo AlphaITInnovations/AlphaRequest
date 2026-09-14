@@ -152,7 +152,7 @@ async function erstellen() {
         await removeWatcher(t.id, ich)
       }
     } catch (e) {
-      showToast(errorMessage(e, 'Auftrag angelegt, aber die Beobachter konnten '
+      showToast(errorMessage(e, 'Auftrag angelegt, aber die Beobachter:innen konnten '
         + 'nicht vollständig übernommen werden'), false)
     }
 
@@ -226,7 +226,7 @@ async function erstellen() {
 
             <div>
               <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Beobachter
+                Beobachter:innen
               </p>
               <ul class="space-y-1.5 mb-2">
                 <li v-for="w in beobachter" :key="w.id"
@@ -242,7 +242,7 @@ async function erstellen() {
                 </li>
               </ul>
               <UserSelect :key="pickerKey" :model-value="null" label=""
-                          placeholder="Beobachter hinzufügen…"
+                          placeholder="Beobachter:in hinzufügen…"
                           @update:model-value="beobachterHinzu" />
             </div>
           </div>

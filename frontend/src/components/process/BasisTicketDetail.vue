@@ -263,12 +263,12 @@ async function abschliessen() {
           <!-- Editierbar = Weiterreichen (das Feld trägt die Zuständigkeit); ob das
                erlaubt ist, entscheidet der Server über editable_fields. -->
           <UserSelect v-if="darfWeiterreichen" v-model="fachabteilung"
-                      label="Verantwortlicher"
+                      label="Verantwortliche Stelle"
                       placeholder="Fachabteilung auswählen…"
                       :show-groups="true" :show-users="false" />
           <template v-else>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              Verantwortlicher
+              Verantwortliche Stelle
             </label>
             <div class="afi w-full !bg-gray-50 dark:!bg-white/[0.04]">
               {{ fachabteilung?.name || '— niemand zugewiesen —' }}
@@ -277,7 +277,7 @@ async function abschliessen() {
         </div>
 
         <div>
-          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Beobachter</p>
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Beobachter:innen</p>
           <ul class="space-y-1.5 mb-2">
             <li v-for="w in beobachter" :key="w.id"
                 class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
@@ -300,7 +300,7 @@ async function abschliessen() {
                anderen Lesenden dürfen nur SICH SELBST eintragen. -->
           <UserSelect v-if="abilities.manage_watchers"
                       :key="pickerKey" :model-value="null" label=""
-                      placeholder="Beobachter hinzufügen…"
+                      placeholder="Beobachter:in hinzufügen…"
                       @update:model-value="beobachterHinzu" />
           <button v-else-if="!terminal && !binBeobachter"
                   @click="selbstBeobachten"

@@ -49,7 +49,7 @@ const summary = computed(() => {
   const us = (props.modelValue.users ?? []).length
   if (gs) parts.push(`${gs} Gruppe${gs === 1 ? '' : 'n'}`)
   if (us) parts.push(`${us} Person${us === 1 ? '' : 'en'}`)
-  return parts.length ? parts.join(' + ') : 'Nur Administratoren'
+  return parts.length ? parts.join(' + ') : 'Nur Administrator:innen'
 })
 </script>
 
@@ -58,7 +58,7 @@ const summary = computed(() => {
     <h3 class="section-title">Wer darf diesen Auftrag anlegen?</h3>
     <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
       Gehört zum Prozess und wird beim Export, Import und Kopieren mitgenommen.
-      Administratoren dürfen immer. Aktuell: <b>{{ summary }}</b>
+      Administrator:innen dürfen immer. Aktuell: <b>{{ summary }}</b>
     </p>
 
     <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 mb-3">

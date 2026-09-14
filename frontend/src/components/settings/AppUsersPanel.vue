@@ -122,7 +122,7 @@ onMounted(loadAppUsers)
 
 <template>
   <section>
-    <h2 class="section-title">Benutzer & Rollen</h2>
+    <h2 class="section-title">Nutzende & Rollen</h2>
     <div class="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-900/20
                 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 mb-4">
       Hier werden nur die Berechtigungen für die Übersicht <strong>„Alle Aufträge"</strong>
@@ -168,7 +168,7 @@ onMounted(loadAppUsers)
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-gray-100 dark:border-white/[0.06] text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            <th class="px-5 py-3 text-left">Benutzer</th>
+            <th class="px-5 py-3 text-left">Nutzende</th>
             <th class="px-5 py-3 text-left">E-Mail</th>
             <th class="px-5 py-3 text-left">Letzter Login</th>
             <th class="px-5 py-3 text-left">Rolle</th>
@@ -232,7 +232,7 @@ onMounted(loadAppUsers)
             </tr>
           </template>
           <tr v-if="filteredAppUsers.length === 0">
-            <td colspan="6" class="px-5 py-10 text-center text-sm text-gray-400 italic">Keine Benutzer gefunden</td>
+            <td colspan="6" class="px-5 py-10 text-center text-sm text-gray-400 italic">Keine Nutzenden gefunden</td>
           </tr>
         </tbody>
       </table>

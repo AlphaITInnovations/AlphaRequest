@@ -155,7 +155,7 @@
       "label": "Titel",
       "widget": "text",
       "help": null,
-      "placeholder": "z. B. Niederlassungsleiter",
+      "placeholder": "z. B. Niederlassungsleitung",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -730,7 +730,7 @@
     },
     {
       "key": "personal.supervisor_hr_id",
-      "label": "Vorgesetzter (vertraglich)",
+      "label": "Vorgesetzte:r (vertraglich)",
       "widget": "user",
       "help": null,
       "placeholder": null,
@@ -783,7 +783,7 @@
     },
     {
       "key": "it.timebutler.approver_differs",
-      "label": "Urlaubsfreigabe weicht vom vertraglichen Vorgesetzten ab",
+      "label": "Urlaubsfreigabe weicht von der vertraglich vorgesetzten Person ab",
       "widget": "checkbox",
       "help": "Nur ankreuzen, wenn eine andere Person als der/die vertragliche Vorgesetzte den Urlaub freigeben soll.",
       "placeholder": null,
@@ -858,7 +858,7 @@
     },
     {
       "key": "it.software.datev_rights",
-      "label": "Rechte wie Mitarbeiter XY?",
+      "label": "Rechte wie Mitarbeiter:in XY?",
       "widget": "text",
       "help": null,
       "placeholder": "z. B. wie Max Mustermann",

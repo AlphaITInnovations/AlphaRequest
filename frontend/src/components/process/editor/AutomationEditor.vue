@@ -370,9 +370,9 @@ watch(dwCollection, (c) => {
       <!-- Benachrichtigen / Eskalieren -->
       <template v-if="a.action.type === 'notify' || a.action.type === 'escalate'">
         <div>
-          <label class="lbl">Empfänger</label>
+          <label class="lbl">Empfänger:in</label>
           <select class="afi w-full" :value="a.action.to ?? ''" @change="patchAction({ to: val($event) || null })">
-            <option value="">Empfänger wählen…</option>
+            <option value="">Empfänger:in wählen…</option>
             <option v-for="r in recipients" :key="r.value" :value="r.value">{{ r.label }}</option>
             <option
               v-if="a.action.to && !recipients.some((r) => r.value === a.action.to)"
@@ -385,7 +385,7 @@ watch(dwCollection, (c) => {
           <textarea
             rows="3"
             class="afi w-full resize-none"
-            placeholder="Kurzer Hinweis für die Empfänger…"
+            placeholder="Kurzer Hinweis für die Empfänger:innen…"
             :value="a.action.template ?? ''"
             @input="patchAction({ template: val($event) || null })"
           />
@@ -533,7 +533,7 @@ watch(dwCollection, (c) => {
             </template>
             <template v-else>
               Schlägt das Schreiben fehl, läuft der Auftrag weiter; der Fehler landet im
-              Verlauf und als Mail an den Fehler-Empfänger.
+              Verlauf und als Mail an die Fehler-Empfänger:in.
             </template>
           </p>
         </div>
@@ -612,7 +612,7 @@ watch(dwCollection, (c) => {
         <p class="text-xs text-gray-400">
           Schreibt live nach Directus. Das braucht einen Directus-Token mit Schreibrechten
           (env DIRECTUS_WRITE_TOKEN oder Schreibrecht des Lese-Tokens). Fehler blockieren den
-          Auftrag nicht – sie landen im Verlauf und als Mail an den Fehler-Empfänger.
+          Auftrag nicht – sie landen im Verlauf und als Mail an die Fehler-Empfänger:in.
         </p>
       </template>
     </div>

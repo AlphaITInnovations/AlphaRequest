@@ -21,7 +21,7 @@ const props = withDefaults(defineProps<{
   users?:        UserOption[] | null
   groups?:       GroupEntry[] | null
 }>(), {
-  label:       'Benutzer',
+  label:       'Nutzende',
   placeholder: 'Mitarbeiter:in auswählen…',
   modelValue:  null,
   showGroups:  false,
@@ -244,7 +244,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
           <template v-if="filteredUsers.length > 0">
             <div v-if="showGroups"
                  class="px-3.5 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-[#1A2130] sticky top-0">
-              Benutzer
+              Nutzende
             </div>
             <div
               v-for="(u, i) in filteredUsers" :key="u.id"

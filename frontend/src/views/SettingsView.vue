@@ -48,7 +48,7 @@ const nav = [
   { key: 'groups',      label: 'Fachabteilungen',    group: 'Organisation' },
   { key: 'processes',   label: 'Prozesse',           group: 'Organisation' },
   { key: 'directus-sources', label: 'Directus-Quellen', group: 'Organisation' },
-  { key: 'app-users',   label: 'Benutzer & Rollen',  group: 'Berechtigungen' },
+  { key: 'app-users',   label: 'Nutzende & Rollen',  group: 'Berechtigungen' },
   { key: 'testmail',    label: 'Testmail',           group: 'Kommunikation' },
 ] as const
 

@@ -1747,7 +1747,7 @@ def add_ticket_watcher(ticket_id: int, body: Optional[WatcherRequest] = None,
                         fields=[{"path": "userId", "code": "REQUIRED", "message": "Pflichtfeld"}])
     if target != user.get("id") and not acc.may_edit(defn, row, user, gids):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
-                        "Nur die zuständige Stelle kann andere Personen als Beobachter eintragen")
+                        "Nur die zuständige Stelle kann andere Personen als Beobachter:in eintragen")
 
     name = (_actor_name(user) if target == user.get("id") else _display_name(target))
     if watchers.add_watcher(row["id"], target, name, added_by=user.get("id")):

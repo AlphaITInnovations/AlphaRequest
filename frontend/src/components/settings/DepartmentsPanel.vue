@@ -155,7 +155,7 @@ onMounted(loadGroups)
               </span>
             </div>
             <div class="flex gap-2">
-              <UserSelect label="" placeholder="Benutzer hinzufügen…"
+              <UserSelect label="" placeholder="Nutzende hinzufügen…"
                           :model-value="memberSel" @update:model-value="memberSel = $event" class="flex-1" />
               <button @click="addMember" class="btn-primary self-end">+</button>
             </div>

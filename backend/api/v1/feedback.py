@@ -26,7 +26,7 @@ def submit_feedback(data: FeedbackRequest, user: dict = Depends(get_current_user
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION, "Bitte eine Beschreibung angeben")
     if not config.BUG_REPORT_MAIL:
         raise api_error(503, "FEEDBACK_NO_RECIPIENT",
-                        "Kein Empfänger für Fehlerberichte konfiguriert (BUG_REPORT_MAIL)")
+                        "Keine Empfänger:in für Fehlerberichte konfiguriert (BUG_REPORT_MAIL)")
 
     reporter      = user.get("displayName") or user.get("id") or "Unbekannt"
     reporter_mail = user.get("mail") or user.get("email")

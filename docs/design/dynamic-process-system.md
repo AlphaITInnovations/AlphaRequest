@@ -221,11 +221,11 @@ nicht nur `description`/`values_json`. Rev. 1 war hier lückenhaft:
    **striktes Pydantic-Schema, das strukturell keine Feldwerte halten kann**; `notify`/Templates dürfen
    keine gerenderten Feldwerte in Runtime schreiben.
 2. **Vollsicht ist explizit**, nicht abgeleitet: Phase-Flag **`grantsFullView`** (Default `false` →
-   Default-Deny). Vollsicht = Aufsichtsrechte ∪ Owner ∪ Beobachter ∪ aktive Zuständige von
+   Default-Deny). Vollsicht = Aufsichtsrechte ∪ Owner ∪ Beobachtende ∪ aktive Zuständige von
    `grantsFullView`-Phasen. Eingeschränkt = Mitglieder eines `departments`-Eintrags, begrenzt auf dessen
-   Feldmenge. Terminale Tickets (archived/rejected) entziehen Bearbeitern die Vollsicht.
+   Feldmenge. Terminale Tickets (archived/rejected) entziehen Bearbeitenden die Vollsicht.
 3. **Schreibschutz (per-Feld-Merge):** Bei PATCH wird aus der gepinnten Definition die
-   *sichtbare-und-editierbare* Feldmenge des Schreibers berechnet; Start = gespeicherte Werte, nur erlaubte
+   *sichtbare-und-editierbare* Feldmenge der schreibenden Person berechnet; Start = gespeicherte Werte, nur erlaubte
    Writes werden angewandt, der Rest verworfen (verborgene Felder immer aus dem Bestand). Damit kann eine
    Fachabteilung `it.hostname` schreiben, während `personal.salary` im selben Payload ignoriert wird —
    der alte „Restricted-Viewer darf gar nicht PATCHen"-Guard passt nicht mehr.
@@ -251,9 +251,9 @@ damit komplexe Features (wie die Eskalation) **ohne Engine-Umbau** nachrüstbar 
 - **Action-Registry (code-hinterlegte Handler):** `notify · escalate · set_field · set_priority ·
   set_status · assign_sequence · require_attachment · auto_advance · spawn_process`. Neue Actions = neuer
   registrierter Handler, kein Format-Bruch.
-- **Empfänger-Resolver-Registry (`to`):** `responsible · owner · watchers · group:<id>`.
+- **Empfangenden-Resolver-Registry (`to`):** `responsible · owner · watchers · group:<id>`.
   **`supervisor` ist ein späterer Resolver** (Quelle noch offen, §13) — das Modell trägt ihn bereits.
-  **Pflicht-Fallback:** jeder `notify`/`escalate` hat einen garantierten Fallback-Empfänger
+  **Pflicht-Fallback:** jeder `notify`/`escalate` hat einen garantierten Fallback-Empfangende
   (z. B. `TICKET_MAIL`/Owner-Gruppe), damit eine Aktion **nie stumm ins Leere** läuft.
 
 ### 6.1 Condition-DSL (geteilt, autoritativ im Backend)
@@ -405,7 +405,7 @@ DDL idempotent (`init_db()`/Lifespan-`ensure_table`). Timestamps für SLA tz-awa
 Sweeper-Default 15 min.
 **Später (Modell trägt es bereits):** Eskalation an **Vorgesetzte:r** — Quelle des Vorgesetzten-Bezugs
 (AD-`manager`-Feld vs. Prozessfeld vs. Gruppe) offen; bei AD-`manager` die Relationen im Lifespan-Cache
-mitführen (kein Blocking-Graph-Call im Sweep) und stets Pflicht-Fallback-Empfänger.
+mitführen (kein Blocking-Graph-Call im Sweep) und stets Pflicht-Fallback-Empfangende.
 
 ---
 
@@ -487,6 +487,6 @@ verlöre jede Person das Anlegerecht, die es nur über eine AD-Gruppe hat.
 ### 14.7 Was ohne Ersatz wegfällt
 Ehrlich festgehalten, damit es niemand später als Bug entdeckt:
 - **Alte Ticket-Daten sind ohne Oberfläche.** Die Tabellen werden NICHT gedroppt
-  (die DB gehört dem Kunden), aber es gibt keinen Lesepfad mehr.
+  (die DB gehört der Kundschaft), aber es gibt keinen Lesepfad mehr.
 - **`waiting_contract`** bleibt als erlaubter `enterStatus` bestehen, hat ohne den
-  zweigeteilten Onboarding-Prozess aber keinen Nutzer mehr.
+  zweigeteilten Onboarding-Prozess aber keine Nutzenden mehr.
