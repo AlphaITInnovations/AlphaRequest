@@ -165,3 +165,29 @@ def source_options(key: str, search: Optional[str] = None, limit: int = 50,
         logger.warning("Directus-Optionen „%s“: %s", key, exc)
         return DataResponse(data={"options": [], "error": "Directus ist derzeit nicht erreichbar."})
     return DataResponse(data={"options": store.build_options(records, src), "error": None})
+
+
+@router.get("/directus/sources/{key}/resolve")
+def resolve_labels(key: str, values: str = "", user: dict = Depends(get_current_user)):
+    """Labels zu bereits GESPEICHERTEN Werten (IDs) auflösen – für die Lese-/
+    Druckansicht, die nur die ID kennt (das Directus-Feld speichert `valueField`,
+    das Label lebt live in Directus). `values` ist eine komma-separierte ID-Liste;
+    Antwort ist eine Map {id: label}. fail-soft: leere Map, wenn nicht konfiguriert,
+    nicht erreichbar oder nichts gefunden – dann zeigt die Ansicht eben die ID."""
+    src = store.get(key)
+    if not src:
+        raise api_error(404, "DIRECTUS_SOURCE_UNKNOWN", f"Quelle „{key}“ nicht gefunden")
+    ids = [v.strip() for v in values.split(",") if v.strip()]
+    if not ids or not dc.is_configured():
+        return DataResponse(data={"labels": {}})
+    in_filter = {src["valueField"]: {"_in": ids}}
+    base = src.get("filter")
+    flt = {"_and": [base, in_filter]} if base else in_filter
+    try:
+        records = dc.query_items(src["collection"], fields=store.query_fields(src),
+                                 filter=flt, limit=max(1, min(len(ids), 200)))
+    except dc.DirectusError as exc:
+        logger.warning("Directus-Label-Auflösung „%s“: %s", key, exc)
+        return DataResponse(data={"labels": {}})
+    labels = {str(o["value"]): o["label"] for o in store.build_options(records, src)}
+    return DataResponse(data={"labels": labels})

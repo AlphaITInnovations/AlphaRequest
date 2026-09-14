@@ -532,4 +532,8 @@ export interface OptionSources {
   groups: { id: string; name: string }[]
   users: { id: string; displayName: string }[]
   companies: string[]
+  /** Aufgelöste Labels gespeicherter Directus-Werte, je Quelle: {quelle: {id: label}}.
+   *  Das Directus-Feld speichert nur die ID; die Lese-/Druckansicht schlägt hier
+   *  das Klartext-Label nach (leer/fehlend ⇒ es bleibt bei der ID). */
+  directusLabels?: Record<string, Record<string, string>>
 }

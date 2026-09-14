@@ -8,7 +8,8 @@
  * der die Picker still leer ließ.
  */
 import { client } from '@/api/client'
-import type { OptionSources } from '@/types/process'
+import { resolveLabels } from '@/api/directus'
+import type { OptionSources, ProcessDefinition } from '@/types/process'
 
 export function emptySources(): OptionSources {
   return { groups: [], users: [], companies: [] }
@@ -77,5 +78,36 @@ export async function loadOptionSources(adminGroups = true): Promise<OptionSourc
     console.warn('Firmen konnten nicht geladen werden', e)
   }
 
+  return out
+}
+
+/**
+ * Klartext-Labels für die gespeicherten Werte aller `directus`-Felder auflösen –
+ * je Quelle in EINER Abfrage gebündelt. Das Directus-Feld speichert nur die ID;
+ * die Lese-/Druckansicht schlägt hier das Label nach. fail-soft: fehlt/leert eine
+ * Quelle, bleibt für ihre Felder die ID. Ergebnis geht als `directusLabels` in die
+ * sources ein (siehe optionLabel in lib/processFieldFormat.ts).
+ */
+export async function loadDirectusLabels(
+  definition: ProcessDefinition | null | undefined,
+  values: Record<string, unknown> | null | undefined,
+): Promise<Record<string, Record<string, string>>> {
+  if (!definition || !values) return {}
+  const bySource = new Map<string, Set<string>>()
+  for (const f of definition.fields ?? []) {
+    if (f.widget !== 'directus' || !f.directusSource) continue
+    const raw = values[f.key]
+    for (const v of Array.isArray(raw) ? raw : [raw]) {
+      if (v === null || v === undefined || v === '') continue
+      if (!bySource.has(f.directusSource)) bySource.set(f.directusSource, new Set())
+      bySource.get(f.directusSource)!.add(String(v))
+    }
+  }
+  if (!bySource.size) return {}
+  const out: Record<string, Record<string, string>> = {}
+  await Promise.all([...bySource.entries()].map(async ([key, ids]) => {
+    const labels = await resolveLabels(key, [...ids])
+    if (Object.keys(labels).length) out[key] = labels
+  }))
   return out
 }

@@ -59,3 +59,20 @@ export async function sourceOptions(key: string, search = ''): Promise<{ options
     { params: search ? { search } : {} })
   return data.data
 }
+
+/**
+ * Labels zu bereits gespeicherten Directus-Werten (IDs) auflösen – für die Lese-/
+ * Druckansicht, die nur die ID kennt. fail-soft: eine leere Map (Aufrufer zeigt
+ * dann die ID). Antwort-Form {labels: {id: label}}.
+ */
+export async function resolveLabels(key: string, values: string[]): Promise<Record<string, string>> {
+  const uniq = Array.from(new Set(values.filter((v) => v != null && v !== '').map(String)))
+  if (!uniq.length) return {}
+  try {
+    const { data } = await client.get(`/directus/sources/${encodeURIComponent(key)}/resolve`,
+      { params: { values: uniq.join(',') } })
+    return data.data?.labels ?? {}
+  } catch {
+    return {}   // fail-soft: ohne Auflösung bleibt die ID stehen
+  }
+}

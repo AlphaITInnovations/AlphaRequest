@@ -15,7 +15,7 @@ import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
-import { emptySources, loadOptionSources } from '@/lib/processSources'
+import { emptySources, loadOptionSources, loadDirectusLabels } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import { departmentProgress, isDepartmentPending } from '@/lib/processDepartments'
 import * as ticketsApi from '@/api/processTickets'
@@ -231,6 +231,10 @@ async function load() {
     // /processes/{key}/versions/{v} verlangt `manage` und würde für normale
     // Beteiligte mit 403 antworten – das Formular bliebe leer.
     definition.value = normalizeDefinition(await ticketsApi.getPinnedDefinition(id.value))
+    // Directus-Felder speichern nur die ID – Klartext-Labels für die Anzeige
+    // (Lese-/Druckansicht) auflösen und in die sources mergen. fail-soft.
+    const labels = await loadDirectusLabels(definition.value, ticket.value?.values)
+    sources.value = { ...sources.value, directusLabels: labels }
   } catch (e) {
     loadError.value = errorMessage(e, 'Auftrag konnte nicht geladen werden')
   } finally {

@@ -45,6 +45,13 @@ const companyOpts = (): Opt[] =>
  * Die Widgets user/company/group haben eine feste Quelle, alle anderen richten
  * sich nach optionsSource (Default: die statische Optionsliste des Feldes).
  */
+// Für ein bestehendes directus-Feld das vorab aufgelöste Klartext-Label (aus
+// sources.directusLabels), damit DirectusSelect nach dem Laden nicht die rohe ID
+// zeigt (es löst sonst erst beim Fokussieren auf). Leer ⇒ es bleibt bei der ID.
+const directusInitialLabel = computed<string>(() =>
+  (props.field.directusSource
+    && props.sources?.directusLabels?.[props.field.directusSource]?.[textModel.value]) || '')
+
 const optionList = computed<Opt[]>(() => {
   const f = props.field
   if (!f) return []
@@ -275,6 +282,7 @@ const readonlyText = computed(() => {
       v-else-if="field.widget === 'directus'"
       :field="field"
       :model-value="textModel"
+      :initial-label="directusInitialLabel"
       :disabled="disabled"
       :invalid="invalid"
       @select="(sel) => emit('directus-pick', sel)"

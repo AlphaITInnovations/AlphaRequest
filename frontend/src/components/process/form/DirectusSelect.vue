@@ -15,9 +15,12 @@ import { sourceOptions, type DirectusOption } from '@/api/directus'
 const props = withDefaults(defineProps<{
   field: FieldDef
   modelValue: string
+  /** Vorab aufgelöstes Klartext-Label zum modelValue (aus sources.directusLabels),
+   *  damit ein bestehender Wert nach dem Laden lesbar ist statt als rohe ID. */
+  initialLabel?: string
   disabled?: boolean
   invalid?: boolean
-}>(), { disabled: false, invalid: false })
+}>(), { initialLabel: '', disabled: false, invalid: false })
 
 const emit = defineEmits<{ select: [sel: { value: string; record: Record<string, any> } | null] }>()
 
@@ -39,11 +42,29 @@ let seq = 0
 const display = ref('')
 const selValue = ref('')
 const selLabel = ref('')
+// Vorab aufgelöstes Label als „gemerkte" Auswahl setzen: so zeigt syncDisplay das
+// Label schon beim Laden (nicht erst nach Fokus). Ein späteres Picken überschreibt.
+function seedFromInitial(v: string) {
+  if (props.initialLabel && v) { selValue.value = v; selLabel.value = props.initialLabel }
+}
 function syncDisplay(v: string) {
   display.value = v && v === selValue.value && selLabel.value ? selLabel.value : (v ? String(v) : '')
 }
+seedFromInitial(props.modelValue ? String(props.modelValue) : '')
 syncDisplay(props.modelValue ? String(props.modelValue) : '')
-watch(() => props.modelValue, (v) => { if (!open.value) syncDisplay(v ? String(v) : '') })
+// initialLabel kommt asynchron (nach der Directus-Auflösung) – dann nachziehen.
+watch(() => props.initialLabel, () => {
+  if (open.value) return
+  const v = props.modelValue ? String(props.modelValue) : ''
+  seedFromInitial(v)
+  syncDisplay(v)
+})
+watch(() => props.modelValue, (v) => {
+  if (open.value) return
+  const s = v ? String(v) : ''
+  seedFromInitial(s)
+  syncDisplay(s)
+})
 
 const sourceKey = () => props.field.directusSource || ''
 

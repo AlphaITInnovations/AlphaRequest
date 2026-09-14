@@ -149,3 +149,68 @@ def test_options_failsoft_on_directus_error(monkeypatch):
     # Nach außen eine neutrale Meldung – die rohe Directus-Fehlermeldung leakt nicht.
     assert "nicht erreichbar" in r.json()["data"]["error"]
     assert "timeout" not in r.json()["data"]["error"]
+
+
+# ── Label-Auflösung gespeicherter Werte (Lese-/Druckansicht) ──────────────────
+
+def test_resolve_labels_ok(monkeypatch):
+    c = _app(USER, monkeypatch)
+    monkeypatch.setattr(dapi.store, "get", lambda k: dict(SRC))
+    monkeypatch.setattr(dapi.dc, "is_configured", lambda: True)
+    seen = {}
+
+    def qi(col, **kw):
+        seen["filter"] = kw.get("filter")
+        return [{"nummer": "10", "firma": {"name": "Alpha"}},
+                {"nummer": "20", "firma": {"name": "Beta"}}]
+    monkeypatch.setattr(dapi.dc, "query_items", qi)
+    r = c.get("/directus/sources/kostenstelle/resolve?values=10,20")
+    assert r.status_code == 200
+    assert r.json()["data"]["labels"] == {"10": "10 – Alpha", "20": "20 – Beta"}
+    # Filtert per _in auf das valueField (hier ohne Basis-Filter → direkt).
+    assert seen["filter"] == {"nummer": {"_in": ["10", "20"]}}
+
+
+def test_resolve_labels_merges_base_filter(monkeypatch):
+    c = _app(USER, monkeypatch)
+    src = {**SRC, "filter": {"aktiv": {"_eq": True}}}
+    monkeypatch.setattr(dapi.store, "get", lambda k: dict(src))
+    monkeypatch.setattr(dapi.dc, "is_configured", lambda: True)
+    seen = {}
+
+    def qi(col, **kw):
+        seen["filter"] = kw.get("filter")
+        return [{"nummer": "10", "firma": {"name": "Alpha"}}]
+    monkeypatch.setattr(dapi.dc, "query_items", qi)
+    c.get("/directus/sources/kostenstelle/resolve?values=10")
+    assert seen["filter"] == {"_and": [{"aktiv": {"_eq": True}}, {"nummer": {"_in": ["10"]}}]}
+
+
+def test_resolve_labels_empty_values_no_query(monkeypatch):
+    c = _app(USER, monkeypatch)
+    monkeypatch.setattr(dapi.store, "get", lambda k: dict(SRC))
+    monkeypatch.setattr(dapi.dc, "is_configured", lambda: True)
+
+    def boom(col, **kw):
+        raise AssertionError("darf ohne Werte nicht abfragen")
+    monkeypatch.setattr(dapi.dc, "query_items", boom)
+    r = c.get("/directus/sources/kostenstelle/resolve?values=")
+    assert r.status_code == 200 and r.json()["data"]["labels"] == {}
+
+
+def test_resolve_labels_failsoft_on_error(monkeypatch):
+    c = _app(USER, monkeypatch)
+    monkeypatch.setattr(dapi.store, "get", lambda k: dict(SRC))
+    monkeypatch.setattr(dapi.dc, "is_configured", lambda: True)
+
+    def boom(col, **kw):
+        raise dapi.dc.DirectusError("timeout")
+    monkeypatch.setattr(dapi.dc, "query_items", boom)
+    r = c.get("/directus/sources/kostenstelle/resolve?values=10")
+    assert r.status_code == 200 and r.json()["data"]["labels"] == {}
+
+
+def test_resolve_labels_unknown_source_404(monkeypatch):
+    c = _app(USER, monkeypatch)
+    monkeypatch.setattr(dapi.store, "get", lambda k: None)
+    assert c.get("/directus/sources/ghost/resolve?values=10").status_code == 404

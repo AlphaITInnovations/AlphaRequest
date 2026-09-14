@@ -31,3 +31,20 @@ describe('fieldValueText / subValueText mit Datum', () => {
     expect(subValueText('2026-08-24')).toBe('24.08.2026')
   })
 })
+
+describe('fieldValueText – Directus-Felder lösen die ID zum Label auf', () => {
+  const dirField = { key: 'firma', widget: 'directus', directusSource: 'firmen' } as unknown as FieldDef
+  const sources = {
+    groups: [], users: [], companies: [],
+    directusLabels: { firmen: { 'a1b2': 'Alpha GmbH' } },
+  }
+
+  it('zeigt das aufgelöste Label statt der gespeicherten ID', () => {
+    expect(fieldValueText(dirField, 'a1b2', sources)).toBe('Alpha GmbH')
+  })
+
+  it('fällt auf die ID zurück, wenn kein Label vorliegt (Directus down / unbekannt)', () => {
+    expect(fieldValueText(dirField, 'x9', sources)).toBe('x9')
+    expect(fieldValueText(dirField, 'a1b2', { groups: [], users: [], companies: [] })).toBe('a1b2')
+  })
+})
