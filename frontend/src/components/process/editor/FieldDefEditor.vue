@@ -69,7 +69,7 @@ const open = ref<Record<SectionKey, boolean>>({
   rules: props.modelValue.constraints !== null,
   visibility: props.modelValue.visibility !== null,
   computed: props.modelValue.computed !== null,
-  directus: props.modelValue.widget === 'directus',
+  directus: props.modelValue.widget === 'directus' || props.modelValue.widget === 'directus_multi',
 })
 function toggle(k: SectionKey) {
   open.value[k] = !open.value[k]
@@ -112,9 +112,10 @@ function setWidget(w: Widget) {
   } else if (next.assign) {
     next.assign = null
   }
-  // Directus-Zuordnung gibt es nur beim Feldtyp „Directus" (Server-Regel).
-  if (w === 'directus') {
+  // Directus-Quelle gibt es nur bei den Directus-Feldtypen (Server-Regel).
+  if (w === 'directus' || w === 'directus_multi') {
     open.value.directus = true
+    if (w === 'directus_multi') next.directusFieldMap = []   // Mehrfach: kein Auto-Fill
   } else {
     next.directusSource = null
     next.directusFieldMap = []
@@ -623,7 +624,8 @@ const computedSummary = computed(() =>
     </div>
 
     <!-- ── Directus-Auswahl ─────────────────────────────────────────────────── -->
-    <div v-if="modelValue.widget === 'directus'" class="rounded-xl border border-gray-200 dark:border-white/10">
+    <div v-if="modelValue.widget === 'directus' || modelValue.widget === 'directus_multi'"
+         class="rounded-xl border border-gray-200 dark:border-white/10">
       <button type="button" @click="toggle('directus')"
               class="w-full flex items-center gap-2 px-3 py-2 text-left rounded-xl
                      hover:bg-gray-50 dark:hover:bg-[#263040] transition">
@@ -648,7 +650,7 @@ const computedSummary = computed(() =>
           </p>
         </div>
 
-        <div>
+        <div v-if="modelValue.widget === 'directus'">
           <div class="flex items-center justify-between">
             <label class="lbl mb-0">Felder automatisch füllen</label>
             <button type="button" @click="addMapping" class="text-xs text-[#3EAAB8] hover:underline">+ Zuordnung</button>
@@ -681,9 +683,13 @@ const computedSummary = computed(() =>
             Keine Zuordnungen – es wird nur der gewählte Wert gespeichert.
           </p>
         </div>
-        <p class="text-xs text-gray-400">
+        <p v-if="modelValue.widget === 'directus'" class="text-xs text-gray-400">
           Ziel-Felder dürfen auch „nur lesen" sein – der Server schreibt den Snapshot beim
           Speichern autoritativ (anhand des gewählten Werts frisch aus Directus).
+        </p>
+        <p v-else class="text-xs text-gray-400">
+          Mehrfachauswahl: gespeichert wird die Liste der gewählten IDs; ein Auto-Fill in
+          andere Felder gibt es hier nicht.
         </p>
       </div>
     </div>

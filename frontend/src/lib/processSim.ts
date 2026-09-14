@@ -136,7 +136,7 @@ export function renderFields(
 
 // ── Validierung (Spiegel process_validation) ──────────────────────────────────
 
-const LIST_WIDGETS = ['multiselect', 'checkbox-group', 'collection']
+const LIST_WIDGETS = ['multiselect', 'checkbox-group', 'collection', 'directus_multi']
 const TEXTY = ['text', 'textarea', 'date', 'select', 'user', 'company', 'group']
 
 /** Pass 1: Wert-Form der gesendeten Felder. */

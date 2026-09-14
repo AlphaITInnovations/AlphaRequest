@@ -48,3 +48,17 @@ describe('fieldValueText – Directus-Felder lösen die ID zum Label auf', () =>
     expect(fieldValueText(dirField, 'a1b2', { groups: [], users: [], companies: [] })).toBe('a1b2')
   })
 })
+
+describe('fieldValueText – directus_multi zeigt die Labels der Liste', () => {
+  const multi = { key: 'nl', widget: 'directus_multi', directusSource: 'niederlassung' } as unknown as FieldDef
+  const sources = {
+    groups: [], users: [], companies: [],
+    directusLabels: { niederlassung: { n1: 'Nürnberg', n2: 'München' } },
+  }
+  it('löst jede ID zum Label auf und verbindet mit Komma', () => {
+    expect(fieldValueText(multi, ['n1', 'n2'], sources)).toBe('Nürnberg, München')
+  })
+  it('fällt je Eintrag auf die ID zurück, wenn kein Label vorliegt', () => {
+    expect(fieldValueText(multi, ['n1', 'x9'], sources)).toBe('Nürnberg, x9')
+  })
+})

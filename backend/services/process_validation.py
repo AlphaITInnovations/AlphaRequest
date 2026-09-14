@@ -36,7 +36,8 @@ def _err(path: str, code: str, message: str) -> dict:
 _SCALAR_TEXT = {Widget.text, Widget.textarea, Widget.date, Widget.select,
                 Widget.user, Widget.company, Widget.group, Widget.directus,
                 Widget.server_generated}
-_LIST_WIDGETS = {Widget.multiselect, Widget.checkbox_group, Widget.collection}
+_LIST_WIDGETS = {Widget.multiselect, Widget.checkbox_group, Widget.collection,
+                 Widget.directus_multi}
 
 
 def validate_values(defn: ProcessDefinition, submitted: dict) -> list[dict]:
@@ -69,6 +70,8 @@ def _check_field(f: FieldDef, val: Any) -> list[dict]:
     elif w in _LIST_WIDGETS:
         if not isinstance(val, list):
             return [_err(f.key, "TYPE", "Liste erwartet")]
+        if w == Widget.directus_multi and any(not isinstance(x, str) for x in val):
+            return [_err(f.key, "TYPE", "Liste von IDs (Text) erwartet")]
     elif w in _SCALAR_TEXT:
         if not isinstance(val, str):
             return [_err(f.key, "TYPE", "Text erwartet")]

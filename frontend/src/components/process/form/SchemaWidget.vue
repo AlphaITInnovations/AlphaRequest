@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue'
 import type { FieldDef, OptionSources } from '@/types/process'
 import UserSelect from '@/components/UserSelect.vue'
 import DirectusSelect from './DirectusSelect.vue'
+import DirectusMultiSelect from './DirectusMultiSelect.vue'
 
 const props = withDefaults(defineProps<{
   field: FieldDef
@@ -51,6 +52,11 @@ const companyOpts = (): Opt[] =>
 const directusInitialLabel = computed<string>(() =>
   (props.field.directusSource
     && props.sources?.directusLabels?.[props.field.directusSource]?.[textModel.value]) || '')
+
+// Für directus_multi: vorab aufgelöste Labels aller bereits gewählten IDs (Chips).
+const directusInitialLabels = computed<Record<string, string>>(() =>
+  (props.field.directusSource
+    && props.sources?.directusLabels?.[props.field.directusSource]) || {})
 
 const optionList = computed<Opt[]>(() => {
   const f = props.field
@@ -286,6 +292,17 @@ const readonlyText = computed(() => {
       :disabled="disabled"
       :invalid="invalid"
       @select="(sel) => emit('directus-pick', sel)"
+    />
+
+    <!-- Directus-Mehrfachauswahl (Liste von IDs) – kein Feld-Mapping/Snapshot. -->
+    <DirectusMultiSelect
+      v-else-if="field.widget === 'directus_multi'"
+      :field="field"
+      :model-value="arrayModel"
+      :initial-labels="directusInitialLabels"
+      :disabled="disabled"
+      :invalid="invalid"
+      @update:model-value="(v) => (arrayModel = v)"
     />
 
     <!-- Datei-Anhang: Stufe 6 speichert für dieses Widget bewusst NICHTS.

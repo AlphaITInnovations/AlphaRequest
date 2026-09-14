@@ -501,3 +501,33 @@ def test_layout_note_visible_when_unknown_ref_rejected():
 def test_layout_note_visible_when_malformed_rejected():
     with pytest.raises(ValidationError):    # kaputte DSL-Struktur
         ProcessDefinition.model_validate(_defn_with_note({"kaputt": 1}))
+
+
+# ── directus_multi (Mehrfachauswahl aus einer Directus-Quelle) ────────────────
+
+def test_directus_multi_requires_source():
+    _reject(_base(fields=[{"key": "a", "widget": "directus_multi"}]))
+
+
+def test_directus_multi_verbietet_field_map():
+    _reject(_base(fields=[
+        {"key": "a", "widget": "directus_multi", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "b"}]},
+        {"key": "b", "widget": "text"}]))
+
+
+def test_directus_multi_ok_mit_quelle():
+    ProcessDefinition.model_validate(_base(fields=[
+        {"key": "a", "widget": "directus_multi", "directusSource": "kostenstelle"},
+        {"key": "b", "widget": "text"}]))
+
+
+def test_directus_multi_wert_ist_eine_liste_von_ids():
+    from backend.services.process_validation import validate_values
+    defn = ProcessDefinition.model_validate(_base(fields=[
+        {"key": "a", "widget": "directus_multi", "directusSource": "kostenstelle"},
+        {"key": "b", "widget": "text"}]))
+    assert validate_values(defn, {"a": ["1", "2"]}) == []          # Liste von IDs: ok
+    assert validate_values(defn, {"a": []}) == []                  # leer erlaubt (Pflicht separat)
+    assert validate_values(defn, {"a": "1"})[0]["code"] == "TYPE"  # Skalar → Liste erwartet
+    assert validate_values(defn, {"a": [1, 2]})[0]["code"] == "TYPE"  # Nicht-Strings → Fehler

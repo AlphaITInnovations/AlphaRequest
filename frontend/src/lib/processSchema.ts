@@ -22,8 +22,8 @@ import type {
 /** Widgets im Feld-Katalog: server_stamped gibt es nur in collection-Unterfeldern. */
 export const WIDGETS_TOP: readonly Widget[] = [
   'text', 'textarea', 'number', 'date', 'select', 'multiselect', 'checkbox',
-  'checkbox-group', 'attachment', 'user', 'company', 'group', 'directus', 'collection',
-  'server_generated',
+  'checkbox-group', 'attachment', 'user', 'company', 'group', 'directus', 'directus_multi',
+  'collection', 'server_generated',
 ]
 
 /** Widgets in collection-Unterfeldern: kein collection, aber server_stamped erlaubt. */
@@ -128,6 +128,7 @@ export const WIDGET_LABEL: Record<Widget, string> = {
   select: 'Auswahl', multiselect: 'Mehrfachauswahl', checkbox: 'Ja/Nein',
   'checkbox-group': 'Ankreuzliste', attachment: 'Datei-Anhang',
   user: 'Person', company: 'Firma', group: 'Fachabteilung', directus: 'Directus-Auswahl',
+  directus_multi: 'Directus-Mehrfachauswahl',
   collection: 'Wiederholgruppe', server_generated: 'Vom System vergebene Nummer',
   server_stamped: 'Systemstempel',
 }

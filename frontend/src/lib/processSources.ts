@@ -95,7 +95,7 @@ export async function loadDirectusLabels(
   if (!definition || !values) return {}
   const bySource = new Map<string, Set<string>>()
   for (const f of definition.fields ?? []) {
-    if (f.widget !== 'directus' || !f.directusSource) continue
+    if ((f.widget !== 'directus' && f.widget !== 'directus_multi') || !f.directusSource) continue
     const raw = values[f.key]
     for (const v of Array.isArray(raw) ? raw : [raw]) {
       if (v === null || v === undefined || v === '') continue

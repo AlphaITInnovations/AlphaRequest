@@ -149,10 +149,15 @@ export function validateDefinition(
         `Abgeleitet aus „${f.computed.from}" – dieses Feld gibt es nicht.`))
     }
 
-    // ── Directus-Feld (widget=directus + Quelle + Auto-Fill-Zuordnungen) ──
-    if (f.widget === 'directus') {
+    // ── Directus-Feld (widget=directus/directus_multi + Quelle [+ Auto-Fill]) ──
+    if (f.widget === 'directus' || f.widget === 'directus_multi') {
       if (!f.directusSource) {
         out.push(err(`${p}.directusSource`, anchor, 'REQUIRED', 'Directus-Feld braucht eine Quelle.'))
+      }
+      // Mehrfachauswahl kennt keinen Einzel-Snapshot in ein Zielfeld.
+      if (f.widget === 'directus_multi' && f.directusFieldMap.length) {
+        out.push(err(`${p}.directusFieldMap`, anchor, 'INVALID',
+          'Auto-Fill-Zuordnungen sind bei der Mehrfachauswahl nicht möglich.'))
       }
       f.directusFieldMap.forEach((b, j) => {
         if (!b.source || !b.target) {

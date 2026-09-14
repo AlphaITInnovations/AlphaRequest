@@ -66,7 +66,7 @@ export function optionLabel(f: FieldDef, raw: unknown, sources?: OptionSources):
   if (f.widget === 'group' || f.optionsSource === 'groups') return groupName(v, sources)
   // Directus-Feld: gespeichert ist nur die ID – Klartext-Label aus den vorab
   // aufgelösten `directusLabels` (Fallback: die ID, falls nicht auflösbar).
-  if (f.widget === 'directus' && f.directusSource) {
+  if ((f.widget === 'directus' || f.widget === 'directus_multi') && f.directusSource) {
     return sources?.directusLabels?.[f.directusSource]?.[v] ?? v
   }
   const opt = (f.options ?? []).find((o) => o.value === v)

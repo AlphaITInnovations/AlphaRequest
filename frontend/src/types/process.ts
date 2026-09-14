@@ -16,7 +16,7 @@
 export type Widget =
   | 'text' | 'textarea' | 'number' | 'date'
   | 'select' | 'multiselect' | 'checkbox' | 'checkbox-group'
-  | 'attachment' | 'user' | 'company' | 'group' | 'directus'
+  | 'attachment' | 'user' | 'company' | 'group' | 'directus' | 'directus_multi'
   | 'collection' | 'server_generated' | 'server_stamped'
 
 export type OptionsSource = 'static' | 'groups' | 'companies' | 'users'

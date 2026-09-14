@@ -40,6 +40,7 @@ class Widget(str, Enum):
     company = "company"
     group = "group"
     directus = "directus"                # Auswahl aus einer Directus-Quelle (Live-Dropdown)
+    directus_multi = "directus_multi"    # Mehrfachauswahl aus einer Directus-Quelle (Liste von IDs)
     collection = "collection"            # Wiederholgruppe (Array von Sub-Items)
     server_generated = "server_generated"  # kein Client-Input, per Action befüllt
     server_stamped = "server_stamped"       # nur innerhalb collection-Items
@@ -371,10 +372,14 @@ class FieldDef(_Base):
             raise ValueError(f"Feld „{self.key}“: server_generated braucht `assign`")
         if self.widget == Widget.server_stamped:
             raise ValueError(f"Feld „{self.key}“: server_stamped ist nur innerhalb einer collection erlaubt")
-        if self.widget == Widget.directus and not self.directusSource:
-            raise ValueError(f"Feld „{self.key}“: widget=directus braucht `directusSource`")
-        if self.widget != Widget.directus and (self.directusSource or self.directusFieldMap):
-            raise ValueError(f"Feld „{self.key}“: `directusSource`/`directusFieldMap` nur bei widget=directus")
+        directus_widgets = {Widget.directus, Widget.directus_multi}
+        if self.widget in directus_widgets and not self.directusSource:
+            raise ValueError(f"Feld „{self.key}“: widget={self.widget.value} braucht `directusSource`")
+        if self.widget not in directus_widgets and (self.directusSource or self.directusFieldMap):
+            raise ValueError(f"Feld „{self.key}“: `directusSource`/`directusFieldMap` nur bei widget=directus/directus_multi")
+        # Mehrfachauswahl kennt keinen Einzel-Snapshot in ein Zielfeld.
+        if self.widget == Widget.directus_multi and self.directusFieldMap:
+            raise ValueError(f"Feld „{self.key}“: `directusFieldMap` ist bei directus_multi nicht erlaubt")
         return self
 
 
