@@ -200,13 +200,19 @@ def user_group_ids(user: dict) -> set:
 
 def build_viewer_ctx(user: dict, ticket_row: dict, defn: Optional[ProcessDefinition],
                      group_ids: Optional[set] = None,
-                     suppress_admin: bool = False) -> ViewerCtx:
+                     suppress_admin: bool = False, is_watcher: bool = False) -> ViewerCtx:
     """Sicht-Kontext für die Feld-Sichtbarkeit.
 
     `suppress_admin=True` blendet den reinen Admin-Bonus aus: der Admin sieht dann
     nur, was er OHNE Admin-Recht sähe (view/manage-Aufsicht, Owner- und Phasen-
     Vollsicht bleiben erhalten). Genutzt in der Normal-/Leseansicht – der volle
     Admin-Blick ist der ausdrücklichen Admin-Ansicht (`?ansicht=admin`) vorbehalten.
+
+    `is_watcher=True` gewährt Vollsicht: Beobachten heißt mitlesen – Beobachter:innen
+    sehen ALLE Angaben (nur `confidential` bleibt die harte Sperre). BEWUSST ein
+    OPT-IN je Aufrufer: die Lese-/Feld-Pfade reichen es durch, das Dokument-/Vertrags-
+    Gate (_docx_fill_prep) NICHT – der Vertrag bleibt der zuständigen Stelle/Admin
+    vorbehalten.
     """
     from backend.database.users import PERM_VIEW, PERM_MANAGE, PERM_ADMIN
 
@@ -221,7 +227,7 @@ def build_viewer_ctx(user: dict, ticket_row: dict, defn: Optional[ProcessDefinit
     terminal = (ticket_row.get("status") in ("archived", "rejected")
                 or bool((ticket_row.get("runtime") or {}).get("rejected")))
 
-    full_view = oversight or is_owner
+    full_view = oversight or is_owner or is_watcher
     if not full_view and not terminal and defn is not None:
         phase = pr.current_phase(defn, ticket_row.get("runtime") or {})
         if phase is not None and phase.grantsFullView and \

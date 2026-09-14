@@ -56,6 +56,22 @@ def test_confidential_hard_gate():
     assert not can_see_field(FIELDS["personal.salary"], IT)
 
 
+def test_watcher_gets_full_view():
+    """Beobachten heißt mitlesen: is_watcher=True gewährt Vollsicht – sieht auch
+    gruppen-beschränkte Felder (visibleToGroups ist ein weicher Hinweis), nur
+    `confidential` bleibt die harte Sperre."""
+    from backend.services import process_runtime as pr
+    from backend.services.process_visibility import build_viewer_ctx
+    row = {"id": 7, "owner_id": "u_owner", "status": "in_progress",
+           "runtime": pr.initial_runtime(DEFN, "t0", {})}
+    outsider = {"id": "u_x", "permissions": []}          # keine Gruppen, keine Rolle
+    plain = build_viewer_ctx(outsider, row, DEFN, group_ids=set(), is_watcher=False)
+    watch = build_viewer_ctx(outsider, row, DEFN, group_ids=set(), is_watcher=True)
+    assert plain.full_view is False and watch.full_view is True
+    assert can_see_field(FIELDS["it.host"], watch)               # gruppen-beschränkt: ja
+    assert not can_see_field(FIELDS["personal.salary"], watch)   # vertraulich: nein
+
+
 def test_filter_values_per_viewer():
     assert filter_values(DEFN, VALUES, ADMIN) == VALUES                       # Admin: alles
     assert filter_values(DEFN, VALUES, FULL) == {"base.name": "Max", "it.host": "PC-1"}  # kein salary

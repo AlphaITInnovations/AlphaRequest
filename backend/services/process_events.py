@@ -144,14 +144,17 @@ def redact(events: Iterable[dict], defn: Optional[ProcessDefinition],
 
 def for_viewer(row: dict, defn: Optional[ProcessDefinition], user: dict,
                group_ids: Iterable[str], *, limit: int = 100, offset: int = 0,
-               ) -> tuple[list[dict], int]:
+               is_watcher: bool = False) -> tuple[list[dict], int]:
     """Verlauf eines Auftrags für eine bestimmte Person laden (redigiert).
 
     `total` ist die UNGEFILTERTE Gesamtzahl – die Blätterung arbeitet auf der
     DB-Reihenfolge, sonst müsste man den ganzen Verlauf lesen, um zu zählen.
     Die Oberfläche zeigt deshalb „x von y" nicht als exakte Sichtbarkeits-Zahl.
+
+    `is_watcher=True` (Beobachten = mitlesen): Vollsicht auf den Verlauf, passend
+    zur Feld-Sicht der Beobachter:innen.
     """
     events, total = store.list_for_ticket(row["id"], limit=limit, offset=offset)
-    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=set(group_ids))
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=set(group_ids), is_watcher=is_watcher)
     staff = acc.is_process_staff(defn, user, group_ids)
     return redact(events, defn, ctx, staff=staff), total

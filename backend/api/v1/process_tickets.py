@@ -221,6 +221,20 @@ def _field_access(row: dict, defn: Optional[ProcessDefinition], phase, ctx: vis.
     return sichtbar, bearbeitbar
 
 
+def _may_export_document(row: dict, defn: Optional[ProcessDefinition],
+                         user: Optional[dict], group_ids) -> bool:
+    """Darf diese Person den ausgefüllten Vertrag exportieren? BEWUSST UNABHÄNGIG
+    vom Entry-Modus: der Fachabteilungs-Link (?abteilung=…) und die Admin-Ansicht
+    engen nur die Feld-SICHT ein, nicht das Export-Recht. Baut denselben echten
+    Gate wie `_docx_fill_prep` (Vollsicht/Admin aus den ECHTEN Gruppen), damit die
+    UI-Ability zum Endpunkt passt – sonst zeigt der Abteilungs-Link die
+    Dokument-Phase für die zuständige Stelle fälschlich als gesperrt."""
+    if not user or defn is None:
+        return False
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=set(group_ids or ()))
+    return bool(ctx.full_view or ctx.is_admin)
+
+
 def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
          user: Optional[dict] = None, group_ids=()) -> ProcessTicketOut:
     cur = pr.current_phase(defn, row["runtime"]) if defn else None
@@ -242,8 +256,11 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
     data["responsibility"] = resp
     completable = _completable_departments(row, defn, user, group_ids, resp)
-    # Dokument/Vertrag exportieren = Vollsicht/Admin (Gate von _docx_fill_prep).
-    can_export = bool(ctx.full_view or ctx.is_admin)
+    # Dokument/Vertrag exportieren: echtes Vollsicht/Admin-Recht aus den ECHTEN
+    # Gruppen – NICHT aus dem (beim Abteilungs-Link heruntergescopeten) Anzeige-Ctx,
+    # sonst sperrt der Fachabteilungs-Link die Dokument-Phase für die zuständige
+    # Stelle. Spiegelt den Gate in _docx_fill_prep.
+    can_export = _may_export_document(row, defn, user, group_ids)
     data["abilities"] = _abilities(row, defn, user, group_ids, completable, can_export)
     data["visible_fields"], data["editable_fields"] = _field_access(row, defn, cur, ctx)
     return ProcessTicketOut(**data)
@@ -272,13 +289,32 @@ def _view_ctx(row: dict, defn, user: dict, gids, view: Optional[str],
     return _read_ctx(user, row, defn, gset)
 
 
-def _read_ctx(user: dict, row: dict, defn, gids=None) -> vis.ViewerCtx:
+def _is_watcher(row: dict, user: dict) -> bool:
+    """Beobachtet DIESE Person den Auftrag? (Beobachten = alle Angaben mitlesen.)"""
+    uid = user.get("id")
+    rid = row.get("id")
+    if not uid or rid is None:
+        return False
+    try:
+        return uid in watchers.watcher_ids(int(rid))
+    except Exception:
+        logger.warning("Beobachter-Status für #%s nicht ladbar – fail-closed", rid)
+        return False
+
+
+def _read_ctx(user: dict, row: dict, defn, gids=None,
+              is_watcher: Optional[bool] = None) -> vis.ViewerCtx:
     """Sicht für ALLE Antwort-Objekte AUSSERHALB der ausdrücklichen Admin-Ansicht
     (Liste, Mutationen, Erstellen). Der reine Admin-Bonus bleibt hier IMMER aus –
     alle Felder zeigt einzig der Detail-GET mit ?view=admin. Für Nicht-Admins ein
     No-Op (view/manage-Aufsicht, Owner- und Phasen-Vollsicht bleiben). BEWUSST NICHT
-    im Dokument-Export (_docx_fill_prep) – das ist ein eigenes, ungefiltertes Gate."""
-    return vis.build_viewer_ctx(user, row, defn, group_ids=gids, suppress_admin=True)
+    im Dokument-Export (_docx_fill_prep) – das ist ein eigenes, ungefiltertes Gate.
+
+    Beobachter:innen sehen alle Angaben: `is_watcher` wird durchgereicht (der
+    Aufrufer kann ihn bündeln, um N+1 zu sparen) oder – wenn None – hier ermittelt."""
+    watcher = _is_watcher(row, user) if is_watcher is None else is_watcher
+    return vis.build_viewer_ctx(user, row, defn, group_ids=gids,
+                                suppress_admin=True, is_watcher=watcher)
 
 
 def _actor_name(user: dict) -> str:
@@ -421,7 +457,8 @@ def list_process_tickets(
         if not oversight and not acc.may_view(d, r, user, gids, watch_map.get(r["id"], ())):
             hidden += 1
             continue
-        out.append(_out(r, d, _read_ctx(user, r, d, gids),
+        out.append(_out(r, d, _read_ctx(user, r, d, gids,
+                                        is_watcher=user.get("id") in watch_map.get(r["id"], ())),
                         user, gids))
     return ListResponse(data=out,
                         meta=Meta(total=max(0, total - hidden), limit=limit, offset=offset))
@@ -1391,7 +1428,8 @@ def list_ticket_events(ticket_id: int, user: dict = Depends(get_current_user),
     """Verlauf eines Auftrags – redigiert: Einträge über nicht sichtbare Felder
     entfallen, interne Nachträge sieht nur die bearbeitende Seite."""
     row, defn, gids = _load_for_view(ticket_id, user)
-    evs, total = events.for_viewer(row, defn, user, gids, limit=limit, offset=offset)
+    evs, total = events.for_viewer(row, defn, user, gids, limit=limit, offset=offset,
+                                   is_watcher=_is_watcher(row, user))
     return ListResponse(data=[EventOut(**e) for e in evs],
                         meta=Meta(total=total, limit=limit, offset=offset))
 

@@ -496,8 +496,10 @@ def test_beobachter_liest_dateien_aber_ruehrt_nichts_an(ctx, owner_client):
 
 
 def test_anhang_feld_sichtbarkeit_gilt_fuer_liste_und_download(ctx, tmp_path):
-    """Anhänge an einem Feld mit visibleToGroups sieht/lädt nur, wer das Feld
-    sehen darf – auch wenn man den Auftrag ansonsten sehen darf (Beobachter)."""
+    """Anhänge an einem Feld mit visibleToGroups: Vollsicht (Owner/Aufsicht/
+    BEOBACHTER – Beobachten heißt mitlesen) sieht/lädt sie, weil visibleToGroups
+    nur ein weicher Hinweis ist (harte Sperre wäre `confidential`). Ein
+    group-gescopeter Beteiligter (Fachabteilung, NICHT diese Gruppe) NICHT."""
     owner = make_client(OWNER)                     # Owner = Voll-Sicht → darf ans Feld
     up = upload(owner, field_key="docs_hr")
     assert up.status_code == 200
@@ -510,23 +512,24 @@ def test_anhang_feld_sichtbarkeit_gilt_fuer_liste_und_download(ctx, tmp_path):
     blob.write_bytes(b"PDF")
     att_api.storage.full_path = lambda sp: blob
 
-    # Beobachter machen may_view möglich, ohne zuständig/Mitglied zu sein.
-    ctx["watchers"].ids[7] = {"w_hr", "w_plain"}
-    hr = make_client({"id": "w_hr", "displayName": "HR", "permissions": [], "groups": ["g_hr"]})
-    plain = make_client({"id": "w_plain", "displayName": "X", "permissions": [], "groups": []})
+    # In die Fachabteilungs-Phase: g_it ist zuständig (beteiligt, aber KEINE
+    # Vollsicht und NICHT g_hr) → das g_hr-Feld bleibt für ihn gesperrt.
+    _zur_fachabteilung(ctx)
+    it = make_client(IT_USER)                      # groups=['g_it']
+    liste_it = it.get("/process-tickets/7/attachments").json()["data"]
+    assert not any(a["field_key"] == "docs_hr" for a in liste_it)
+    assert it.get(f"/attachments/{att_id}/download").status_code == 404
 
-    # g_hr-Mitglied: sieht das Feld-Attachment in der Liste UND lädt es.
-    liste_hr = hr.get("/process-tickets/7/attachments").json()["data"]
-    assert any(a["field_key"] == "docs_hr" for a in liste_hr)
-    assert hr.get(f"/attachments/{att_id}/download").status_code == 200
-
-    # Beteiligt, aber nicht g_hr: weder in der Liste noch ladbar (404, Existenz verdeckt).
-    liste_plain = plain.get("/process-tickets/7/attachments").json()["data"]
-    assert not any(a["field_key"] == "docs_hr" for a in liste_plain)
-    assert plain.get(f"/attachments/{att_id}/download").status_code == 404
+    # Beobachter:in = mitlesen = Vollsicht: sieht das visibleToGroups-Feld UND lädt es
+    # (auch ohne g_hr-Mitgliedschaft) – nur `confidential` bliebe gesperrt.
+    ctx["watchers"].ids[7] = {"w_watch"}
+    watch = make_client({"id": "w_watch", "displayName": "Beobachter", "permissions": [], "groups": []})
+    liste_w = watch.get("/process-tickets/7/attachments").json()["data"]
+    assert any(a["field_key"] == "docs_hr" for a in liste_w)
+    assert watch.get(f"/attachments/{att_id}/download").status_code == 200
 
     # Nicht-feldgebundene/normale Anhänge bleiben für Beteiligte sichtbar.
     up2 = upload(owner, field_key="vertrag")
     assert any(a["field_key"] == "vertrag"
-               for a in plain.get("/process-tickets/7/attachments").json()["data"])
-    assert plain.get(f"/attachments/{up2.json()['data']['id']}/download").status_code == 200
+               for a in it.get("/process-tickets/7/attachments").json()["data"])
+    assert it.get(f"/attachments/{up2.json()['data']['id']}/download").status_code == 200
