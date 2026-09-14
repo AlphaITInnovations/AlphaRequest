@@ -276,6 +276,30 @@ def test_run_action_escalate_sends_to_all_and_bumps_priority(monkeypatch):
     assert sent[0]["kind"] == "escalate"
 
 
+# ── Testmail (Editor-Vorschau) ────────────────────────────────────────────────
+
+def test_build_escalation_test_message_marks_as_test():
+    subj, body = pactions.build_escalation_test_message(
+        "Bitte zeitnah bearbeiten", True, process_name="Onboarding Max", phase_label="Bearbeitung")
+    assert "[TEST]" in subj and "Bitte zeitnah bearbeiten" in subj and "Onboarding Max" in subj
+    assert "TESTNACHRICHT" in body            # klar als Test gekennzeichnet
+    assert "hoch" in body                     # raisePriority spiegelt sich im Text
+
+
+def test_build_escalation_test_message_default_verb():
+    # ohne message + ohne raisePriority → „Erinnerung"; mit raisePriority → „Eskalation"
+    assert "Erinnerung" in pactions.build_escalation_test_message(None, False)[0]
+    assert "Eskalation" in pactions.build_escalation_test_message(None, True)[0]
+
+
+def test_send_escalation_test_targets_single_address():
+    sent = []
+    pactions.send_escalation_test(
+        "me@example.org", message="X", raise_priority=False, phase_label="P",
+        sender=lambda to, subject, body, kind=None: sent.append({"to": to, "kind": kind}))
+    assert sent == [{"to": ["me@example.org"], "kind": "escalation_test"}]
+
+
 def test_run_action_notify_stage_does_not_bump_priority(monkeypatch):
     monkeypatch.setattr(pactions, "_user_email", lambda uid: None)
     d = _defn({"enabled": True, "stages": [

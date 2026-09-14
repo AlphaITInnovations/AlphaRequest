@@ -180,3 +180,13 @@ export async function confirmProcessDelete(
 export async function deleteVersion(key: string, version: number): Promise<void> {
   await client.delete(`/processes/${encodeURIComponent(key)}/versions/${version}`)
 }
+
+/** Eskalations-Testmail an die eigene Adresse schicken (Vorschau im Editor).
+ *  Geht bewusst NUR an die anfragende Person, nie an konfigurierte Empfänger. */
+export async function testEscalationMail(payload: {
+  message: string | null; raisePriority: boolean
+  processName?: string | null; phaseLabel?: string | null
+}): Promise<{ ok: boolean; message: string }> {
+  const { data } = await client.post('/processes:test-escalation-mail', payload)
+  return data.data
+}

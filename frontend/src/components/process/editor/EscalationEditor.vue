@@ -6,16 +6,42 @@
  * Timer-Automation (notify bzw. escalate); die bewährte Timer-/Mail-Lauffläche
  * feuert sie unverändert.
  */
+import { ref } from 'vue'
 import type { EscalationSpec, EscalationStage } from '@/types/process'
 import { blankEscalationStage, ESCALATION_MAX_DAYS } from '@/lib/processSchema'
+import { testEscalationMail } from '@/api/processes'
+import { useToast } from '@/composables/useToast'
 import RecipientPicker from './RecipientPicker.vue'
 
 const props = defineProps<{
   modelValue: EscalationSpec
   groups: { id: string; name: string }[]
   users: { id: string; displayName: string }[]
+  phaseLabel?: string | null
+  processName?: string | null
   readonly?: boolean
 }>()
+
+const { showToast } = useToast()
+const sendingIdx = ref<number | null>(null)
+
+/** Testmail dieser Stufe an die eigene Adresse – zeigt die echte Mail, ohne
+ *  konfigurierte Empfänger anzuschreiben. */
+async function sendTest(i: number) {
+  const st = props.modelValue.stages[i]
+  sendingIdx.value = i
+  try {
+    const res = await testEscalationMail({
+      message: st.message, raisePriority: st.raisePriority,
+      phaseLabel: props.phaseLabel ?? null, processName: props.processName ?? null,
+    })
+    showToast(res.message || 'Testmail gesendet', true)
+  } catch (e: any) {
+    showToast(e?.response?.data?.error?.message || 'Testmail konnte nicht gesendet werden.', false)
+  } finally {
+    sendingIdx.value = null
+  }
+}
 
 const emit = defineEmits<{ 'update:modelValue': [value: EscalationSpec] }>()
 
@@ -102,13 +128,20 @@ function setRepeatEnabled(i: number, on: boolean) {
                  @input="setStage(i, { message: ($event.target as HTMLInputElement).value || null })" />
         </div>
 
-        <!-- Priorität -->
-        <label class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300 select-none">
-          <input type="checkbox" :checked="st.raisePriority" :disabled="readonly"
-                 class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8] focus:ring-[#3EAAB8]/30"
-                 @change="setStage(i, { raisePriority: ($event.target as HTMLInputElement).checked })" />
-          Ticket-Priorität dabei auf „hoch" setzen
-        </label>
+        <!-- Priorität + Testmail -->
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <label class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300 select-none">
+            <input type="checkbox" :checked="st.raisePriority" :disabled="readonly"
+                   class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8] focus:ring-[#3EAAB8]/30"
+                   @change="setStage(i, { raisePriority: ($event.target as HTMLInputElement).checked })" />
+            Ticket-Priorität dabei auf „hoch" setzen
+          </label>
+          <button type="button" class="btn-secondary text-xs py-1" :disabled="sendingIdx !== null"
+                  title="Diese Mail als Test an deine eigene Adresse senden"
+                  @click="sendTest(i)">
+            {{ sendingIdx === i ? 'Sende …' : 'Testmail an mich' }}
+          </button>
+        </div>
       </div>
 
       <button v-if="!readonly" type="button" @click="addStage" class="btn-secondary text-xs py-1">

@@ -236,6 +236,42 @@ def _default_sender(recipients: list[str], subject: str, body: str, kind: str = 
     )
 
 
+def build_escalation_test_message(message: Optional[str], raise_priority: bool,
+                                  process_name: Optional[str] = None,
+                                  phase_label: Optional[str] = None) -> tuple[str, str]:
+    """Betreff + Body einer Eskalations-TESTMAIL: sieht aus wie die echte
+    Erinnerung (gleiche Vorlage/Button, Anlass-Text = `message`), ist aber klar
+    als Testnachricht gekennzeichnet – für die Vorschau im Editor."""
+    verb = (message or "").strip() or ("Eskalation" if raise_priority else "Erinnerung")
+    title = (process_name or "").strip() or "Test-Auftrag"
+    base = (getattr(config, "FRONTEND_URL", "") or "").rstrip("/")
+    link = f"{base}/dashboard" if base else ""
+    subject = (f"[AlphaRequest] [TEST] {verb}: {title}"
+               .replace("\r", " ").replace("\n", " ")[:200])
+    body = render_corporate_email(
+        subject=subject,
+        header_subtitle=f"Testnachricht · {verb}",
+        headline=title,
+        info_box_url=link or None,
+        intro="Dies ist eine TESTNACHRICHT einer Eskalations-/Erinnerungsstufe. So sieht "
+              "die Mail aus, die betroffene Empfänger:innen erhalten würden.",
+        info_rows=[("Phase", phase_label or "—"),
+                   ("Priorität", "wird auf „hoch“ gesetzt" if raise_priority else "unverändert")],
+        action_html=_primary_button_html(link) if link else "",
+        content="",
+    )
+    return subject, body
+
+
+def send_escalation_test(to: str, *, message: Optional[str] = None, raise_priority: bool = False,
+                         process_name: Optional[str] = None, phase_label: Optional[str] = None,
+                         sender: Callable = _default_sender) -> None:
+    """Verschickt eine Eskalations-Testmail an GENAU EINE Adresse (die anfragende
+    Person selbst – bewusst NICHT an die konfigurierten Empfänger/Verteiler)."""
+    subject, body = build_escalation_test_message(message, raise_priority, process_name, phase_label)
+    sender([to], subject, body, kind="escalation_test")
+
+
 def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
                *, sender: Callable = _default_sender, groups: Optional[list] = None) -> dict:
     """Führt eine Action aus (Mail-Nebenwirkung) und gibt Zustandsänderungen zurück."""

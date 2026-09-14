@@ -29,6 +29,7 @@ import html
 
 from backend.services import attachment_storage as storage
 from backend.services import docx_fill
+from backend.services import process_actions as pactions
 from backend.services import process_delete as pdel
 from backend.services import process_permissions as perms
 from backend.services import process_runtime as pr
@@ -738,6 +739,39 @@ def _template_info(row: dict) -> dict:
             "size": row.get("size_bytes"), "placeholders": placeholders,
             "uploaded_at": str(row.get("uploaded_at") or ""),
             "uploaded_by": row.get("uploaded_by_name")}
+
+
+class EscalationTestIn(BaseModel):
+    message: Optional[str] = None
+    raisePriority: bool = False
+    processName: Optional[str] = None
+    phaseLabel: Optional[str] = None
+
+
+class EscalationTestOut(BaseModel):
+    ok: bool
+    message: str
+
+
+@router.post("/processes:test-escalation-mail",
+             response_model=DataResponse[EscalationTestOut])
+def test_escalation_mail(payload: EscalationTestIn, user: dict = Depends(get_current_user)):
+    """Verschickt eine Eskalations-Testmail an die anfragende Person selbst –
+    zur Vorschau im Editor. BEWUSST nicht an die konfigurierten Empfänger, damit
+    ein Klick im Editor keine echten Empfänger/Verteiler anschreibt."""
+    _require_admin(user)
+    to = pactions._user_email(user.get("id")) or user.get("email") or user.get("mail")
+    if not to:
+        raise api_error(400, ErrorCode.VALIDATION_FAILED,
+                        "Für dein Konto ist keine E-Mail-Adresse hinterlegt.")
+    try:
+        pactions.send_escalation_test(
+            to, message=payload.message, raise_priority=payload.raisePriority,
+            process_name=payload.processName, phase_label=payload.phaseLabel)
+    except Exception as exc:
+        logger.exception("Eskalations-Testmail an %s fehlgeschlagen: %s", to, exc)
+        raise api_error(502, "MAIL_FAILED", "Die Testmail konnte nicht gesendet werden.")
+    return DataResponse(data=EscalationTestOut(ok=True, message=f"Testmail an {to} gesendet"))
 
 
 @router.get("/processes/{key}/phases/{phase}/document-template")
