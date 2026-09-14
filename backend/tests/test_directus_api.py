@@ -214,3 +214,15 @@ def test_resolve_labels_unknown_source_404(monkeypatch):
     c = _app(USER, monkeypatch)
     monkeypatch.setattr(dapi.store, "get", lambda k: None)
     assert c.get("/directus/sources/ghost/resolve?values=10").status_code == 404
+
+
+def test_resolve_labels_nutzt_display_template(monkeypatch):
+    c = _app(USER, monkeypatch)
+    src = {**SRC, "displayTemplate": "{{nummer}} · {{firma.name}}"}
+    monkeypatch.setattr(dapi.store, "get", lambda k: dict(src))
+    monkeypatch.setattr(dapi.dc, "is_configured", lambda: True)
+    monkeypatch.setattr(dapi.dc, "query_items",
+                        lambda col, **kw: [{"nummer": "10", "firma": {"name": "Alpha"}}])
+    r = c.get("/directus/sources/kostenstelle/resolve?values=10")
+    # Ticket-Anzeige nutzt die Anzeige-Vorlage (nicht die Label-Vorlage).
+    assert r.json()["data"]["labels"] == {"10": "10 · Alpha"}

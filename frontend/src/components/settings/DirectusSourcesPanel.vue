@@ -45,7 +45,7 @@ function varLabel(p: string): string { return '{{' + p + '}}' }
 
 function blank(): DirectusSource {
   return { key: '', label: '', collection: '', valueField: '', labelTemplate: '',
-           fields: [], filter: null, sort: [], limit: 200 }
+           displayTemplate: '', fields: [], filter: null, sort: [], limit: 200 }
 }
 
 async function loadAll() {
@@ -124,6 +124,9 @@ function addPath(s: DirectusSource) {
 }
 function insertVar(s: DirectusSource, path: string) {
   s.labelTemplate = (s.labelTemplate ? s.labelTemplate + ' ' : '') + `{{${path}}}`
+}
+function insertDisplayVar(s: DirectusSource, path: string) {
+  s.displayTemplate = (s.displayTemplate ? s.displayTemplate + ' ' : '') + `{{${path}}}`
 }
 
 /** Alle vorschlagbaren Pfade fürs Label: Top-Level-Felder + bereits gewählte Pfade. */
@@ -337,6 +340,23 @@ onMounted(loadAll)
           <div v-if="suggestPaths(sources[selected]).length" class="flex flex-wrap gap-1.5 mt-2">
             <button v-for="p in suggestPaths(sources[selected])" :key="p"
                     @click="insertVar(sources[selected], p)"
+                    class="text-xs px-2 py-0.5 rounded-full border border-gray-200 dark:border-white/10
+                           text-gray-600 dark:text-gray-300 hover:border-[#3EAAB8] hover:text-[#3EAAB8]">
+              + {{ varLabel(p) }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Anzeige-Vorlage: wie der gewählte Wert in den Ticket-Ansichten erscheint. -->
+        <div v-if="sources[selected].collection">
+          <label class="lbl">Anzeige-Vorlage
+            <span class="text-gray-400 font-normal">(so erscheint das Feld in den Ticket-Ansichten; leer = wie Label-Vorlage)</span>
+          </label>
+          <input v-model="sources[selected].displayTemplate" class="set-input w-full"
+                 :placeholder="sources[selected].labelTemplate || PH_LABEL_EXAMPLE" />
+          <div v-if="suggestPaths(sources[selected]).length" class="flex flex-wrap gap-1.5 mt-2">
+            <button v-for="p in suggestPaths(sources[selected])" :key="p"
+                    @click="insertDisplayVar(sources[selected], p)"
                     class="text-xs px-2 py-0.5 rounded-full border border-gray-200 dark:border-white/10
                            text-gray-600 dark:text-gray-300 hover:border-[#3EAAB8] hover:text-[#3EAAB8]">
               + {{ varLabel(p) }}
