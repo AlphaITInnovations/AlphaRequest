@@ -15,6 +15,7 @@ import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import { listArchive, type ArchiveRow } from '@/api/archive'
+import { archiveTicket, deleteTicket } from '@/api/processTickets'
 import { listProcesses } from '@/api/processes'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { errorMessage } from '@/lib/processErrors'
@@ -61,6 +62,60 @@ const statusClass = (s: string) =>
 
 const terminal = (s: string) => s === 'archived' || s === 'rejected'
 
+// ── Admin-Sammelaktionen (NUR im globalen Archiv) ────────────────────────────
+// Auswahl per Kästchen + Archivieren/Löschen für alle Markierten. Ausschließlich
+// für Admins; die Aktionen laufen über die bestehenden, pro Auftrag geprüften und
+// auditierten Einzel-Endpunkte (kein ungeprüfter Sammel-Endpunkt).
+const canBulk = computed(() => isGlobal.value && auth.isAdmin)
+const selected = ref<Set<number>>(new Set())
+const busy = ref(false)
+const confirmAction = ref<null | 'archive' | 'delete'>(null)
+
+const isSel = (id: number) => selected.value.has(id)
+const allSelected = computed(() =>
+  items.value.length > 0 && items.value.every((r) => selected.value.has(r.id)))
+const someSelected = computed(() => items.value.some((r) => selected.value.has(r.id)))
+
+function toggleOne(id: number) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function toggleAll() {
+  selected.value = allSelected.value ? new Set() : new Set(items.value.map((r) => r.id))
+}
+function clearSelection() { selected.value = new Set() }
+
+function askBulk(kind: 'archive' | 'delete') { if (selected.value.size) confirmAction.value = kind }
+
+async function runBulk() {
+  const kind = confirmAction.value
+  confirmAction.value = null
+  if (!kind) return
+  busy.value = true
+  let ok = 0, skipped = 0, failed = 0
+  // Über die aktuelle Seite laufen (nur sichtbare Zeilen sind wählbar).
+  for (const r of items.value) {
+    if (!selected.value.has(r.id)) continue
+    try {
+      if (kind === 'archive') {
+        if (terminal(r.status)) { skipped++; continue }   // schon abgeschlossen
+        await archiveTicket(r.id, 'Sammel-Archivierung über das globale Archiv')
+      } else {
+        await deleteTicket(r.id)
+      }
+      ok++
+    } catch { failed++ }
+  }
+  busy.value = false
+  const parts = [kind === 'archive' ? `${ok} archiviert` : `${ok} gelöscht`]
+  if (skipped) parts.push(`${skipped} übersprungen (bereits abgeschlossen)`)
+  if (failed) parts.push(`${failed} fehlgeschlagen`)
+  showToast(parts.join(' · '), failed === 0)
+  await load()   // lädt neu und leert die Auswahl
+}
+
 const von = computed(() => (total.value === 0 ? 0 : offset.value + 1))
 const bis = computed(() => Math.min(offset.value + PAGE, total.value))
 const hatVor = computed(() => offset.value > 0)
@@ -84,6 +139,7 @@ async function load() {
     items.value = page.items
     total.value = page.total
     truncated.value = page.truncated
+    selected.value = new Set()   // Auswahl gilt je Seite/Filter – bei neuem Stand leeren
   } catch (e) {
     if (mine !== reqSeq) return
     showToast(errorMessage(e, 'Archiv konnte nicht geladen werden'), false)
@@ -206,13 +262,41 @@ onMounted(async () => {
              : (isGlobal ? 'Noch keine Aufträge im System.' : 'Du warst bisher an keinem Auftrag beteiligt.') }}
         </p>
 
-        <ul v-else class="flex flex-col gap-2">
+        <!-- Admin-Sammelaktionen (nur globales Archiv): Auswahl + Aktionen. -->
+        <div v-if="canBulk && items.length" class="flex items-center gap-3 flex-wrap mb-2 px-1">
+          <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none">
+            <input type="checkbox" class="h-4 w-4 rounded border-gray-300 dark:border-white/20 accent-[#3EAAB8]"
+                   :checked="allSelected" :indeterminate="someSelected && !allSelected" @change="toggleAll" />
+            Alle auf dieser Seite
+          </label>
+          <template v-if="selected.size">
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ selected.size }} ausgewählt</span>
+            <button type="button" @click="askBulk('archive')" :disabled="busy"
+                    class="text-xs font-medium px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/15
+                           text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 disabled:opacity-40">
+              Archivieren
+            </button>
+            <button type="button" @click="askBulk('delete')" :disabled="busy"
+                    class="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-500/30
+                           text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40">
+              Löschen
+            </button>
+            <button type="button" @click="clearSelection"
+                    class="text-xs text-gray-400 hover:underline">Auswahl aufheben</button>
+          </template>
+        </div>
+
+        <ul v-if="items.length" class="flex flex-col gap-2">
           <li v-for="r in items" :key="r.id"
               @click="open(r)"
-              class="cursor-pointer flex items-start justify-between gap-3 px-4 py-3.5 rounded-xl
+              class="cursor-pointer flex items-start gap-3 px-4 py-3.5 rounded-xl
                      bg-white dark:bg-[#212B3A] border border-gray-200/80 dark:border-white/[0.09]
-                     hover:border-[#3EAAB8]/40 hover:shadow-sm hover:-translate-y-px transition">
-            <div class="min-w-0">
+                     hover:border-[#3EAAB8]/40 hover:shadow-sm hover:-translate-y-px transition"
+              :class="isSel(r.id) ? 'ring-1 ring-[#3EAAB8]/50' : ''">
+            <input v-if="canBulk" type="checkbox" :checked="isSel(r.id)"
+                   @click.stop @change="toggleOne(r.id)"
+                   class="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 dark:border-white/20 accent-[#3EAAB8] cursor-pointer" />
+            <div class="min-w-0 flex-1">
               <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
                 {{ r.title || `Auftrag #${r.id}` }}
               </p>
@@ -241,6 +325,34 @@ onMounted(async () => {
           </div>
         </div>
       </template>
+
+      <!-- Bestätigung der Sammelaktion (Löschen ist endgültig). -->
+      <div v-if="confirmAction" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+           @click.self="confirmAction = null">
+        <div class="w-full max-w-md rounded-2xl bg-white dark:bg-[#212B3A] shadow-xl p-5">
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-2">
+            {{ confirmAction === 'delete' ? `${selected.size} Aufträge löschen?` : `${selected.size} Aufträge archivieren?` }}
+          </h3>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            <template v-if="confirmAction === 'delete'">
+              Die ausgewählten Aufträge werden <strong>endgültig gelöscht</strong> – das lässt
+              sich <strong>nicht rückgängig</strong> machen.
+            </template>
+            <template v-else>
+              Die ausgewählten Aufträge werden zwangsweise abgeschlossen (archiviert). Bereits
+              abgeschlossene werden übersprungen; rückholbar über die Wiederaufnahme.
+            </template>
+          </p>
+          <div class="flex justify-end gap-2 mt-5">
+            <button type="button" @click="confirmAction = null" class="btn-secondary text-sm">Abbrechen</button>
+            <button type="button" @click="runBulk" :disabled="busy"
+                    class="text-sm font-medium px-4 py-2 rounded-xl text-white disabled:opacity-50"
+                    :class="confirmAction === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#3EAAB8] hover:bg-[#369aa7]'">
+              {{ confirmAction === 'delete' ? 'Endgültig löschen' : 'Archivieren' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </AppLayout>
 </template>
