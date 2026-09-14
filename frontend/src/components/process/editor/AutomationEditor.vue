@@ -14,7 +14,8 @@
  */
 import { computed, ref, watch } from 'vue'
 import type {
-  Action, ActionType, Automation, DirectusOperation, DirectusWriteSpec, Trigger, TriggerType,
+  Action, ActionType, Automation, DirectusOperation, DirectusWriteBinding, DirectusWriteSpec,
+  Trigger, TriggerType,
 } from '@/types/process'
 import {
   ACTION_LABEL, ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
@@ -158,6 +159,21 @@ function setDwResolve(i: number, on: boolean) {
     else delete next.resolve
     return next
   }) })
+}
+/** Quelle einer Zuordnung umstellen: Prozess-Feld ODER fester Wert. Beim Wechsel
+ *  die jeweils andere Seite (+ resolve) verwerfen, damit genau eines gesetzt ist. */
+function setDwSourceKind(i: number, kind: string) {
+  const cur = a.value.action.directus ?? blankDirectus()
+  patchDirectus({ fieldMap: cur.fieldMap.map((b, j): DirectusWriteBinding => {
+    if (j !== i) return b
+    if (kind === 'const') return { target: b.target, source: null, value: b.value ?? '' }
+    return { target: b.target, source: b.source ?? '' }
+  }) })
+}
+function setDwConst(i: number, value: string) {
+  const cur = a.value.action.directus ?? blankDirectus()
+  patchDirectus({ fieldMap: cur.fieldMap.map((b, j): DirectusWriteBinding =>
+    (j === i ? { target: b.target, source: null, value } : b)) })
 }
 
 function onActionType(t: ActionType) {
@@ -545,7 +561,16 @@ watch(dwCollection, (c) => {
           </div>
           <div v-for="(b, i) in (a.action.directus?.fieldMap ?? [])" :key="i" class="mt-2">
             <div class="flex items-center gap-2">
-              <select class="afi flex-1" :value="b.source"
+              <!-- Quelle: Prozess-Feld ODER fester Wert. -->
+              <select class="afi w-28 shrink-0" :value="b.value != null ? 'const' : 'field'"
+                      @change="setDwSourceKind(i, val($event))">
+                <option value="field">Prozess-Feld</option>
+                <option value="const">Fester Wert</option>
+              </select>
+              <input v-if="b.value != null" class="afi flex-1" :value="b.value"
+                     placeholder="Fester Wert, z. B. AlphaRequest"
+                     @input="setDwConst(i, val($event))" />
+              <select v-else class="afi flex-1" :value="b.source"
                       @change="setDwMap(i, 'source', val($event))">
                 <option value="">Prozess-Feld…</option>
                 <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
@@ -561,13 +586,13 @@ watch(dwCollection, (c) => {
               <button type="button" @click="removeDwMap(i)"
                       class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
             </div>
-            <label v-if="fieldWidgets?.[b.source] === 'company' || b.resolve === 'company_directus_id'"
+            <label v-if="b.value == null && (fieldWidgets?.[b.source ?? ''] === 'company' || b.resolve === 'company_directus_id')"
                    class="mt-1 ml-1 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
               <input type="checkbox" :checked="b.resolve === 'company_directus_id'"
                      class="h-3.5 w-3.5 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]"
                      @change="setDwResolve(i, ($event.target as HTMLInputElement).checked)" />
               Als alphacore-Firmen-ID auflösen (statt Firmenname)
-              <span v-if="fieldWidgets?.[b.source] !== 'company'" class="text-amber-600 dark:text-amber-400">
+              <span v-if="fieldWidgets?.[b.source ?? ''] !== 'company'" class="text-amber-600 dark:text-amber-400">
                 – nur für ein Firmen-Feld gültig
               </span>
             </label>

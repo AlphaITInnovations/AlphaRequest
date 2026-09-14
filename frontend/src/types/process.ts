@@ -160,8 +160,9 @@ export interface Trigger {
 export type DirectusWriteResolve = 'company_directus_id'
 
 export interface DirectusWriteBinding {
-  source: string   // Prozess-Feld-Key
-  target: string   // Directus-Feld
+  source: string | null   // Prozess-Feld-Key (leer bei festem Wert)
+  target: string          // Directus-Feld
+  value?: string | null   // fester Wert statt Prozess-Feld (genau eines von source/value)
   resolve?: DirectusWriteResolve | null
 }
 

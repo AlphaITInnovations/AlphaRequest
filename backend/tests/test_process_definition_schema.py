@@ -531,3 +531,24 @@ def test_directus_multi_wert_ist_eine_liste_von_ids():
     assert validate_values(defn, {"a": []}) == []                  # leer erlaubt (Pflicht separat)
     assert validate_values(defn, {"a": "1"})[0]["code"] == "TYPE"  # Skalar → Liste erwartet
     assert validate_values(defn, {"a": [1, 2]})[0]["code"] == "TYPE"  # Nicht-Strings → Fehler
+
+
+def test_directus_write_fester_wert_ok():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [{"source": "a", "target": "name"},
+                                                  {"value": "AlphaRequest", "target": "source"}]}}}]
+    ProcessDefinition.model_validate(d)   # valide: fester Wert braucht kein Prozess-Feld
+
+
+def test_directus_write_matchfield_kein_fester_wert():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "matchField": "source",
+                   "fieldMap": [{"source": "a", "target": "name"},
+                                {"value": "AlphaRequest", "target": "source"}]}}}]
+    _reject(d)   # Suchschlüssel darf kein fester Wert sein

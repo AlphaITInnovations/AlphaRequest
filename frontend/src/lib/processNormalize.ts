@@ -165,8 +165,16 @@ function normDirectusWrite(v: any): DirectusWriteSpec | null {
     operation: (v.operation ?? 'create') as DirectusWriteSpec['operation'],
     collection: String(v.collection ?? ''),
     fieldMap: arr(v.fieldMap).map((b: any) => {
-      const bind: any = { source: String(b?.source ?? ''), target: String(b?.target ?? '') }
-      if (b?.resolve === 'company_directus_id') bind.resolve = 'company_directus_id'
+      const hasValue = b?.value !== undefined && b?.value !== null
+      const bind: any = { target: String(b?.target ?? '') }
+      if (hasValue) {
+        // Fester Wert: kein Prozess-Feld, kein resolve.
+        bind.value = String(b.value)
+        bind.source = null
+      } else {
+        bind.source = String(b?.source ?? '')
+        if (b?.resolve === 'company_directus_id') bind.resolve = 'company_directus_id'
+      }
       return bind
     }),
     idField: String(v.idField ?? ''),

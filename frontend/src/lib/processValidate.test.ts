@@ -482,6 +482,30 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(errorCount(validateDefinition(d))).toBe(0)
   })
 
+  it('akzeptiert einen festen Wert (value) als Zuordnung', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'k', idField: 'mid',
+            fieldMap: [{ source: 'base.name', target: 'name' },
+                       { value: 'AlphaRequest', target: 'source' }] } } }] }] })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('lehnt matchField auf einen festen Wert ab', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'k', idField: 'mid', matchField: 'source',
+            fieldMap: [{ source: 'base.name', target: 'name' },
+                       { value: 'AlphaRequest', target: 'source' }] } } }] }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
   it('lehnt matchField ab, das kein gemapptes Directus-Zielfeld ist', () => {
     const d = defn({
       fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],

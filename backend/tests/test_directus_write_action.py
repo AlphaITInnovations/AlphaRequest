@@ -208,3 +208,27 @@ def test_create_without_returned_id_reports():
     ch = dwa.execute(_action(DirectusOperation.create, [("base.first_name", "vorname")]),
                      row, None, None, client=client, on_error=lambda *a: errs.append(a))
     assert ch == {} and len(errs) == 1
+
+
+# ── Feste Werte (value) statt Prozess-Feld ────────────────────────────────────
+
+def test_build_payload_schreibt_festen_wert():
+    from pydantic import ValidationError  # noqa: F401 (nur zur Klarheit)
+    spec = DirectusWriteSpec(
+        operation=DirectusOperation.create, collection="mitarbeiter",
+        idField="mitarbeiter.directus_id",
+        fieldMap=[DirectusWriteBinding(source="base.first_name", target="vorname"),
+                  DirectusWriteBinding(value="AlphaRequest", target="source")])
+    out = dwa.build_payload(spec, {"base.first_name": "Max"})
+    assert out == {"vorname": "Max", "source": "AlphaRequest"}
+
+
+def test_binding_braucht_genau_source_oder_value():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        DirectusWriteBinding(target="source")                                  # keines
+    with pytest.raises(ValidationError):
+        DirectusWriteBinding(source="a", value="x", target="source")           # beides
+    with pytest.raises(ValidationError):
+        DirectusWriteBinding(value="x", target="s", resolve="company_directus_id")  # value+resolve
+    assert DirectusWriteBinding(value="AlphaRequest", target="source").value == "AlphaRequest"

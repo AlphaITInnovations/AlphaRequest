@@ -42,6 +42,12 @@ def build_payload(spec, values: dict, *, companies=None) -> dict:
                 f"Firmen für die Directus-Auflösung nicht lesbar: {exc}") from exc
     out: dict = {}
     for b in spec.fieldMap:
+        # Feste Zuordnung: den konfigurierten Wert unverändert schreiben (kein
+        # Prozess-Feld, kein resolve, keine Leer-Auslassung).
+        const = getattr(b, "value", None)
+        if const is not None:
+            out[b.target] = const
+            continue
         v = values.get(b.source)
         resolve = getattr(b, "resolve", None)
         if resolve is not None:

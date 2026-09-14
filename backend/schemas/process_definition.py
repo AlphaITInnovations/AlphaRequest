@@ -476,14 +476,28 @@ class Trigger(_Base):
 
 
 class DirectusWriteBinding(_Base):
-    """Eine Feld-Zuordnung fürs Schreiben nach Directus: der Wert des
-    Prozess-Felds `source` wird in das Directus-Feld `target` geschrieben.
+    """Eine Feld-Zuordnung fürs Schreiben nach Directus. Der Wert kommt entweder
+    aus einem Prozess-Feld (`source`) ODER ist ein fester Wert (`value`) und wird
+    in das Directus-Feld `target` geschrieben – genau EINES von beiden.
 
     `resolve` übersetzt den Quellwert optional vor dem Schreiben (siehe
-    DirectusWriteResolve) – z. B. Firmenname → alphacore-Firmen-ID."""
-    source: str
+    DirectusWriteResolve) – z. B. Firmenname → alphacore-Firmen-ID; nur mit
+    `source` sinnvoll, nicht bei einem festen `value`."""
+    source: Optional[str] = None
     target: str
+    value: Optional[str] = None
     resolve: Optional[DirectusWriteResolve] = None
+
+    @model_validator(mode="after")
+    def _binding_rules(self) -> "DirectusWriteBinding":
+        has_source = bool(self.source)
+        has_value = self.value is not None
+        if has_source == has_value:
+            raise ValueError("Directus-Zuordnung braucht genau EINES: `source` "
+                             "(Prozess-Feld) ODER `value` (fester Wert)")
+        if has_value and self.resolve is not None:
+            raise ValueError("`resolve` ist bei einem festen `value` nicht erlaubt")
+        return self
 
 
 class DirectusWriteSpec(_Base):
@@ -1064,7 +1078,9 @@ class ProcessDefinition(_Base):
                         "Feld – es würde die zurückgeschriebene Directus-id überschreiben. "
                         "Ein einfaches, nicht berechnetes Textfeld verwenden")
                 for j, b in enumerate(d.fieldMap):
-                    _need(b.source, f"automation[{a.id}].directus.fieldMap[{j}].source")
+                    # Feste Werte (value) haben kein Prozess-Feld als Quelle.
+                    if b.source:
+                        _need(b.source, f"automation[{a.id}].directus.fieldMap[{j}].source")
                     if not b.target.strip():
                         raise ValueError(
                             f"automation[{a.id}].directus.fieldMap[{j}].target: "
@@ -1092,6 +1108,12 @@ class ProcessDefinition(_Base):
                         raise ValueError(
                             f"automation[{a.id}].directus.matchField: „{d.matchField}“ darf kein "
                             "aufgelöstes Feld sein (Suchwert würde nicht zum gespeicherten passen)")
+                    # Ein fester Wert als Suchschlüssel würde bei JEDEM Datensatz matchen
+                    # → get-or-create wäre wirkungslos.
+                    if any(b.value is not None for b in _match_bindings):
+                        raise ValueError(
+                            f"automation[{a.id}].directus.matchField: „{d.matchField}“ darf kein "
+                            "fester Wert sein (der Suchschlüssel muss aus einem Prozess-Feld kommen)")
 
         # on_department_done: nur als PHASEN-Automation einer Fachabteilungs-Phase,
         # und die Gruppe muss eine Fachabteilung genau dieser Phase sein.
