@@ -1084,19 +1084,10 @@
     {
       "key": "it.mailboxes.additional",
       "label": "Zusätzliche Postfächer?",
-      "widget": "select",
+      "widget": "checkbox",
       "help": null,
       "placeholder": null,
-      "options": [
-        {
-          "value": "Ja",
-          "label": "Ja"
-        },
-        {
-          "value": "Nein",
-          "label": "Nein"
-        }
-      ],
+      "options": [],
       "optionsSource": null,
       "allowOther": false,
       "valueShape": null,
@@ -1143,19 +1134,10 @@
     {
       "key": "it.additional_cost_centers_needed",
       "label": "Zusätzliche Drucker / Niederlassungsfreigaben?",
-      "widget": "select",
+      "widget": "checkbox",
       "help": null,
       "placeholder": null,
-      "options": [
-        {
-          "value": "Ja",
-          "label": "Ja"
-        },
-        {
-          "value": "Nein",
-          "label": "Nein"
-        }
-      ],
+      "options": [],
       "optionsSource": null,
       "allowOther": false,
       "valueShape": null,
@@ -2802,16 +2784,10 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": {
-            "==": [
-              "it.mailboxes.additional",
-              "Ja"
-            ]
+            "truthy": "it.mailboxes.additional"
           },
           "visibleWhen": {
-            "==": [
-              "it.mailboxes.additional",
-              "Ja"
-            ]
+            "truthy": "it.mailboxes.additional"
           }
         },
         {
@@ -2826,16 +2802,10 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": {
-            "==": [
-              "it.additional_cost_centers_needed",
-              "Ja"
-            ]
+            "truthy": "it.additional_cost_centers_needed"
           },
           "visibleWhen": {
-            "==": [
-              "it.additional_cost_centers_needed",
-              "Ja"
-            ]
+            "truthy": "it.additional_cost_centers_needed"
           }
         },
         {
