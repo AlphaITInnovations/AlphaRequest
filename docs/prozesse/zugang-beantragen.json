@@ -23,7 +23,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "7c88310d535140359d4b021d3754193f"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -351,12 +356,7 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "7c88310d535140359d4b021d3754193f"
-        ]
-      },
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -670,12 +670,7 @@
       "allowOther": true,
       "valueShape": "id",
       "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "7c88310d535140359d4b021d3754193f"
-        ]
-      },
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -720,12 +715,7 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "7c88310d535140359d4b021d3754193f"
-        ]
-      },
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": {
@@ -749,148 +739,7 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "7c88310d535140359d4b021d3754193f"
-        ]
-      },
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": []
-    },
-    {
-      "key": "it.appearance_company",
-      "label": "Firma (Signatur / Webseite)",
-      "widget": "company",
-      "help": "Firma, unter der der Mitarbeitende auftreten soll (E-Mail-Signatur).",
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "b66f749021c34618a8b8aca13ed4328c"
-        ]
-      },
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": []
-    },
-    {
-      "key": "it.signature.title",
-      "label": "Titel (Signatur)",
-      "widget": "text",
-      "help": "Aus „Titel“ (Basisdaten) vorbefüllt und danach frei änderbar – ein manuell gesetzter Wert bleibt erhalten.",
-      "placeholder": "Wird automatisch aus Basisdaten übernommen",
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "b66f749021c34618a8b8aca13ed4328c"
-        ]
-      },
-      "computed": {
-        "from": "base.title",
-        "map": null
-      },
-      "overridable": true,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": []
-    },
-    {
-      "key": "it.signature.street",
-      "label": "Straße (Signatur)",
-      "widget": "text",
-      "help": null,
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "b66f749021c34618a8b8aca13ed4328c"
-        ]
-      },
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": []
-    },
-    {
-      "key": "it.signature.zip",
-      "label": "Postleitzahl (Signatur)",
-      "widget": "text",
-      "help": null,
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": {
-        "pattern": "^[0-9]{5}$",
-        "minLength": 5,
-        "maxLength": 5,
-        "min": null,
-        "max": null,
-        "minDate": null,
-        "maxDate": null
-      },
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "b66f749021c34618a8b8aca13ed4328c"
-        ]
-      },
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": []
-    },
-    {
-      "key": "it.signature.city",
-      "label": "Ort (Signatur)",
-      "widget": "text",
-      "help": null,
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "b66f749021c34618a8b8aca13ed4328c"
-        ]
-      },
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -2070,6 +1919,11 @@
               "type": "field",
               "ref": "base.start_date",
               "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.position",
+              "width": "half"
             }
           ]
         },
@@ -2115,21 +1969,6 @@
               "type": "field",
               "ref": "konditionen.sonderkonditionen",
               "width": "full"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Personaldaten",
-          "variant": "hr",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "personal.position",
-              "width": "half"
             }
           ]
         },
@@ -2478,6 +2317,11 @@
               "type": "field",
               "ref": "base.start_date",
               "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.position",
+              "width": "half"
             }
           ]
         },
@@ -2523,21 +2367,6 @@
               "type": "field",
               "ref": "konditionen.sonderkonditionen",
               "width": "full"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Personaldaten",
-          "variant": "hr",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "personal.position",
-              "width": "half"
             }
           ]
         }
@@ -2876,41 +2705,6 @@
           }
         },
         {
-          "ref": "it.appearance_company",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.title",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.street",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.zip",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.city",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
           "ref": "it.software.datev",
           "mode": "editable",
           "required": false,
@@ -3154,6 +2948,26 @@
               "type": "field",
               "ref": "base.start_date",
               "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.personal_number",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.position",
+              "width": "half"
             }
           ]
         },
@@ -3212,11 +3026,6 @@
           "items": [
             {
               "type": "field",
-              "ref": "personal.position",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "personal.private_street",
               "width": "half"
             },
@@ -3257,22 +3066,7 @@
             },
             {
               "type": "field",
-              "ref": "personal.department",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "personal.department_other",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.supervisor_hr_id",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.personal_number",
               "width": "half"
             }
           ]
@@ -3310,31 +3104,6 @@
           "description": null,
           "collapsed": false,
           "items": [
-            {
-              "type": "field",
-              "ref": "it.appearance_company",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.title",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.street",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.zip",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.city",
-              "width": "half"
-            },
             {
               "type": "field",
               "ref": "it.software.datev",
@@ -3803,41 +3572,6 @@
           "visibleWhen": null
         },
         {
-          "ref": "it.appearance_company",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.title",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.street",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.zip",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "it.signature.city",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
           "ref": "it.software.datev",
           "mode": "readonly",
           "required": false,
@@ -4037,6 +3771,26 @@
               "type": "field",
               "ref": "base.start_date",
               "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.personal_number",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.position",
+              "width": "half"
             }
           ]
         },
@@ -4080,27 +3834,7 @@
             },
             {
               "type": "field",
-              "ref": "personal.department",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "personal.department_other",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.personal_number",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.supervisor_hr_id",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.position",
               "width": "half"
             }
           ]
@@ -4138,31 +3872,6 @@
           "description": null,
           "collapsed": false,
           "items": [
-            {
-              "type": "field",
-              "ref": "it.appearance_company",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.title",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.street",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.zip",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.signature.city",
-              "width": "half"
-            },
             {
               "type": "field",
               "ref": "it.software.datev",
