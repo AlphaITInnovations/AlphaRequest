@@ -1176,10 +1176,10 @@
     },
     {
       "key": "it.additional_cost_centers",
-      "label": "Drucker / Niederlassungsfreigaben eintragen",
-      "widget": "textarea",
-      "help": "Für Zugriff auf mehr als die eigene Niederlassung (z. B. Drucker oder Rechte aufs Niederlassungslaufwerk).",
-      "placeholder": null,
+      "label": "Drucker / Niederlassungsfreigaben",
+      "widget": "directus_multi",
+      "help": "Niederlassung(en) aus Core wählen – für Zugriff über die eigene hinaus (Drucker, Rechte aufs Niederlassungslaufwerk). Mehrfachauswahl möglich.",
+      "placeholder": "Niederlassung suchen & hinzufügen…",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -1196,7 +1196,7 @@
       "assign": null,
       "mode": null,
       "item": [],
-      "directusSource": null,
+      "directusSource": "niederlassung",
       "directusFieldMap": []
     },
     {
