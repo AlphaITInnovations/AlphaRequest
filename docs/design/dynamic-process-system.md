@@ -33,7 +33,7 @@ Dazu **saubere REST-API** und **echte Server-Validierung**.
 | 2 | Visueller Phasen-Editor | ✔ Baustufe 6 |
 | 3 | Entwurf → Vorschau → Release | Vorschau = **Client-Simulation** (kein Wegwerf-Ticket); Release s. §4 |
 | 4 | Keine Rückwärtskompatibilität | ✔ Neustart; **v1 wird ersetzt** (kein Parallelbetrieb, §8/§13) |
-| 5 | Flexible Per-Phasen-Features (z. B. Eskalation) | Erweiterbares **Automations-Registry** (§6); Eskalation ist **späteres** Beispiel, Modell muss es tragen |
+| 5 | Flexible Per-Phasen-Features (z. B. Eskalation) | Erweiterbares **Automations-Registry** (§6); Eskalation als deklarativer **`escalation`-Phasen-Block** umgesetzt (§6.2) |
 | 6 | Saubere API statt `view`/`overview` | ✔ §8 |
 | 7 | Server-Validierung (heute: „alles wird angenommen") | ✔ Zwei-Pass-Validierung + Fehler-Envelope (§9) |
 | — | Wer darf Prozesse bearbeiten/releasen? | **Nur Admin** (`PERM_ADMIN`) + Audit (§8) |
@@ -251,8 +251,10 @@ damit komplexe Features (wie die Eskalation) **ohne Engine-Umbau** nachrüstbar 
 - **Action-Registry (code-hinterlegte Handler):** `notify · escalate · set_field · set_priority ·
   set_status · assign_sequence · require_attachment · auto_advance · spawn_process`. Neue Actions = neuer
   registrierter Handler, kein Format-Bruch.
-- **Empfangenden-Resolver-Registry (`to`):** `responsible · owner · watchers · group:<id>`.
-  **`supervisor` ist ein späterer Resolver** (Quelle noch offen, §13) — das Modell trägt ihn bereits.
+- **Empfangenden-Resolver-Registry (`to`):** `responsible · owner · watchers · group:<id> · user:<id>`.
+  `user:<id>` adressiert **einzelne Mitarbeitende** (deren AD-Mail); `notify`/`escalate` tragen dafür
+  neben dem Einzel-`to` eine `recipients: [<token>…]`-**Liste** (mehrere Ziele). **`supervisor` ist ein
+  späterer Resolver** (Quelle noch offen, §13) — das Modell trägt ihn bereits.
   **Pflicht-Fallback:** jeder `notify`/`escalate` hat einen garantierten Fallback-Empfangende
   (z. B. `TICKET_MAIL`/Owner-Gruppe), damit eine Aktion **nie stumm ins Leere** läuft.
 
@@ -267,8 +269,34 @@ Refs sind Dot-Paths in `values_json`. **Auswertung gegen die serverseitig gemerg
 Confidential-Preserve-Schritt), nie gegen den Roh-Request. Wertproduzierende Formen (für `computed`/`set_field`)
 sind eine eigene, ebenfalls serialisierbare Ausdrucksform.
 
-*Eskalations-Beispiel (später):* `reminder-7d` (`after P7D, repeat P7D` → `notify responsible`) +
-`escalate-14d` (`after P14D` → `escalate supervisor`, mit Pflicht-Fallback).
+*Eskalations-Beispiel:* `reminder-7d` (`after P7D, repeat P7D` → `notify responsible`) +
+`escalate-14d` (`after P14D` → `escalate`, mit Pflicht-Fallback).
+
+### 6.2 Eskalation/Erinnerungen als deklarativer Phasen-Block (`escalation`)
+
+Statt Eskalationen als rohe `timer`+`escalate`-Automationen von Hand zu bauen, trägt jede Phase einen
+optionalen **`escalation`**-Block — der Pro-Phasen-**An/Aus-Schalter** plus eine geordnete **Stufen-Liste**
+(Fundament für spätere Eskalationsketten):
+
+```jsonc
+"escalation": {
+  "enabled": true,
+  "stages": [
+    { "afterDays": 7, "repeatDays": 7,
+      "recipients": ["responsible", "user:AB12"], "message": "Bitte zeitnah bearbeiten." },
+    { "afterDays": 14, "recipients": ["group:leitung"], "raisePriority": true }
+  ]
+}
+```
+
+**Laufzeit-Andockung ohne Engine-Umbau:** beim Planen expandiert `escalation_automations(phase)` jede Stufe
+in **genau eine** synthetische `timer`-Automation (`after=P<afterDays>D`, optional `repeat=P<repeatDays>D`;
+`raisePriority` → `escalate`, sonst `notify`; `recipients` → Action-`recipients`). Der bestehende
+`_phase_timers`-Sammelpunkt, der Fire-once-Ledger (`process_timer_fires`, stabile ID
+`__escalation__<phase>__<i>`) und der Mailversand feuern sie **unverändert**. Der Block ist in einer
+`kind=end`-Phase verboten (dort wartet nichts mehr); das ID-Präfix `__escalation__` ist für echte
+Automationen reserviert. Redaktion im Editor: Sektion „Erinnerungen / Eskalation" je Phase (Schalter +
+Stufen-Karten, Empfänger-Picker aus Rollen/Mitarbeitenden/Fachabteilungen).
 
 ---
 

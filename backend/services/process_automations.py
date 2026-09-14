@@ -13,7 +13,9 @@ liegt im Scheduler.
 from datetime import datetime, timedelta
 from typing import Optional
 
-from backend.schemas.process_definition import PhaseDef, TriggerType
+from backend.schemas.process_definition import (
+    PhaseDef, TriggerType, escalation_automations,
+)
 from backend.services.iso_duration import parse_duration
 
 
@@ -46,9 +48,10 @@ def next_due_at(entered_at_iso: str, after_s: int, repeat_s: int,
 
 
 def _phase_timers(phase: PhaseDef, extra=()):
-    """Timer-Automations der Phase PLUS prozessweite (definition.automations)."""
-    return [a for a in list(extra) + list(phase.automations)
-            if a.trigger.type == TriggerType.timer]
+    """Timer-Automations der Phase PLUS prozessweite (definition.automations) PLUS
+    die aus `phase.escalation` expandierten Erinnerungs-/Eskalationsstufen."""
+    autos = list(extra) + list(phase.automations) + escalation_automations(phase)
+    return [a for a in autos if a.trigger.type == TriggerType.timer]
 
 
 def compute_next_timer_due(phase: PhaseDef, entered_at_iso: str, paused_ms: int,

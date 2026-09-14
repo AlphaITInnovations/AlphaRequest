@@ -184,6 +184,9 @@ export interface DirectusWriteSpec {
 export interface Action {
   type: ActionType
   to: string | null
+  /** Mehrere Empfänger-Ziele (notify/escalate). Gesetzt → ersetzt `to`. Tokens:
+   *  'responsible' | 'owner' | 'watchers' | `group:<id>` | `user:<id>`. */
+  recipients?: string[] | null
   template: string | null
   field: string | null
   value: unknown | null
@@ -299,6 +302,31 @@ export interface DocumentBinding {
 /** Sonderquelle „aktuelles Datum" – immer im Zuordnungs-Dropdown wählbar. */
 export const TODAY_BINDING = '@today'
 
+/**
+ * Eine Erinnerungs-/Eskalationsstufe: Frist in Tagen → optional Wiederholung →
+ * Empfänger. Beim Speichern expandiert der Server jede Stufe in eine
+ * Timer-Automation (notify bzw. escalate).
+ */
+export interface EscalationStage {
+  /** Erste Erinnerung nach so vielen Tagen in der Phase. */
+  afterDays: number
+  /** Danach alle so viele Tage wiederholen. `null` = einmalig. */
+  repeatDays: number | null
+  /** Ziele: 'responsible' | 'owner' | 'watchers' | `group:<id>` | `user:<id>`. */
+  recipients: string[]
+  /** Freier Anlass-Text der Mail (reiner Text). `null` = Standard („Erinnerung"). */
+  message: string | null
+  /** Zusätzlich die Ticket-Priorität auf „hoch" setzen (= escalate statt notify). */
+  raisePriority: boolean
+}
+
+/** Eskalation/Erinnerungen einer Phase – der An/Aus-Schalter je Phase. `enabled=false`
+ *  behält die Stufen, hält sie aber still. */
+export interface EscalationSpec {
+  enabled: boolean
+  stages: EscalationStage[]
+}
+
 export interface PhaseDef {
   key: string
   label: string | null
@@ -313,6 +341,8 @@ export interface PhaseDef {
   approval: ApprovalSpec | null
   /** Pflicht bei view='document', sonst `null`. */
   document: DocumentSpec | null
+  /** Optional: Erinnerungen/Eskalation, solange das Ticket in dieser Phase liegt. */
+  escalation: EscalationSpec | null
   fields: FieldRef[]
   /** Optionale Darstellung; nicht platzierte Felder kommen in einen Sammel-Abschnitt. */
   layout: LayoutSection[]

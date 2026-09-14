@@ -38,7 +38,9 @@ export function useProcessEditor() {
 
   const clientIssues = computed<ProcessIssue[]>(() => {
     if (!draft.value) return []
-    return validateDefinition(draft.value, new Set(sources.groups.map((g) => g.id)))
+    return validateDefinition(draft.value,
+      new Set(sources.groups.map((g) => g.id)),
+      new Set(sources.users.map((u) => u.id)))
   })
 
   const issues = computed<ProcessIssue[]>(() => [...clientIssues.value, ...serverIssues.value])

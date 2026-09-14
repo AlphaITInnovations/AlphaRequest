@@ -71,25 +71,11 @@ def watcher_emails(ticket_id) -> list[str]:
     return [m for m in (_user_email(uid) for uid in sorted(ids)) if m]
 
 
-def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
-                       groups: Optional[list] = None) -> list[str]:
-    """Empfänger-Adressen für notify/escalate. Gruppen liefern ihre Verteiler
-    (distributions). Nicht auf Adressen auflösbare Ziele (owner/user/supervisor)
-    sowie ein leeres Ergebnis fallen auf TICKET_MAIL zurück – eine Aktion läuft
-    NIE stumm ins Leere.
-
-    Ausnahme `watchers`: „niemand beobachtet" ist ein gültiges leeres Ergebnis
-    und kein Auflöse-Fehler. Dafür die Zentral-Adresse anzuschreiben wäre nur Lärm.
-    """
-    if groups is None:
-        from backend.database.groups import get_groups
-        groups = get_groups()
-    by_id = {g.get("id"): g for g in groups}
-
-    def dist(gid):
-        g = by_id.get(gid)
-        return list(g.get("distributions") or []) if g else []
-
+def _resolve_token(to: Optional[str], row: dict, phase: Optional[PhaseDef],
+                   dist) -> set[str]:
+    """Rohe Adress-Menge für EIN Ziel-Token – OHNE Fallback (der greift erst,
+    wenn ALLE Tokens zusammen leer bleiben). `dist(gid)` liefert die Verteiler
+    einer Gruppe."""
     emails: set[str] = set()
     if to == "responsible" and phase is not None:
         resp = pr.resolve_responsibility(phase, row.get("values") or {})
@@ -120,10 +106,56 @@ def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
     elif to == "watchers":
         emails |= set(watcher_emails(row.get("id")))
     elif to and to.startswith("group:"):
-        emails |= set(dist(to.split(":", 1)[1]))
+        # .strip(): die Validierung (is_valid_recipient) prüft die ID ebenfalls
+        # getrimmt – ohne strip liefe „group: g1" hier stumm in den Fallback.
+        emails |= set(dist(to.split(":", 1)[1].strip()))
+    elif to and to.startswith("user:"):
+        # Einzelne Person (Mitarbeiter-Empfänger einer Eskalationsstufe).
+        mail = _user_email(to.split(":", 1)[1].strip())
+        if mail:
+            emails.add(mail)
+    return {e for e in emails if e}
 
+
+def _dist_fn(groups: Optional[list]):
+    """Gruppen-Verteiler-Auflöser (lädt die Gruppen einmalig)."""
+    if groups is None:
+        from backend.database.groups import get_groups
+        groups = get_groups()
+    by_id = {g.get("id"): g for g in groups}
+
+    def dist(gid):
+        g = by_id.get(gid)
+        return list(g.get("distributions") or []) if g else []
+    return dist
+
+
+def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
+                       groups: Optional[list] = None) -> list[str]:
+    """Empfänger-Adressen für EIN notify/escalate-Ziel. Gruppen liefern ihre
+    Verteiler (distributions), `user:<id>` die Personen-Mail. Nicht auflösbare
+    Ziele sowie ein leeres Ergebnis fallen auf TICKET_MAIL zurück – eine Aktion
+    läuft NIE stumm ins Leere.
+
+    Ausnahme `watchers`: „niemand beobachtet" ist ein gültiges leeres Ergebnis
+    und kein Auflöse-Fehler. Dafür die Zentral-Adresse anzuschreiben wäre nur Lärm.
+    """
+    return resolve_recipients_multi([to] if to else [], row, phase, groups)
+
+
+def resolve_recipients_multi(tokens: list, row: dict, phase: Optional[PhaseDef],
+                             groups: Optional[list] = None) -> list[str]:
+    """Wie resolve_recipients, aber für MEHRERE Ziele (Eskalationsstufe mit einer
+    Empfänger-Liste). Vereinigt die Adressen aller Tokens und wendet den
+    TICKET_MAIL-Fallback GENAU EINMAL an, wenn insgesamt niemand herauskommt."""
+    toks = [t for t in tokens if t]
+    dist = _dist_fn(groups)
+    emails: set[str] = set()
+    for to in toks:
+        emails |= _resolve_token(to, row, phase, dist)
     emails = {e for e in emails if e}
-    if not emails and to == "watchers":
+    # „Nur Beobachter:innen und keine da" ist ein gültiges Leerergebnis.
+    if not emails and toks and all(t == "watchers" for t in toks):
         return []
     if not emails:
         fb = getattr(config, "TICKET_MAIL", "") or ""
@@ -210,7 +242,10 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
     t = action.type
     changes: dict = {}
     if t in (ActionType.notify, ActionType.escalate):
-        recips = resolve_recipients(action.to, row, phase, groups)
+        # `recipients` (Liste, z. B. Eskalationsstufe) hat Vorrang vor dem
+        # Einzel-Ziel `to`.
+        tokens = list(action.recipients) if action.recipients else ([action.to] if action.to else [])
+        recips = resolve_recipients_multi(tokens, row, phase, groups)
         subject, body = _build_message(action, row, phase)
         try:
             sender(recips, subject, body, kind=t.value)

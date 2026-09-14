@@ -64,7 +64,7 @@ const PRIORITY_LABEL: Record<string, string> = {
 
 const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null, group: null })
 const blankAction = (): Action => ({
-  type: 'notify', to: 'responsible', template: null, field: null,
+  type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
   value: null, counter: null, directus: null,
 })
 const blankDirectus = (): DirectusWriteSpec => ({
@@ -178,14 +178,18 @@ function setDwConst(i: number, value: string) {
 
 function onActionType(t: ActionType) {
   const cur = a.value.action
+  // recipients IMMER mitführen (null-Default wie normAction) – sonst fehlt der Key
+  // nach einem Typwechsel und der Dirty-Vergleich schlägt dauerhaft an.
   const next: Action = {
-    type: t, to: null, template: null, field: null, value: null, counter: null, directus: null,
+    type: t, to: null, recipients: null, template: null, field: null,
+    value: null, counter: null, directus: null,
   }
   if (t === 'directus_write') {
     next.directus = cur.directus ?? blankDirectus()
   }
   if (t === 'notify' || t === 'escalate') {
     next.to = cur.to ?? 'responsible'
+    next.recipients = cur.recipients ?? null
     next.template = cur.template
   } else if (t === 'set_field') {
     next.field = cur.field

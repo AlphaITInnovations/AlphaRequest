@@ -12,7 +12,7 @@
 import type {
   LayoutItem, LayoutItemType, LayoutSection, LayoutWidth, NoteTone, SectionVariant,
   ActionType, ApprovalSpec, AssignSpec, Automation, DepartmentRule, DocumentSpec, FieldDef, FieldMode,
-  FieldRef, OptionsSource,
+  FieldRef, OptionsSource, EscalationSpec, EscalationStage,
   CreatePermissions, PhaseDef, PhaseKind, PhaseView, ProcessDefinition, Responsibility, ResponsibilityKind,
   SubField, Widget,
 } from '@/types/process'
@@ -63,8 +63,21 @@ export const COUNTER_LABEL: Record<string, string> = {
 /** enterStatus/set_status: terminale Status sind verboten. */
 export const ENTER_STATUS: readonly string[] = ['in_progress', 'in_request', 'waiting_contract']
 export const PRIORITIES: readonly string[] = ['low', 'normal', 'high', 'urgent']
-/** Feste Empfänger-Ziele; zusätzlich ist 'group:<id>' erlaubt. */
+/** Feste Empfänger-Ziele; zusätzlich sind 'group:<id>' und 'user:<id>' erlaubt. */
 export const RECIPIENTS: readonly string[] = ['responsible', 'owner', 'watchers']
+
+/** Rollen-Ziele, die der Eskalations-Empfänger-Picker anbietet. `watchers` fehlt
+ *  bewusst: Beobachten heißt mitlesen, nicht eskaliert werden. */
+export const ESCALATION_ROLES: readonly string[] = ['responsible', 'owner']
+
+/** Ein Empfänger-Token ist gültig, wenn es eine bekannte Rolle ist oder ein
+ *  ID-behaftetes Ziel `group:<id>` / `user:<id>` mit nicht-leerer ID (Spiegel von
+ *  is_valid_recipient in backend/schemas/process_definition.py). */
+export function isValidRecipient(token: string): boolean {
+  if (!token) return false
+  if (RECIPIENTS.includes(token)) return true
+  return (['group:', 'user:'].some((p) => token.startsWith(p) && token.slice(p.length).trim() !== ''))
+}
 
 export const SCHEMA_VERSION = 1
 
@@ -260,6 +273,22 @@ export function blankDocument(): DocumentSpec {
   }
 }
 
+/** Obergrenze für Frist/Wiederholung einer Eskalationsstufe in Tagen (Spiegel von
+ *  _ESCALATION_MAX_DAYS in backend/schemas/process_definition.py). */
+export const ESCALATION_MAX_DAYS = 3650
+
+/** Eine leere Eskalationsstufe: erste Erinnerung nach 7 Tagen, keine Empfänger
+ *  (die muss die/der Bearbeiter:in wählen – sonst blockt die Validierung). */
+export function blankEscalationStage(): EscalationStage {
+  return { afterDays: 7, repeatDays: null, recipients: [], message: null, raisePriority: false }
+}
+
+/** Frischer Eskalations-Block (aktiv, mit einer Start-Stufe). Muss den
+ *  SERVER-Defaults von EscalationSpec entsprechen (canonicalJson-Vergleich). */
+export function blankEscalation(): EscalationSpec {
+  return { enabled: true, stages: [blankEscalationStage()] }
+}
+
 /** Passende Standard-Ansicht zur Phasenart (view=approval nur bei kind=approval). */
 export function defaultViewFor(kind: PhaseKind): PhaseView {
   if (kind === 'approval') return 'approval'
@@ -274,6 +303,7 @@ export function blankPhase(key: string, kind: PhaseKind = 'task'): PhaseDef {
     responsibility: blankResponsibility(kind === 'review' ? 'departments' : 'owner'),
     approval: kind === 'approval' ? blankApproval() : null,
     document: null,
+    escalation: null,
     fields: [], layout: [], constraints: [], automations: [],
   }
 }
@@ -292,6 +322,10 @@ export function phaseKindPatch(phase: PhaseDef, kind: PhaseKind): Partial<PhaseD
   return {
     kind,
     approval: wirdFreigabe ? (phase.approval ?? blankApproval()) : null,
+    // In einer Abschluss-Phase gibt es keine Erinnerungen (Server verbietet sie) –
+    // der Block fällt sonst weg, aber die Editor-Sektion wäre für kind=end
+    // ausgeblendet, sodass der Fehler nicht mehr behebbar wäre.
+    escalation: kind === 'end' ? null : phase.escalation,
     view: wirdFreigabe || viewPasstNichtMehr ? defaultViewFor(kind) : phase.view,
   }
 }
@@ -322,7 +356,7 @@ export function blankAutomation(id: string): Automation {
     id,
     trigger: { type: 'on_enter', after: null, repeat: null, field: null, group: null },
     guard: null,
-    action: { type: 'notify', to: 'responsible', template: null, field: null,
+    action: { type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
       value: null, counter: null, directus: null },
   }
 }

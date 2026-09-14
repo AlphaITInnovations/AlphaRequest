@@ -9,10 +9,11 @@ import type {
   Condition, ProcessDefinition, ProcessIssue,
 } from '@/types/process'
 import {
-  ACTION_TYPES, ENTER_STATUS, PHASE_KINDS, PHASE_VIEWS, PRIORITIES, RECIPIENTS,
+  ACTION_TYPES, ENTER_STATUS, PHASE_KINDS, PHASE_VIEWS, PRIORITIES,
   RESPONSIBILITY_KINDS,
   SCHEMA_VERSION, SEQUENCE_COUNTERS, WIDGETS_SUB, WIDGETS_TOP, WIDGET_LABEL, backToTarget,
-  isValidFieldKey, isValidOnReject, isValidPhaseKey, isValidProcessKey,
+  isValidFieldKey, isValidOnReject, isValidPhaseKey, isValidProcessKey, isValidRecipient,
+  ESCALATION_MAX_DAYS,
 } from '@/lib/processSchema'
 import { isValidDuration } from '@/lib/isoDuration'
 import { SPECIAL_MAIL_VARS, mailFieldRefs, mailVariables } from '@/lib/mailTemplate'
@@ -67,14 +68,30 @@ function warn(path: string, anchor: string, code: string, message: string): Proc
 }
 
 /**
- * Prüft eine Definition. `knownGroupIds` (optional) erzeugt Warnungen für
- * Gruppen-IDs, die es nicht (mehr) gibt – der Server prüft das nicht.
+ * Prüft eine Definition. `knownGroupIds`/`knownUserIds` (optional) erzeugen
+ * Warnungen für Gruppen- bzw. Personen-IDs, die es nicht (mehr) gibt – der Server
+ * prüft das nicht.
  */
 export function validateDefinition(
-  d: ProcessDefinition, knownGroupIds?: Set<string>,
+  d: ProcessDefinition, knownGroupIds?: Set<string>, knownUserIds?: Set<string>,
 ): ProcessIssue[] {
   const out: ProcessIssue[] = []
   const TOP = 'pe-top'
+
+  /** Ein Empfänger-Token (Rolle / `group:<id>` / `user:<id>`) prüfen: harter
+   *  Fehler bei unbekannter Form, Warnung bei gelöschter Gruppe/Person. */
+  const checkRecipientToken = (tok: string, path: string, anchor: string): void => {
+    if (!isValidRecipient(tok)) {
+      out.push(err(path, anchor, 'INVALID', `Unbekanntes Ziel „${tok}".`))
+      return
+    }
+    if (knownGroupIds && tok.startsWith('group:') && !knownGroupIds.has(tok.slice(6))) {
+      out.push(warn(path, anchor, 'UNKNOWN_GROUP', `Unbekannte Fachabteilung „${tok.slice(6)}".`))
+    }
+    if (knownUserIds && tok.startsWith('user:') && !knownUserIds.has(tok.slice(5))) {
+      out.push(warn(path, anchor, 'UNKNOWN_USER', `Unbekannte Person „${tok.slice(5)}".`))
+    }
+  }
 
   // ── Kopfdaten ──
   if (!isValidProcessKey(d.key)) {
@@ -402,6 +419,42 @@ export function validateDefinition(
       }
     }
 
+    // ── Eskalation / Erinnerungen ──
+    const esc = ph.escalation
+    if (esc) {
+      if (ph.kind === 'end') {
+        out.push(err(`${p}.escalation`, anchor, 'INVALID',
+          'In einer Abschluss-Phase gibt es keine Erinnerungen (dort wartet nichts mehr).'))
+      }
+      if (esc.enabled && esc.stages.length === 0) {
+        out.push(err(`${p}.escalation`, anchor, 'REQUIRED',
+          'Die Eskalation ist aktiv, hat aber keine Stufe – bitte eine Stufe hinzufügen '
+          + 'oder die Eskalation ausschalten.'))
+      }
+      esc.stages.forEach((st, j) => {
+        const sp = `${p}.escalation.stages.${j}`
+        if (!(st.afterDays > 0)) {
+          out.push(err(`${sp}.afterDays`, anchor, 'INVALID',
+            'Die Frist muss mindestens 1 Tag sein.'))
+        } else if (st.afterDays > ESCALATION_MAX_DAYS) {
+          out.push(err(`${sp}.afterDays`, anchor, 'INVALID',
+            `Die Frist darf ${ESCALATION_MAX_DAYS} Tage nicht überschreiten.`))
+        }
+        if (st.repeatDays !== null && !(st.repeatDays > 0)) {
+          out.push(err(`${sp}.repeatDays`, anchor, 'INVALID',
+            'Die Wiederholung muss mindestens 1 Tag sein (oder leer für einmalig).'))
+        } else if (st.repeatDays !== null && st.repeatDays > ESCALATION_MAX_DAYS) {
+          out.push(err(`${sp}.repeatDays`, anchor, 'INVALID',
+            `Die Wiederholung darf ${ESCALATION_MAX_DAYS} Tage nicht überschreiten.`))
+        }
+        if (!st.recipients.length) {
+          out.push(err(`${sp}.recipients`, anchor, 'REQUIRED',
+            'Bitte mindestens eine empfangende Person oder Stelle wählen.'))
+        }
+        st.recipients.forEach((tok) => checkRecipientToken(tok, `${sp}.recipients`, anchor))
+      })
+    }
+
     const r = ph.responsibility
     if (!RESPONSIBILITY_KINDS.includes(r.kind)) {
       out.push(err(`${p}.responsibility.kind`, anchor, 'UNSUPPORTED',
@@ -607,14 +660,10 @@ export function validateDefinition(
         `Aktion „${ac.type}" ist nicht verfügbar.`))
     }
     if ((ac.type === 'notify' || ac.type === 'escalate')) {
-      if (!ac.to) out.push(err(`${path}.action.to`, anchor, 'REQUIRED', 'Empfänger:in fehlt.'))
-      else if (!RECIPIENTS.includes(ac.to) && !ac.to.startsWith('group:')) {
-        out.push(err(`${path}.action.to`, anchor, 'INVALID', `Unbekanntes Ziel „${ac.to}".`))
-      } else if (knownGroupIds && ac.to.startsWith('group:')
-                 && !knownGroupIds.has(ac.to.slice(6))) {
-        out.push(warn(`${path}.action.to`, anchor, 'UNKNOWN_GROUP',
-          `Unbekannte Fachabteilung „${ac.to.slice(6)}".`))
-      }
+      const toks = (ac.recipients && ac.recipients.length) ? ac.recipients
+        : (ac.to ? [ac.to] : [])
+      if (!toks.length) out.push(err(`${path}.action.to`, anchor, 'REQUIRED', 'Empfänger:in fehlt.'))
+      else toks.forEach((tok) => checkRecipientToken(tok, `${path}.action.to`, anchor))
     }
     if (ac.type === 'set_field') {
       if (!ac.field) out.push(err(`${path}.action.field`, anchor, 'REQUIRED', 'Feld fehlt.'))

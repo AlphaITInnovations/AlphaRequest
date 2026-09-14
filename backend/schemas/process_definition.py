@@ -159,7 +159,21 @@ ALLOWED_PRIORITY = {"low", "normal", "high", "urgent"}
 TERMINAL_STATUS = {"archived", "rejected"}
 
 # Empfänger-Ziele, die process_actions.resolve_recipients wirklich auflösen kann.
-ALLOWED_RECIPIENTS = {"responsible", "owner", "watchers"}   # + "group:<id>"
+ALLOWED_RECIPIENTS = {"responsible", "owner", "watchers"}   # + "group:<id>", "user:<id>"
+
+#: Präfixe für ID-behaftete Empfänger-Ziele: eine Fachgruppe (deren Verteiler)
+#: bzw. eine einzelne Person (deren Mail).
+_RECIPIENT_PREFIXES = ("group:", "user:")
+
+
+def is_valid_recipient(token: str) -> bool:
+    """Ein Empfänger-Token ist gültig, wenn es eine bekannte Rolle ist oder ein
+    ID-behaftetes Ziel `group:<id>` / `user:<id>` mit nicht-leerer ID."""
+    if not token:
+        return False
+    if token in ALLOWED_RECIPIENTS:
+        return True
+    return any(token.startswith(p) and token[len(p):].strip() for p in _RECIPIENT_PREFIXES)
 
 # Ehrlichkeits-Regel (§ Review): Was die Laufzeit NICHT umsetzt, wird beim
 # Speichern/Veröffentlichen abgelehnt statt still ignoriert. Beim Nachrüsten der
@@ -523,6 +537,9 @@ class DirectusWriteSpec(_Base):
 class Action(_Base):
     type: ActionType
     to: Optional[str] = None         # Empfänger-Resolver (notify/escalate)
+    #: Mehrere Empfänger-Ziele (notify/escalate). Ist die Liste gesetzt, ersetzt
+    #: sie `to`; jedes Token ist eine Rolle, `group:<id>` oder `user:<id>`.
+    recipients: Optional[list[str]] = None
     template: Optional[str] = None
     field: Optional[str] = None
     value: Optional[Any] = None
@@ -550,12 +567,19 @@ class Action(_Base):
             raise ValueError(f"action „{t.value}“ ist noch nicht implementiert und "
                              f"kann daher nicht veröffentlicht werden")
         if t in (ActionType.notify, ActionType.escalate):
-            if not self.to:
-                raise ValueError(f"action {t.value} erfordert `to`")
+            tokens = list(self.recipients or [])
+            if self.to:
+                tokens.append(self.to)
+            if not tokens:
+                raise ValueError(f"action {t.value} erfordert `to` oder `recipients`")
             # Nur auflösbare Ziele zulassen – sonst landet die Mail stumm im Fallback.
-            if not (self.to in ALLOWED_RECIPIENTS or self.to.startswith("group:")):
-                raise ValueError(f"action {t.value}: unbekanntes Ziel „{self.to}“ "
-                                 f"(erlaubt: {', '.join(sorted(ALLOWED_RECIPIENTS))}, group:<id>)")
+            for tok in tokens:
+                if not is_valid_recipient(tok):
+                    raise ValueError(f"action {t.value}: unbekanntes Ziel „{tok}“ "
+                                     f"(erlaubt: {', '.join(sorted(ALLOWED_RECIPIENTS))}, "
+                                     f"group:<id>, user:<id>)")
+        elif self.recipients is not None:
+            raise ValueError("`recipients` ist nur bei action notify/escalate erlaubt")
         if t == ActionType.set_field and (not self.field or self.value is None):
             raise ValueError("action set_field erfordert `field` und `value`")
         if t == ActionType.set_status:
@@ -771,6 +795,100 @@ class DocumentSpec(_Base):
         return {k: ({"field": b} if isinstance(b, str) else b) for k, b in v.items()}
 
 
+# ── Eskalation / Erinnerungen (§6.1) ─────────────────────────────────────────
+#
+# Ein deklarativer Aufsatz auf die vorhandene Timer-/Mail-Laufzeit: pro Phase
+# eine Liste von Stufen (Frist in Tagen → optional Wiederholung → Empfänger).
+# Beim Planen wird jede Stufe in genau EINE synthetische Timer-Automation
+# expandiert (escalation_automations); Scheduler, Fire-once-Ledger und Mailversand
+# feuern sie unverändert. Die Liste ist bewusst geordnet – Fundament für spätere
+# Eskalationsketten (Stufe 2 an Vorgesetzte usw.).
+
+#: Reserviertes ID-Präfix synthetischer Eskalations-Automationen. Echte
+#: Automationen dürfen es nicht verwenden (sonst kollidiert der Timer-Ledger).
+ESCALATION_AUTO_PREFIX = "__escalation__"
+
+#: Frist/Wiederholung dürfen nicht beliebig groß werden – schützt die
+#: ISO-Dauer-Expansion (P<n>D) vor Unsinn (z. B. Tippfehler „7000“).
+_ESCALATION_MAX_DAYS = 3650
+
+
+class EscalationStage(_Base):
+    """Eine Erinnerungs-/Eskalationsstufe innerhalb einer Phase."""
+    #: Erste Erinnerung nach so vielen Tagen in der Phase (Verweildauer,
+    #: SLA-Pause abgezogen – wie jeder Timer).
+    afterDays: int
+    #: Danach alle so viele Tage wiederholen. Leer = einmalig.
+    repeatDays: Optional[int] = None
+    #: Ziele: Rollen (responsible/owner/watchers), `group:<id>`, `user:<id>`.
+    recipients: list[str] = Field(default_factory=list)
+    #: Freier Anlass-Text der Mail (reiner Text). Leer = „Erinnerung".
+    message: Optional[str] = None
+    #: Zusätzlich die Ticket-Priorität auf „hoch" setzen (= Aktion escalate statt
+    #: notify). Standard aus: reine Erinnerungsmail.
+    raisePriority: bool = False
+
+    @model_validator(mode="after")
+    def _stage_rules(self) -> "EscalationStage":
+        if self.afterDays <= 0:
+            raise ValueError("escalation: `afterDays` muss größer als 0 sein")
+        if self.afterDays > _ESCALATION_MAX_DAYS:
+            raise ValueError(f"escalation: `afterDays` überschreitet {_ESCALATION_MAX_DAYS} Tage")
+        if self.repeatDays is not None:
+            if self.repeatDays <= 0:
+                raise ValueError("escalation: `repeatDays` muss größer als 0 sein")
+            if self.repeatDays > _ESCALATION_MAX_DAYS:
+                raise ValueError(f"escalation: `repeatDays` überschreitet {_ESCALATION_MAX_DAYS} Tage")
+        if not self.recipients:
+            raise ValueError("escalation: eine Stufe braucht mindestens einen Empfänger")
+        for tok in self.recipients:
+            if not is_valid_recipient(tok):
+                raise ValueError(f"escalation: unbekanntes Ziel „{tok}“ "
+                                 f"(erlaubt: {', '.join(sorted(ALLOWED_RECIPIENTS))}, "
+                                 f"group:<id>, user:<id>)")
+        return self
+
+
+class EscalationSpec(_Base):
+    """Eskalations-/Erinnerungs-Konfiguration einer Phase (der An/Aus-Schalter je
+    Phase). `enabled=false` behält die Stufen, hält sie aber still."""
+    enabled: bool = True
+    stages: list[EscalationStage] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _escalation_rules(self) -> "EscalationSpec":
+        if self.enabled and not self.stages:
+            raise ValueError("escalation ist aktiv, aber ohne Stufen – entweder eine "
+                             "Stufe hinzufügen oder deaktivieren")
+        return self
+
+
+def escalation_automations(phase: "PhaseDef") -> list["Automation"]:
+    """Expandiert `phase.escalation` in synthetische Timer-Automationen, die die
+    bestehende Timer-/Mail-Laufzeit unverändert feuert. Eine Stufe → eine
+    Automation (timer after/repeat + notify bzw. escalate an die Stufen-Empfänger).
+    Leere/deaktivierte Eskalation → keine Automationen."""
+    esc = getattr(phase, "escalation", None)
+    if esc is None or not esc.enabled:
+        return []
+    out: list[Automation] = []
+    for i, st in enumerate(esc.stages):
+        out.append(Automation(
+            id=f"{ESCALATION_AUTO_PREFIX}{phase.key}__{i}",
+            trigger=Trigger(
+                type=TriggerType.timer,
+                after=f"P{st.afterDays}D",
+                repeat=(f"P{st.repeatDays}D" if st.repeatDays else None),
+            ),
+            action=Action(
+                type=(ActionType.escalate if st.raisePriority else ActionType.notify),
+                recipients=list(st.recipients),
+                template=st.message,
+            ),
+        ))
+    return out
+
+
 class PhaseDef(_Base):
     key: str
     label: Optional[str] = None
@@ -786,6 +904,8 @@ class PhaseDef(_Base):
     approval: Optional[ApprovalSpec] = None
     #: Pflicht bei view=document, sonst verboten.
     document: Optional[DocumentSpec] = None
+    #: Optional: Erinnerungen/Eskalation, solange das Ticket in dieser Phase liegt.
+    escalation: Optional[EscalationSpec] = None
     fields: list[FieldRef] = Field(default_factory=list)
     #: Optionale Darstellung. Felder, die hier NICHT vorkommen, werden hinten in
     #: einem Sammel-Abschnitt gerendert – so wird nie ein Feld unsichtbar.
@@ -831,6 +951,11 @@ class PhaseDef(_Base):
             raise ValueError(f"Phase „{self.key}“: `approval` ist nur bei kind=approval erlaubt")
         if self.view == PhaseView.approval and self.kind != PhaseKind.approval:
             raise ValueError(f"Phase „{self.key}“: view=approval passt nur zu kind=approval")
+        # In einer Endphase wartet nichts mehr – Erinnerungen dort wären Lärm und
+        # würden ohnehin nie feuern (terminale Tickets werden nicht mehr geplant).
+        if self.escalation is not None and self.kind == PhaseKind.end:
+            raise ValueError(f"Phase „{self.key}“: `escalation` ist in einer Endphase "
+                             f"(kind=end) nicht sinnvoll")
         return self
 
     @model_validator(mode="after")
@@ -950,6 +1075,13 @@ class ProcessDefinition(_Base):
         adupes = {a for a in aids if aids.count(a) > 1}
         if adupes:
             raise ValueError(f"doppelte Automation-IDs: {', '.join(sorted(adupes))}")
+
+        # Das Präfix synthetischer Eskalations-Automationen ist reserviert – eine
+        # echte Automation mit diesem Präfix würde im Timer-Ledger kollidieren.
+        reserved = sorted({a.id for a in all_autos if a.id.startswith(ESCALATION_AUTO_PREFIX)})
+        if reserved:
+            raise ValueError(f"Automation-ID mit reserviertem Präfix „{ESCALATION_AUTO_PREFIX}“: "
+                             f"{', '.join(reserved)} (für Eskalationsstufen reserviert)")
 
         # ── Alle Feld-Referenzen müssen im Katalog existieren (sonst stiller No-op /
         #    Datenverlust zur Laufzeit). Betrifft computed.from, DSL-Leaf-Refs in

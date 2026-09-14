@@ -15,7 +15,7 @@ import type {
   DirectusWriteSpec, LayoutItem,
   DocumentSpec, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
-  StaticOption, SubField, Trigger,
+  StaticOption, SubField, Trigger, EscalationSpec, EscalationStage,
 } from '@/types/process'
 import { SCHEMA_VERSION, blankApproval } from '@/lib/processSchema'
 
@@ -187,6 +187,9 @@ function normAction(v: any): Action {
   return {
     type: v?.type ?? 'notify',
     to: str(v?.to),
+    recipients: Array.isArray(v?.recipients)
+      ? v.recipients.map((r: unknown) => String(r)).filter(Boolean)
+      : null,
     template: str(v?.template),
     field: str(v?.field),
     value: v?.value === undefined ? null : v.value,
@@ -248,6 +251,24 @@ function normDocument(v: any): DocumentSpec | null {
   }
 }
 
+function normEscalationStage(v: any): EscalationStage {
+  return {
+    afterDays: num(v?.afterDays) ?? 0,
+    repeatDays: num(v?.repeatDays),
+    recipients: arr(v?.recipients).map((r) => String(r)).filter(Boolean),
+    message: str(v?.message),
+    raisePriority: bool(v?.raisePriority),
+  }
+}
+
+/** Eskalations-Block. FEHLT er, bleibt es bei `null` (ein hinzugedichteter Block
+ *  würde jede geladene Definition sofort als geändert zeigen). Ist er DA, werden
+ *  alle Keys mit den Server-Defaults gefüllt. */
+function normEscalation(v: any): EscalationSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return { enabled: bool(v.enabled, true), stages: arr(v.stages).map(normEscalationStage) }
+}
+
 /** Extra-Keys bleiben erhalten – der Server verbietet sie hier NICHT. */
 function normConstraintEntry(v: any): PhaseConstraint {
   return { ...(v ?? {}), when: cond(v?.when) ?? {}, message: String(v?.message ?? '') }
@@ -266,6 +287,7 @@ export function normalizePhase(v: any): PhaseDef {
     responsibility: normResponsibility(v?.responsibility),
     approval: normApproval(v?.approval),
     document: normDocument(v?.document),
+    escalation: normEscalation(v?.escalation),
     fields: arr(v?.fields).map(normalizeFieldRef),
     layout: arr(v?.layout).map(normLayoutSection),
     constraints: arr(v?.constraints).map(normConstraintEntry),
