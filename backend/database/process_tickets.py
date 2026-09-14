@@ -387,6 +387,12 @@ def metrics_snapshot(now: str) -> dict:
         by_status = _group_count(conn, "status")
         by_priority = _group_count(conn, "priority")
         by_process = _group_count(conn, "process_key")
+        # Zusätzlich nur die OFFENEN (nicht-terminalen) je Dimension: sonst
+        # überwiegen mit der Zeit die archivierten Aufträge und verdecken das
+        # aktuell arbeitsrelevante Bild. „Alle" bleiben erhalten (Historie).
+        by_status_active = _group_count(conn, "status", active_only=True)
+        by_priority_active = _group_count(conn, "priority", active_only=True)
+        by_process_active = _group_count(conn, "process_key", active_only=True)
         active_row = _fetchone(
             conn, f"SELECT COUNT(*) AS n FROM process_tickets WHERE {_ACTIVE_CLAUSE}")
         oldest_rows = _fetchall(
@@ -413,6 +419,9 @@ def metrics_snapshot(now: str) -> dict:
         "by_status": by_status,
         "by_priority": by_priority,
         "by_process": by_process,
+        "by_status_active": by_status_active,
+        "by_priority_active": by_priority_active,
+        "by_process_active": by_process_active,
         # ISO-Zeitstempel des ältesten offenen Auftrags je Prozess (Staus sichtbar
         # machen); die Alters-Rechnung passiert im Metrik-Modul.
         "oldest_active_created_at": oldest,

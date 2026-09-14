@@ -24,6 +24,10 @@ SNAP = {
     "by_status": {"in_progress": 3, "in_request": 2, "archived": 2},
     "by_priority": {"normal": 6, "high": 1},
     "by_process": {"demo": 7},
+    # Offen-Varianten: dieselben Dimensionen ohne die 2 archivierten (=> 5 offen).
+    "by_status_active": {"in_progress": 3, "in_request": 2},
+    "by_priority_active": {"normal": 4, "high": 1},
+    "by_process_active": {"demo": 5},
     # Weit in der Vergangenheit → Alter > 0.
     "oldest_active_created_at": {"demo": "2020-01-01T00:00:00"},
     "timers_due": 4,
@@ -73,6 +77,18 @@ def test_kopf_kennzahlen_werden_gesetzt(snapshot, runtime_rows):
         "process_tickets_by_status", {"status": "in_progress"}) == 3
     assert REGISTRY.get_sample_value(
         "process_tickets_by_priority", {"priority": "high"}) == 1
+    assert REGISTRY.get_sample_value(
+        "process_tickets_by_process", {"process": "demo"}) == 7
+    # Offen-Varianten: nur nicht-terminale Aufträge.
+    assert REGISTRY.get_sample_value(
+        "process_tickets_open_by_status", {"status": "in_progress"}) == 3
+    # archived taucht in der Offen-Reihe NICHT auf.
+    assert REGISTRY.get_sample_value(
+        "process_tickets_open_by_status", {"status": "archived"}) is None
+    assert REGISTRY.get_sample_value(
+        "process_tickets_open_by_priority", {"priority": "normal"}) == 4
+    assert REGISTRY.get_sample_value(
+        "process_tickets_open_by_process", {"process": "demo"}) == 5
     age = REGISTRY.get_sample_value(
         "process_tickets_oldest_open_age_seconds", {"process": "demo"})
     assert age is not None and age > 0

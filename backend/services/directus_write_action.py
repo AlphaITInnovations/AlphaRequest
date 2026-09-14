@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
+from backend.metrics import engine_metrics
 from backend.schemas.process_definition import DirectusOperation
 from backend.services import directus_client as dc
 from backend.utils.logger import logger
@@ -85,6 +86,7 @@ def execute(action, row: dict, defn, phase, *, client=dc,
     id_field = spec.idField
     current_id = values.get(id_field)
     report = on_error or _report_failure
+    op = getattr(spec.operation, "value", spec.operation)
 
     try:
         if spec.operation == DirectusOperation.create:
@@ -96,25 +98,32 @@ def execute(action, row: dict, defn, phase, *, client=dc,
                 mval = _match_value(spec, match, values)
                 existing = client.find_one_id(spec.collection, match, mval)
                 if existing:
+                    engine_metrics.record_directus_write(op, "ok")
                     return {"values": {id_field: str(existing)}}
             created = client.create_item(spec.collection, build_payload(spec, values))
             new_id = created.get("id") if isinstance(created, dict) else None
             if new_id in (None, ""):
                 raise dc.DirectusError("Directus lieferte keine id für den angelegten Datensatz")
+            engine_metrics.record_directus_write(op, "ok")
             return {"values": {id_field: str(new_id)}}
 
         if spec.operation == DirectusOperation.update:
             if not current_id:
                 raise dc.DirectusError(f"Keine Directus-id in „{id_field}“ – Update nicht möglich")
             client.update_item(spec.collection, current_id, build_payload(spec, values))
+            engine_metrics.record_directus_write(op, "ok")
             return {}
 
         if spec.operation == DirectusOperation.delete:
             if not current_id:
                 raise dc.DirectusError(f"Keine Directus-id in „{id_field}“ – Löschen nicht möglich")
             client.delete_item(spec.collection, current_id)
+            engine_metrics.record_directus_write(op, "ok")
             return {"values": {id_field: None}}            # id zurücksetzen (Datensatz existiert nicht mehr)
     except dc.DirectusError as exc:
+        # Erfasst AUCH die blockierenden Fehler (onError=block), die sonst nirgends
+        # gezählt werden.
+        engine_metrics.record_directus_write(op, "error")
         # Block-Modus: Fehler DURCHREICHEN, damit die auslösende Aktion (Abschließen
         # der Fachabteilung) abbricht – nichts wird als „erledigt“ vorgetäuscht.
         if _blocks(spec):

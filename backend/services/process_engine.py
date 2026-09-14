@@ -21,6 +21,7 @@ from typing import Optional
 from backend.database import process_tickets as store
 from backend.database import process_timer_fires as fires
 from backend.database.audit_log import record_audit
+from backend.metrics import engine_metrics
 from backend.schemas.process_definition import ActionType, ProcessDefinition, PhaseDef, TriggerType
 from backend.services import process_actions as actions
 from backend.services import process_automations as pa
@@ -78,6 +79,8 @@ def _audit_fired(row: dict, phase: PhaseDef, automation, occurrence: Optional[in
     # Auch im Verlauf sichtbar machen: eine Eskalation, die niemand im Ticket
     # sieht, wirkt wie „es ist nichts passiert" (das Audit liest nur der Admin).
     events.system(row, events.AUTOMATION_FIRED, phase_key=phase.key, details=details)
+    engine_metrics.record_automation_fired(
+        row.get("process_key"), automation.trigger.type.value, automation.action.type.value)
 
 
 def _audit_failed(row: dict, automation, exc: Exception) -> None:
@@ -87,6 +90,7 @@ def _audit_failed(row: dict, automation, exc: Exception) -> None:
         summary=f"Automation „{automation.id}“ fehlgeschlagen: {type(exc).__name__}",
         details={"automation": automation.id, "error": str(exc)[:500]},
     )
+    engine_metrics.record_automation_failed(row.get("process_key"), automation.action.type.value)
 
 
 # ── Feuern ────────────────────────────────────────────────────────────────────
@@ -237,6 +241,15 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
     now_iso = now_iso or utcnow_iso()
     old_phase = pr.current_phase(defn, row.get("runtime") or {})
     if old_phase is not None:
+        # Verweildauer der verlassenen Phase (Wall-Clock) fürs Engpass-Histogram.
+        _ent = entered_at(row.get("runtime") or {})
+        if _ent:
+            try:
+                from datetime import datetime
+                _dwell = (datetime.fromisoformat(now_iso) - datetime.fromisoformat(_ent)).total_seconds()
+                engine_metrics.record_phase_duration(defn.key, old_phase.key, _dwell)
+            except Exception:
+                pass
         # Fortlaufende Nummern, die mit dem Abschluss DIESER Phase fällig werden,
         # vor dem Übergang vergeben – bewusst NICHT über fire(): dort wird jede
         # Action-Exception weggefangen, ein erschöpfter Nummernkreis würde den

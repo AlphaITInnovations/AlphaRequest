@@ -56,6 +56,35 @@ process_tickets_by_priority = Gauge(
     ["priority"]
 )
 
+# Aufträge nach Prozess-Typ (process_key) – insgesamt angelegt.
+process_tickets_by_process = Gauge(
+    "process_tickets_by_process",
+    "Prozess-Aufträge nach Typ (Prozess-Key)",
+    ["process"]
+)
+
+# OFFEN-Varianten: dieselben Dimensionen, aber nur nicht-terminale Aufträge. Wir
+# behalten bewusst BEIDE Reihen – „alle" für die Historie, „offen" fürs Tagesbild
+# (sonst überwiegen mit der Zeit die archivierten Aufträge). Das Dashboard zeigt
+# standardmäßig die Offen-Reihen.
+process_tickets_open_by_status = Gauge(
+    "process_tickets_open_by_status",
+    "Offene (nicht-terminale) Prozess-Aufträge nach Status",
+    ["status"]
+)
+
+process_tickets_open_by_priority = Gauge(
+    "process_tickets_open_by_priority",
+    "Offene (nicht-terminale) Prozess-Aufträge nach Priorität",
+    ["priority"]
+)
+
+process_tickets_open_by_process = Gauge(
+    "process_tickets_open_by_process",
+    "Offene (nicht-terminale) Prozess-Aufträge nach Typ (Prozess-Key)",
+    ["process"]
+)
+
 # Offene Aufträge nach aktueller Phase. Der Phasen-Key allein ist mehrdeutig –
 # „pruefung" gibt es in mehreren Prozessen –, deshalb immer mit Prozess-Key.
 # Ersetzt `tickets_by_phase` des Alt-Systems (dort war das Label die Phasen-
@@ -231,8 +260,14 @@ def _collect_snapshot() -> None:
     """Kopf-Kennzahlen – alle Aggregate SQL-seitig, eine Verbindung."""
     snap = process_store.metrics_snapshot(utcnow_iso())
 
+    # clear() vor dem Neusetzen: verschwindet ein Label-Wert (z. B. letzter Auftrag
+    # eines Status archiviert), soll die Reihe auf 0 fallen, nicht eingefroren bleiben.
     process_tickets_by_status.clear()
     process_tickets_by_priority.clear()
+    process_tickets_by_process.clear()
+    process_tickets_open_by_status.clear()
+    process_tickets_open_by_priority.clear()
+    process_tickets_open_by_process.clear()
     process_tickets_oldest_open_age_seconds.clear()
 
     process_tickets_total.set(snap["total"])
@@ -241,9 +276,18 @@ def _collect_snapshot() -> None:
 
     for status, count in snap["by_status"].items():
         process_tickets_by_status.labels(status=status).set(count)
-
     for priority, count in snap["by_priority"].items():
         process_tickets_by_priority.labels(priority=priority).set(count)
+    for process, count in snap["by_process"].items():
+        process_tickets_by_process.labels(process=process).set(count)
+
+    # Offen-Varianten (nur nicht-terminale Aufträge).
+    for status, count in snap["by_status_active"].items():
+        process_tickets_open_by_status.labels(status=status).set(count)
+    for priority, count in snap["by_priority_active"].items():
+        process_tickets_open_by_priority.labels(priority=priority).set(count)
+    for process, count in snap["by_process_active"].items():
+        process_tickets_open_by_process.labels(process=process).set(count)
 
     # `by_process` zählt ALLE Zeilen je Prozess – das ist exakt „insgesamt
     # angelegt". Deshalb keine zweite Abfrage und keine doppelte Reihe.

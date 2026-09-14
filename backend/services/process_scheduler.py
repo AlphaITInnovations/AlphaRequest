@@ -11,11 +11,13 @@ Ausgeführt wird über process_engine (dieselben Pfade wie der Request) – der
 Scheduler kümmert sich nur um Auswahl, Claim und Fehlerrobustheit.
 """
 import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 
 from backend.database import process_tickets as store
 from backend.database import process_timer_fires as fires
 from backend.database import process_definitions as defstore
+from backend.metrics import engine_metrics
 from backend.schemas.process_definition import ProcessDefinition
 from backend.services import process_automations as pa
 from backend.services import process_engine as engine
@@ -72,6 +74,7 @@ def _process_ticket(row_stale: dict, now: datetime) -> None:
 def sweep_once(now: datetime = None) -> int:
     """Ein Sweep-Durchlauf. Gibt die Anzahl betrachteter Tickets zurück."""
     now = now or datetime.now(timezone.utc)
+    started = time.perf_counter()
     due = store.list_due(now.isoformat(), limit=SWEEP_LIMIT)
     for row in due:
         try:
@@ -79,6 +82,7 @@ def sweep_once(now: datetime = None) -> int:
         except Exception:
             # Selbstheilend: Timer nach hinten schieben, sonst blockiert dieses
             # Ticket bei jedem Sweep erneut das LIMIT-Fenster.
+            engine_metrics.record_scheduler_ticket_failure()
             logger.exception("Sweep für Ticket #%s fehlgeschlagen – Backoff %s min",
                              row.get("id"), ERROR_BACKOFF_MIN)
             try:
@@ -86,6 +90,9 @@ def sweep_once(now: datetime = None) -> int:
                                      (now + timedelta(minutes=ERROR_BACKOFF_MIN)).isoformat())
             except Exception:
                 logger.exception("Backoff für Ticket #%s konnte nicht gesetzt werden", row.get("id"))
+    # Lebenszeichen des Off-Loop-Motors: steigt timers_due, aber sweeps_total bleibt
+    # flach → der Scheduler steht (nicht bloß viel Last).
+    engine_metrics.record_scheduler_sweep(time.perf_counter() - started)
     return len(due)
 
 
