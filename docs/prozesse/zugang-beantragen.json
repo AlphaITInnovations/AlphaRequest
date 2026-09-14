@@ -4042,6 +4042,12 @@
                   "source": "base.contract_company",
                   "target": "firma",
                   "resolve": "company_directus_id"
+                },
+                {
+                  "source": null,
+                  "target": "source",
+                  "value": "AlphaRequest",
+                  "resolve": null
                 }
               ],
               "idField": "it.directus_mitarbeiter_id",
