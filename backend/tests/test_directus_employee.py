@@ -20,7 +20,7 @@ def _q(rows, calls=None):
     return query
 
 
-def test_treffer_gibt_datensatz_und_filtert_auf_mail():
+def test_treffer_gibt_datensatz_und_filtert_klein_auf_mail():
     calls = []
     rec = de.lookup_employee(
         "Marco.Schneider@x.de",
@@ -29,7 +29,8 @@ def test_treffer_gibt_datensatz_und_filtert_auf_mail():
     assert rec == {"id": 1, "email": "marco.schneider@x.de"}
     coll, kw = calls[0]
     assert coll == "mitarbeitende"
-    assert kw["filter"] == {"email": {"_eq": "Marco.Schneider@x.de"}}
+    # Directus speichert die Mail klein → kleingeschrieben vergleichen
+    assert kw["filter"] == {"email": {"_eq": "marco.schneider@x.de"}}
     assert kw["limit"] == 1
 
 

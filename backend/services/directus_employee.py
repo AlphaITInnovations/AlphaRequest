@@ -69,7 +69,9 @@ def lookup_employee(
         rows = query(
             config.DIRECTUS_EMPLOYEE_COLLECTION,
             fields=(config.DIRECTUS_EMPLOYEE_FIELDS or None),
-            filter={config.DIRECTUS_EMPLOYEE_EMAIL_FIELD: {"_eq": raw}},
+            # Directus speichert die Mail klein – deshalb kleingeschrieben
+            # vergleichen (Azure liefert sie oft gemischt, z. B. „Vorname.Name@…").
+            filter={config.DIRECTUS_EMPLOYEE_EMAIL_FIELD: {"_eq": key}},
             limit=1,
         )
     except directus_client.DirectusError as e:
