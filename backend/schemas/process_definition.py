@@ -114,6 +114,9 @@ class ActionType(str, Enum):
     auto_advance = "auto_advance"
     #: Datensatz in Directus anlegen/ändern/löschen (services/directus_write).
     directus_write = "directus_write"
+    #: Beliebiger ausgehender HTTP-/API-Aufruf (services/http_action). URL, Header
+    #: und Body dürfen {{feld.key}}-Platzhalter aus den Auftragswerten tragen.
+    http_request = "http_request"
 
 
 class DirectusOperation(str, Enum):
@@ -144,6 +147,28 @@ class DirectusWriteResolve(str, Enum):
     während die Personalnummer-Logik weiterhin am Firmennamen hängt.
     """
     company_directus_id = "company_directus_id"
+
+
+class HttpMethod(str, Enum):
+    get = "GET"
+    post = "POST"
+    put = "PUT"
+    patch = "PATCH"
+    delete = "DELETE"
+
+
+class HttpRequestOnError(str, Enum):
+    """Verhalten, wenn der API-Aufruf fehlschlägt (Netzfehler, Timeout, Status ≥ 400).
+
+    continue_ : Fehler melden (Verlauf/Audit/Mail), Ablauf läuft weiter (Default).
+    block     : Fehler durchreichen – die auslösende Aktion (z. B. das Abschließen
+                der Fachabteilung) bricht ab; erst wenn der Aufruf klappt, gilt sie
+                als erledigt. Blockierend wirkt das NUR im synchronen
+                on_department_done-Pfad (wie bei directus_write); in jedem anderen
+                Auslöser wird der Fehler nur auditiert.
+    """
+    continue_ = "continue"
+    block = "block"
 
 
 # Erlaubte enterStatus-Werte (Whitelist gegen Tippfehler). Bewusst als Menge
@@ -534,6 +559,57 @@ class DirectusWriteSpec(_Base):
     matchField: Optional[str] = None
 
 
+#: Obergrenze für den Aufruf-Timeout (Sekunden) – schützt Motor/Scheduler vor
+#: einer hängenden Gegenstelle. Default bewusst kurz.
+_HTTP_MAX_TIMEOUT = 60
+_HTTP_DEFAULT_TIMEOUT = 10
+
+
+class HttpHeader(_Base):
+    """Ein HTTP-Header für den API-Aufruf. `value` darf {{feld.key}}-Platzhalter
+    tragen (roh eingesetzt – der Header-Autor ist Admin)."""
+    name: str
+    value: str = ""
+
+    @model_validator(mode="after")
+    def _header_rules(self) -> "HttpHeader":
+        if not self.name.strip():
+            raise ValueError("HTTP-Header: `name` fehlt")
+        return self
+
+
+class HttpRequestSpec(_Base):
+    """Konfiguration der Aktion `http_request` (ausgehender API-Aufruf).
+
+    `url`, jeder Header-`value` und `body` dürfen `{{feld.key}}`-Platzhalter aus den
+    Auftragswerten tragen (zusätzlich {{title}}, {{id}}); in der URL werden die
+    eingesetzten Werte prozentkodiert, in Headern/Body roh übernommen. Reiner Text –
+    die Definition pflegt die Admin-Rolle (Prozess-Editor), dieselbe
+    Vertrauensstellung wie directus_write.
+    """
+    method: HttpMethod = HttpMethod.post
+    url: str
+    headers: list[HttpHeader] = Field(default_factory=list)
+    body: Optional[str] = None
+    #: Content-Type für den Body. Leer + Body gesetzt und kein eigener Header →
+    #: application/json.
+    contentType: Optional[str] = None
+    timeoutSeconds: int = _HTTP_DEFAULT_TIMEOUT
+    onError: HttpRequestOnError = HttpRequestOnError.continue_
+
+    @model_validator(mode="after")
+    def _http_rules(self) -> "HttpRequestSpec":
+        u = (self.url or "").strip()
+        if not u:
+            raise ValueError("http_request: `url` fehlt")
+        if not (u.startswith("http://") or u.startswith("https://")):
+            raise ValueError("http_request: `url` muss mit http:// oder https:// beginnen")
+        if self.timeoutSeconds < 1 or self.timeoutSeconds > _HTTP_MAX_TIMEOUT:
+            raise ValueError(f"http_request: `timeoutSeconds` muss zwischen 1 und "
+                             f"{_HTTP_MAX_TIMEOUT} liegen")
+        return self
+
+
 class Action(_Base):
     type: ActionType
     to: Optional[str] = None         # Empfänger-Resolver (notify/escalate)
@@ -545,12 +621,17 @@ class Action(_Base):
     value: Optional[Any] = None
     counter: Optional[str] = None    # bei assign_sequence
     directus: Optional[DirectusWriteSpec] = None   # bei directus_write
+    http: Optional[HttpRequestSpec] = None         # bei http_request
 
     @model_validator(mode="after")
     def _action_rules(self) -> "Action":
         t = self.type
         if t != ActionType.directus_write and self.directus is not None:
             raise ValueError("`directus` ist nur bei action directus_write erlaubt")
+        if t != ActionType.http_request and self.http is not None:
+            raise ValueError("`http` ist nur bei action http_request erlaubt")
+        if t == ActionType.http_request and self.http is None:
+            raise ValueError("action http_request erfordert `http` (URL, Methode, …)")
         if t == ActionType.directus_write:
             d = self.directus
             if d is None:

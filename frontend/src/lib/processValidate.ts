@@ -759,6 +759,30 @@ export function validateDefinition(
         }
       }
     }
+    if (ac.type === 'http_request') {
+      const h = ac.http
+      if (!h) {
+        out.push(err(`${path}.action`, anchor, 'REQUIRED', 'API-Konfiguration fehlt.'))
+      } else {
+        const u = (h.url ?? '').trim()
+        if (!u) {
+          out.push(err(`${path}.action.http.url`, anchor, 'REQUIRED', 'Adresse (URL) fehlt.'))
+        } else if (!/^https?:\/\//i.test(u)) {
+          out.push(err(`${path}.action.http.url`, anchor, 'INVALID',
+            'Die Adresse muss mit http:// oder https:// beginnen.'))
+        }
+        if (!(h.timeoutSeconds >= 1 && h.timeoutSeconds <= 60)) {
+          out.push(err(`${path}.action.http.timeoutSeconds`, anchor, 'INVALID',
+            'Zeitlimit muss zwischen 1 und 60 Sekunden liegen.'))
+        }
+        h.headers.forEach((hd, j) => {
+          if (!hd.name?.trim()) {
+            out.push(err(`${path}.action.http.headers.${j}`, anchor, 'REQUIRED',
+              'Header-Name fehlt.'))
+          }
+        })
+      }
+    }
   })
 
   // on_department_done: nur als Phasen-Automation einer Fachabteilungs-Phase; die

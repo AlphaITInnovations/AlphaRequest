@@ -43,6 +43,34 @@ describe('validateDefinition – Grundgerüst', () => {
   })
 })
 
+describe('validateDefinition – API-Aufruf (http_request)', () => {
+  const withHttp = (http: Record<string, unknown> | null) => defn({
+    phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+      automations: [{ id: 'call', trigger: { type: 'on_enter' },
+        action: { type: 'http_request', http } }] }],
+  })
+
+  it('meldet nichts bei gültiger URL', () => {
+    expect(errorCount(validateDefinition(
+      withHttp({ url: 'https://api.example.org/x/{{base.name}}' })))).toBe(0)
+  })
+
+  it('verlangt eine URL mit http(s)-Schema', () => {
+    expect(codes(withHttp({ url: '' }))).toContain('REQUIRED')
+    expect(codes(withHttp({ url: 'ftp://x/y' }))).toContain('INVALID')
+  })
+
+  it('verlangt das http-Objekt', () => {
+    expect(codes(withHttp(null))).toContain('REQUIRED')
+  })
+
+  it('prüft die Zeitlimit-Grenzen und Header-Namen', () => {
+    expect(codes(withHttp({ url: 'https://x/y', timeoutSeconds: 999 }))).toContain('INVALID')
+    expect(codes(withHttp({ url: 'https://x/y', headers: [{ name: '', value: 'v' }] })))
+      .toContain('REQUIRED')
+  })
+})
+
 describe('validateDefinition – Referenzen', () => {
   it('meldet unbekannte fieldRefs', () => {
     const d = defn({ phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },

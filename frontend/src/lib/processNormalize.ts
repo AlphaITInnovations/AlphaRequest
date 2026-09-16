@@ -12,7 +12,7 @@
  */
 import type {
   Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions,
-  DirectusWriteSpec, LayoutItem,
+  DirectusWriteSpec, HttpRequestSpec, LayoutItem,
   DocumentSpec, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger, EscalationSpec, EscalationStage,
@@ -183,6 +183,26 @@ function normDirectusWrite(v: any): DirectusWriteSpec | null {
   }
 }
 
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+
+function normHttpRequest(v: any): HttpRequestSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const method = HTTP_METHODS.includes(String(v.method))
+    ? (String(v.method) as HttpRequestSpec['method']) : 'POST'
+  const timeout = Number(v.timeoutSeconds)
+  return {
+    method,
+    url: String(v.url ?? ''),
+    headers: arr(v.headers).map((h: any) => ({
+      name: String(h?.name ?? ''), value: String(h?.value ?? ''),
+    })),
+    body: str(v.body),
+    contentType: str(v.contentType),
+    timeoutSeconds: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : 10,
+    onError: v.onError === 'block' ? 'block' : 'continue',
+  }
+}
+
 function normAction(v: any): Action {
   return {
     type: v?.type ?? 'notify',
@@ -195,6 +215,7 @@ function normAction(v: any): Action {
     value: v?.value === undefined ? null : v.value,
     counter: str(v?.counter),
     directus: normDirectusWrite(v?.directus),
+    http: normHttpRequest(v?.http),
   }
 }
 

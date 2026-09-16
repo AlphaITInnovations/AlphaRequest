@@ -74,7 +74,10 @@ Engpass-Phasen), `process_automation_fired_total{process,trigger,action}` /
 `process_automation_failed_total{process,action}`,
 `process_scheduler_sweeps_total`, `process_scheduler_sweep_duration_seconds`
 (Histogram), `process_scheduler_ticket_failures_total`,
-`process_directus_write_total{operation,outcome}`.
+`process_directus_write_total{operation,outcome}`,
+`process_http_request_total{method,outcome}` /
+`process_http_request_duration_seconds` (Histogram – ausgehende API-Aufrufe der
+Aktion `http_request`).
 
 > Eskalationen/Erinnerungen = `process_automation_fired_total{trigger="timer"}`
 > (`action="escalate"` bzw. `"notify"`).

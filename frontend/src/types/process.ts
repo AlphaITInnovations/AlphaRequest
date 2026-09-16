@@ -33,7 +33,7 @@ export type TriggerType = 'on_enter' | 'on_exit' | 'on_field_change' | 'timer' |
 export type DirectusOperation = 'create' | 'update' | 'delete'
 export type ActionType =
   | 'notify' | 'escalate' | 'set_field' | 'set_priority' | 'set_status'
-  | 'assign_sequence' | 'auto_advance' | 'directus_write'
+  | 'assign_sequence' | 'auto_advance' | 'directus_write' | 'http_request'
 
 /** Genau EIN Operator-Key pro Objekt – Shapes siehe lib/conditionDsl.ts. */
 export type Condition = Record<string, any>
@@ -181,6 +181,29 @@ export interface DirectusWriteSpec {
   matchField?: string | null
 }
 
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+export type HttpRequestOnError = 'continue' | 'block'
+
+/** Ein HTTP-Header; `value` darf {{feld.key}}-Platzhalter tragen. */
+export interface HttpHeader { name: string; value: string }
+
+/**
+ * Konfiguration der Aktion 'http_request' (ausgehender API-Aufruf). `url`, jeder
+ * Header-`value` und `body` dürfen {{feld.key}}-Platzhalter aus den Auftragswerten
+ * tragen (zusätzlich {{title}}, {{id}}); in der URL werden die eingesetzten Werte
+ * prozentkodiert, in Headern/Body roh übernommen.
+ */
+export interface HttpRequestSpec {
+  method: HttpMethod
+  url: string
+  headers: HttpHeader[]
+  body: string | null
+  /** Content-Type des Body. Leer + Body gesetzt und kein eigener Header → application/json. */
+  contentType: string | null
+  timeoutSeconds: number
+  onError: HttpRequestOnError
+}
+
 export interface Action {
   type: ActionType
   to: string | null
@@ -194,6 +217,8 @@ export interface Action {
   counter: string | null
   /** Bei type='directus_write': Schreib-Konfiguration. */
   directus: DirectusWriteSpec | null
+  /** Bei type='http_request': API-Aufruf-Konfiguration. */
+  http: HttpRequestSpec | null
 }
 
 export interface Automation {

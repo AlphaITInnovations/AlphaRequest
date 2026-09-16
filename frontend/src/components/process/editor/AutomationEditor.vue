@@ -15,7 +15,7 @@
 import { computed, ref, watch } from 'vue'
 import type {
   Action, ActionType, Automation, DirectusOperation, DirectusWriteBinding, DirectusWriteSpec,
-  Trigger, TriggerType,
+  HttpHeader, HttpMethod, HttpRequestSpec, Trigger, TriggerType,
 } from '@/types/process'
 import {
   ACTION_LABEL, ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
@@ -48,6 +48,11 @@ const DIRECTUS_ONERROR: { value: 'continue' | 'block'; label: string }[] = [
   { value: 'continue', label: 'Weiterlaufen + melden (Standard)' },
   { value: 'block', label: 'Blockieren – Abschluss verhindern, bis es klappt' },
 ]
+const HTTP_METHODS: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+const HTTP_ONERROR: { value: 'continue' | 'block'; label: string }[] = [
+  { value: 'continue', label: 'Weiterlaufen + melden (Standard)' },
+  { value: 'block', label: 'Blockieren – Abschluss verhindern, bis es klappt' },
+]
 const deptGroups = computed(() =>
   (props.departmentGroups?.length ? props.departmentGroups : props.groups) ?? [])
 
@@ -65,11 +70,15 @@ const PRIORITY_LABEL: Record<string, string> = {
 const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null, group: null })
 const blankAction = (): Action => ({
   type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
-  value: null, counter: null, directus: null,
+  value: null, counter: null, directus: null, http: null,
 })
 const blankDirectus = (): DirectusWriteSpec => ({
   operation: 'create', collection: '', fieldMap: [], idField: '',
   onError: 'continue', matchField: null,
+})
+const blankHttp = (): HttpRequestSpec => ({
+  method: 'POST', url: '', headers: [], body: null, contentType: null,
+  timeoutSeconds: 10, onError: 'continue',
 })
 
 const a = computed<Automation>(() => {
@@ -176,16 +185,46 @@ function setDwConst(i: number, value: string) {
     (j === i ? { target: b.target, source: null, value } : b)) })
 }
 
+// ── API-Aufruf (http_request) ────────────────────────────────────────────────
+function patchHttp(p: Partial<HttpRequestSpec>) {
+  patchAction({ http: { ...(a.value.action.http ?? blankHttp()), ...p } })
+}
+function addHeader() {
+  const cur = a.value.action.http ?? blankHttp()
+  patchHttp({ headers: [...cur.headers, { name: '', value: '' }] })
+}
+function removeHeader(i: number) {
+  const cur = a.value.action.http ?? blankHttp()
+  patchHttp({ headers: cur.headers.filter((_, j) => j !== i) })
+}
+function setHeader(i: number, part: keyof HttpHeader, value: string) {
+  const cur = a.value.action.http ?? blankHttp()
+  patchHttp({ headers: cur.headers.map((h, j) => (j === i ? { ...h, [part]: value } : h)) })
+}
+/** Zeitlimit robust setzen (leer/ungültig → Standard 10). */
+function setHttpTimeout(raw: string) {
+  const n = Math.floor(Number(raw))
+  patchHttp({ timeoutSeconds: Number.isFinite(n) && n > 0 ? n : 10 })
+}
+/** Kurzer Platzhalter-Spick: die wichtigsten verfügbaren {{…}}-Tokens. */
+const placeholderHint = computed(() => {
+  const fields = keys.value.slice(0, 6).map((k) => `{{${k}}}`)
+  return ['{{title}}', '{{id}}', ...fields].join('  ')
+})
+
 function onActionType(t: ActionType) {
   const cur = a.value.action
   // recipients IMMER mitführen (null-Default wie normAction) – sonst fehlt der Key
   // nach einem Typwechsel und der Dirty-Vergleich schlägt dauerhaft an.
   const next: Action = {
     type: t, to: null, recipients: null, template: null, field: null,
-    value: null, counter: null, directus: null,
+    value: null, counter: null, directus: null, http: null,
   }
   if (t === 'directus_write') {
     next.directus = cur.directus ?? blankDirectus()
+  }
+  if (t === 'http_request') {
+    next.http = cur.http ?? blankHttp()
   }
   if (t === 'notify' || t === 'escalate') {
     next.to = cur.to ?? 'responsible'
@@ -618,6 +657,92 @@ watch(dwCollection, (c) => {
           (env DIRECTUS_WRITE_TOKEN oder Schreibrecht des Lese-Tokens). Fehler blockieren den
           Auftrag nicht – sie landen im Verlauf und als Mail an die Fehler-Empfänger:in.
         </p>
+      </template>
+
+      <!-- API-Aufruf (http_request) -->
+      <template v-else-if="a.action.type === 'http_request'">
+        <div class="grid grid-cols-1 sm:grid-cols-[7rem_minmax(0,1fr)] gap-3">
+          <div>
+            <label class="lbl">Methode</label>
+            <select class="afi w-full" :value="a.action.http?.method ?? 'POST'"
+                    @change="patchHttp({ method: val($event) as HttpMethod })">
+              <option v-for="m in HTTP_METHODS" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Adresse (URL)</label>
+            <input class="afi w-full font-mono text-xs"
+                   placeholder="https://api.example.org/hooks/{{base.pn}}"
+                   :value="a.action.http?.url ?? ''"
+                   @input="patchHttp({ url: val($event) })" />
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between">
+            <label class="lbl mb-0">Header <span class="text-gray-400 font-normal">(optional)</span></label>
+            <button type="button" @click="addHeader" class="text-xs text-[#3EAAB8] hover:underline">+ Header</button>
+          </div>
+          <div v-for="(hd, i) in (a.action.http?.headers ?? [])" :key="i" class="mt-2 flex items-center gap-2">
+            <input class="afi w-40 shrink-0 font-mono text-xs" placeholder="Name, z. B. Authorization"
+                   :value="hd.name" @input="setHeader(i, 'name', val($event))" />
+            <span class="text-gray-400 text-sm">:</span>
+            <input class="afi flex-1 font-mono text-xs" placeholder="Wert (darf {{…}} enthalten)"
+                   :value="hd.value" @input="setHeader(i, 'value', val($event))" />
+            <button type="button" @click="removeHeader(i)"
+                    class="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="lbl">Body <span class="text-gray-400 font-normal">(optional)</span></label>
+          <textarea rows="4" class="afi w-full resize-y font-mono text-xs"
+                    placeholder='{ "personalnummer": "{{base.pn}}", "name": "{{base.first_name}}" }'
+                    :value="a.action.http?.body ?? ''"
+                    @input="patchHttp({ body: val($event) || null })" />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl">Content-Type <span class="text-gray-400 font-normal">(optional)</span></label>
+            <input class="afi w-full font-mono text-xs"
+                   placeholder="application/json (Standard bei Body)"
+                   :value="a.action.http?.contentType ?? ''"
+                   @input="patchHttp({ contentType: val($event) || null })" />
+          </div>
+          <div>
+            <label class="lbl">Zeitlimit (Sekunden)</label>
+            <input type="number" min="1" max="60" class="afi w-full"
+                   :value="a.action.http?.timeoutSeconds ?? 10"
+                   @input="setHttpTimeout(val($event))" />
+          </div>
+        </div>
+
+        <div>
+          <label class="lbl">Bei Fehler</label>
+          <select class="afi w-full" :value="a.action.http?.onError ?? 'continue'"
+                  @change="patchHttp({ onError: val($event) as 'continue' | 'block' })">
+            <option v-for="o in HTTP_ONERROR" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">
+            <template v-if="(a.action.http?.onError ?? 'continue') === 'block'">
+              Schlägt der Aufruf fehl, wird die auslösende Aktion (z. B. „Fachabteilung
+              abschließen“) abgebrochen – wirkt nur beim Auslöser „Fachabteilung abgeschlossen“.
+            </template>
+            <template v-else>
+              Schlägt der Aufruf fehl, läuft der Auftrag weiter; der Fehler landet im
+              Verlauf und als Mail an die Fehler-Empfänger:in.
+            </template>
+          </p>
+        </div>
+
+        <div class="rounded-lg bg-gray-50 dark:bg-white/[0.04] px-3 py-2">
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            In Adresse, Header-Werten und Body kannst du Platzhalter aus den Auftragsfeldern
+            nutzen: <code class="text-[11px]">{{ placeholderHint }}</code> … In der URL werden
+            die Werte automatisch URL-sicher kodiert.
+          </p>
+        </div>
       </template>
     </div>
   </div>

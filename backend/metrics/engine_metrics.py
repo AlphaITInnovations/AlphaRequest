@@ -67,6 +67,18 @@ process_directus_write_total = Counter(
     ["operation", "outcome"],   # operation=create|update|delete, outcome=ok|error
 )
 
+process_http_request_total = Counter(
+    "process_http_request_total",
+    "Ausgehende API-Aufrufe aus Automationen (Integrations-Gesundheit)",
+    ["method", "outcome"],   # method=GET|POST|…, outcome=ok|error
+)
+
+process_http_request_duration_seconds = Histogram(
+    "process_http_request_duration_seconds",
+    "Dauer eines ausgehenden API-Aufrufs aus einer Automation (Sekunden)",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60),
+)
+
 
 def _s(v: Optional[str]) -> str:
     return str(v) if v else "unbekannt"
@@ -114,5 +126,15 @@ def record_scheduler_ticket_failure() -> None:
 def record_directus_write(operation: Optional[str], outcome: str) -> None:
     try:
         process_directus_write_total.labels(operation=_s(operation), outcome=outcome).inc()
+    except Exception:
+        pass
+
+
+def record_http_request(method: Optional[str], outcome: str,
+                        seconds: Optional[float] = None) -> None:
+    try:
+        process_http_request_total.labels(method=_s(method), outcome=outcome).inc()
+        if seconds is not None and seconds >= 0:
+            process_http_request_duration_seconds.observe(seconds)
     except Exception:
         pass

@@ -89,7 +89,26 @@ describe('normalizeDefinition', () => {
       automations: [{ id: 'a', trigger: { type: 'on_enter' },
         action: { type: 'notify', to: 'owner', process: 'alt' } }] })
     expect(Object.keys(d.automations[0].action).sort())
-      .toEqual(['counter', 'directus', 'field', 'recipients', 'template', 'to', 'type', 'value'])
+      .toEqual(['counter', 'directus', 'field', 'http', 'recipients', 'template', 'to', 'type', 'value'])
+  })
+
+  it('normalisiert einen API-Aufruf (http_request) mit Defaults', () => {
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      automations: [{ id: 'c', trigger: { type: 'on_enter' },
+        action: { type: 'http_request', http: { url: 'https://x/y', method: 'lol',
+          headers: [{ name: 'X', value: '{{id}}' }] } } }] })
+    const http = d.automations[0].action.http!
+    expect(http.method).toBe('POST')          // unbekannte Methode → Default POST
+    expect(http.url).toBe('https://x/y')
+    expect(http.headers).toEqual([{ name: 'X', value: '{{id}}' }])
+    expect(http.timeoutSeconds).toBe(10)       // fehlend → Default 10
+    expect(http.onError).toBe('continue')
+  })
+
+  it('lässt http null, wenn die Aktion keinen API-Aufruf ist', () => {
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      automations: [{ id: 'c', trigger: { type: 'on_enter' }, action: { type: 'notify', to: 'owner' } }] })
+    expect(d.automations[0].action.http).toBeNull()
   })
 
   it('ergänzt die einzig erlaubte assign.action', () => {

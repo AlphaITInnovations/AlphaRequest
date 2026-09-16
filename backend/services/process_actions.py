@@ -7,9 +7,9 @@ injizierbaren Sender) und gibt die gewünschten Zustandsänderungen als dict
 zurück ({status?, priority?, values?, advance?}). Der Aufrufer (Scheduler bzw.
 Request-Pfad) wendet sie an – so bleibt die Logik ohne DB testbar.
 
-Umgesetzt: notify, escalate, set_status, set_priority, set_field, auto_advance.
-Erkannt-aber-noch-nicht-ausgeführt (und daher beim Veröffentlichen abgelehnt,
-s. UNIMPLEMENTED_ACTIONS): spawn_process, assign_sequence, require_attachment.
+Umgesetzt: notify, escalate, set_status, set_priority, set_field, auto_advance,
+directus_write, http_request. Erkannt-aber-noch-nicht-ausgeführt (und daher beim
+Veröffentlichen abgelehnt, s. UNIMPLEMENTED_ACTIONS): derzeit keine.
 
 Neben den Automations-Actions liegen hier die festen Benachrichtigungen, die
 JEDER Prozess braucht und die niemand pro Prozess konfigurieren soll:
@@ -300,6 +300,9 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
     elif t == ActionType.directus_write:
         from backend.services import directus_write_action as dwa
         changes = dwa.execute(action, row, defn, phase)
+    elif t == ActionType.http_request:
+        from backend.services import http_action
+        changes = http_action.execute(action, row, defn, phase)
     else:
         logger.info("Automation-Action „%s“ ist in Stufe 5 noch nicht umgesetzt (Ticket #%s)",
                     t.value, row.get("id"))
