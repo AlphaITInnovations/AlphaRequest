@@ -47,6 +47,16 @@ const sources = ref<OptionSources>(emptySources())
 const loadError = ref<string | null>(null)
 
 /**
+ * Standardisierte Fehlermeldung dieser Ansicht: der rote Balken GANZ OBEN im
+ * Ticket. Bewusst FLÜCHTIG – nur für den aktuellen Blick gültig: `load()` (jeder
+ * Neuaufruf des Tickets, jede Aktualisierung, jeder Ticket-Wechsel) setzt ihn
+ * zurück. So steht die Meldung wirklich nur im Moment des Fehlers und ist beim
+ * nächsten Betreten wieder weg. Jede Fehlerquelle (Speichern, Weitergeben,
+ * Fachabteilung abschließen, Admin-Eingriffe …) füllt ihn über `showViewError`.
+ */
+const viewError = ref<string | null>(null)
+
+/**
  * Sichtbarkeits-Kontext für die ANZEIGE – er kommt VOM SERVER.
  *
  * Das Frontend kennt die Gruppen-Mitgliedschaft nicht und könnte die Entscheidung
@@ -220,6 +230,26 @@ watch(errors, () => {
   if (hatPflichtfehler.value) window.scrollTo({ top: 0, behavior: 'smooth' })
 })
 
+/** Eine (fertig formulierte) Fehlermeldung im roten Balken ganz oben zeigen und
+ *  dorthin scrollen, damit sie sicher im Blick ist. Für Kind-Komponenten
+ *  (z. B. AdminActionsPanel) über `@error` erreichbar. */
+function showViewError(message: string) {
+  viewError.value = message || 'Es ist ein Fehler aufgetreten'
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+/** Fehler einer Aktion standardisiert anzeigen: etwaige FELD-Fehler markieren
+ *  weiterhin die Felder, die allgemeine Server-Meldung landet im roten Balken
+ *  (statt in einer flüchtigen Toast-Meldung, die man im Moment des Fehlers
+ *  leicht übersieht). Der synthetische „body"-Eintrag wandert bewusst NUR in den
+ *  Balken, nicht zusätzlich in die Feldliste. */
+function reportActionError(e: unknown, fallback: string) {
+  errors.value = issuesFromError(e)
+    .filter((i) => i.path !== 'body')
+    .map((i) => ({ path: i.path, code: i.code, message: i.message }))
+  showViewError(errorMessage(e, fallback))
+}
+
 /** Nach Admin-Eingriffen: Auftrag UND Verlauf nachziehen. */
 async function reloadAll() {
   await load()
@@ -229,6 +259,9 @@ async function reloadAll() {
 async function load() {
   loading.value = true
   loadError.value = null
+  // Flüchtige Fehlermeldung zurücksetzen: beim (Neu-)Laden des Tickets soll der
+  // rote Balken weg sein – er gehört nur zum Moment des vorigen Fehlers.
+  viewError.value = null
   try {
     const t = await ticketsApi.getTicket(id.value, viewParams.value)
     ticket.value = t
@@ -262,8 +295,7 @@ async function saveValues() {
     // mit „Speichern & später weiterbearbeiten" im Basis-Ticket).
     router.push('/dashboard')
   } catch (e) {
-    errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
-    showToast(errorMessage(e, 'Speichern fehlgeschlagen'), false)
+    reportActionError(e, 'Speichern fehlgeschlagen')
   } finally { busy.value = false }
 }
 
@@ -293,8 +325,7 @@ async function advance() {
     showToast('Phase abgeschlossen')
     router.push('/dashboard')
   } catch (e) {
-    errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
-    showToast(errorMessage(e, 'Weiterschalten fehlgeschlagen'), false)
+    reportActionError(e, 'Weiterschalten fehlgeschlagen')
   } finally { busy.value = false }
 }
 
@@ -335,8 +366,7 @@ async function fachabteilungAbschliessen() {
     showToast('Fachabteilung abgeschlossen')
     router.push('/dashboard')
   } catch (e) {
-    errors.value = issuesFromError(e).map((i) => ({ path: i.path, code: i.code, message: i.message }))
-    showToast(errorMessage(e, 'Abschließen fehlgeschlagen'), false)
+    reportActionError(e, 'Abschließen fehlgeschlagen')
   } finally { busy.value = false }
 }
 
@@ -345,6 +375,10 @@ async function fachabteilungAbschliessen() {
 // Bearbeitungs-Leiste kennt nur Speichern und Weitergeben.
 
 const groupName = (gid: string) => sources.value.groups.find((g) => g.id === gid)?.name || gid
+
+// Ticket-Wechsel ohne Remount (App.vue hat kein router-view :key): beim Wechsel
+// der id neu laden – zieht die Daten nach UND räumt den flüchtigen Fehlerbalken.
+watch(id, () => { load() })
 
 // auth.isAdmin: normale Nutzer:innen direkt über den öffentlichen /groups-Endpunkt
 // (der Admin-Endpunkt gäbe 403 – ohne Gruppennamen stünden rohe IDs in der Ansicht).
@@ -363,13 +397,34 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
       <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
 
       <template v-else>
+        <!-- Standardisierter Fehlerbalken GANZ OBEN: gilt nur für den aktuellen
+             Blick (load() räumt ihn), fängt aber Fehler ALLER Quellen ab –
+             Speichern, Weitergeben, Fachabteilung abschließen, Admin-Eingriffe.
+             Damit sieht man z. B. „Abschließen nicht möglich – Directus …", statt
+             nur festzustellen, dass sich nichts abschließen lässt. -->
+        <div v-if="viewError" role="alert"
+             class="mb-4 rounded-xl border border-red-300 dark:border-red-500/40
+                    bg-red-50 dark:bg-red-900/25 px-4 py-3 flex items-start gap-3">
+          <svg class="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" fill="none" viewBox="0 0 24 24"
+               stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p class="flex-1 min-w-0 text-sm text-red-800 dark:text-red-200 whitespace-pre-wrap">
+            {{ viewError }}
+          </p>
+          <button type="button" @click="viewError = null" aria-label="Meldung schließen"
+                  class="text-red-400 hover:text-red-600 dark:hover:text-red-300 text-lg leading-none
+                         -mt-0.5 shrink-0">✕</button>
+        </div>
+
         <!-- Admin-Ansicht = normale LESEANSICHT als Basis, die Aktionen-Leiste
              legt sich nur darüber. So haben alle Aufträge überall dieselbe
              Struktur; die Rechte prüft jeder Endpunkt selbst. -->
         <AdminActionsPanel v-if="adminModus && ticket && definition"
                            class="mb-4"
                            :ticket="ticket" :definition="definition" :sources="sources"
-                           @reload="reloadAll" />
+                           @reload="reloadAll" @error="showViewError" />
 
         <!-- Im Admin-Modus rückt der Verlauf als EIGENE Spalte rechts neben das
              normale Layout – die Reparatur braucht ihn ständig im Blick. -->
@@ -521,7 +576,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               :definition="definition" :ticket="ticket" :phase="phase"
               :viewer="viewer" :sources="sources"
               @exported="showToast('PDF erzeugt')"
-              @failed="showToast($event, false)" />
+              @failed="showViewError($event)" />
             <!-- Dokument-Phase: Vertrag aus Vorlage, Inline-Editor + Word-Export.
                  NUR Vollsicht/Admin sehen das Dokument (der Vertrag trägt
                  vertrauliche Angaben); Beobachter:innen/Involvierte bekommen nur

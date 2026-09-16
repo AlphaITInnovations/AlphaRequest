@@ -28,7 +28,7 @@ const props = defineProps<{
   sources: OptionSources
 }>()
 
-const emit = defineEmits<{ reload: [] }>()
+const emit = defineEmits<{ reload: []; error: [message: string] }>()
 
 const router = useRouter()
 const { showToast } = useToast()
@@ -50,8 +50,11 @@ const zustFeld = computed(() => {
   return { feld: r.from_field, art: r.kind as 'group' | 'user' }
 })
 
+// Fehler an die Detailansicht melden: sie zeigt sie im standardisierten roten
+// Balken GANZ OBEN (bleibt stehen bis zum nächsten Betreten), statt in einer
+// flüchtigen Toast-Meldung, die man im Moment des Fehlers leicht übersieht.
 function fehler(e: unknown, fallback: string) {
-  showToast(errorMessage(e, fallback), false)
+  emit('error', errorMessage(e, fallback))
 }
 
 // ── Zuständigkeit ändern ──────────────────────────────────────────────────────
