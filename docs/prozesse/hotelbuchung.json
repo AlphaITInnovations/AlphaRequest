@@ -1683,12 +1683,12 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
+        "group": "HIER_GRUPPEN_ID_REISESTELLE_EINSETZEN",
         "user": null,
         "fromField": null,
         "rule": [],
         "resetOnDescriptionChange": false,
-        "notifyOnEnter": false
+        "notifyOnEnter": true
       },
       "approval": null,
       "document": {
