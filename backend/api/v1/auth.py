@@ -16,7 +16,7 @@ from backend.metrics.auth_metrics import (
     record_login_attempt, record_login_success, record_login_failed,
 )
 from backend.schemas.responses import DataResponse
-from backend.schemas.user import UserOut
+from backend.schemas.user import UserOut, ProfileOut
 from backend.services.microsoft_auth import (
     initiate_auth_flow, acquire_token_by_auth_code,
 )
@@ -77,6 +77,29 @@ def me(request: Request, user: dict = Depends(get_current_user)):
         displayName=user["displayName"],
         mail=user.get("mail") or user.get("email"),
         permissions=permissions,
+    ))
+
+
+# ── /auth/profile (volle Profil-Anzeige inkl. Directus-Stammdaten) ────────────
+
+@router.get("/auth/profile", response_model=DataResponse[ProfileOut])
+def profile(request: Request, user: dict = Depends(get_current_user)):
+    """Alle Infos des angemeldeten Nutzers für die Profil-Ansicht: Konto + das,
+    was Azure über die Session mitgibt, plus der per E-Mail verknüpfte
+    Directus-Mitarbeiter-Datensatz (`employee`). `permissions` und `employee`
+    sind von get_current_user bereits frisch gesetzt."""
+    return DataResponse(data=ProfileOut(
+        id=user["id"],
+        displayName=user["displayName"],
+        mail=user.get("mail") or user.get("email"),
+        permissions=list(user.get("permissions") or []),
+        phone=user.get("phone"),
+        mobile=user.get("mobile"),
+        company=user.get("company"),
+        position=user.get("position"),
+        address=user.get("address"),
+        groups=list(user.get("groups") or []),
+        employee=user.get("employee"),
     ))
 
 

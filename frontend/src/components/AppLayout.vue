@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useTheme } from '@/composables/useTheme'
 import { client } from '@/api/client'
+import { authApi } from '@/api/auth'
+import type { UserProfile } from '@/types/api'
+import { employeeRows } from '@/lib/profileFields'
 import { BASIS_TICKET_PATH } from '@/lib/basisTicket'
 
 const auth   = useAuthStore()
@@ -72,6 +75,49 @@ async function submitFeedback() {
   } finally {
     feedbackSending.value = false
   }
+}
+
+// ── Profil ───────────────────────────────────────────────────────────────────
+const showProfile    = ref(false)
+const profile        = ref<UserProfile | null>(null)
+const profileLoading = ref(false)
+const profileError   = ref(false)
+
+async function openProfile() {
+  showProfile.value = true
+  mobileOpen.value = false
+  profileError.value = false
+  profileLoading.value = true
+  try {
+    const { data } = await authApi.profile()
+    profile.value = data.data
+  } catch {
+    profileError.value = true
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+const employeeInfo = computed(() => employeeRows(profile.value?.employee ?? null))
+
+// Fallback, wenn kein Directus-Datensatz verknüpft ist (Break-Glass / Gate aus):
+// wenigstens die Azure-Angaben zeigen.
+const azureInfo = computed(() => {
+  const p = profile.value
+  if (!p) return []
+  return [
+    { label: 'Telefon',  value: p.phone || '–' },
+    { label: 'Mobil',    value: p.mobile || '–' },
+    { label: 'Firma',    value: p.company || '–' },
+    { label: 'Position', value: p.position || '–' },
+  ]
+})
+
+const ROLE_LABELS: Record<string, string> = {
+  view: 'Ansicht', manage: 'Bearbeiten', admin: 'Administrator',
+}
+function roleLabel(p: string): string {
+  return ROLE_LABELS[p] ?? p
 }
 
 defineProps<{ title?: string }>()
@@ -272,16 +318,20 @@ defineProps<{ title?: string }>()
           <span v-if="sidebarOpen" class="truncate">{{ dark ? 'Light Mode' : 'Dark Mode' }}</span>
         </button>
 
-        <!-- User info + Logout -->
-        <div class="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/10"
+        <!-- User info (klickbar → Profil) + Logout -->
+        <div class="flex items-center gap-1 px-1 py-1 rounded-xl bg-white/10"
              :class="sidebarOpen ? '' : 'justify-center'">
-          <div class="w-8 h-8 rounded-full bg-white/25 flex items-center justify-center flex-shrink-0 text-xs font-bold">
-            {{ auth.user?.displayName?.charAt(0) ?? '?' }}
-          </div>
-          <div v-if="sidebarOpen" class="min-w-0 flex-1">
-            <p class="text-sm font-medium truncate leading-tight">{{ auth.user?.displayName }}</p>
-            <p class="text-[11px] text-white/60 truncate leading-tight">{{ auth.user?.mail }}</p>
-          </div>
+          <button @click="openProfile" title="Profil anzeigen"
+                  class="flex items-center gap-3 min-w-0 flex-1 px-2 py-1.5 rounded-lg hover:bg-white/10 transition text-left"
+                  :class="sidebarOpen ? '' : 'justify-center'">
+            <div class="w-8 h-8 rounded-full bg-white/25 flex items-center justify-center flex-shrink-0 text-xs font-bold">
+              {{ auth.user?.displayName?.charAt(0) ?? '?' }}
+            </div>
+            <div v-if="sidebarOpen" class="min-w-0 flex-1">
+              <p class="text-sm font-medium truncate leading-tight">{{ auth.user?.displayName }}</p>
+              <p class="text-[11px] text-white/60 truncate leading-tight">{{ auth.user?.mail }}</p>
+            </div>
+          </button>
           <button v-if="sidebarOpen" @click="auth.logout()" title="Abmelden"
                   class="p-1.5 rounded-lg hover:bg-white/15 transition flex-shrink-0">
             <svg class="w-4 h-4 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -322,6 +372,69 @@ defineProps<{ title?: string }>()
         </div>
       </main>
     </div>
+
+    <!-- ── Profil-Modal ── -->
+    <Teleport to="body">
+      <div v-if="showProfile"
+           class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+           @click.self="showProfile = false">
+        <div class="bg-white dark:bg-[#1C2535] rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+          <!-- Kopf -->
+          <div class="flex items-start gap-4 p-6 border-b border-gray-100 dark:border-white/10">
+            <div class="w-14 h-14 rounded-full bg-[#3EAAB8] text-white flex items-center justify-center text-xl font-bold flex-shrink-0">
+              {{ (profile?.displayName ?? auth.user?.displayName)?.charAt(0) ?? '?' }}
+            </div>
+            <div class="min-w-0 flex-1">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                {{ profile?.displayName ?? auth.user?.displayName }}
+              </h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400 truncate">
+                {{ profile?.mail ?? auth.user?.mail }}
+              </p>
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <span v-for="p in (profile?.permissions ?? auth.permissions)" :key="p"
+                      class="text-[11px] px-2 py-0.5 rounded-full bg-[#3EAAB8]/15 text-[#2B7D89] dark:text-[#7FD3DE] font-medium">
+                  {{ roleLabel(p) }}
+                </span>
+              </div>
+            </div>
+            <button @click="showProfile = false" title="Schließen"
+                    class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Inhalt -->
+          <div class="p-6">
+            <div v-if="profileLoading" class="text-sm text-gray-400 py-6 text-center">Wird geladen…</div>
+            <div v-else-if="profileError" class="text-sm text-red-500 py-6 text-center">
+              Profil konnte nicht geladen werden.
+            </div>
+            <template v-else>
+              <div v-if="employeeInfo.length" class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                <div v-for="row in employeeInfo" :key="row.key" class="min-w-0">
+                  <p class="text-[11px] uppercase tracking-wide text-gray-400">{{ row.label }}</p>
+                  <p class="text-sm text-gray-800 dark:text-gray-100 break-words">{{ row.value }}</p>
+                </div>
+              </div>
+              <div v-else class="space-y-3">
+                <p class="text-sm text-amber-600 dark:text-amber-400">
+                  Kein Directus-Mitarbeiter-Datensatz verknüpft – es werden die Azure-Angaben gezeigt.
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  <div v-for="row in azureInfo" :key="row.label" class="min-w-0">
+                    <p class="text-[11px] uppercase tracking-wide text-gray-400">{{ row.label }}</p>
+                    <p class="text-sm text-gray-800 dark:text-gray-100 break-words">{{ row.value }}</p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- ── Fehler-melden-Modal ── -->
     <Teleport to="body">

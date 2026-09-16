@@ -27,6 +27,18 @@ export interface User {
   permissions: Permission[]
 }
 
+/** Volle Profil-Anzeige: Konto + Azure-Profil + verknüpfter Directus-Datensatz.
+ *  `employee` trägt beliebige Directus-Felder (je nach DIRECTUS_EMPLOYEE_FIELDS). */
+export interface UserProfile extends User {
+  phone:    string | null
+  mobile:   string | null
+  company:  string | null
+  position: string | null
+  address:  unknown
+  groups:   string[]
+  employee: Record<string, unknown> | null
+}
+
 // ── Antwort-Hüllen ───────────────────────────────────────────────────────────
 
 export interface Meta {
