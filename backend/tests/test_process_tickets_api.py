@@ -165,9 +165,25 @@ class FakeStore:
     def set_status(self, tid, v, expected_rev=None):
         self.rows[tid]["status"] = v
 
-    def list_tickets(self, **kw):
+    def list_tickets(self, *, status=None, process_key=None, owner_id=None, q=None,
+                     limit=50, offset=0):
         rows = [dict(r) for r in self.rows.values()]
-        return rows, len(rows)
+        if owner_id is not None:
+            rows = [r for r in rows if r.get("owner_id") == owner_id]
+        if status:
+            rows = [r for r in rows if r.get("status") == status]
+        if process_key:
+            rows = [r for r in rows if r.get("process_key") == process_key]
+        if q:
+            rows = [r for r in rows if q.lower() in str(r.get("title") or "").lower()]
+        return rows[offset:offset + limit], len(rows)
+
+    def get_many(self, ids):
+        return [dict(self.rows[i]) for i in ids if i in self.rows]
+
+    def list_active_full(self, limit=3000):
+        return [dict(r) for r in self.rows.values()
+                if r.get("status") not in ("archived", "rejected")][:limit]
 
     def list_all_lightweight(self, limit=2000, include_runtime=True):
         return [dict(r) for r in self.rows.values()][:limit]
@@ -1179,3 +1195,63 @@ def test_redact_responsibility_verbirgt_vertrauliches_quellfeld():
     # Feste Zuständigkeit ohne from_field bleibt unangetastet.
     fixed = {"kind": "group", "group": "g_fix"}
     assert pt._redact_responsibility(fixed, defn, ctx_no) == fixed
+
+
+# ── Übersichts-Liste: Sichtbarkeit VOR der Paginierung (Skalierung) ───────────
+
+def test_liste_nichtaufsicht_zeigt_eigene_und_zaehlt_korrekt(client, monkeypatch):
+    """Ohne Aufsicht sieht man den eigenen Auftrag – und die Gesamtzahl zählt nur
+    die sichtbaren (nicht die global neuesten)."""
+    from backend.core.dependencies import get_current_user
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user", lambda uid: [])
+    a = client.post("/process-tickets", json={"processKey": "demo",
+        "values": {"base.name": "A"}}).json()["data"]["id"]
+    b = client.post("/process-tickets", json={"processKey": "demo",
+        "values": {"base.name": "B"}}).json()["data"]["id"]
+    pt.store.rows[a]["owner_id"] = "u_norm"
+    pt.store.rows[b]["owner_id"] = "u_other"
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_norm", "permissions": []}
+    body = client.get("/process-tickets").json()
+    ids = [t["id"] for t in body["data"]]
+    assert a in ids and b not in ids
+    assert body["meta"]["total"] == 1
+
+
+def test_liste_nichtaufsicht_zeigt_gruppen_zustaendige_erst_ab_erreichter_phase(client, monkeypatch):
+    """Eine Fachabteilung sieht den Auftrag in der Übersicht erst, wenn ihre Phase
+    aktuell ist – vorher nicht (der Aktiv-Scan wertet die aktuelle Zuständigkeit aus)."""
+    from backend.core.dependencies import get_current_user
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user",
+                        lambda uid: ["g_it"] if uid == "u_it" else [])
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+        "values": {"base.name": "X"}}).json()["data"]["id"]
+    pt.store.rows[tid]["owner_id"] = "u1"                      # nicht u_it
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_it", "permissions": []}
+    assert all(t["id"] != tid for t in client.get("/process-tickets").json()["data"])
+    # → review-Phase (g_it)
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "permissions": ["admin"]}
+    client.post(f"/process-tickets/{tid}:advance")
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_it", "permissions": []}
+    assert any(t["id"] == tid for t in client.get("/process-tickets").json()["data"])
+
+
+def test_liste_nichtaufsicht_zeigt_beobachtete(client, monkeypatch):
+    """Ein beobachteter (fremder) Auftrag erscheint in der Übersicht."""
+    from backend.core.dependencies import get_current_user
+    monkeypatch.setattr("backend.database.groups.get_group_ids_for_user", lambda uid: [])
+    tid = client.post("/process-tickets", json={"processKey": "demo",
+        "values": {"base.name": "W"}}).json()["data"]["id"]
+    pt.store.rows[tid]["owner_id"] = "u1"                      # fremd für u_norm
+    monkeypatch.setattr(pt.watchers, "ticket_ids_for_watcher",
+                        lambda uid: [tid] if uid == "u_norm" else [])
+    client.app.dependency_overrides[get_current_user] = lambda: {"id": "u_norm", "permissions": []}
+    assert any(t["id"] == tid for t in client.get("/process-tickets").json()["data"])
+
+
+def test_liste_aufsicht_sieht_alles_paginiert(client):
+    """Aufsicht (admin) sieht alle Aufträge – die DB paginiert, total = alle."""
+    for i in range(3):
+        client.post("/process-tickets", json={"processKey": "demo",
+            "values": {"base.name": f"T{i}"}})
+    body = client.get("/process-tickets").json()
+    assert body["meta"]["total"] == 3 and len(body["data"]) == 3

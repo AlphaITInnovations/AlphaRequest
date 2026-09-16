@@ -8,6 +8,10 @@ class Meta(BaseModel):
     total: int
     limit: int
     offset: int
+    #: True, wenn die Liste über eine Scan-Obergrenze gekürzt wurde (z. B. sehr viele
+    #: aktive Aufträge) – dann ist `total` eine Untergrenze und es kann Sichtbares
+    #: jenseits des Fensters geben. Default False (keine Kürzung).
+    truncated: bool = False
 
 
 class DataResponse(BaseModel, Generic[T]):

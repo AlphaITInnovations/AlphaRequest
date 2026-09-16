@@ -10,7 +10,7 @@ Getrennte Tabelle vom Alt-System (`tickets`) → Parallelbetrieb während des Um
 Cutover (Alt-System entfernen, ggf. Umbenennung) ist ein eigener späterer Schritt.
 """
 import json
-from typing import Optional
+from typing import Iterable, Optional
 
 from backend.database.connection import get_connection, _exec, _fetchone, _fetchall
 from backend.utils.timeutil import to_db_datetime
@@ -333,6 +333,41 @@ def values_for_tickets(ids: list[int]) -> dict[int, dict]:
         except Exception:
             out[int(r["id"])] = {}
     return out
+
+
+def get_many(ids: Iterable[int]) -> list[dict]:
+    """Mehrere Aufträge in EINER Abfrage laden (volle Spalten inkl. Werten) – für
+    die Sicht auf beobachtete Aufträge im Übersichts-Endpunkt (kein N+1)."""
+    id_list = [int(i) for i in ids]
+    if not id_list:
+        return []
+    placeholders = ", ".join(["%s"] * len(id_list))
+    conn = get_connection()
+    try:
+        rows = _fetchall(conn, f"SELECT {_COLS} FROM process_tickets WHERE id IN ({placeholders})",
+                         tuple(id_list))
+    finally:
+        conn.close()
+    return [_row_to_dict(r) for r in rows]
+
+
+def list_active_full(limit: int = 3000) -> list[dict]:
+    """Aktive (nicht-terminale) Aufträge mit VOLLEN Spalten inkl. `values` – für die
+    Sichtbarkeitsprüfung „aktuell zuständig" im Übersichts-Endpunkt. Anders als
+    `list_active` werden die Feldwerte mitgeladen, weil die Zuständigkeit bei
+    group_from_field/assignable im Feldwert steht. Gebunden über `limit` (harte
+    Scan-Obergrenze; der Aufrufer meldet, wenn sie greift)."""
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            f"SELECT {_COLS} FROM process_tickets WHERE {_ACTIVE_CLAUSE} "
+            "ORDER BY updated_at DESC, id DESC LIMIT %s",
+            (limit,),
+        )
+    finally:
+        conn.close()
+    return [_row_to_dict(r) for r in rows]
 
 
 def list_active(limit: int = 200, *, include_runtime: bool = True) -> list[dict]:

@@ -434,6 +434,28 @@ def _assert_edit(row: dict, defn, user: dict) -> list:
 
 # ── Endpunkte ────────────────────────────────────────────────────────────────
 
+# Übersichts-Sichtbarkeit für Nicht-Aufsicht: „aktuell zuständig" steht im
+# Runtime-/Feldwert-JSON und ist nicht per SQL filterbar – deshalb ein gebundener
+# Scan der AKTIVEN Aufträge. Eigene (owner) + beobachtete Aufträge kommen dagegen
+# vollständig über SQL (kein Cap). _OVERVIEW_MINE_CAP begrenzt nur die (praktisch
+# beschränkten) eigenen Aufträge defensiv.
+_OVERVIEW_SCAN_CAP = 3000
+_OVERVIEW_MINE_CAP = 5000
+
+
+def _overview_match(r: dict, status: Optional[str], process_key: Optional[str],
+                    q: Optional[str]) -> bool:
+    """Client-Filter (status/process_key/q) auf eine Zeile anwenden – für die Quellen,
+    die nicht schon SQL-seitig gefiltert wurden (beobachtete/aktiv-zuständige)."""
+    if status and r.get("status") != status:
+        return False
+    if process_key and r.get("process_key") != process_key:
+        return False
+    if q and q.lower() not in str(r.get("title") or "").lower():
+        return False
+    return True
+
+
 @router.get("/process-tickets", response_model=ListResponse[ProcessTicketOut])
 def list_process_tickets(
     user: dict = Depends(get_current_user),
@@ -443,37 +465,75 @@ def list_process_tickets(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    rows, total = store.list_tickets(status=status, process_key=process_key, q=q,
-                                     limit=limit, offset=offset)
     # Definitionen je (key, version) nur EINMAL laden/parsen und die Gruppen-
     # Mitgliedschaft einmal abfragen – sonst 2 DB-Abfragen + 1 Validierung pro Zeile.
     defn_cache: dict = {}
     gids = vis.user_group_ids(user)
-    # Ohne Aufsichtsrechte nur eigene/zugewiesene Auftraege zeigen. Die Gesamtzahl
-    # wird um die ausgefilterten korrigiert, damit die Blaetterung stimmt.
-    oversight = acc.has_oversight(user)
-    # Beobachter aller Zeilen in EINER Abfrage (ohne Aufsichtsrechte relevant für
-    # die Sichtbarkeit) – je Zeile einzeln wäre das ein N+1.
-    watch_map: dict = {}
-    if not oversight and rows:
-        try:
-            watch_map = watchers.watcher_ids_for_tickets([r["id"] for r in rows])
-        except Exception:
-            logger.warning("Beobachter-Liste nicht ladbar – fail-closed")
-    out = []
-    hidden = 0
-    for r in rows:
+
+    def render(r: dict) -> ProcessTicketOut:
         try:
             d = _load_pinned_defn(r, defn_cache)
         except Exception:
             d = None
-        if not oversight and not acc.may_view(d, r, user, gids, watch_map.get(r["id"], ())):
-            hidden += 1
-            continue
-        out.append(_out(r, d, _read_ctx(user, r, d, gids),
-                        user, gids))
-    return ListResponse(data=out,
-                        meta=Meta(total=max(0, total - hidden), limit=limit, offset=offset))
+        return _out(r, d, _read_ctx(user, r, d, gids), user, gids)
+
+    # Aufsicht (view/manage/admin) sieht ALLE Aufträge – die DB paginiert korrekt.
+    if acc.has_oversight(user):
+        rows, total = store.list_tickets(status=status, process_key=process_key, q=q,
+                                         limit=limit, offset=offset)
+        return ListResponse(data=[render(r) for r in rows],
+                            meta=Meta(total=total, limit=limit, offset=offset))
+
+    # Ohne Aufsicht: die Sichtbarkeit VOR der Paginierung bestimmen, sonst enthält
+    # eine „Seite" (die global zuletzt geänderten) womöglich keine eigenen Aufträge
+    # und die Gesamtzahl/Blätterung stimmt nicht. Sichtbare Quellen:
+    #   a) eigene (owner)      – vollständig über den owner_id-Index
+    #   b) beobachtete         – vollständig über die Beobachter-Tabelle
+    #   c) aktuell zuständig   – Runtime/Feldwert-JSON → gebundener Aktiv-Scan
+    uid = user.get("id")
+    by_id: dict = {}
+    if uid:
+        owner_rows, _ = store.list_tickets(owner_id=uid, status=status,
+                                           process_key=process_key, q=q,
+                                           limit=_OVERVIEW_MINE_CAP, offset=0)
+        for r in owner_rows:
+            by_id[r["id"]] = r
+        try:
+            watched = [t for t in watchers.ticket_ids_for_watcher(uid) if t not in by_id]
+            for r in store.get_many(watched):
+                if _overview_match(r, status, process_key, q):
+                    by_id[r["id"]] = r
+        except Exception:
+            logger.warning("Beobachtete Aufträge nicht ladbar – fail-closed")
+
+    truncated = False
+    # „aktuell zuständig" gibt es nur an nicht-terminalen Aufträgen. Bei einem Filter
+    # auf einen terminalen Status entfällt der Scan (eigene/beobachtete terminale
+    # Aufträge kommen schon oben; „war mal zuständig" ist Sache des Archivs).
+    if status not in ("archived", "rejected"):
+        active = store.list_active_full(limit=_OVERVIEW_SCAN_CAP + 1)
+        if len(active) > _OVERVIEW_SCAN_CAP:
+            truncated = True
+            active = active[:_OVERVIEW_SCAN_CAP]
+            logger.warning("Auftragsliste: Aktiv-Scan-Grenze %d erreicht – aktuell "
+                           "zuständige Aufträge jenseits davon fehlen (Nutzer %s)",
+                           _OVERVIEW_SCAN_CAP, uid)
+        for r in active:
+            if r["id"] in by_id or not _overview_match(r, status, process_key, q):
+                continue
+            try:
+                d = _load_pinned_defn(r, defn_cache)
+            except Exception:
+                d = None
+            if acc.is_responsible(d, r, user, gids):
+                by_id[r["id"]] = r
+
+    ordered = sorted(by_id.values(),
+                     key=lambda r: (str(r.get("updated_at") or ""), r["id"]), reverse=True)
+    total = len(ordered)
+    page = ordered[offset:offset + limit]
+    return ListResponse(data=[render(r) for r in page],
+                        meta=Meta(total=total, limit=limit, offset=offset, truncated=truncated))
 
 
 @router.post("/process-tickets", response_model=DataResponse[ProcessTicketOut])
