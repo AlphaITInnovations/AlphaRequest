@@ -30,7 +30,12 @@ router = APIRouter()
 # /process-tickets). Der Scan-Wert begrenzt die Zeilen, die für die
 # Beteiligungs-Prüfung (may_view, läuft in Python) geladen werden.
 _PROCESS_MY_LIMIT = 25
-_PROCESS_SCAN_LIMIT = 200
+# Obergrenze des Aktiv-Scans für „beteiligt" (may_view läuft je Zeile in Python).
+# Beobachtete/eigene Aufträge kommen vollständig über get_many/list_for_owner; nur
+# die „aktuell zuständig"-Ermittlung braucht diesen Scan. Wird die Grenze erreicht,
+# signalisiert die Antwort `truncated` (keine stille Kürzung). Der durchgängig
+# skalierende Weg wäre eine Beteiligungs-Projektion (siehe Audit) – späterer Schritt.
+_PROCESS_SCAN_LIMIT = 1000
 
 
 class ProcessDashboardTicket(BaseModel):
@@ -64,6 +69,10 @@ class ProcessDashboardBlock(BaseModel):
     #: beteiligt ist, findet ihn in beiden – jede Liste beantwortet ihre Frage
     #: vollständig, statt dass eine der anderen Einträge wegnimmt.
     watched: list[ProcessDashboardTicket] = []
+    #: True, wenn der Aktiv-Scan für „beteiligt" die Obergrenze erreicht hat – dann
+    #: können beteiligte Aufträge jenseits des Fensters fehlen (eigene/beobachtete
+    #: sind davon NICHT betroffen, die kommen vollständig).
+    truncated: bool = False
     # Anzahl je Status – nur über die Aufträge, die dieser Nutzer sehen darf
     # (über die IDs entdoppelt, ein Auftrag zählt einmal).
     counts: dict[str, int] = {}
@@ -175,22 +184,36 @@ def _process_block(user: dict) -> ProcessDashboardBlock:
     my_rows = pstore.list_for_owner(uid, limit=_PROCESS_MY_LIMIT, include_runtime=True) if uid else []
     my = [_to_process_ticket(r, _load_process_defn(r, defn_cache), True) for r in my_rows]
 
-    involved: list[ProcessDashboardTicket] = []
+    # Beobachtet: die VOLLSTÄNDIGE Beobachtungs-Menge gezielt laden (kein Scan-Cap).
+    # Vorher wurde sie mit dem 200er-Aktiv-Fenster geschnitten – ein beobachteter
+    # Auftrag jenseits davon fiel still weg, obwohl seine ID bekannt ist. Nur aktive
+    # (nicht-terminale) fürs Arbeits-Dashboard.
     watched: list[ProcessDashboardTicket] = []
-    for row in pstore.list_active(limit=_PROCESS_SCAN_LIMIT):
+    if beobachtet_ids:
+        for row in pstore.get_many(beobachtet_ids):
+            if row.get("status") in ("archived", "rejected"):
+                continue
+            watched.append(_to_process_ticket(
+                row, _load_process_defn(row, defn_cache),
+                bool(uid and row.get("owner_id") == uid)))
+
+    # Beteiligt („aktuell zuständig") steht im Runtime/Feldwert-JSON und ist nicht
+    # per SQL filterbar → gebundener Aktiv-Scan MIT Werten (damit die Zuständigkeit
+    # bei group_from_field/assignable korrekt greift). Wird die Grenze erreicht,
+    # meldet `truncated` das ehrlich statt still zu kürzen.
+    involved: list[ProcessDashboardTicket] = []
+    truncated = False
+    active = pstore.list_active_full(limit=_PROCESS_SCAN_LIMIT + 1)
+    if len(active) > _PROCESS_SCAN_LIMIT:
+        truncated = True
+        active = active[:_PROCESS_SCAN_LIMIT]
+        logger.warning("Dashboard: Aktiv-Scan-Grenze %d erreicht – beteiligte Aufträge "
+                       "jenseits davon fehlen (Nutzer %s)", _PROCESS_SCAN_LIMIT, uid)
+    for row in active:
         defn = _load_process_defn(row, defn_cache)
-        beobachtet = row["id"] in beobachtet_ids
-        beteiligt = acc.may_view(defn, row, user, group_ids)
-        if not beteiligt and not beobachtet:
-            continue
-        eintrag = _to_process_ticket(row, defn, bool(uid and row.get("owner_id") == uid))
-        if beobachtet:
-            # Auch EIGENE Aufträge: wer anlegt, wird automatisch Beobachter:in –
-            # darüber findet man sie wieder, wenn sie längst bei einer
-            # Fachabteilung liegen.
-            watched.append(eintrag)
-        if beteiligt:
-            involved.append(eintrag)
+        if acc.may_view(defn, row, user, group_ids):
+            involved.append(_to_process_ticket(
+                row, defn, bool(uid and row.get("owner_id") == uid)))
 
     # Zähler nur über die SICHTBAREN Aufträge – eine globale Statistik würde
     # Unbeteiligten verraten, wie viel im System läuft.
@@ -203,7 +226,8 @@ def _process_block(user: dict) -> ProcessDashboardBlock:
             continue
         gesehen.add(t.id)
         counts[t.status] = counts.get(t.status, 0) + 1
-    return ProcessDashboardBlock(my=my, involved=involved, watched=watched, counts=counts)
+    return ProcessDashboardBlock(my=my, involved=involved, watched=watched,
+                                 counts=counts, truncated=truncated)
 
 
 def _process_block_safe(user: dict) -> ProcessDashboardBlock:

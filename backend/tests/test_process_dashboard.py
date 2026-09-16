@@ -67,6 +67,14 @@ class FakeStore:
         return [dict(r) for r in self.rows
                 if r["status"] not in ("archived", "rejected")]
 
+    def list_active_full(self, limit=3000):
+        return [dict(r) for r in self.rows
+                if r["status"] not in ("archived", "rejected")][:limit]
+
+    def get_many(self, ids):
+        wanted = {int(i) for i in ids}
+        return [dict(r) for r in self.rows if r["id"] in wanted]
+
 
 class FakeDefs:
     def __init__(self):
