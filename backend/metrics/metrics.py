@@ -1,5 +1,6 @@
 import os
 import base64
+import hmac
 import threading
 import time
 
@@ -9,6 +10,8 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST,
     REGISTRY
 )
+
+from backend.utils.config import config
 
 from backend.metrics.collect_guard import run_part
 from backend.metrics.http_metrics import MetricsMiddleware
@@ -36,7 +39,10 @@ COLLECT_INTERVAL_SECONDS = int(os.getenv("METRICS_COLLECT_INTERVAL", "10"))
 def _check_basic_auth(request: Request) -> bool:
 
     if not METRICS_USERNAME or not METRICS_PASSWORD:
-        return True
+        # FAIL-CLOSED in Produktion: ohne gesetzte Zugangsdaten bleibt /metrics NICHT
+        # offen (die Reihen verraten Prozess-Struktur, Auftrags-/Session-/Login-Zahlen).
+        # In der Entwicklung darf er offen sein – dort ist der Port nicht exponiert.
+        return config.APP_ENV == "development"
 
     auth = request.headers.get("Authorization")
 
@@ -55,7 +61,9 @@ def _check_basic_auth(request: Request) -> bool:
 
     user, pwd = decoded.split(":", 1)
 
-    return user == METRICS_USERNAME and pwd == METRICS_PASSWORD
+    # Zeitkonstanter Vergleich (hmac.compare_digest statt ==) gegen Timing-Angriffe.
+    return (hmac.compare_digest(user, METRICS_USERNAME)
+            and hmac.compare_digest(pwd, METRICS_PASSWORD))
 
 
 # ---------------------------------------------------------

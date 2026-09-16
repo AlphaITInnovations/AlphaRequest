@@ -111,11 +111,13 @@ Prometheus scrapt `backend:5000/metrics` im `dokploy-network`
 `--storage.tsdb.retention.time=30d`. Langzeit (VictoriaMetrics/Mimir/Thanos via
 `remote_write`) ist ein optionaler späterer Schritt.
 
-**Absicherung (`/metrics`):** Der Endpunkt ist offen, solange
-`METRICS_USERNAME`/`METRICS_PASSWORD` im Backend **nicht** gesetzt sind. Für
-Produktion beide in der Backend-Umgebung setzen und in `prometheus.yml` den
-`basic_auth`-Block aktivieren. Mit `ENABLE_METRICS=false` lässt sich `/metrics`
-ganz abschalten.
+**Absicherung (`/metrics`):** **fail-closed** – in Produktion (`APP_ENV` ≠
+`development`) liefert `/metrics` ohne gesetzte `METRICS_USERNAME`/`METRICS_PASSWORD`
+ein **401**; der Endpunkt ist also NICHT versehentlich offen. In der Entwicklung
+bleibt er ohne Zugangsdaten offen (bequem, Port nicht exponiert). Für Produktion
+beide Variablen setzen (Vergleich zeitkonstant via `hmac.compare_digest`) und in
+`prometheus.yml` den `basic_auth`-Block aktivieren. Mit `ENABLE_METRICS=false`
+lässt sich `/metrics` ganz abschalten (404).
 
 ## Alarme
 
