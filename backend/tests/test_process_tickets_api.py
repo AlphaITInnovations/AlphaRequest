@@ -1255,3 +1255,31 @@ def test_liste_aufsicht_sieht_alles_paginiert(client):
             "values": {"base.name": f"T{i}"}})
     body = client.get("/process-tickets").json()
     assert body["meta"]["total"] == 3 and len(body["data"]) == 3
+
+
+def test_create_haelt_erst_eingaben_als_angaben_geaendert_fest(client, monkeypatch):
+    """Beim Anlegen wird zusätzlich zum CREATED-Eintrag festgehalten, WAS in die
+    Felder eingetragen wurde – als „Angaben geändert" (alt=leer → neu=Wert)."""
+    calls = []
+    monkeypatch.setattr(pt.events, "record",
+                        lambda row, action, **kw: calls.append((action, kw)))
+    client.post("/process-tickets", json={"processKey": "demo",
+                "values": {"base.name": "Max", "base.age": 30}})
+    actions = [a for a, _ in calls]
+    assert pt.events.CREATED in actions
+    assert pt.events.UPDATED in actions
+    upd = next(kw for a, kw in calls if a == pt.events.UPDATED)
+    changes = upd["details"]["changes"]
+    assert changes["base.name"] == {"from": None, "to": "Max"}
+    assert changes["base.age"]["to"] == 30
+    assert set(upd["details"]["fields"]) == {"base.name", "base.age"}
+
+
+def test_create_ohne_eingaben_kein_leerer_angaben_eintrag(client, monkeypatch):
+    """Ohne (nicht-leere) Eingaben entsteht KEIN „Angaben geändert"-Eintrag."""
+    calls = []
+    monkeypatch.setattr(pt.events, "record",
+                        lambda row, action, **kw: calls.append((action, kw)))
+    client.post("/process-tickets", json={"processKey": "demo", "values": {}})
+    assert pt.events.CREATED in [a for a, _ in calls]
+    assert pt.events.UPDATED not in [a for a, _ in calls]

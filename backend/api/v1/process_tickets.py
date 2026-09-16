@@ -623,6 +623,16 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
                        row["id"])
     events.record(row, events.CREATED, actor_id=user.get("id"), actor_name=_actor_name(user),
                   details={"process_key": defn.key, "version": pub["version"]})
+    # Auch beim ANLEGEN festhalten, WAS in die Felder eingetragen wurde – als
+    # „Angaben geändert" (alt→neu, from = leer). So zeigt der Verlauf die Erst-
+    # Eingaben genau wie ein späteres Bearbeiten; die Feld-Sicht greift dabei wie
+    # überall (process_events.redact bindet fields UND changes an dieselbe Sicht,
+    # und lässt den Eintrag entfallen, wenn davon nichts sichtbar ist).
+    init_changes = {k: {"from": None, "to": v} for k, v in values.items()
+                    if v is not None and v != "" and v != []}
+    if init_changes:
+        events.record(row, events.UPDATED, actor_id=user.get("id"), actor_name=_actor_name(user),
+                      details={"fields": sorted(init_changes), "changes": init_changes})
     if not body.autoStart:
         # Der Client lädt gleich Datei-Anhänge hoch und ruft DANACH :advance –
         # so verlässt der Auftrag die Startphase erst nach dem Upload und die
