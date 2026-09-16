@@ -1295,8 +1295,8 @@ def _department_action(ticket_id: int, group_id: str, status: str,
             blk_changes = engine.run_department_done_blocking(row, defn, _cur_phase, group_id)
         except dc.DirectusError as exc:
             raise api_error(502, "DIRECTUS_WRITE_FAILED",
-                            f"Abschließen nicht möglich – der Datensatz konnte nicht in "
-                            f"Directus angelegt werden: {exc}. Bitte erneut versuchen.")
+                            f"Abschließen nicht möglich – der Directus-Schreibvorgang ist "
+                            f"fehlgeschlagen: {exc}. Bitte erneut versuchen.")
         except Exception:
             logger.exception("Blockierende Automation für #%s (Gruppe %s) fehlgeschlagen",
                              ticket_id, group_id)
