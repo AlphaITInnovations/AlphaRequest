@@ -73,6 +73,10 @@ export function normalizeField(v: any): FieldDef {
     visibility: normVisibility(v?.visibility),
     computed: from
       ? { from: String(from),
+          // `op`/`to` (z. B. days_between) beim Round-Trip erhalten – sonst ginge
+          // eine importierte Datumsdifferenz beim Speichern im Editor verloren.
+          ...(v?.computed?.op ? { op: String(v.computed.op) } : {}),
+          ...(v?.computed?.to ? { to: String(v.computed.to) } : {}),
           map: (v?.computed?.map && typeof v.computed.map === 'object') ? v.computed.map : null }
       : null,
     overridable: bool(v?.overridable),

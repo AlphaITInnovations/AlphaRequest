@@ -321,12 +321,35 @@ class FieldVisibility(_Base):
 
 class ComputedSpec(_Base):
     from_: str = Field(alias="from")
+    #: Zweites Quellfeld – nur für op="days_between" (das Enddatum). Das Ergebnis
+    #: ist die Tagesdifferenz `to − from`.
+    to: Optional[str] = None
+    #: Ableitungs-Operation. None/"copy" = Quellwert 1:1 kopieren bzw. per `map`
+    #: übersetzen (bisheriges Verhalten). "days_between" = Ganzzahl-Tagesdifferenz
+    #: zweier Datumsfelder (from, to); leere, ungültige oder negative Differenzen
+    #: ergeben einen leeren Wert.
+    op: Optional[str] = None
     #: Optionaler Lookup: Quellwert → abgeleiteter Wert. Ohne `map` wird der
     #: Quellwert 1:1 kopiert (bisheriges Verhalten). Mit `map` wird er übersetzt
     #: (z. B. Position → Fahrzeuggruppe); ein nicht enthaltener Quellwert ergibt
     #: einen leeren Wert.
     map: Optional[dict[str, Any]] = None
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @model_validator(mode="after")
+    def _op_rules(self) -> "ComputedSpec":
+        if self.op not in (None, "copy", "days_between"):
+            raise ValueError(f"computed.op „{self.op}“ ist unbekannt "
+                             f"(erlaubt: copy, days_between)")
+        if self.op == "days_between":
+            if not self.to:
+                raise ValueError("computed.op=days_between benötigt ein zweites "
+                                 "Datumsfeld „to“")
+            if self.map is not None:
+                raise ValueError("computed.map ist mit op=days_between nicht kombinierbar")
+        elif self.to is not None:
+            raise ValueError("computed.to ist nur für op=days_between zulässig")
+        return self
 
 
 class DirectusBinding(_Base):
@@ -1232,6 +1255,21 @@ class ProcessDefinition(_Base):
         for f in self.fields:
             if f.computed:
                 _need(f.computed.from_, f"Feld „{f.key}“.computed.from")
+                if f.computed.op == "days_between":
+                    _need(f.computed.to, f"Feld „{f.key}“.computed.to")
+                    # from/to müssen Datumsfelder sein, das Zielfeld eine Zahl –
+                    # sonst laufen Ableitung und Anzeige/Validierung auseinander.
+                    for ref_key, lbl in ((f.computed.from_, "from"), (f.computed.to, "to")):
+                        src = next((x for x in self.fields if x.key == ref_key), None)
+                        if src is not None and src.widget != Widget.date:
+                            raise ValueError(
+                                f"Feld „{f.key}“.computed.{lbl}: „{ref_key}“ "
+                                f"(widget={src.widget.value}) ist kein Datumsfeld – "
+                                f"days_between erwartet Datumsfelder.")
+                    if f.widget != Widget.number:
+                        raise ValueError(
+                            f"Feld „{f.key}“: computed.op=days_between ergibt eine Zahl, "
+                            f"das Feld ist aber widget={f.widget.value}.")
                 if f.computed.map is not None:
                     src = next((x for x in self.fields if x.key == f.computed.from_), None)
                     if src is not None and src.widget not in _map_source_ok:

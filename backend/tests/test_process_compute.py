@@ -1,5 +1,6 @@
 """Ebene-1: Wert-Ausdrücke / computed-Felder (services/process_compute)."""
 
+import pytest
 
 from backend.schemas.process_definition import ProcessDefinition
 from backend.services.process_compute import apply_computed
@@ -71,6 +72,89 @@ def test_computed_from_computed_resolves_regardless_of_order():
     })
     out = apply_computed(defn, {"base": "X"})
     assert out["a"] == "X" and out["b"] == "X"
+
+
+def _nights_defn():
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "reise", "name": "Reise",
+        "fields": [
+            {"key": "anreise", "widget": "date"},
+            {"key": "abreise", "widget": "date"},
+            {"key": "naechte", "widget": "number", "overridable": False,
+             "computed": {"from": "anreise", "to": "abreise", "op": "days_between"}},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "anreise"}, {"ref": "abreise"},
+                               {"ref": "naechte", "mode": "readonly"}]}],
+    })
+
+
+def test_days_between_zaehlt_uebernachtungen():
+    defn = _nights_defn()
+    assert apply_computed(defn, {"anreise": "2026-09-16", "abreise": "2026-09-18"})["naechte"] == 2
+    # gleicher Tag → 0 Übernachtungen
+    assert apply_computed(defn, {"anreise": "2026-09-16", "abreise": "2026-09-16"})["naechte"] == 0
+
+
+def test_days_between_leer_bei_unvollstaendig_oder_negativ():
+    defn = _nights_defn()
+    # fehlendes Enddatum → leer
+    assert apply_computed(defn, {"anreise": "2026-09-16"}).get("naechte") is None
+    # gar keine Daten → leer
+    assert apply_computed(defn, {}).get("naechte") is None
+    # Abreise vor Anreise → leer (keine negative Zahl)
+    assert apply_computed(defn, {"anreise": "2026-09-18", "abreise": "2026-09-16"}).get("naechte") is None
+    # unparsbares Datum → leer, kein Absturz
+    assert apply_computed(defn, {"anreise": "morgen", "abreise": "2026-09-18"}).get("naechte") is None
+
+
+def test_days_between_ist_non_overridable():
+    """Auch ein mitgeschickter Wert wird überschrieben (immer abgeleitet)."""
+    defn = _nights_defn()
+    out = apply_computed(defn, {"anreise": "2026-09-16", "abreise": "2026-09-18", "naechte": 99})
+    assert out["naechte"] == 2
+
+
+def test_days_between_ohne_to_wird_abgewiesen():
+    with pytest.raises(ValueError):
+        ProcessDefinition.model_validate({
+            "schemaVersion": 1, "key": "k", "name": "N",
+            "fields": [
+                {"key": "a", "widget": "date"},
+                {"key": "n", "widget": "number", "computed": {"from": "a", "op": "days_between"}},
+            ],
+            "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                        "fields": [{"ref": "a"}]}],
+        })
+
+
+def test_days_between_verlangt_datumsfelder_und_zahlziel():
+    # from ist kein Datum → abgewiesen
+    with pytest.raises(ValueError):
+        ProcessDefinition.model_validate({
+            "schemaVersion": 1, "key": "k", "name": "N",
+            "fields": [
+                {"key": "a", "widget": "text"},
+                {"key": "b", "widget": "date"},
+                {"key": "n", "widget": "number",
+                 "computed": {"from": "a", "to": "b", "op": "days_between"}},
+            ],
+            "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                        "fields": [{"ref": "a"}]}],
+        })
+    # Zielfeld ist keine Zahl → abgewiesen
+    with pytest.raises(ValueError):
+        ProcessDefinition.model_validate({
+            "schemaVersion": 1, "key": "k", "name": "N",
+            "fields": [
+                {"key": "a", "widget": "date"},
+                {"key": "b", "widget": "date"},
+                {"key": "n", "widget": "text",
+                 "computed": {"from": "a", "to": "b", "op": "days_between"}},
+            ],
+            "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                        "fields": [{"ref": "a"}]}],
+        })
 
 
 def test_computed_map_leitet_fahrzeugklasse_aus_position_ab():

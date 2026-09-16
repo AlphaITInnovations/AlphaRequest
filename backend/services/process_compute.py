@@ -11,13 +11,32 @@ Bewusst einfache Ableitung (Kopie von `computed.from`). Komplexere Ausdrücke
 (Datumsdifferenz, externe Lookups) sind als Erweiterung vorgesehen; das Format
 trägt sie bereits. Der Frontend-Spiegel (lib/conditionDsl.ts) hält dieselbe Logik.
 """
-from typing import Any
+from datetime import date
+from typing import Any, Optional
 
 from backend.schemas.process_definition import ProcessDefinition, Widget
 
 
 def _is_empty(v: Any) -> bool:
     return v is None or v == "" or v == [] or v == {}
+
+
+def _days_between(a: Any, b: Any) -> Optional[int]:
+    """Tagesdifferenz `b − a` zweier ISO-Datumswerte (YYYY-MM-DD).
+
+    Fehlt eines der Daten, ist es kein parsbares Datum oder liegt das Enddatum
+    vor dem Startdatum, ergibt sich ein leerer Wert (None) – dann steht schlicht
+    noch keine sinnvolle Übernachtungszahl fest.
+    """
+    if not isinstance(a, str) or not isinstance(b, str):
+        return None
+    try:
+        da = date.fromisoformat(a[:10])
+        db = date.fromisoformat(b[:10])
+    except ValueError:
+        return None
+    diff = (db - da).days
+    return diff if diff >= 0 else None
 
 
 def stamp_server_fields(defn: ProcessDefinition, values: dict, stored: dict, *,
@@ -66,11 +85,17 @@ def apply_computed(defn: ProcessDefinition, values: dict) -> dict:
     for _ in range(len(computed) + 1):
         changed = False
         for f in computed:
-            src_val = out.get(f.computed.from_)
-            # Mit `map` wird der Quellwert übersetzt (z. B. Position →
-            # Fahrzeuggruppe); ohne `map` 1:1 kopiert. Fehlt der Quellwert in der
-            # Map, ist das Ergebnis leer (None).
-            derived = f.computed.map.get(src_val) if f.computed.map is not None else src_val
+            c = f.computed
+            if c.op == "days_between":
+                # Tagesdifferenz zweier Datumsfelder (z. B. Übernachtungen =
+                # Abreise − Anreise).
+                derived = _days_between(out.get(c.from_), out.get(c.to))
+            else:
+                src_val = out.get(c.from_)
+                # Mit `map` wird der Quellwert übersetzt (z. B. Position →
+                # Fahrzeuggruppe); ohne `map` 1:1 kopiert. Fehlt der Quellwert in der
+                # Map, ist das Ergebnis leer (None).
+                derived = c.map.get(src_val) if c.map is not None else src_val
             if f.overridable:
                 if _is_empty(out.get(f.key)) and not _is_empty(derived):
                     out[f.key] = derived

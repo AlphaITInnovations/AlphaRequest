@@ -67,4 +67,16 @@ describe('applyComputed (mirror of backend)', () => {
     expect(applyComputed(mapped, { pos: 2 as unknown as string }).grp).toBeNull()
     expect(applyComputed(mapped, { pos: 'toString' }).grp).toBeNull()
   })
+
+  it('days_between: Tagesdifferenz, leer bei unvollständig/negativ/unparsbar (wie Backend)', () => {
+    const nights = [{ key: 'naechte', computed: { from: 'an', to: 'ab', op: 'days_between' } }]
+    expect(applyComputed(nights, { an: '2026-09-16', ab: '2026-09-18' }).naechte).toBe(2)
+    expect(applyComputed(nights, { an: '2026-09-16', ab: '2026-09-16' }).naechte).toBe(0)
+    // non-overridable → überschreibt mitgeschickten Wert
+    expect(applyComputed(nights, { an: '2026-09-16', ab: '2026-09-18', naechte: 99 }).naechte).toBe(2)
+    // unvollständig / negativ / unparsbar → null
+    expect(applyComputed(nights, { an: '2026-09-16' }).naechte).toBeNull()
+    expect(applyComputed(nights, { an: '2026-09-18', ab: '2026-09-16' }).naechte).toBeNull()
+    expect(applyComputed(nights, { an: 'morgen', ab: '2026-09-18' }).naechte).toBeNull()
+  })
 })

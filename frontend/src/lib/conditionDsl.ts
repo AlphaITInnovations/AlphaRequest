@@ -67,8 +67,25 @@ export function isEmpty(v: unknown): boolean {
 
 export interface ComputedFieldDef {
   key: string
-  computed?: { from: string; map?: Record<string, unknown> | null } | null
+  computed?: { from: string; to?: string | null; op?: string | null; map?: Record<string, unknown> | null } | null
   overridable?: boolean
+}
+
+/**
+ * Tagesdifferenz `b − a` zweier ISO-Datumswerte (Spiegel von
+ * process_compute._days_between): fehlende, unparsbare oder negative Differenzen
+ * ergeben null.
+ */
+function daysBetween(a: unknown, b: unknown): number | null {
+  if (typeof a !== 'string' || typeof b !== 'string') return null
+  const ra = /^(\d{4})-(\d{2})-(\d{2})/.exec(a)
+  const rb = /^(\d{4})-(\d{2})-(\d{2})/.exec(b)
+  if (!ra || !rb) return null
+  const da = Date.UTC(+ra[1], +ra[2] - 1, +ra[3])
+  const db = Date.UTC(+rb[1], +rb[2] - 1, +rb[3])
+  if (Number.isNaN(da) || Number.isNaN(db)) return null
+  const diff = Math.round((db - da) / 86400000)
+  return diff >= 0 ? diff : null
 }
 
 /**
@@ -84,16 +101,23 @@ export function applyComputed(fields: ComputedFieldDef[], values: Values): Value
   for (let i = 0; i <= computed.length; i++) {
     let changed = false
     for (const f of computed) {
-      const src = out[f.computed!.from]
-      const m = f.computed!.map
-      // Exakt wie das Backend (process_compute.apply_computed): map.get(src) über
-      // die EIGENEN String-Schlüssel. Nicht-String-Quellen und nicht enthaltene
-      // Schlüssel ergeben null (kein String()-Zwang, keine Prototype-Kette – sonst
-      // liefen JS und Python auseinander, z. B. bei Zahlen/„toString").
-      const derived = m != null
-        ? (typeof src === 'string' && Object.prototype.hasOwnProperty.call(m, src)
-            ? (m[src] ?? null) : null)
-        : src
+      const c = f.computed!
+      let derived: unknown
+      if (c.op === 'days_between') {
+        // Tagesdifferenz zweier Datumsfelder (z. B. Übernachtungen).
+        derived = daysBetween(out[c.from], out[c.to ?? ''])
+      } else {
+        const src = out[c.from]
+        const m = c.map
+        // Exakt wie das Backend (process_compute.apply_computed): map.get(src) über
+        // die EIGENEN String-Schlüssel. Nicht-String-Quellen und nicht enthaltene
+        // Schlüssel ergeben null (kein String()-Zwang, keine Prototype-Kette – sonst
+        // liefen JS und Python auseinander, z. B. bei Zahlen/„toString").
+        derived = m != null
+          ? (typeof src === 'string' && Object.prototype.hasOwnProperty.call(m, src)
+              ? (m[src] ?? null) : null)
+          : src
+      }
       if (f.overridable) {
         if (isEmpty(out[f.key]) && !isEmpty(derived)) { out[f.key] = derived; changed = true }
       } else if (out[f.key] !== derived) {

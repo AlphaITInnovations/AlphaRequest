@@ -56,8 +56,14 @@ export interface FieldVisibility {
   visibleToGroups: string[]
 }
 
-/** Wire-Name ist `from` (Python: from_ mit alias). */
-export interface ComputedSpec { from: string; map?: Record<string, unknown> | null }
+/** Wire-Name ist `from` (Python: from_ mit alias). `op="days_between"` bildet die
+ *  Tagesdifferenz `to − from` zweier Datumsfelder; sonst Kopie/`map`-Lookup. */
+export interface ComputedSpec {
+  from: string
+  to?: string | null
+  op?: string | null
+  map?: Record<string, unknown> | null
+}
 
 /**
  * Wie ein `server_generated`-Feld gefüllt wird. Serverseitig gilt: `action` muss
