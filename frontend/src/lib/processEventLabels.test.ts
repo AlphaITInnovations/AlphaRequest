@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ProcessEvent } from '@/api/processEvents'
 import {
-  absoluteTime, eventSummary, eventTone, relativeTime,
+  absoluteTime, eventFields, eventIcon, eventSummary, eventTitle, eventTone, relativeTime,
 } from '@/lib/processEventLabels'
 
 function ev(part: Partial<ProcessEvent> = {}): ProcessEvent {
@@ -111,6 +111,53 @@ describe('eventSummary', () => {
       .toBe('Angaben geändert: —')
     expect(eventSummary(ev({ action: 'department_done', details: {} }), ctx))
       .toBe('Fachabteilung abgeschlossen: —')
+  })
+})
+
+describe('eventTitle / eventFields (kompakte Timeline)', () => {
+  it('zeigt bei „Angaben geändert" nur die ANZAHL, nicht die Feldliste', () => {
+    const e = ev({ details: { fields: ['base.name', 'gehalt'] } })
+    expect(eventTitle(e, ctx)).toBe('2 Angaben geändert')
+    // Die Feldnamen selbst stehen NICHT im Titel (die zeigt die Timeline als Chips).
+    expect(eventTitle(e, ctx)).not.toContain('Nachname')
+  })
+
+  it('zählt verborgene Felder in die Anzahl mit ein', () => {
+    const e = ev({ details: { fields: ['base.name'], fields_hidden: 3 } })
+    expect(eventTitle(e, ctx)).toBe('4 Angaben geändert')
+  })
+
+  it('singular bei genau einer Änderung', () => {
+    expect(eventTitle(ev({ details: { fields: ['base.name'] } }), ctx)).toBe('1 Angabe geändert')
+  })
+
+  it('eventFields liefert lesbare Namen und die Zahl verborgener Felder', () => {
+    const { names, hidden } = eventFields(ev({ details: { fields: ['base.name', 'x.y'], fields_hidden: 2 } }), ctx)
+    expect(names).toEqual(['Nachname', 'x.y'])
+    expect(hidden).toBe(2)
+  })
+
+  it('nicht-„updated"-Einträge behalten ihre volle Überschrift', () => {
+    const e = ev({ action: 'department_done', details: { group: 'g_it' } })
+    expect(eventTitle(e, ctx)).toBe('Fachabteilung abgeschlossen: IT-Abteilung')
+  })
+})
+
+describe('eventIcon', () => {
+  it('ordnet die wichtigsten Aktionen einem Symbol zu', () => {
+    expect(eventIcon(ev({ action: 'updated' }))).toBe('edit')
+    expect(eventIcon(ev({ action: 'advanced' }))).toBe('advance')
+    expect(eventIcon(ev({ action: 'rejected' }))).toBe('reject')
+    expect(eventIcon(ev({ action: 'created' }))).toBe('created')
+  })
+
+  it('unterscheidet Freigabe-Ja/Nein am Symbol', () => {
+    expect(eventIcon(ev({ action: 'approval_decided', details: { act: 'approve' } }))).toBe('check')
+    expect(eventIcon(ev({ action: 'approval_decided', details: { act: 'reject' } }))).toBe('reject')
+  })
+
+  it('fällt bei unbekannter Aktion auf einen Punkt zurück', () => {
+    expect(eventIcon(ev({ action: 'irgendwas' }))).toBe('dot')
   })
 })
 

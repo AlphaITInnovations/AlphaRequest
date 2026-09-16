@@ -140,6 +140,54 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
   }
 }
 
+/**
+ * Geänderte Felder eines „updated"-Eintrags: die sichtbaren Beschriftungen und
+ * die Anzahl der (für diese Augen) verborgenen. Grundlage der Feld-Chips in der
+ * Timeline – so steht die lange Liste nicht mehr als Fließtext im Titel.
+ */
+export function eventFields(ev: ProcessEvent, ctx: LabelCtx = {}): { names: string[]; hidden: number } {
+  const raw = ev.details?.fields
+  const keys = Array.isArray(raw) ? raw.filter((k): k is string => typeof k === 'string') : []
+  return { names: keys.map((k) => ctx.fieldLabels?.[k] || k), hidden: num(ev.details?.fields_hidden) }
+}
+
+/**
+ * Kompakte Überschrift eines Eintrags für die Timeline. Anders als `eventSummary`
+ * bläht sie einen „Angaben geändert"-Eintrag NICHT mit der ganzen Feldliste auf –
+ * dort steht nur die ANZAHL, die Felder selbst zeigt die Timeline als Chips.
+ */
+export function eventTitle(ev: ProcessEvent, ctx: LabelCtx = {}): string {
+  if (ev.action === 'updated') {
+    const { names, hidden } = eventFields(ev, ctx)
+    const n = names.length + hidden
+    return n === 1 ? '1 Angabe geändert' : `${n} Angaben geändert`
+  }
+  return eventSummary(ev, ctx)
+}
+
+/** Symbol-Kategorie eines Eintrags (die Timeline bildet sie auf ein SVG ab). */
+export function eventIcon(ev: ProcessEvent): string {
+  switch (ev.action) {
+    case 'created': return 'created'
+    case 'updated': return 'edit'
+    case 'advanced': return 'advance'
+    case 'rejected':
+    case 'department_rejected': return 'reject'
+    case 'reopened': return 'reopen'
+    case 'comment': return 'comment'
+    case 'department_done': return 'check'
+    case 'department_skipped': return 'skip'
+    case 'watcher_added':
+    case 'watcher_removed': return 'watcher'
+    case 'automation_fired': return 'automation'
+    case 'priority_changed': return 'priority'
+    case 'approval_decided': return ev.details?.act === 'reject' ? 'reject' : 'check'
+    case 'approval_sent_back': return 'reopen'
+    case 'approval_no_recipient': return 'warn'
+    default: return 'dot'
+  }
+}
+
 /** „vor 3 Minuten" / Datum – ohne Fremdbibliothek. */
 export function relativeTime(iso: string | null, now: Date = new Date()): string {
   if (!iso) return ''
