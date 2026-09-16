@@ -3305,7 +3305,7 @@
         "fromField": null,
         "rule": [],
         "resetOnDescriptionChange": false,
-        "notifyOnEnter": true
+        "notifyOnEnter": false
       },
       "approval": null,
       "document": null,
