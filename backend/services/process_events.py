@@ -10,12 +10,15 @@ Zwei Dinge, die hier zusammenlaufen müssen:
    wie `services/ticket_history.add_history_event` im Alt-System).
 
 2. **Redaktion beim Lesen.** Ein Eintrag nennt Feldschlüssel („diese Felder
-   wurden geändert"). Wer ein Feld nicht sehen darf, darf auch nicht aus dem
-   Verlauf erfahren, dass es existiert und wann es gefüllt wurde – sonst wäre
-   die Feld-Sichtbarkeit über den Verlauf umgehbar.
+   wurden geändert") und – bei `updated` – die alt→neu-Werte (`changes`). Wer ein
+   Feld nicht sehen darf, darf auch nicht aus dem Verlauf erfahren, dass es
+   existiert, wann es gefüllt wurde oder WELCHER Wert drinsteht – sonst wäre die
+   Feld-Sichtbarkeit über den Verlauf umgehbar.
 
-`details` darf deshalb NIE Feld-WERTE tragen, nur Schlüssel und Metadaten.
-`redact` entfernt einen `values`-Schlüssel defensiv trotzdem.
+`redact` erzwingt das: es beschneidet `fields` UND `changes` auf die sichtbaren
+Schlüssel (bleibt nichts übrig, entfällt der Eintrag ganz) und entfernt einen
+rohen `values`-Schlüssel defensiv. Feld-WERTE stehen also nur im `changes`-Kanal,
+der dieselbe Feld-Sicht durchläuft wie die Schlüssel.
 """
 from typing import Iterable, Optional
 
@@ -133,6 +136,15 @@ def redact(events: Iterable[dict], defn: Optional[ProcessDefinition],
             if len(keep) != len(named):
                 # Ehrlich bleiben: es waren mehr, aber nicht für diese Augen.
                 det["fields_hidden"] = len(named) - len(keep)
+            # alt→neu-Werte an dieselbe Feld-Sicht binden: verborgene Felder tragen
+            # ihren Wert nicht in den redigierten Eintrag.
+            ch = det.get("changes")
+            if isinstance(ch, dict) and ch:
+                kept = {k: v for k, v in ch.items() if k in visible}
+                if kept:
+                    det["changes"] = kept
+                else:
+                    det.pop("changes", None)
 
         single = det.get("field")
         if isinstance(single, str) and single and single not in visible:

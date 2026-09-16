@@ -1112,11 +1112,13 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
                       details={"from": alt_prio, "to": body.priority})
 
     if to_apply:
-        # Verlauf: NUR die Feld-Schlüssel, nie die Werte. Wer ein Feld nicht sehen
-        # darf, sieht den Eintrag auch nicht (Redaktion in process_events.redact).
+        # Verlauf: geänderte Felder samt alt→neu-Wert. Beim LESEN wird pro Feld-Sicht
+        # redigiert (process_events.redact) – wer ein Feld nicht sehen darf, bekommt
+        # weder den Schlüssel noch den Wert. `stored` ist der Stand VOR dem Schreiben.
+        changes = {k: {"from": stored.get(k), "to": to_apply[k]} for k in to_apply}
         events.record(row, events.UPDATED, actor_id=user.get("id"),
                       actor_name=_actor_name(user),
-                      details={"fields": sorted(to_apply.keys())})
+                      details={"fields": sorted(to_apply.keys()), "changes": changes})
         wants_advance = engine.run_inline(row, defn, phase, {TriggerType.on_field_change},
                                           changed_fields=set(to_apply.keys()))
         if wants_advance:
@@ -1805,8 +1807,11 @@ def remove_ticket_watcher(ticket_id: int, watcher_id: str,
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                         "Nur die Ersteller:in und Admins können andere Beobachter:innen entfernen")
     if watchers.remove_watcher(row["id"], watcher_id):
+        # Name mitschreiben (wie beim Eintragen), damit der Verlauf nicht eine
+        # rohe Nutzer-ID zeigt.
         events.record(row, events.WATCHER_REMOVED, actor_id=user.get("id"),
-                      actor_name=_actor_name(user), details={"watcher": watcher_id})
+                      actor_name=_actor_name(user),
+                      details={"watcher": watcher_id, "watcher_name": _display_name(watcher_id)})
     rows = watchers.list_watchers(row["id"])
     return ListResponse(data=[WatcherOut(**w) for w in rows],
                         meta=Meta(total=len(rows), limit=len(rows), offset=0))

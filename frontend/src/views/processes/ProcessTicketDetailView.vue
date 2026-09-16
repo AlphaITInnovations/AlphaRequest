@@ -375,6 +375,7 @@ async function fachabteilungAbschliessen() {
 // Bearbeitungs-Leiste kennt nur Speichern und Weitergeben.
 
 const groupName = (gid: string) => sources.value.groups.find((g) => g.id === gid)?.name || gid
+const userName = (uid: string) => sources.value.users.find((u) => u.id === uid)?.displayName || uid
 
 // Ticket-Wechsel ohne Remount (App.vue hat kein router-view :key): beim Wechsel
 // der id neu laden – zieht die Daten nach UND räumt den flüchtigen Fehlerbalken.
@@ -647,7 +648,8 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
         <ProcessTimeline v-if="adminModus && ticket && definition"
                          ref="timeline" :ticket-id="ticket.id" view="admin"
                          :field-labels="fieldLabels" :phase-labels="phaseLabels"
-                         :group-name="groupName" :can-be-internal="true"
+                         :group-name="groupName" :user-name="userName"
+                         :fields="definition.fields" :sources="sources" :can-be-internal="true"
                          class="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" />
         </div>
       </template>

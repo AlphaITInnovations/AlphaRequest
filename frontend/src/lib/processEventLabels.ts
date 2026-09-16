@@ -39,6 +39,8 @@ export interface LabelCtx {
   groupName?: (id: string) => string
   /** Phasen-Schlüssel → Beschriftung. */
   phaseLabels?: Record<string, string>
+  /** Nutzer-ID → Anzeigename (löst rohe IDs im Verlauf auf, z. B. Beobachter:in). */
+  userName?: (id: string) => string
 }
 
 function str(v: unknown): string | null {
@@ -69,6 +71,15 @@ function gruppe(ev: ProcessEvent, ctx: LabelCtx): string {
   const g = str(ev.details?.group)
   if (!g) return '—'
   return ctx.groupName ? ctx.groupName(g) : g
+}
+
+/** Beobachter:in lesbar machen: der beim Eintragen mitgeschriebene Name, sonst per
+ *  Nutzer-Auflösung (deckt Alt-Einträge ab, die nur die ID tragen), sonst die ID. */
+function watcherLabel(ev: ProcessEvent, ctx: LabelCtx): string {
+  const id = str(ev.details?.watcher)
+  const stored = str(ev.details?.watcher_name)
+  const resolved = id && ctx.userName ? ctx.userName(id) : null
+  return stored || resolved || id || '—'
 }
 
 const AUTOMATION_LABEL: Record<string, string> = {
@@ -109,10 +120,9 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
     case 'department_rejected':
       return `Ablehnung durch Fachabteilung: ${gruppe(ev, ctx)}`
     case 'watcher_added':
-      return `Beobachter:in eingetragen: ${str(ev.details?.watcher_name)
-        || str(ev.details?.watcher) || '—'}`
+      return `Beobachter:in eingetragen: ${watcherLabel(ev, ctx)}`
     case 'watcher_removed':
-      return `Beobachtung beendet: ${str(ev.details?.watcher) || '—'}`
+      return `Beobachtung beendet: ${watcherLabel(ev, ctx)}`
     case 'automation_fired': {
       // Der Anlass-Text der Automation (template) ist die ehrlichste
       // Beschriftung – erst ohne ihn fällt die Anzeige auf den Aktions-Typ zurück.

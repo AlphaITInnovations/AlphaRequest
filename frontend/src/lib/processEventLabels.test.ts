@@ -97,6 +97,20 @@ describe('eventSummary', () => {
     expect(s).not.toContain('Erinnerung')
   })
 
+  it('zeigt Beobachter:innen mit Namen statt roher ID', () => {
+    // Eintragen: der Name steht im Eintrag.
+    expect(eventSummary(ev({ action: 'watcher_added',
+      details: { watcher: 'u1', watcher_name: 'Max Muster' } }), ctx))
+      .toBe('Beobachter:in eingetragen: Max Muster')
+    // Austragen (Alt-Eintrag ohne Name): per userName-Auflösung.
+    const withUsers = { ...ctx, userName: (id: string) => (id === 'u1' ? 'Max Muster' : id) }
+    expect(eventSummary(ev({ action: 'watcher_removed', details: { watcher: 'u1' } }), withUsers))
+      .toBe('Beobachtung beendet: Max Muster')
+    // Ohne Auflösung bleibt die ID (kein Absturz).
+    expect(eventSummary(ev({ action: 'watcher_removed', details: { watcher: 'u9' } }), ctx))
+      .toBe('Beobachtung beendet: u9')
+  })
+
   it('nennt bei der Wiederaufnahme die Phase', () => {
     expect(eventSummary(ev({ action: 'reopened', details: { phase: 'pruefung' } }), ctx))
       .toContain('Prüfung')

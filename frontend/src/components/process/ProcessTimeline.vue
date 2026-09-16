@@ -26,6 +26,8 @@ import { listEvents, type ProcessEvent } from '@/api/processEvents'
 import {
   absoluteTime, eventFields, eventIcon, eventTitle, eventTone, relativeTime,
 } from '@/lib/processEventLabels'
+import { EMPTY_TEXT, fieldValueText, isEmptyValue } from '@/lib/processFieldFormat'
+import type { FieldDef, OptionSources } from '@/types/process'
 import { errorMessage } from '@/lib/processErrors'
 
 const props = withDefaults(defineProps<{
@@ -34,6 +36,12 @@ const props = withDefaults(defineProps<{
   fieldLabels?: Record<string, string>
   phaseLabels?: Record<string, string>
   groupName?: (id: string) => string
+  /** Nutzer-ID → Anzeigename (Beobachter:innen im Verlauf). */
+  userName?: (id: string) => string
+  /** Feld-Katalog + Stammdaten: nötig, um bei „Angaben geändert" die alt→neu-Werte
+   *  lesbar zu machen (Optionen/Namen/Directus-Labels wie in der Leseansicht). */
+  fields?: FieldDef[]
+  sources?: OptionSources
   /** Ruht mit der Nachtrags-Eingabe (siehe Docstring) – bleibt für die Rückkehr. */
   canComment?: boolean
   canBeInternal?: boolean
@@ -55,7 +63,14 @@ const ctx = computed(() => ({
   fieldLabels: props.fieldLabels,
   phaseLabels: props.phaseLabels,
   groupName: props.groupName,
+  userName: props.userName,
 }))
+
+const fieldByKey = computed<Record<string, FieldDef>>(() => {
+  const out: Record<string, FieldDef> = {}
+  for (const f of props.fields ?? []) out[f.key] = f
+  return out
+})
 
 /**
  * Neueste zuerst – der Server liefert chronologisch aufsteigend.
@@ -111,13 +126,55 @@ const mehrereEpochen = computed(() => new Set(items.value.map((e) => e.epoch)).s
 const phaseName = (ev: ProcessEvent) =>
   ev.phase_key ? (props.phaseLabels?.[ev.phase_key] || ev.phase_key) : null
 
-// „Angaben geändert"-Chips je Eintrag einzeln auf-/zuklappen.
+// „Angaben geändert" je Eintrag einzeln auf-/zuklappen.
 const offeneFelder = ref<Set<number>>(new Set())
 function toggleFelder(id: number) {
   const next = new Set(offeneFelder.value)
   next.has(id) ? next.delete(id) : next.add(id)
   offeneFelder.value = next
 }
+const hiddenCount = (ev: ProcessEvent) => Number(ev.details?.fields_hidden) || 0
+
+/** Hat der Eintrag alt→neu-Werte (neue Einträge) oder nur Feld-Schlüssel (alt)? */
+function hasChanges(ev: ProcessEvent): boolean {
+  const c = ev.details?.changes
+  return !!c && typeof c === 'object' && Object.keys(c).length > 0
+}
+
+interface ChangeRow { key: string; label: string; from: string; to: string; fromEmpty: boolean; complex: boolean }
+
+/** Eine Zeile je geändertem Feld: Beschriftung + alt→neu, lesbar formatiert
+ *  (Optionen/Namen/Directus-Labels wie in der Leseansicht). Wiederholgruppen und
+ *  Anhänge zeigen „aktualisiert" statt eines rohen Objekt-Dumps. */
+function changeRows(ev: ProcessEvent): ChangeRow[] {
+  const keys = Array.isArray(ev.details?.fields)
+    ? (ev.details!.fields as unknown[]).filter((k): k is string => typeof k === 'string') : []
+  const changes = (ev.details?.changes ?? {}) as Record<string, { from?: unknown; to?: unknown }>
+  return keys.map((key) => {
+    const field = fieldByKey.value[key]
+    const ch = changes[key] ?? {}
+    const complex = !!field && (field.widget === 'collection' || field.widget === 'attachment')
+    const fmt = (v: unknown) => (field
+      ? fieldValueText(field, v, props.sources)
+      : (v === null || v === undefined || v === '' ? EMPTY_TEXT : String(v)))
+    return {
+      key,
+      label: props.fieldLabels?.[key] || key,
+      from: fmt(ch.from),
+      to: fmt(ch.to),
+      fromEmpty: isEmptyValue(ch.from),
+      complex,
+    }
+  })
+}
+function changeInfo(ev: ProcessEvent): { shown: ChangeRow[]; more: number; hidden: number } {
+  const rows = changeRows(ev)
+  const offen = offeneFelder.value.has(ev.id)
+  const shown = offen ? rows : rows.slice(0, CHIPS_KURZ)
+  return { shown, more: offen ? 0 : Math.max(0, rows.length - shown.length), hidden: hiddenCount(ev) }
+}
+
+/** Fallback für Alt-Einträge OHNE Werte: nur die Feldnamen als Chips. */
 function chips(ev: ProcessEvent): { shown: string[]; more: number; hidden: number } {
   const { names, hidden } = eventFields(ev, ctx.value)
   const offen = offeneFelder.value.has(ev.id)
@@ -202,8 +259,40 @@ watch(() => props.ticketId, load)
             </template>
           </div>
 
-          <!-- „Angaben geändert": Felder als Chips (aufklappbar), nie als Fließtext -->
-          <div v-if="ev.action === 'updated'" class="mt-1.5 flex flex-wrap items-center gap-1">
+          <!-- „Angaben geändert": alt→neu je Feld, lesbar formatiert (aufklappbar).
+               Alt-Einträge ohne Werte fallen auf reine Feld-Chips zurück. -->
+          <div v-if="ev.action === 'updated' && hasChanges(ev)" class="mt-1.5 space-y-0.5">
+            <div v-for="c in changeInfo(ev).shown" :key="c.key" class="text-[12px] leading-snug">
+              <span class="text-gray-400">{{ c.label }}:</span>
+              <template v-if="c.complex">
+                <span class="text-gray-500 dark:text-gray-400"> aktualisiert</span>
+              </template>
+              <template v-else>
+                <template v-if="!c.fromEmpty">
+                  <span class="text-gray-400 line-through decoration-gray-300 dark:decoration-white/25">
+                    {{ c.from }}</span>
+                  <span class="text-gray-300 dark:text-gray-500"> → </span>
+                </template>
+                <span class="text-gray-800 dark:text-gray-100 font-medium">{{ c.to }}</span>
+              </template>
+            </div>
+            <div class="flex items-center gap-2 pt-0.5">
+              <button v-if="changeInfo(ev).more" type="button" @click="toggleFelder(ev.id)"
+                      class="text-[11px] text-[#3EAAB8] hover:underline">
+                +{{ changeInfo(ev).more }} weitere
+              </button>
+              <button v-else-if="offeneFelder.has(ev.id) && changeRows(ev).length > CHIPS_KURZ"
+                      type="button" @click="toggleFelder(ev.id)"
+                      class="text-[11px] text-gray-400 hover:underline">weniger</button>
+              <span v-if="changeInfo(ev).hidden" class="text-[11px] text-amber-600 dark:text-amber-400"
+                    title="Für Sie nicht sichtbare Felder">
+                +{{ changeInfo(ev).hidden }} nicht sichtbar
+              </span>
+            </div>
+          </div>
+
+          <!-- Fallback: Alt-Einträge ohne Wert-Diff → Felder als Chips -->
+          <div v-else-if="ev.action === 'updated'" class="mt-1.5 flex flex-wrap items-center gap-1">
             <span v-for="name in chips(ev).shown" :key="name"
                   class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] leading-tight
                          bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">{{ name }}</span>

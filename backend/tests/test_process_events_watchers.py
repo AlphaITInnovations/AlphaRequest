@@ -168,6 +168,23 @@ def test_teilweise_sichtbarer_eintrag_wird_gekuerzt_und_zaehlt_ehrlich():
     assert out[0]["details"]["fields_hidden"] == 1
 
 
+def _changes_ev():
+    return _ev(details={"fields": ["name", "gehalt"],
+                        "changes": {"name": {"from": "A", "to": "B"},
+                                    "gehalt": {"from": "1", "to": "2"}}})
+
+
+def test_changes_folgen_der_feld_sicht():
+    """alt→neu-Werte werden wie die Schlüssel redigiert: ein verborgenes Feld
+    trägt seinen Wert NICHT in den redigierten Eintrag."""
+    out = pev.redact([_changes_ev()], DEFN, _ctx(OWNER), staff=False)
+    assert out[0]["details"]["changes"] == {"name": {"from": "A", "to": "B"}}
+    assert out[0]["details"]["fields_hidden"] == 1
+    # HR darf das vertrauliche Feld – und damit auch dessen Wert – sehen.
+    hr = pev.redact([_changes_ev()], DEFN, _ctx(FREMD, ["g_hr"]), staff=False)
+    assert set(hr[0]["details"]["changes"]) == {"name", "gehalt"}
+
+
 def test_einzelfeld_referenz_wird_geprueft():
     evs = [_ev(action="automation_fired", details={"field": "gehalt"})]
     assert pev.redact(evs, DEFN, _ctx(OWNER), staff=False) == []
