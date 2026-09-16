@@ -720,7 +720,184 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Angaben zur antragstellenden Person",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.telefonnummer",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kostenstelle",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reisedaten",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.anreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.abreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.anzahl_naechte",
+              "width": "third"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseziel",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.ort_stadt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.partner_hotel",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.hotelwunsch",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseanlass",
+          "variant": "travel",
+          "badge": null,
+          "description": "Zwingend auszufüllen.",
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.reiseanlass",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_anschrift",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.sonstiges_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.genehmigung",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Budgetvorgaben gemäß Reisekostenrichtlinie",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.budget_bestaetigung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.budget_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.budget_genehmigung",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Besondere Anforderungen",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.besondere_anforderungen",
+              "width": "full"
+            }
+          ]
+        }
+      ]
     },
     {
       "key": "durchfuehrung",
@@ -906,7 +1083,184 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Angaben zur antragstellenden Person",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.telefonnummer",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kostenstelle",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reisedaten",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.anreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.abreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.anzahl_naechte",
+              "width": "third"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseziel",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.ort_stadt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.partner_hotel",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.hotelwunsch",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseanlass",
+          "variant": "travel",
+          "badge": null,
+          "description": "Zwingend auszufüllen.",
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.reiseanlass",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_anschrift",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.sonstiges_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.genehmigung",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Budgetvorgaben gemäß Reisekostenrichtlinie",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.budget_bestaetigung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.budget_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.budget_genehmigung",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Besondere Anforderungen",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.besondere_anforderungen",
+              "width": "full"
+            }
+          ]
+        }
+      ]
     },
     {
       "key": "reisestelle",
@@ -1086,7 +1440,184 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Angaben zur antragstellenden Person",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.telefonnummer",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kostenstelle",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reisedaten",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.anreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.abreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.anzahl_naechte",
+              "width": "third"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseziel",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.ort_stadt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.partner_hotel",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.hotelwunsch",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseanlass",
+          "variant": "travel",
+          "badge": null,
+          "description": "Zwingend auszufüllen.",
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.reiseanlass",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_anschrift",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.sonstiges_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.genehmigung",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Budgetvorgaben gemäß Reisekostenrichtlinie",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.budget_bestaetigung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.budget_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.budget_genehmigung",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Besondere Anforderungen",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.besondere_anforderungen",
+              "width": "full"
+            }
+          ]
+        }
+      ]
     }
   ],
   "automations": []
