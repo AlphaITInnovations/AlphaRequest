@@ -77,6 +77,29 @@ class Config:
     # Ziel-Collection). Getrennt haltbar, um Lese- und Schreibrechte zu trennen.
     DIRECTUS_WRITE_TOKEN: str = os.getenv("DIRECTUS_WRITE_TOKEN", "")
 
+    # ── Mitarbeiter-Zuordnung: Azure-Login ↔ Directus-Stammdaten ─────────────
+    # Grundprinzip: die IDENTITÄT bleibt Azure (oid, Gruppen, Benachrichtigung);
+    # die INFOS (Name, Position, Vorgesetzter …) kommen aus Directus, verknüpft
+    # über die E-Mail. Bewusst per ENV (Kern-Infrastruktur, tiefer als ein
+    # Formular-Dropdown) und NICHT über die admin-editierbaren Directus-Quellen –
+    # damit sich niemand über das Admin-UI selbst aussperren kann.
+    DIRECTUS_EMPLOYEE_COLLECTION: str = os.getenv("DIRECTUS_EMPLOYEE_COLLECTION", "mitarbeitende")
+    DIRECTUS_EMPLOYEE_EMAIL_FIELD: str = os.getenv("DIRECTUS_EMPLOYEE_EMAIL_FIELD", "email")
+    # Directus-Feldliste des Datensatzes (dot-Pfade erlaubt, z. B. für den
+    # Vorgesetzten: "*,vorgesetzter.*"). Default: alle Top-Level-Felder.
+    DIRECTUS_EMPLOYEE_FIELDS = [s.strip() for s in
+                               os.getenv("DIRECTUS_EMPLOYEE_FIELDS", "*").split(",") if s.strip()]
+    DIRECTUS_EMPLOYEE_CACHE_TTL: int = int(os.getenv("DIRECTUS_EMPLOYEE_CACHE_TTL", "300"))
+    # Hard Gate: ohne Directus-Datensatz kein Arbeiten. Abschaltbar für Dev/Rollout
+    # (dann wird der Datensatz nur best-effort angehängt, aber nie blockiert).
+    AUTH_REQUIRE_DIRECTUS_EMPLOYEE: bool = str_to_bool(
+        os.getenv("AUTH_REQUIRE_DIRECTUS_EMPLOYEE", "true"))
+    # Break-Glass: diese E-Mails passieren das Gate IMMER – auch wenn Directus down
+    # ist ODER kein Datensatz existiert. Mindestens eine Admin-Mail hier eintragen,
+    # damit ein Directus-Ausfall nicht alle (inkl. Admins) aussperrt.
+    AUTH_BOOTSTRAP_EMAILS = {s.strip().lower() for s in
+                            os.getenv("AUTH_BOOTSTRAP_EMAILS", "").split(",") if s.strip()}
+
     @property
     def COMPANIES(self):
         return db.get_companies()
