@@ -290,6 +290,7 @@ def assign_due_sequences(defn: ProcessDefinition, row: dict, phase: Optional[Pha
     if not faellig:
         return {}
 
+    alt = dict(row.get("values") or {})     # Stand VOR der Vergabe (fürs alt→neu)
     vergeben: dict[str, str] = {}
     # Bewusst Feld für Feld und ohne Sammel-Transaktion: jede Nummer ist für sich
     # geclaimt. Scheitert die zweite, bleibt die erste im Ledger stehen und wird
@@ -301,8 +302,10 @@ def assign_due_sequences(defn: ProcessDefinition, row: dict, phase: Optional[Pha
 
     _persist(row, vergeben, store)
 
-    # Verlauf: NUR die Feldschlüssel. Der Wert selbst unterliegt der
-    # Feld-Sichtbarkeit; `process_events.redact` filtert über details["fields"].
+    # Verlauf: Feldschlüssel + vergebene Nummer (alt→neu). Der Wert unterliegt der
+    # Feld-Sichtbarkeit; `process_events.redact` bindet `changes` an dieselbe
+    # Feld-Sicht wie `fields` – wer das Feld nicht sehen darf, sieht die Nummer nicht.
+    changes = {k: {"from": alt.get(k), "to": v} for k, v in vergeben.items()}
     events.system(row, events.UPDATED, phase_key=phase.key if phase else None,
-                  details={"fields": sorted(vergeben)})
+                  details={"fields": sorted(vergeben), "changes": changes})
     return vergeben

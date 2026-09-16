@@ -523,9 +523,10 @@ def test_firma_ohne_hinterlegten_bereich_blockiert(stille_nebenwirkungen):
         run(defn, row, phase(defn, "backoffice"), ledger_fake=lg, store=FakeStore(row))
 
 
-def test_verlauf_nennt_nur_den_feldschluessel_nie_die_nummer(stille_nebenwirkungen):
-    """Sichtbarkeit: die Nummer ist ein Feldwert. Im Verlauf steht nur der
-    Schlüssel – nur so kann `process_events.redact` sie überhaupt verbergen."""
+def test_verlauf_nennt_feld_und_nummer_als_changes(stille_nebenwirkungen):
+    """Die vergebene Nummer reist als alt→neu in `details["changes"]` mit. Sie ist
+    ein Feldwert; beim LESEN bindet `process_events.redact` sie an die Feld-Sicht
+    (verborgenes Feld ⇒ keine Nummer, getestet in test_process_events_watchers)."""
     audits, verlauf = stille_nebenwirkungen
     defn, row = make_defn(), make_row()
     run(defn, row, phase(defn, "backoffice"), ledger_fake=FakeLedger([company()]),
@@ -533,9 +534,9 @@ def test_verlauf_nennt_nur_den_feldschluessel_nie_die_nummer(stille_nebenwirkung
     assert len(verlauf) == 1
     action, kw = verlauf[0]
     assert action == svc.events.UPDATED
-    assert kw["details"] == {"fields": ["personal.number"]}
-    assert "00896" not in json.dumps(kw)
-    # Im Audit-Log (nur Admin, revisionssicher) steht die Nummer weiterhin – wie bisher.
+    assert kw["details"]["fields"] == ["personal.number"]
+    assert kw["details"]["changes"]["personal.number"]["to"] == "00896"
+    # Im Audit-Log (nur Admin, revisionssicher) steht die Nummer weiterhin.
     assert audits[0]["details"]["number"] == "00896"
 
 

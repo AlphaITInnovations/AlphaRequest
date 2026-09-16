@@ -1711,8 +1711,8 @@ def set_process_ticket_raw_values(ticket_id: int, body: RawValuesRequest,
     repariert wird genau der Zustand, den die normalen Pfade nicht mehr zulassen
     (z. B. eine leergelaufene Zuständigkeit). Zwei Zugeständnisse: abgeleitete
     Felder werden nachgezogen (sonst widersprächen sie ihren Quellfeldern beim
-    nächsten normalen Speichern), und der Grund ist Pflicht. Im Verlauf stehen
-    NUR die geänderten Feld-Schlüssel, nie die Werte.
+    nächsten normalen Speichern), und der Grund ist Pflicht. Im Verlauf stehen die
+    geänderten Felder samt alt→neu-Wert – je Feld-Sicht redigiert (redact).
     """
     row = _admin_row_or_error(ticket_id, user, "Roh-Werte eines Auftrags ersetzen")
     defn = _load_pinned_defn(row)
@@ -1720,13 +1720,14 @@ def set_process_ticket_raw_values(ticket_id: int, body: RawValuesRequest,
     alt = row.get("values") or {}
     neu = compute.apply_computed(defn, dict(body.values))
     geaendert = sorted(k for k in set(alt) | set(neu) if alt.get(k) != neu.get(k))
+    changes = {k: {"from": alt.get(k), "to": neu.get(k)} for k in geaendert}
     try:
         row = store.update_values(ticket_id, json.dumps(neu, ensure_ascii=False),
                                   expected_rev=row.get("rev"))
     except store.ProcessTicketConflict as exc:
         raise api_error(409, "TICKET_CONFLICT", str(exc))
     events.record(row, events.UPDATED, actor_id=user.get("id"), actor_name=_actor_name(user),
-                  body=grund, details={"fields": geaendert, "raw": True})
+                  body=grund, details={"fields": geaendert, "changes": changes, "raw": True})
     return DataResponse(data=RawValuesOut(values=row.get("values") or {}))
 
 
