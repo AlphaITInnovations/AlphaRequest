@@ -156,9 +156,15 @@ const viewParams = computed<{ view?: 'admin' | 'department'; department?: string
 
 // Die Admin-Ansicht rendert eine EIGENE Komponente (AdminTicketDetail) – die
 // abilities hier steuern nur noch die Lese-/Bearbeitungsansicht.
+//
+// Ausnahme in der Leseansicht: die Admin-Ansicht (?ansicht=admin) ist Lesen PLUS
+// Reparatur-Werkzeuge – dort dürfen Admins weiterhin Beobachter:innen ein- und
+// austragen (Verwaltungs-Werkzeug, kein Bearbeiten des Auftrags). Der Server
+// erlaubt das ohnehin nur Ersteller:in + Admins und prüft jede Änderung selbst.
 const abilities = computed(() => (leseModus.value
   ? { ...serverAbilities.value, edit: false, internal_comment: false,
-      manage_watchers: false, attach: false, reopen: false, archive: false, delete: false }
+      manage_watchers: adminModus.value && serverAbilities.value.manage_watchers,
+      attach: false, reopen: false, archive: false, delete: false }
   : serverAbilities.value))
 
 // BEWUSST kein Wechsel-Knopf in der Leseansicht: in die Bearbeitung kommt man
