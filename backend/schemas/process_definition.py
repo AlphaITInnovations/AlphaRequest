@@ -23,6 +23,11 @@ CURRENT_SCHEMA_VERSION = 1
 
 KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
+#: Obergrenze der Länge eines Feld-Constraint-Regex (ReDoS-Schutz): ein sehr langes
+#: Muster ist ein Warnzeichen und bläht den Backtracking-Raum auf. Großzügig – echte
+#: Formate (Telefon, PLZ, Personalnummer …) sind kurz.
+_PATTERN_MAX_LEN = 1000
+
 
 # ── Enums / Whitelists ─────────────────────────────────────────────────────────
 
@@ -283,6 +288,9 @@ class FieldConstraints(_Base):
     @classmethod
     def _valid_regex(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
+            if len(v) > _PATTERN_MAX_LEN:
+                raise ValueError(f"Regex-Pattern zu lang (max {_PATTERN_MAX_LEN} Zeichen) – "
+                                 f"Schutz vor katastrophalem Backtracking (ReDoS)")
             try:
                 re.compile(v)
             except re.error as e:

@@ -119,6 +119,12 @@ def _check_collection(f: FieldDef, val: list) -> list[dict]:
     return e
 
 
+#: Maximale Eingabelänge, die gegen ein Constraint-Regex geprüft wird (ReDoS-Schutz).
+#: Längere Werte werden ohne Match als „Format ungültig" abgelehnt (Format-Felder
+#: erwarten kurze Werte).
+_PATTERN_MAX_INPUT = 2048
+
+
 def _check_constraints(f: FieldDef, val: Any) -> list[dict]:
     import re
     c = f.constraints
@@ -129,11 +135,18 @@ def _check_constraints(f: FieldDef, val: Any) -> list[dict]:
         if c.maxLength is not None and len(val) > c.maxLength:
             e.append(_err(f.key, "MAX_LENGTH", f"höchstens {c.maxLength} Zeichen"))
         if c.pattern is not None:
-            try:
-                if not re.fullmatch(c.pattern, val):
-                    e.append(_err(f.key, "PATTERN", "Format ungültig"))
-            except re.error:
-                pass  # ungültiges Pattern wurde bei der Definition schon geprüft
+            if len(val) > _PATTERN_MAX_INPUT:
+                # ReDoS-Schutz: ein überlanger Wert wird NICHT gegen das Muster
+                # geprüft (ein pathologisches Pattern könnte darauf CPU-gebunden
+                # festhängen). Format-Felder erwarten kurze Werte – ein derart langer
+                # gilt als ungültig, statt den Worker zu binden.
+                e.append(_err(f.key, "PATTERN", "Format ungültig"))
+            else:
+                try:
+                    if not re.fullmatch(c.pattern, val):
+                        e.append(_err(f.key, "PATTERN", "Format ungültig"))
+                except re.error:
+                    pass  # ungültiges Pattern wurde bei der Definition schon geprüft
         if c.minDate is not None and val < c.minDate:
             e.append(_err(f.key, "MIN_DATE", f"nicht vor {c.minDate}"))
         if c.maxDate is not None and val > c.maxDate:

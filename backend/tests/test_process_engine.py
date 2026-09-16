@@ -71,6 +71,30 @@ def test_pass1_none_allowed():
     assert pv.validate_values(_defn(), {"base.name": None}) == []
 
 
+def test_pattern_zu_lang_wird_abgelehnt():
+    """ReDoS-Schutz: ein überlanges Constraint-Regex wird beim Speichern abgelehnt."""
+    import pytest
+    from pydantic import ValidationError
+    from backend.schemas.process_definition import FieldConstraints
+    FieldConstraints(pattern="a" * 100)                       # ok
+    with pytest.raises(ValidationError):
+        FieldConstraints(pattern="a" * 1001)
+
+
+def test_pattern_ueberlanger_wert_wird_nicht_gematcht():
+    """ReDoS-Schutz zur Laufzeit: ein überlanger Wert wird gegen ein Muster NICHT
+    ausgewertet (kein CPU-Hänger), sondern als Format-Fehler abgelehnt."""
+    defn = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "code", "widget": "text", "constraints": {"pattern": r"[a-z]+"}}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "code"}]}],
+    })
+    assert pv.validate_values(defn, {"code": "abc"}) == []     # normaler Wert passt
+    errs = pv.validate_values(defn, {"code": "a" * 5000})      # überlanger Wert
+    assert any(x["code"] == "PATTERN" for x in errs)
+
+
 # ── Pass 2 ──────────────────────────────────────────────────────────────────
 
 def test_pass2_required_and_conditional():
