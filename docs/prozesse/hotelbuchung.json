@@ -7,7 +7,7 @@
   "fields": [
     {
       "key": "buchung.antragsteller_name",
-      "label": "Name, Vorname",
+      "label": "Name",
       "widget": "text",
       "help": null,
       "placeholder": null,
@@ -22,6 +22,26 @@
       "assign": null,
       "mode": null,
       "item": []
+    },
+    {
+      "key": "buchung.antragsteller_vorname",
+      "label": "Vorname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": []
     },
     {
       "key": "buchung.antragsteller_email",
@@ -170,24 +190,6 @@
       "widget": "text",
       "help": null,
       "placeholder": "z. B. München",
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": []
-    },
-    {
-      "key": "buchung.partner_hotel",
-      "label": "Partner-Hotel (z. B. MOTEL ONE)",
-      "widget": "text",
-      "help": null,
-      "placeholder": "Optional",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -375,69 +377,6 @@
       "item": []
     },
     {
-      "key": "buchung.budget_bestaetigung",
-      "label": "Budgetvorgabe",
-      "widget": "select",
-      "help": null,
-      "placeholder": null,
-      "options": [
-        {
-          "value": "unter_120",
-          "label": "Innerhalb der Richtlinie (unter 120 €)"
-        },
-        {
-          "value": "abweichung",
-          "label": "Abweichung vom Budget"
-        }
-      ],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": []
-    },
-    {
-      "key": "buchung.budget_begruendung",
-      "label": "Begründung",
-      "widget": "textarea",
-      "help": null,
-      "placeholder": "Warum wird das Budget überschritten?",
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": []
-    },
-    {
-      "key": "buchung.budget_genehmigung",
-      "label": "Budget genehmigt durch",
-      "widget": "user",
-      "help": null,
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": []
-    },
-    {
       "key": "buchung.besondere_anforderungen",
       "label": "Besondere Anforderungen",
       "widget": "textarea",
@@ -454,6 +393,86 @@
       "assign": null,
       "mode": null,
       "item": []
+    },
+    {
+      "key": "buchung.hotel_name",
+      "label": "Name Hotel",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": []
+    },
+    {
+      "key": "buchung.hotel_adresse",
+      "label": "Adresse",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": []
+    },
+    {
+      "key": "buchung.buchungsnummer",
+      "label": "Buchungsnummer",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": []
+    },
+    {
+      "key": "buchung.rechnung",
+      "label": "Rechnung",
+      "widget": "attachment",
+      "help": "Bitte die Hotelrechnung hochladen.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": []
     }
   ],
   "phases": [
@@ -463,17 +482,29 @@
       "kind": "start",
       "view": "form",
       "enterStatus": null,
-      "grantsFullView": true,
+      "advanceLabel": null,
+      "grantsFullView": false,
       "responsibility": {
         "kind": "owner",
         "group": null,
         "user": null,
+        "fromField": null,
         "rule": [],
-        "resetOnDescriptionChange": false
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
       },
+      "approval": null,
+      "document": null,
       "fields": [
         {
           "ref": "buchung.antragsteller_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.antragsteller_vorname",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -532,13 +563,6 @@
           "ref": "buchung.ort_stadt",
           "mode": "editable",
           "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.partner_hotel",
-          "mode": "editable",
-          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
@@ -671,47 +695,6 @@
           }
         },
         {
-          "ref": "buchung.budget_bestaetigung",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.budget_begruendung",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "buchung.budget_bestaetigung",
-              "abweichung"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "buchung.budget_bestaetigung",
-              "abweichung"
-            ]
-          }
-        },
-        {
-          "ref": "buchung.budget_genehmigung",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": {
-            "==": [
-              "buchung.budget_bestaetigung",
-              "abweichung"
-            ]
-          },
-          "visibleWhen": {
-            "==": [
-              "buchung.budget_bestaetigung",
-              "abweichung"
-            ]
-          }
-        },
-        {
           "ref": "buchung.besondere_anforderungen",
           "mode": "editable",
           "required": false,
@@ -719,8 +702,6 @@
           "visibleWhen": null
         }
       ],
-      "constraints": [],
-      "automations": [],
       "layout": [
         {
           "type": "section",
@@ -733,6 +714,11 @@
             {
               "type": "field",
               "ref": "buchung.antragsteller_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_vorname",
               "width": "half"
             },
             {
@@ -797,11 +783,6 @@
             },
             {
               "type": "field",
-              "ref": "buchung.partner_hotel",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "buchung.hotelwunsch",
               "width": "full"
             }
@@ -812,7 +793,7 @@
           "title": "Reiseanlass",
           "variant": "travel",
           "badge": null,
-          "description": "Zwingend auszufüllen.",
+          "description": "Zwingend auszufuellen.",
           "collapsed": false,
           "items": [
             {
@@ -859,31 +840,6 @@
         },
         {
           "type": "section",
-          "title": "Budgetvorgaben gemäß Reisekostenrichtlinie",
-          "variant": "travel",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "buchung.budget_bestaetigung",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.budget_begruendung",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.budget_genehmigung",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
           "title": "Besondere Anforderungen",
           "variant": "travel",
           "badge": null,
@@ -896,389 +852,40 @@
               "width": "full"
             }
           ]
-        }
-      ]
-    },
-    {
-      "key": "durchfuehrung",
-      "label": "Prüfung Hotelbuchung",
-      "kind": "review",
-      "view": "review",
-      "enterStatus": null,
-      "grantsFullView": false,
-      "responsibility": {
-        "kind": "departments",
-        "group": null,
-        "user": null,
-        "rule": [
-          {
-            "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
-            "required": true,
-            "when": null
-          }
-        ],
-        "resetOnDescriptionChange": false
-      },
-      "fields": [
-        {
-          "ref": "buchung.antragsteller_name",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.antragsteller_email",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.niederlassung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.telefonnummer",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.kostenstelle",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.anreisedatum",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.abreisedatum",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.anzahl_naechte",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.ort_stadt",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.partner_hotel",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.hotelwunsch",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.reiseanlass",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.kunde_name",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.kunde_anschrift",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.kunde_grund",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.besuch_niederlassung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.besuch_begruendung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.sonstiges_grund",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.genehmigung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.budget_bestaetigung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.budget_begruendung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.budget_genehmigung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.besondere_anforderungen",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
         }
       ],
       "constraints": [],
-      "automations": [],
-      "layout": [
-        {
-          "type": "section",
-          "title": "Angaben zur antragstellenden Person",
-          "variant": "base",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "buchung.antragsteller_name",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.antragsteller_email",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.niederlassung",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.telefonnummer",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.kostenstelle",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Reisedaten",
-          "variant": "travel",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "buchung.anreisedatum",
-              "width": "third"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.abreisedatum",
-              "width": "third"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.anzahl_naechte",
-              "width": "third"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Reiseziel",
-          "variant": "travel",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "buchung.ort_stadt",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.partner_hotel",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.hotelwunsch",
-              "width": "full"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Reiseanlass",
-          "variant": "travel",
-          "badge": null,
-          "description": "Zwingend auszufüllen.",
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "buchung.reiseanlass",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.kunde_name",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.kunde_anschrift",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.kunde_grund",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.besuch_niederlassung",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.besuch_begruendung",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.sonstiges_grund",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.genehmigung",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Budgetvorgaben gemäß Reisekostenrichtlinie",
-          "variant": "travel",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "buchung.budget_bestaetigung",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.budget_begruendung",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "buchung.budget_genehmigung",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Besondere Anforderungen",
-          "variant": "travel",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "buchung.besondere_anforderungen",
-              "width": "full"
-            }
-          ]
-        }
-      ]
+      "automations": []
     },
     {
-      "key": "reisestelle",
-      "label": "Reisestelle",
+      "key": "buchung",
+      "label": "Buchung",
       "kind": "task",
-      "view": "readonly",
+      "view": "form",
       "enterStatus": null,
-      "grantsFullView": false,
+      "advanceLabel": "Buchung abschliessen",
+      "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_REISESTELLE_EINSETZEN",
+        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
         "user": null,
+        "fromField": null,
         "rule": [],
-        "resetOnDescriptionChange": false
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
       },
+      "approval": null,
+      "document": null,
       "fields": [
         {
           "ref": "buchung.antragsteller_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.antragsteller_vorname",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -1341,13 +948,6 @@
           "visibleWhen": null
         },
         {
-          "ref": "buchung.partner_hotel",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
           "ref": "buchung.hotelwunsch",
           "mode": "readonly",
           "required": false,
@@ -1366,70 +966,84 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "kundentermin"
+            ]
+          }
         },
         {
           "ref": "buchung.kunde_anschrift",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "kundentermin"
+            ]
+          }
         },
         {
           "ref": "buchung.kunde_grund",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "kundentermin"
+            ]
+          }
         },
         {
           "ref": "buchung.besuch_niederlassung",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "besuch_niederlassung"
+            ]
+          }
         },
         {
           "ref": "buchung.besuch_begruendung",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "besuch_niederlassung"
+            ]
+          }
         },
         {
           "ref": "buchung.sonstiges_grund",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "sonstiges"
+            ]
+          }
         },
         {
           "ref": "buchung.genehmigung",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.budget_bestaetigung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.budget_begruendung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
-        },
-        {
-          "ref": "buchung.budget_genehmigung",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "sonstiges"
+            ]
+          }
         },
         {
           "ref": "buchung.besondere_anforderungen",
@@ -1437,11 +1051,55 @@
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
+        },
+        {
+          "ref": "buchung.hotel_name",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.hotel_adresse",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.buchungsnummer",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
         }
       ],
-      "constraints": [],
-      "automations": [],
       "layout": [
+        {
+          "type": "section",
+          "title": "Buchung",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.hotel_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.hotel_adresse",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.buchungsnummer",
+              "width": "half"
+            }
+          ]
+        },
         {
           "type": "section",
           "title": "Angaben zur antragstellenden Person",
@@ -1453,6 +1111,11 @@
             {
               "type": "field",
               "ref": "buchung.antragsteller_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_vorname",
               "width": "half"
             },
             {
@@ -1517,11 +1180,6 @@
             },
             {
               "type": "field",
-              "ref": "buchung.partner_hotel",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "buchung.hotelwunsch",
               "width": "full"
             }
@@ -1532,7 +1190,7 @@
           "title": "Reiseanlass",
           "variant": "travel",
           "badge": null,
-          "description": "Zwingend auszufüllen.",
+          "description": "Zwingend auszufuellen.",
           "collapsed": false,
           "items": [
             {
@@ -1579,7 +1237,7 @@
         },
         {
           "type": "section",
-          "title": "Budgetvorgaben gemäß Reisekostenrichtlinie",
+          "title": "Besondere Anforderungen",
           "variant": "travel",
           "badge": null,
           "description": null,
@@ -1587,17 +1245,411 @@
           "items": [
             {
               "type": "field",
-              "ref": "buchung.budget_bestaetigung",
+              "ref": "buchung.besondere_anforderungen",
+              "width": "full"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "rechnung",
+      "label": "Warten auf Rechnung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "advanceLabel": "Weitergeben",
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": false
+      },
+      "approval": null,
+      "document": null,
+      "fields": [
+        {
+          "ref": "buchung.antragsteller_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.antragsteller_vorname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.antragsteller_email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.niederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.telefonnummer",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.kostenstelle",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.anreisedatum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.abreisedatum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.anzahl_naechte",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.ort_stadt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.hotelwunsch",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.reiseanlass",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.kunde_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "kundentermin"
+            ]
+          }
+        },
+        {
+          "ref": "buchung.kunde_anschrift",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "kundentermin"
+            ]
+          }
+        },
+        {
+          "ref": "buchung.kunde_grund",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "kundentermin"
+            ]
+          }
+        },
+        {
+          "ref": "buchung.besuch_niederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "besuch_niederlassung"
+            ]
+          }
+        },
+        {
+          "ref": "buchung.besuch_begruendung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "besuch_niederlassung"
+            ]
+          }
+        },
+        {
+          "ref": "buchung.sonstiges_grund",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "sonstiges"
+            ]
+          }
+        },
+        {
+          "ref": "buchung.genehmigung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "buchung.reiseanlass",
+              "sonstiges"
+            ]
+          }
+        },
+        {
+          "ref": "buchung.besondere_anforderungen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.hotel_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.hotel_adresse",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.buchungsnummer",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "buchung.rechnung",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Rechnung",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.rechnung",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Buchung",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.hotel_name",
               "width": "half"
             },
             {
               "type": "field",
-              "ref": "buchung.budget_begruendung",
+              "ref": "buchung.hotel_adresse",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.buchungsnummer",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Angaben zur antragstellenden Person",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_vorname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.antragsteller_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.telefonnummer",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kostenstelle",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reisedaten",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.anreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.abreisedatum",
+              "width": "third"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.anzahl_naechte",
+              "width": "third"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseziel",
+          "variant": "travel",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.ort_stadt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.hotelwunsch",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Reiseanlass",
+          "variant": "travel",
+          "badge": null,
+          "description": "Zwingend auszufuellen.",
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "buchung.reiseanlass",
               "width": "full"
             },
             {
               "type": "field",
-              "ref": "buchung.budget_genehmigung",
+              "ref": "buchung.kunde_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_anschrift",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.kunde_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.besuch_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.sonstiges_grund",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "buchung.genehmigung",
               "width": "half"
             }
           ]
@@ -1617,7 +1669,38 @@
             }
           ]
         }
-      ]
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "reisekostenabrechnung",
+      "label": "Reisekostenabrechnung",
+      "kind": "task",
+      "view": "document",
+      "enterStatus": null,
+      "advanceLabel": "Archivieren",
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": false
+      },
+      "approval": null,
+      "document": {
+        "templateHtml": "",
+        "title": "Reisekostenabrechnung",
+        "filename": "Reisekostenabrechnung_{{buchung.antragsteller_name}}_{{buchung.antragsteller_vorname}}",
+        "bindings": {}
+      },
+      "fields": [],
+      "layout": [],
+      "constraints": [],
+      "automations": []
     }
   ],
   "automations": []
