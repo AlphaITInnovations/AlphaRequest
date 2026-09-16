@@ -749,6 +749,15 @@ def apply_action_changes(row: dict, defn: ProcessDefinition, changes: dict, stor
     if "status" in changes:
         store.set_status(tid, changes["status"])
         row["status"] = changes["status"]
+    if ("priority" in changes or "status" in changes) and "values" not in changes:
+        # set_priority/set_status geben die neue rev NICHT zurück, erhöhen sie aber
+        # (der reale Store bumpt bei jedem Write). Ohne Auffrischen bliebe row['rev']
+        # veraltet – und ein direkt folgender rev-geschützter Schreibvorgang (der
+        # Phasenübergang nach einer on_exit-Automation) liefe in einen 409. Der
+        # values-Zweig unten frischt row['rev'] bereits selbst über row.update auf.
+        fresh = store.get(tid)
+        if fresh:
+            row["rev"] = fresh.get("rev", row.get("rev"))
     if "values" in changes:
         # rev-Guard UND frischer Stand: hier wird der KOMPLETTE values-Blob
         # zurückgeschrieben. Ohne beides könnte eine Automation mit veraltetem

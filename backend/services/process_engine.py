@@ -266,6 +266,13 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
             # der Übergang gleich mit der eigenen Nummern-Schreibung.
             expected_rev = row.get("rev")
         run_inline(row, defn, old_phase, {TriggerType.on_exit})
+        # Eine on_exit-Automation mit Schreibwirkung (set_field/set_priority/…) hat
+        # gerade selbst die rev erhöht. Ohne dieses Auffrischen schriebe update_runtime
+        # unten mit dem VERALTETEN expected_rev und liefe deterministisch in einen
+        # 409 – die Phase ließe sich dann NIE weiterschalten (jeder Retry feuert
+        # on_exit erneut). apply_action_changes hält row['rev'] dafür aktuell.
+        if expected_rev is not None:
+            expected_rev = row.get("rev")
 
     # Werte mitgeben: die neue Phase entscheidet damit, WELCHE Fachabteilungen
     # beteiligt sind (bedingte Regeln werden erst beim Eintritt ausgewertet).

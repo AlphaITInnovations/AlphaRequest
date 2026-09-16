@@ -1,6 +1,7 @@
 """Ebene-1: Condition-DSL-Auswertung, Zwei-Pass-Validierung, Phasen-Runtime."""
 
 import copy
+import json
 
 from backend.schemas.process_definition import ProcessDefinition
 from backend.services.condition_dsl import evaluate
@@ -203,3 +204,109 @@ def test_run_department_done_fires_nonblocking(monkeypatch):
                         lambda a, r, d, p, occurrence=None: fired.append(a.id) or False)
     engine.run_department_done(row, defn, defn.phases[1], "g_it")
     assert fired == ["anlegen"]
+
+
+# ── Regression: on_exit-Automation mit Schreibwirkung darf den Übergang nicht ──
+# in einen (falschen, dauerhaften) 409 laufen lassen. ──────────────────────────
+
+class _RevStore:
+    """Store-Double mit ECHTER rev-Semantik (wie der reale Store): jeder Write
+    erhöht rev, ein gesetzter expected_rev muss die AKTUELLE rev treffen (sonst
+    ProcessTicketConflict). Damit reproduziert der Test den Bug: eine schreibende
+    on_exit-Automation bumpt die rev, bevor update_runtime mit dem alten
+    expected_rev schreibt. set_priority/set_status geben – wie real – KEINE frische
+    rev zurück (nur get zeigt sie), erhöhen sie aber."""
+
+    def __init__(self, row):
+        self.row = row
+
+    def get(self, tid):
+        return dict(self.row)
+
+    def _guard(self, expected_rev):
+        if expected_rev is not None and self.row["rev"] != expected_rev:
+            from backend.database.process_tickets import ProcessTicketConflict
+            raise ProcessTicketConflict(f"rev {expected_rev} != {self.row['rev']}")
+
+    def set_priority(self, tid, v, expected_rev=None):
+        self._guard(expected_rev)
+        self.row["priority"] = v
+        self.row["rev"] += 1
+
+    def set_status(self, tid, v, expected_rev=None):
+        self._guard(expected_rev)
+        self.row["status"] = v
+        self.row["rev"] += 1
+
+    def update_values(self, tid, values_json, title=None, expected_rev=None):
+        self._guard(expected_rev)
+        self.row["values"] = json.loads(values_json)
+        self.row["rev"] += 1
+        return dict(self.row)
+
+    def update_runtime(self, tid, *, runtime_json, status, next_timer_due_at=None, expected_rev=None):
+        self._guard(expected_rev)
+        self.row["runtime"] = json.loads(runtime_json)
+        self.row["status"] = status
+        self.row["next_timer_due_at"] = next_timer_due_at
+        self.row["rev"] += 1
+        return dict(self.row)
+
+    def set_next_timer(self, tid, v, expected_rev=None):
+        self.row["next_timer_due_at"] = v
+
+
+class _FakeFires:
+    def fired_map(self, tid, phase_key, epoch):
+        return {}
+
+
+def _on_exit_defn(action):
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "oe", "name": "OE",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "flag", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}, {"ref": "flag"}],
+             "automations": [{"id": "stamp", "trigger": {"type": "on_exit"}, "action": action}]},
+            {"key": "next", "kind": "task", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a", "mode": "readonly"}]},
+        ],
+    })
+
+
+def _prep_transition(monkeypatch, action):
+    from backend.services import process_engine as engine
+    defn = _on_exit_defn(action)
+    rt = pr.initial_runtime(defn, "t0")
+    row = {"id": 1, "rev": 3, "values": {"a": "x"}, "runtime": rt,
+           "status": "in_progress", "priority": "normal", "next_timer_due_at": None}
+    monkeypatch.setattr(engine, "store", _RevStore(row))
+    monkeypatch.setattr(engine, "fires", _FakeFires())
+    monkeypatch.setattr(engine, "SENDER", lambda *a, **k: None)
+    monkeypatch.setattr(engine, "record_audit", lambda **k: None)
+    monkeypatch.setattr(engine, "_audit_fired", lambda *a, **k: None)
+    monkeypatch.setattr(engine.actions, "notify_phase_entry", lambda *a, **k: [])
+    monkeypatch.setattr(engine.events, "record", lambda *a, **k: None)
+    monkeypatch.setattr(engine.events, "system", lambda *a, **k: None)
+    return engine, defn, row
+
+
+def test_transition_survives_on_exit_set_field(monkeypatch):
+    # Vor dem Fix: on_exit-set_field bumpt rev 3→4, update_runtime schreibt mit dem
+    # veralteten expected_rev=3 → ProcessTicketConflict/409. Muss durchlaufen.
+    engine, defn, row = _prep_transition(
+        monkeypatch, {"type": "set_field", "field": "flag", "value": "done"})
+    engine.transition(row, defn, expected_rev=3)          # darf NICHT werfen
+    assert row["runtime"]["current_index"] == 1           # neue Phase betreten
+    assert row["values"]["flag"] == "done"                # on_exit-Wirkung steht
+
+
+def test_transition_survives_on_exit_set_priority(monkeypatch):
+    # set_priority gibt keine frische rev zurück – apply_action_changes muss
+    # row['rev'] trotzdem nachziehen, sonst 409 wie oben.
+    engine, defn, row = _prep_transition(
+        monkeypatch, {"type": "set_priority", "value": "high"})
+    engine.transition(row, defn, expected_rev=3)
+    assert row["runtime"]["current_index"] == 1
+    assert row["priority"] == "high"
