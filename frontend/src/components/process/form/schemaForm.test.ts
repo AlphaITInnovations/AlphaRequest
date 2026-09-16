@@ -8,6 +8,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { normalizeDefinition } from '@/lib/processNormalize'
+import { applyComputed } from '@/lib/conditionDsl'
 import {
   renderFields, validateValues, validatePhaseCompletion, visibleFieldKeys,
 } from '@/lib/processSim'
@@ -116,6 +117,48 @@ describe('Listen-Widgets senden immer ein Array', () => {
   it('erwartet für number eine echte Zahl, keinen String', () => {
     expect(validateValues(defn, { gehalt: '1000' })[0]?.code).toBe('TYPE')
     expect(validateValues(defn, { gehalt: 1000 })).toEqual([])
+  })
+})
+
+describe('Berechnete Übernachtungen werden sofort angezeigt', () => {
+  // Nachbildung des Hotelbuchung-Musters: Nächte = days_between(Anreise, Abreise),
+  // read-only. normalizeDefinition läuft hier mit – der Test deckt damit auch ab,
+  // dass der Normalizer op/to erhält (sonst käme statt der Zahl das Rohdatum).
+  const reise = normalizeDefinition({
+    schemaVersion: 1, key: 'reise', name: 'Reise',
+    fields: [
+      { key: 'an', widget: 'date', label: 'Anreise' },
+      { key: 'ab', widget: 'date', label: 'Abreise' },
+      { key: 'naechte', widget: 'number', label: 'Übernachtungen', overridable: false,
+        computed: { from: 'an', to: 'ab', op: 'days_between' } },
+    ],
+    phases: [{
+      key: 'start', kind: 'start',
+      fields: [{ ref: 'an' }, { ref: 'ab' }, { ref: 'naechte', mode: 'readonly' }],
+    }],
+  })
+  const p = reise.phases[0]
+  const wer: SimViewer = { fullView: true, isAdmin: true, groupIds: [] }
+  const naechteRow = (values: Record<string, unknown>) =>
+    renderFields(reise, p, values, wer).find((r) => r.field.key === 'naechte')
+
+  it('zeigt das Nächte-Feld an (sichtbar, aber nicht editierbar)', () => {
+    const r = naechteRow({})
+    expect(r?.visible).toBe(true)   // wird also gerendert (disabled)
+    expect(r?.editable).toBe(false)
+  })
+
+  it('füllt den angezeigten Wert, sobald beide Daten gewählt sind', () => {
+    // genau das, was onValues() im Anlege-Formular tut
+    const after = applyComputed(reise.fields, { an: '2026-09-16', ab: '2026-09-18' })
+    expect(after.naechte).toBe(2)               // Zahl, nicht das Rohdatum → Normalizer ok
+    expect(naechteRow(after)?.visible).toBe(true)
+    // gleicher Tag → 0 (wird als „0" angezeigt, nicht leer)
+    expect(applyComputed(reise.fields, { an: '2026-09-16', ab: '2026-09-16' }).naechte).toBe(0)
+  })
+
+  it('bleibt leer, solange nur ein Datum gewählt ist', () => {
+    expect(applyComputed(reise.fields, { an: '2026-09-16' }).naechte ?? null).toBeNull()
   })
 })
 
