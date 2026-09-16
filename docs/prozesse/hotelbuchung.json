@@ -108,9 +108,9 @@
     {
       "key": "buchung.kostenstelle",
       "label": "Kostenstelle",
-      "widget": "text",
-      "help": null,
-      "placeholder": "z. B. 1234",
+      "widget": "directus",
+      "help": "Nur Ziffern.",
+      "placeholder": null,
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -121,7 +121,9 @@
       "overridable": false,
       "assign": null,
       "mode": null,
-      "item": []
+      "item": [],
+      "directusSource": "kostenstelle",
+      "directusFieldMap": []
     },
     {
       "key": "buchung.anreisedatum",
@@ -178,11 +180,17 @@
         "maxDate": null
       },
       "visibility": null,
-      "computed": null,
+      "computed": {
+        "from": "buchung.anreisedatum",
+        "to": "buchung.abreisedatum",
+        "op": "days_between",
+        "map": null
+      },
       "overridable": false,
       "assign": null,
       "mode": null,
-      "item": []
+      "item": [],
+      "help": "Wird automatisch aus An- und Abreisedatum berechnet."
     },
     {
       "key": "buchung.ort_stadt",
@@ -554,7 +562,7 @@
         },
         {
           "ref": "buchung.anzahl_naechte",
-          "mode": "editable",
+          "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
