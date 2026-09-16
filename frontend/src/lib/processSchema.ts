@@ -49,10 +49,19 @@ export const ACTION_TYPES: readonly ActionType[] = [
 ]
 
 /**
+ * Aktionen, die als AUTOMATION wählbar sind. `assign_sequence` fehlt bewusst: die
+ * Nummernvergabe lehnt der Server als Automation immer ab (sie wird als Feld mit
+ * Feldtyp „Vom System vergeben" eingerichtet). Nur zum Anbieten im Editor gedacht –
+ * ACTION_TYPES bleibt die vollständige Liste (Labels, Normalisierung).
+ */
+export const AUTOMATION_ACTION_TYPES: readonly ActionType[] =
+  ACTION_TYPES.filter((t) => t !== 'assign_sequence')
+
+/**
  * Nummernkreise, die die Laufzeit kennt (Spiegel von KNOWN_COUNTERS in
- * backend/services/process_sequences.py). Das Meta-Schema prüft den Namen NICHT –
- * ein unbekannter Nummernkreis lässt sich also speichern und scheitert erst beim
- * Phasenabschluss. Der Editor warnt deshalb, blockiert aber nicht.
+ * backend/services/process_sequences.py). Das Meta-Schema (AssignSpec) prüft den
+ * Namen SEHR WOHL und lehnt einen unbekannten Nummernkreis ab; der Editor meldet
+ * ihn deshalb als Fehler (nicht nur als Warnung).
  */
 export const SEQUENCE_COUNTERS: readonly string[] = ['personalnummer']
 

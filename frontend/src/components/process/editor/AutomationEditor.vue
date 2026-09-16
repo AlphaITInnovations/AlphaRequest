@@ -18,7 +18,7 @@ import type {
   HttpHeader, HttpMethod, HttpRequestSpec, Trigger, TriggerType,
 } from '@/types/process'
 import {
-  ACTION_LABEL, ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
+  ACTION_LABEL, AUTOMATION_ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
   RECIPIENT_LABEL, SEQUENCE_COUNTERS, STATUS_LABEL, TRIGGER_LABEL, TRIGGER_TYPES,
 } from '@/lib/processSchema'
 import { listCollections, listFields } from '@/api/directus'
@@ -407,7 +407,7 @@ watch(dwCollection, (c) => {
       <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">Aktion</p>
 
       <select class="afi w-full" :value="a.action.type" @change="onActionType(val($event) as ActionType)">
-        <option v-for="t in ACTION_TYPES" :key="t" :value="t">{{ ACTION_LABEL[t] ?? t }}</option>
+        <option v-for="t in AUTOMATION_ACTION_TYPES" :key="t" :value="t">{{ ACTION_LABEL[t] ?? t }}</option>
       </select>
 
       <!-- Benachrichtigen / Eskalieren -->

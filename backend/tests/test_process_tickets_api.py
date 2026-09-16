@@ -1153,3 +1153,29 @@ def test_view_liste_kein_admin_bonus(client, monkeypatch):
     row = next(r for r in rows if r["id"] == tid)
     assert "it.secret" not in row["visible_fields"]
     assert "it.secret" not in row["values"]
+
+
+def test_redact_responsibility_verbirgt_vertrauliches_quellfeld():
+    """Befund: die aus einem Auftragsfeld gewählte Zuständigkeit (group_from_field/
+    assignable) folgt der Feld-Sicht – ein confidential-Quellfeld darf nicht über
+    `responsibility` leaken."""
+    from backend.schemas.process_definition import ProcessDefinition
+    from backend.services import process_visibility as vis
+    defn = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "resp_grp", "widget": "group",
+                    "visibility": {"confidential": True, "visibleToGroups": ["g_hr"]}}],
+        "phases": [{"key": "start", "kind": "start",
+                    "responsibility": {"kind": "group_from_field", "fromField": "resp_grp"},
+                    "fields": [{"ref": "resp_grp"}]}],
+    })
+    resp = {"kind": "group", "group": "g_secret", "from_field": "resp_grp", "assignable": True}
+    # Vollsicht hilft bei confidential NICHT → Wert ausgeblendet.
+    ctx_no = vis.ViewerCtx(full_view=True, is_admin=False, group_ids=set())
+    assert pt._redact_responsibility(resp, defn, ctx_no)["group"] is None
+    # HR (Gruppe hinterlegt) sieht den Wert.
+    ctx_hr = vis.ViewerCtx(full_view=False, is_admin=False, group_ids={"g_hr"})
+    assert pt._redact_responsibility(resp, defn, ctx_hr)["group"] == "g_secret"
+    # Feste Zuständigkeit ohne from_field bleibt unangetastet.
+    fixed = {"kind": "group", "group": "g_fix"}
+    assert pt._redact_responsibility(fixed, defn, ctx_no) == fixed

@@ -192,10 +192,10 @@ describe('validateDefinition – freigeschaltete Werte', () => {
     expect(errorCount(validateDefinition(d))).toBe(0)
   })
 
-  it('akzeptiert die Aktion assign_sequence mit Nummernkreis und Feld', () => {
+  it('lehnt assign_sequence als Automation ab (nur als Feld zulässig)', () => {
     const d = defn({ automations: [{ id: 'x', trigger: { type: 'on_enter' },
       action: { type: 'assign_sequence', counter: 'personalnummer', field: 'base.name' } }] })
-    expect(errorCount(validateDefinition(d))).toBe(0)
+    expect(codes(d)).toContain('UNSUPPORTED')
   })
 
   it('akzeptiert die Zuständigkeit „Fachabteilung aus einem Feld"', () => {
@@ -326,31 +326,27 @@ describe('validateDefinition – vom Server vergebene Nummern', () => {
     expect(codes(d)).toContain('SERVER_FIELD_NOT_EDITABLE')
   })
 
-  it('verlangt Nummernkreis UND Zielfeld bei der Aktion', () => {
-    const ohneBeides = defn({ automations: [{ id: 'x', trigger: { type: 'on_enter' },
-      action: { type: 'assign_sequence' } }] })
-    expect(ohneBeides && validateDefinition(ohneBeides)
-      .filter((i) => i.code === 'REQUIRED').length).toBe(2)
-  })
-
-  it('warnt bei unbekanntem Nummernkreis, blockiert aber nicht', () => {
+  it('meldet einen unbekannten Nummernkreis als Fehler (Server lehnt ab)', () => {
     const d = mitPnr({ widget: 'server_generated',
       assign: { action: 'assign_sequence', counter: 'rechnungsnummer', companyRef: 'firma' } })
-    const issues = validateDefinition(d)
-    expect(issues.some((i) => i.code === 'UNKNOWN_COUNTER' && i.severity === 'warning')).toBe(true)
-    expect(errorCount(issues)).toBe(0)
+    expect(codes(d)).toContain('UNKNOWN_COUNTER')
   })
 
-  it('warnt, wenn die Nummer nie vergeben werden kann', () => {
+  it('verlangt ein Firmen-Feld als companyRef', () => {
+    // companyRef zeigt auf ein Text- statt Firmen-Feld → Server lehnt ab.
+    const d = mitPnr({ widget: 'server_generated',
+      assign: { action: 'assign_sequence', counter: 'personalnummer', companyRef: 'base.name' } })
+    expect(codes(d)).toContain('INVALID')
+  })
+
+  it('meldet als Fehler, wenn die Nummer nie vergeben werden kann', () => {
     const d = defn({
       fields: [{ key: 'base.name', widget: 'text' }, { key: 'firma', widget: 'company' },
         { key: 'pnr', widget: 'server_generated',
           assign: { action: 'assign_sequence', counter: 'personalnummer', companyRef: 'firma' } }],
       phases: [START],   // keine Phase führt „pnr"
     })
-    const issues = validateDefinition(d)
-    expect(issues.some((i) => i.code === 'NEVER_ASSIGNED' && i.severity === 'warning')).toBe(true)
-    expect(errorCount(issues)).toBe(0)
+    expect(codes(d)).toContain('NEVER_ASSIGNED')
   })
 })
 
@@ -545,15 +541,26 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(codes(d)).toContain('INVALID')
   })
 
-  it('akzeptiert matchField + onError=block auf einem gemappten Zielfeld', () => {
+  it('akzeptiert matchField auf einem gemappten Zielfeld', () => {
     const d = defn({
       fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
       phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
         fields: [{ ref: 'base.name' }],
         automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
           directus: { operation: 'create', collection: 'k', idField: 'mid', matchField: 'name',
-            onError: 'block', fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+            onError: 'continue', fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
     expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('lehnt onError=block ab, wenn der Auslöser nicht on_department_done ist', () => {
+    const d = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'k', idField: 'mid',
+            onError: 'block', fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+    expect(codes(d)).toContain('INVALID')
   })
 
   it('lehnt matchField auf einem aufgelösten Feld ab', () => {

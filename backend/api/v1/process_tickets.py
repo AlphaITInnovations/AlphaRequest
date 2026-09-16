@@ -246,6 +246,23 @@ def _may_export_document(row: dict, defn: Optional[ProcessDefinition],
     return bool(ctx.full_view or ctx.is_admin)
 
 
+def _redact_responsibility(resp: Optional[dict], defn: Optional[ProcessDefinition],
+                           ctx: vis.ViewerCtx) -> Optional[dict]:
+    """Der aus einem Auftragsfeld gewählte Zuständige (kind=assignable /
+    group_from_field) ist ein FELD-Wert und unterliegt daher der Feld-Sicht wie
+    jeder andere Wert: darf der Betrachter das Quellfeld (`from_field`) nicht sehen,
+    wird der gewählte user/group ausgeblendet. Ohne das leakt ein als confidential
+    markiertes Zuständigkeits-Feld über `responsibility`, obwohl `values` es korrekt
+    verbirgt. Feste group/user-Zuständigkeiten (aus der Definition, ohne from_field)
+    sind nicht betroffen."""
+    if not resp or not resp.get("from_field"):
+        return resp
+    if resp["from_field"] in vis.visible_field_keys(defn, ctx):
+        return resp
+    key = "group" if resp.get("kind") == "group" else "user"
+    return {**resp, key: None}
+
+
 def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
          user: Optional[dict] = None, group_ids=()) -> ProcessTicketOut:
     cur = pr.current_phase(defn, row["runtime"]) if defn else None
@@ -265,7 +282,8 @@ def _out(row: dict, defn: Optional[ProcessDefinition], ctx: vis.ViewerCtx,
     data["values"] = vis.filter_values(defn, row.get("values") or {}, ctx)
     data["current_phase"] = cur.key if cur else None
     data["current_phase_label"] = (cur.label or cur.key) if cur else None
-    data["responsibility"] = resp
+    # Feld-Sicht auch auf die (aus einem Feld gewählte) Zuständigkeit anwenden.
+    data["responsibility"] = _redact_responsibility(resp, defn, ctx)
     completable = _completable_departments(row, defn, user, group_ids, resp)
     # Dokument/Vertrag exportieren: echtes Vollsicht/Admin-Recht aus den ECHTEN
     # Gruppen – NICHT aus dem (beim Abteilungs-Link heruntergescopeten) Anzeige-Ctx,

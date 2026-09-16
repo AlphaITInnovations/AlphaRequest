@@ -8,6 +8,28 @@ from pydantic import ValidationError
 from backend.schemas.process_definition import ProcessDefinition, validate_condition
 
 
+def test_onerror_block_nur_bei_department_done():
+    """onError=block ist nur beim Auslöser on_department_done wirksam – bei jedem
+    anderen Trigger wäre es ein stiller No-Op und wird deshalb abgelehnt."""
+    from backend.schemas.process_definition import Automation
+    dw = {"type": "directus_write", "directus": {
+        "operation": "create", "collection": "c", "idField": "mid", "onError": "block",
+        "fieldMap": [{"source": "a", "target": "n"}]}}
+    with pytest.raises(ValidationError):
+        Automation.model_validate({"id": "x", "trigger": {"type": "on_enter"}, "action": dw})
+    # Beim richtigen Auslöser erlaubt.
+    Automation.model_validate(
+        {"id": "x", "trigger": {"type": "on_department_done", "group": "g_it"}, "action": dw})
+    # onError=continue ist überall erlaubt.
+    cont = {"type": "directus_write", "directus": {**dw["directus"], "onError": "continue"}}
+    Automation.model_validate({"id": "x", "trigger": {"type": "on_enter"}, "action": cont})
+    # Gilt genauso für http_request.
+    http_block = {"type": "http_request", "http": {"url": "https://x.test", "onError": "block"}}
+    with pytest.raises(ValidationError):
+        Automation.model_validate(
+            {"id": "x", "trigger": {"type": "timer", "after": "P1D"}, "action": http_block})
+
+
 VALID = {
     "schemaVersion": 1,
     "key": "demo-prozess",
@@ -286,12 +308,15 @@ def test_directus_write_matchfield_not_on_resolved_target():
     _reject(d)
 
 
-def test_directus_write_matchfield_and_block_ok():
+def test_directus_write_matchfield_ok():
+    # matchField (Geschäftsschlüssel) ist strukturell gültig. onError=block wird
+    # separat geprüft (nur beim Auslöser on_department_done erlaubt), daher hier
+    # continue.
     d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
     d["phases"][0]["fields"] = [{"ref": "a"}]
     d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
         "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
-                   "idField": "mid", "matchField": "name", "onError": "block",
+                   "idField": "mid", "matchField": "name", "onError": "continue",
                    "fieldMap": [{"source": "a", "target": "name"}]}}}]
     ProcessDefinition.model_validate(d)  # darf nicht werfen
 

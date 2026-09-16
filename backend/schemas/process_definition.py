@@ -695,6 +695,29 @@ class Automation(_Base):
             validate_condition(self.guard, f"automation[{self.id}].guard")
         return self
 
+    @model_validator(mode="after")
+    def _blocking_only_on_department_done(self) -> "Automation":
+        """onError=block wirkt NUR im synchronen on_department_done-Pfad (dort läuft
+        die Aktion VOR dem Persistieren von „done" und bricht den Abschluss ab). Bei
+        jedem anderen Auslöser läuft sie über den fehlerschluckenden fire()-Pfad: die
+        Phase schaltet trotzdem weiter, der Fehlschlag wird nur generisch auditiert –
+        schlechter als continue. So ein wirkungsloser „block" wäre ein stiller
+        Footgun; deshalb hier ablehnen statt still ignorieren."""
+        oe = None
+        act = self.action
+        if act.type == ActionType.directus_write and act.directus is not None:
+            oe = act.directus.onError
+        elif act.type == ActionType.http_request and act.http is not None:
+            oe = act.http.onError
+        blocks = oe is not None and str(getattr(oe, "value", oe)) == "block"
+        if blocks and self.trigger.type != TriggerType.on_department_done:
+            raise ValueError(
+                f"automation[{self.id}]: onError=block wirkt nur beim Auslöser "
+                f"„Fachabteilung abgeschlossen“ (on_department_done). Bei "
+                f"„{self.trigger.type.value}“ schaltet die Phase trotzdem weiter – "
+                f"entweder den Auslöser ändern oder onError=continue verwenden.")
+        return self
+
 
 # ── Layout (nur Darstellung) ──────────────────────────────────────────────────
 #

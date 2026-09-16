@@ -136,15 +136,18 @@ def redact(events: Iterable[dict], defn: Optional[ProcessDefinition],
             if len(keep) != len(named):
                 # Ehrlich bleiben: es waren mehr, aber nicht für diese Augen.
                 det["fields_hidden"] = len(named) - len(keep)
-            # alt→neu-Werte an dieselbe Feld-Sicht binden: verborgene Felder tragen
-            # ihren Wert nicht in den redigierten Eintrag.
-            ch = det.get("changes")
-            if isinstance(ch, dict) and ch:
-                kept = {k: v for k, v in ch.items() if k in visible}
-                if kept:
-                    det["changes"] = kept
-                else:
-                    det.pop("changes", None)
+
+        # alt→neu-Werte an dieselbe Feld-Sicht binden – UNABHÄNGIG von der
+        # fields-Liste (ein `changes`-Dict ohne begleitende `fields` darf nicht
+        # ungefiltert durch): verborgene Felder tragen ihren Wert nicht in den
+        # redigierten Eintrag.
+        ch = det.get("changes")
+        if isinstance(ch, dict) and ch:
+            kept = {k: v for k, v in ch.items() if k in visible}
+            if kept:
+                det["changes"] = kept
+            else:
+                det.pop("changes", None)
 
         single = det.get("field")
         if isinstance(single, str) and single and single not in visible:

@@ -212,19 +212,23 @@ export function validateDefinition(
         out.push(err(`${p}.assign.counter`, anchor, 'REQUIRED',
           'Bitte den Nummernkreis angeben, aus dem die Nummer kommt.'))
       } else if (!SEQUENCE_COUNTERS.includes(f.assign.counter)) {
-        // Der Server prüft den Namen NICHT – die Vergabe scheitert erst beim
-        // Phasenabschluss. Darum warnen statt blockieren.
-        out.push(warn(`${p}.assign.counter`, anchor, 'UNKNOWN_COUNTER',
-          `Nummernkreis „${f.assign.counter}" ist der Laufzeit unbekannt – die Vergabe `
-          + `bricht später ab. Bekannt: ${SEQUENCE_COUNTERS.join(', ')}.`))
+        // Der Server lehnt einen unbekannten Nummernkreis ab (KNOWN_COUNTERS) –
+        // deshalb harter Fehler, nicht nur Warnung.
+        out.push(err(`${p}.assign.counter`, anchor, 'UNKNOWN_COUNTER',
+          `Nummernkreis „${f.assign.counter}" ist der Laufzeit unbekannt. `
+          + `Bekannt: ${SEQUENCE_COUNTERS.join(', ')}.`))
       }
+      // Nummernkreise werden je Firma geführt: companyRef ist Pflicht, muss im
+      // Katalog stehen UND ein Firmen-Feld sein (alles serverseitig hart geprüft).
       if (!f.assign.companyRef) {
-        out.push(warn(`${p}.assign.companyRef`, anchor, 'REQUIRED',
-          'Ohne Firmen-Feld gibt es keinen Nummernkreis – die Vergabe bricht beim '
-          + 'Abschluss der Phase ab.'))
+        out.push(err(`${p}.assign.companyRef`, anchor, 'REQUIRED',
+          'Firmen-Feld fehlt – ohne Firma gibt es keinen Nummernkreis.'))
       } else if (!catalog.has(f.assign.companyRef)) {
-        out.push(warn(`${p}.assign.companyRef`, anchor, 'UNKNOWN_REF',
+        out.push(err(`${p}.assign.companyRef`, anchor, 'UNKNOWN_REF',
           `Firmen-Feld „${f.assign.companyRef}" ist nicht im Katalog.`))
+      } else if (widgetByKey.get(f.assign.companyRef) !== 'company') {
+        out.push(err(`${p}.assign.companyRef`, anchor, 'INVALID',
+          `„${f.assign.companyRef}" muss ein Firmen-Feld sein (Feldtyp „Firma").`))
       }
     }
     const c = f.constraints
@@ -274,7 +278,8 @@ export function validateDefinition(
   serverAssigned.forEach((k) => {
     if (!d.phases.some((ph) => ph.fields.some((fr) => fr.ref === k))) {
       const idx = d.fields.findIndex((f) => f.key === k)
-      out.push(warn(`fields.${idx}`, `pe-catalog-${idx}`, 'NEVER_ASSIGNED',
+      // Server lehnt das ab (kein Vergabe-Zeitpunkt) → harter Fehler.
+      out.push(err(`fields.${idx}`, `pe-catalog-${idx}`, 'NEVER_ASSIGNED',
         `„${k}" wird vom System vergeben, ist aber in keiner Phase eingebunden – `
         + 'damit bekommt es nie eine Nummer.'))
     }
@@ -683,20 +688,22 @@ export function validateDefinition(
       out.push(err(`${path}.action.value`, anchor, 'INVALID', 'Unbekannte Priorität.'))
     }
     if (ac.type === 'assign_sequence') {
-      if (!ac.counter) {
-        out.push(err(`${path}.action.counter`, anchor, 'REQUIRED', 'Nummernkreis fehlt.'))
-      } else if (!SEQUENCE_COUNTERS.includes(ac.counter)) {
-        out.push(warn(`${path}.action.counter`, anchor, 'UNKNOWN_COUNTER',
-          `Nummernkreis „${ac.counter}" ist der Laufzeit unbekannt `
-          + `(bekannt: ${SEQUENCE_COUNTERS.join(', ')}).`))
-      }
-      if (!ac.field) {
-        out.push(err(`${path}.action.field`, anchor, 'REQUIRED',
-          'Feld fehlt – ohne Ziel wüsste niemand, wohin die Nummer geschrieben wird.'))
-      } else if (!catalog.has(ac.field)) {
-        out.push(err(`${path}.action.field`, anchor, 'UNKNOWN_REF',
-          `Unbekanntes Feld „${ac.field}".`))
-      }
+      // Nummernvergabe ist KEINE Automation – der Server lehnt sie immer mit 422
+      // ab. Sie wird als FELD eingerichtet (Feldtyp „Vom System vergeben" mit
+      // Nummernkreis), nicht als Aktion.
+      out.push(err(`${path}.action.type`, anchor, 'UNSUPPORTED',
+        'Nummernvergabe ist keine Automation. Sie wird als Feld eingerichtet '
+        + '(Feldtyp „Vom System vergeben" mit Nummernkreis).'))
+    }
+    // onError=block wirkt nur beim Auslöser „Fachabteilung abgeschlossen"
+    // (on_department_done); sonst schaltet die Phase trotzdem weiter → Server 422.
+    const onErr = ac.type === 'directus_write' ? ac.directus?.onError
+      : ac.type === 'http_request' ? ac.http?.onError : undefined
+    if (onErr === 'block' && a.trigger.type !== 'on_department_done') {
+      out.push(err(`${path}.action`, anchor, 'INVALID',
+        'Bei Fehler „Blockieren" wirkt nur mit dem Auslöser „Fachabteilung '
+        + 'abgeschlossen". Sonst schaltet die Phase trotzdem weiter – Auslöser '
+        + 'ändern oder „Weiterlaufen" wählen.'))
     }
     if (ac.type === 'directus_write') {
       const dw = ac.directus

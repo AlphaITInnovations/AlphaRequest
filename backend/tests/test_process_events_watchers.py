@@ -185,6 +185,15 @@ def test_changes_folgen_der_feld_sicht():
     assert set(hr[0]["details"]["changes"]) == {"name", "gehalt"}
 
 
+def test_changes_ohne_fields_liste_werden_trotzdem_redigiert():
+    """Ein `changes`-Dict OHNE begleitende `fields`-Liste darf nicht ungefiltert
+    durch – die Werte hängen an derselben Feld-Sicht wie die Schlüssel."""
+    ev = _ev(details={"changes": {"name": {"from": "A", "to": "B"},
+                                  "gehalt": {"from": "1", "to": "2"}}})
+    out = pev.redact([ev], DEFN, _ctx(OWNER), staff=False)
+    assert out[0]["details"]["changes"] == {"name": {"from": "A", "to": "B"}}
+
+
 def test_einzelfeld_referenz_wird_geprueft():
     evs = [_ev(action="automation_fired", details={"field": "gehalt"})]
     assert pev.redact(evs, DEFN, _ctx(OWNER), staff=False) == []
