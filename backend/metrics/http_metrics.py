@@ -24,10 +24,13 @@ http_request_duration_seconds = Histogram(
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
 )
 
+# Nur nach Methode – NICHT nach route: der In-progress-Gauge wird VOR dem Routing
+# erhöht (das Route-Muster steht da noch nicht fest). Ein route-Label müsste hier
+# den Rohpfad tragen und würde die Kardinalität aufblähen (Scanner).
 http_requests_in_progress = Gauge(
     "http_requests_in_progress",
     "In-progress HTTP requests",
-    ["method", "route"],
+    ["method"],
 )
 
 http_exceptions_total = Counter(
@@ -69,6 +72,37 @@ def normalize_path(path: str) -> str:
     return "/" + "/".join(normalized)
 
 
+#: Sammel-Label für Anfragen, die auf KEINE definierte Route passen (404-Scan) –
+#: hält die Kardinalität an der Zahl echter Endpunkte fest.
+_UNMATCHED = "__unmatched__"
+
+
+def route_label(request: Request) -> str:
+    """Ein KARDINALITÄTS-SICHERES route-Label: das gematchte Route-MUSTER (z. B.
+    /process-tickets/{ticket_id}), NICHT der Rohpfad. Sonst erzeugt ein Scanner, der
+    beliebige Pfade abklappert, unbegrenzt viele Zeitreihen (Speicher-DoS aufs
+    Monitoring). Wird erst NACH dem Routing aufgerufen (Muster steht dann fest).
+
+    Robuste Auflösung in Stufen: (1) `scope["route"].path`, falls die Starlette-
+    Version es setzt; (2) Rekonstruktion aus den `path_params` (Werte im Pfad durch
+    `:name` ersetzt); (3) ID-Normalisierung für parameterlose Treffer; (4) sonst
+    `__unmatched__`."""
+    scope = getattr(request, "scope", {}) or {}
+    tmpl = getattr(scope.get("route"), "path", None)
+    if tmpl:
+        return tmpl
+    path = scope.get("path") or request.url.path
+    params = scope.get("path_params") or {}
+    if params:
+        for name, val in params.items():
+            if val is not None:
+                path = path.replace(str(val), f":{name}", 1)
+        return path
+    if scope.get("endpoint") is not None:
+        return normalize_path(path)
+    return _UNMATCHED
+
+
 # ---------------------------------------------------------
 # METRICS MIDDLEWARE
 # ---------------------------------------------------------
@@ -78,12 +112,8 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
 
         method = request.method
-        route = normalize_path(request.url.path)
 
-        http_requests_in_progress.labels(
-            method=method,
-            route=route
-        ).inc()
+        http_requests_in_progress.labels(method=method).inc()
 
         start = time.perf_counter()
         status = "500"
@@ -97,8 +127,9 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
         except Exception as exc:
 
+            # route erst NACH dem Routing bestimmen (Muster steht dann fest).
             http_exceptions_total.labels(
-                route=route,
+                route=route_label(request),
                 exception=exc.__class__.__name__,
             ).inc()
 
@@ -107,6 +138,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         finally:
 
             duration = time.perf_counter() - start
+            route = route_label(request)
 
             http_requests_total.labels(
                 method=method,
@@ -119,7 +151,4 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 route=route,
             ).observe(duration)
 
-            http_requests_in_progress.labels(
-                method=method,
-                route=route,
-            ).dec()
+            http_requests_in_progress.labels(method=method).dec()
