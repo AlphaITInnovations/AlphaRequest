@@ -6,24 +6,6 @@
   "icon": "🏨",
   "fields": [
     {
-      "key": "buchung.antragsteller_name",
-      "label": "Name",
-      "widget": "text",
-      "help": null,
-      "placeholder": null,
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": []
-    },
-    {
       "key": "buchung.antragsteller_vorname",
       "label": "Vorname",
       "widget": "text",
@@ -42,6 +24,24 @@
       "item": [],
       "directusSource": null,
       "directusFieldMap": []
+    },
+    {
+      "key": "buchung.antragsteller_name",
+      "label": "Nachname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
     },
     {
       "key": "buchung.antragsteller_email",
@@ -497,14 +497,14 @@
       "document": null,
       "fields": [
         {
-          "ref": "buchung.antragsteller_name",
+          "ref": "buchung.antragsteller_vorname",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
-          "ref": "buchung.antragsteller_vorname",
+          "ref": "buchung.antragsteller_name",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -713,12 +713,12 @@
           "items": [
             {
               "type": "field",
-              "ref": "buchung.antragsteller_name",
+              "ref": "buchung.antragsteller_vorname",
               "width": "half"
             },
             {
               "type": "field",
-              "ref": "buchung.antragsteller_vorname",
+              "ref": "buchung.antragsteller_name",
               "width": "half"
             },
             {
@@ -867,7 +867,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
+        "group": "e342b490e75e4734911738b90f1134c8",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -878,14 +878,14 @@
       "document": null,
       "fields": [
         {
-          "ref": "buchung.antragsteller_name",
+          "ref": "buchung.antragsteller_vorname",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
-          "ref": "buchung.antragsteller_vorname",
+          "ref": "buchung.antragsteller_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -1110,12 +1110,12 @@
           "items": [
             {
               "type": "field",
-              "ref": "buchung.antragsteller_name",
+              "ref": "buchung.antragsteller_vorname",
               "width": "half"
             },
             {
               "type": "field",
-              "ref": "buchung.antragsteller_vorname",
+              "ref": "buchung.antragsteller_name",
               "width": "half"
             },
             {
@@ -1264,7 +1264,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
+        "group": "e342b490e75e4734911738b90f1134c8",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -1275,14 +1275,14 @@
       "document": null,
       "fields": [
         {
-          "ref": "buchung.antragsteller_name",
+          "ref": "buchung.antragsteller_vorname",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
-          "ref": "buchung.antragsteller_vorname",
+          "ref": "buchung.antragsteller_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -1529,12 +1529,12 @@
           "items": [
             {
               "type": "field",
-              "ref": "buchung.antragsteller_name",
+              "ref": "buchung.antragsteller_vorname",
               "width": "half"
             },
             {
               "type": "field",
-              "ref": "buchung.antragsteller_vorname",
+              "ref": "buchung.antragsteller_name",
               "width": "half"
             },
             {
@@ -1683,7 +1683,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_REISESTELLE_EINSETZEN",
+        "group": "6b3e2e0fe71c42ccaa674445a8ff4e18",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -1703,5 +1703,12 @@
       "automations": []
     }
   ],
-  "automations": []
+  "automations": [],
+  "titleEditable": true,
+  "titleTemplate": null,
+  "createPermissions": {
+    "everyone": true,
+    "groups": [],
+    "users": []
+  }
 }
