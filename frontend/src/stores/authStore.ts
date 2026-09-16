@@ -1,7 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
+import { errorCode, errorMessage } from '@/lib/processErrors'
 import type { User, Permission } from '@/types/api'
+
+/** Gate-Codes des Backends (core/dependencies.enforce_employee_link): angemeldet,
+ *  aber ohne verknüpften Directus-Mitarbeiter-Datensatz bzw. Directus nicht
+ *  erreichbar. KEIN „nicht angemeldet" (das ist 401) – deshalb nicht zum Login,
+ *  sondern eine eigene Erklärseite. */
+const GATE_CODES = ['NO_DIRECTUS_RECORD', 'DIRECTUS_UNAVAILABLE']
 
 export const useAuthStore = defineStore('auth', () => {
   const user    = ref<User | null>(null)
@@ -9,6 +16,9 @@ export const useAuthStore = defineStore('auth', () => {
   const sessionExpired   = ref(false)
   const reauthenticating = ref(false)
   const hadSession       = ref(false)
+  /** Angemeldet, aber vom Backend-Gate blockiert (kein Directus-Datensatz /
+   *  Directus down). Trägt Code + Meldung für die „Kein Zugang"-Seite. */
+  const accessDenied = ref<{ code: string; message: string } | null>(null)
 
   // ── Basis ────────────────────────────────────────────────────────────────────
 
@@ -33,9 +43,16 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data } = await authApi.me()
       user.value = data.data
+      accessDenied.value = null
       hadSession.value = true
-    } catch {
+    } catch (e) {
       user.value = null
+      // Angemeldet, aber vom Gate blockiert → Grund festhalten (statt still auf
+      // Login zu leiten, was zur Endlosschleife führte).
+      const code = errorCode(e)
+      accessDenied.value = code && GATE_CODES.includes(code)
+        ? { code, message: errorMessage(e, 'Kein Zugang.') }
+        : null
     } finally {
       loading.value = false
     }
@@ -52,6 +69,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout() {
     user.value = null
+    accessDenied.value = null
     window.location.href = '/logout'
   }
 
@@ -95,6 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
           try {
             const { data } = await authApi.me()
             user.value = data.data
+            accessDenied.value = null
             sessionExpired.value = false
             reauthenticating.value = false
             resolve(true)
@@ -108,7 +127,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    user, loading, sessionExpired, reauthenticating, hadSession,
+    user, loading, sessionExpired, reauthenticating, hadSession, accessDenied,
     isLoggedIn, permissions, hasPermission,
     canView, canManage, isAdmin,
     fetchMe, refreshSession, logout, markSessionExpired, reloginViaPopup,

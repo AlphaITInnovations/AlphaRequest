@@ -118,6 +118,16 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
 
+    // ── Kein Zugang ──────────────────────────────────────────────────────────
+    // Angemeldet, aber vom Backend-Gate blockiert (kein Directus-Datensatz /
+    // Directus nicht erreichbar). Bewusst KEIN Login-Redirect – sonst Endlos-
+    // schleife: einloggen → 403 → Login → …
+    {
+      path: '/kein-zugang',
+      component: () => import('@/views/AccessDeniedView.vue'),
+      meta: { requiresAuth: false },
+    },
+
     // ── Catch-all (MUSS GANZ AM ENDE STEHEN) ──────────────────────────────────
     {
       path: '/:pathMatch(.*)*',
@@ -136,7 +146,9 @@ router.beforeEach(async (to) => {
   }
 
   if (!auth.isLoggedIn) {
-    return { path: '/login' }
+    // Vom Gate blockiert (angemeldet, aber kein Zugang) → Erklärseite statt Login,
+    // sonst Endlosschleife. Sonst: normaler Login.
+    return auth.accessDenied ? { path: '/kein-zugang' } : { path: '/login' }
   }
 
   // Einzelne Berechtigung ODER Liste („eine davon genügt").
