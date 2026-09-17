@@ -110,6 +110,16 @@ export interface FieldDef {
   directusSource: string | null
   /** widget='directus': Auto-Fill-Zuordnungen Directus-Pfad → Ziel-Feld-Key. */
   directusFieldMap: DirectusBinding[]
+  /** Vorbelegung aus den Daten des angemeldeten Users (beim Anlegen). */
+  prefill: PrefillSpec | null
+}
+
+/** Feld beim Anlegen aus den Daten der angemeldeten Person vorbelegen.
+ *  source 'employee' = Directus-Stammdaten, 'user' = Session-Felder;
+ *  field = Attribut (dot-Pfad für Relationen, z. B. "location.name"). */
+export interface PrefillSpec {
+  source: string
+  field: string
 }
 
 export interface DirectusBinding {

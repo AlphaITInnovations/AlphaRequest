@@ -40,6 +40,7 @@ from backend.services import process_compute as compute
 from backend.services import process_engine as engine
 from backend.services import process_events as events
 from backend.services import process_permissions as perms
+from backend.services import process_prefill
 from backend.services import process_runtime as pr
 from backend.services import process_sequences as seq
 from backend.services import process_validation as pv
@@ -589,6 +590,10 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     except vis.AppendOnlyViolation as exc:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig",
                         fields=[{"path": exc.field_key, "code": "APPEND_ONLY", "message": str(exc)}])
+
+    # Antragsteller-Felder aus den Daten der angemeldeten Person vorbelegen
+    # (read-only prefill – autoritativ, überschreibt evtl. mitgeschickte Werte).
+    values = process_prefill.apply_prefill(defn, values, user)
 
     errs = pv.validate_values(defn, values)
     if errs:

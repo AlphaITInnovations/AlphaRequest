@@ -216,7 +216,7 @@ export function blankFieldDef(key = '', widget: Widget = 'text'): FieldDef {
     options: [], optionsSource: null, allowOther: false, valueShape: null,
     constraints: null, visibility: null, computed: null, overridable: false,
     assign: null, mode: null, item: [],
-    directusSource: null, directusFieldMap: [],
+    directusSource: null, directusFieldMap: [], prefill: null,
   }
 }
 

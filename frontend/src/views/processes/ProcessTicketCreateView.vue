@@ -14,8 +14,10 @@ import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
 import { emptySources, loadOptionSources } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
+import { applyPrefill } from '@/lib/processPrefill'
 import { renderMailTemplate } from '@/lib/mailTemplate'
 import * as processesApi from '@/api/processes'
+import { authApi } from '@/api/auth'
 import { createTicket, advanceTicket } from '@/api/processTickets'
 import { uploadAttachment } from '@/api/processAttachments'
 import { addWatcher } from '@/api/processEvents'
@@ -33,6 +35,8 @@ const submitting = ref(false)
 const selectedKey = ref<string>(String(route.params.key || ''))
 const definition = ref<ProcessDefinition | null>(null)
 const values = ref<Record<string, unknown>>({})
+/** Profil der angemeldeten Person (für prefill-Felder) – einmal geladen. */
+const profile = ref<Record<string, unknown> | null>(null)
 const title = ref('')
 /**
  * Priorität wird NICHT abgefragt: die Anzeige ist überall ausgeblendet, bis
@@ -110,6 +114,17 @@ const titelVorschau = computed(() => {
 /** Prozess global deaktiviert? Dann kein Formular, sondern ein Hinweis. */
 const deaktiviert = ref(false)
 
+/** Profil der angemeldeten Person einmal laden (für prefill). Fehlt Directus,
+ *  bleibt es null – prefill lässt die Felder dann einfach leer. */
+async function ensureProfile() {
+  if (profile.value) return
+  try {
+    profile.value = (await authApi.profile()).data.data as unknown as Record<string, unknown>
+  } catch {
+    profile.value = null
+  }
+}
+
 async function loadProcess(key: string) {
   if (!key) { definition.value = null; return }
   deaktiviert.value = false
@@ -125,7 +140,10 @@ async function loadProcess(key: string) {
       editable: new Set(access.editable_fields),
     }
     title.value = row.name
-    values.value = {}
+    // prefill-Felder (z. B. Antragsteller-Angaben) aus den eigenen Directus-
+    // Stammdaten vorbelegen; der Server setzt sie beim Anlegen erneut autoritativ.
+    await ensureProfile()
+    values.value = applyPrefill(definition.value.fields, profile.value, {})
     pendingAttachments.value = {}
     pendingWatchers.value = []
     errors.value = []

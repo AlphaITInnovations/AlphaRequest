@@ -92,6 +92,10 @@ export function normalizeField(v: any): FieldDef {
     directusFieldMap: arr(v?.directusFieldMap).map((b: any) => ({
       source: String(b?.source ?? ''), target: String(b?.target ?? ''),
     })),
+    // Vorbelegung erhalten (sonst ginge sie beim Editor-Import verloren).
+    prefill: (v?.prefill && v.prefill.field)
+      ? { source: String(v.prefill.source ?? 'employee'), field: String(v.prefill.field) }
+      : null,
   }
 }
 

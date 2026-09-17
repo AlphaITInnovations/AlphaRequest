@@ -401,6 +401,30 @@ class SubField(_Base):
     value: Optional[str] = None   # für server_stamped: "actor" | "now"
 
 
+class PrefillSpec(_Base):
+    """Ein Feld beim ANLEGEN aus den Daten der angemeldeten Person vorbelegen.
+
+    `source`: "employee" = Directus-Mitarbeiter-Datensatz (user["employee"]),
+    "user" = Session-Felder (email, displayName, phone, mobile, company, position).
+    `field`: Attribut in der Quelle; dot-Pfad löst Relationen auf, z. B.
+    "location.name". Zusammen mit einem read-only Feld in der Start-Phase ergibt
+    das ein fest vorbelegtes, nicht editierbares Antragsteller-Feld (serverseitig
+    autoritativ gesetzt – manipulationssicher).
+    """
+    source: str = "employee"
+    field: str
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @model_validator(mode="after")
+    def _rules(self) -> "PrefillSpec":
+        if self.source not in ("employee", "user"):
+            raise ValueError(f"prefill.source ist unbekannt: {self.source!r} "
+                             f"(erlaubt: employee, user)")
+        if not self.field:
+            raise ValueError("prefill.field fehlt")
+        return self
+
+
 class FieldDef(_Base):
     key: str
     label: Optional[str] = None
@@ -420,6 +444,7 @@ class FieldDef(_Base):
     item: list[SubField] = Field(default_factory=list)  # Sub-Katalog für collection
     directusSource: Optional[str] = None        # Schlüssel einer Directus-Quelle (bei widget=directus)
     directusFieldMap: list[DirectusBinding] = Field(default_factory=list)  # Auto-Fill der Zielfelder
+    prefill: Optional[PrefillSpec] = None       # Vorbelegung aus den Daten des angemeldeten Users
 
     @field_validator("key")
     @classmethod
