@@ -70,7 +70,7 @@ const PRIORITY_LABEL: Record<string, string> = {
 const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null, group: null })
 const blankAction = (): Action => ({
   type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
-  value: null, counter: null, directus: null, http: null,
+  value: null, counter: null, directus: null, http: null, email: null,
 })
 const blankDirectus = (): DirectusWriteSpec => ({
   operation: 'create', collection: '', fieldMap: [], idField: '',
@@ -218,7 +218,7 @@ function onActionType(t: ActionType) {
   // nach einem Typwechsel und der Dirty-Vergleich schlägt dauerhaft an.
   const next: Action = {
     type: t, to: null, recipients: null, template: null, field: null,
-    value: null, counter: null, directus: null, http: null,
+    value: null, counter: null, directus: null, http: null, email: null,
   }
   if (t === 'directus_write') {
     next.directus = cur.directus ?? blankDirectus()

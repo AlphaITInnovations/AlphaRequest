@@ -12,7 +12,7 @@
  */
 import type {
   Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions,
-  DirectusWriteSpec, HttpRequestSpec, LayoutItem,
+  DirectusWriteSpec, HttpRequestSpec, EmailSpec, LayoutItem,
   DocumentSpec, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger, EscalationSpec, EscalationStage,
@@ -212,6 +212,19 @@ function normHttpRequest(v: any): HttpRequestSpec | null {
   }
 }
 
+function normEmailSpec(v: any): EmailSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return {
+    targetField: String(v.targetField ?? ''),
+    firstNameField: String(v.firstNameField ?? ''),
+    lastNameField: String(v.lastNameField ?? ''),
+    companyField: String(v.companyField ?? ''),
+    collection: String(v.collection ?? ''),
+    emailField: String(v.emailField ?? ''),
+    conflictField: String(v.conflictField ?? ''),
+  }
+}
+
 function normAction(v: any): Action {
   return {
     type: v?.type ?? 'notify',
@@ -225,6 +238,7 @@ function normAction(v: any): Action {
     counter: str(v?.counter),
     directus: normDirectusWrite(v?.directus),
     http: normHttpRequest(v?.http),
+    email: normEmailSpec(v?.email),
   }
 }
 

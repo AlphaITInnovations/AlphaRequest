@@ -368,7 +368,7 @@ export function blankAutomation(id: string): Automation {
     trigger: { type: 'on_enter', after: null, repeat: null, field: null, group: null },
     guard: null,
     action: { type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
-      value: null, counter: null, directus: null, http: null },
+      value: null, counter: null, directus: null, http: null, email: null },
   }
 }
 

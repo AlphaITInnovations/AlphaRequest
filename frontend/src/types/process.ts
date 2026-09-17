@@ -34,6 +34,7 @@ export type DirectusOperation = 'create' | 'update' | 'delete'
 export type ActionType =
   | 'notify' | 'escalate' | 'set_field' | 'set_priority' | 'set_status'
   | 'assign_sequence' | 'auto_advance' | 'directus_write' | 'http_request'
+  | 'company_email'
 
 /** Genau EIN Operator-Key pro Objekt – Shapes siehe lib/conditionDsl.ts. */
 export type Condition = Record<string, any>
@@ -237,6 +238,19 @@ export interface Action {
   directus: DirectusWriteSpec | null
   /** Bei type='http_request': API-Aufruf-Konfiguration. */
   http: HttpRequestSpec | null
+  /** Bei type='company_email': Auto-Firmenmail + Directus-Eindeutigkeits-Config. */
+  email: EmailSpec | null
+}
+
+/** company_email: automatische Firmenmail + blockierende Directus-Prüfung. */
+export interface EmailSpec {
+  targetField: string
+  firstNameField: string
+  lastNameField: string
+  companyField: string
+  collection: string
+  emailField: string
+  conflictField: string
 }
 
 export interface Automation {
