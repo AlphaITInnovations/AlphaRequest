@@ -45,17 +45,19 @@ export const TRIGGER_TYPES = ['on_enter', 'on_exit', 'on_field_change', 'timer',
 
 export const ACTION_TYPES: readonly ActionType[] = [
   'notify', 'escalate', 'set_field', 'set_priority', 'set_status', 'assign_sequence',
-  'auto_advance', 'directus_write', 'http_request',
+  'auto_advance', 'directus_write', 'http_request', 'company_email',
 ]
 
 /**
  * Aktionen, die als AUTOMATION wählbar sind. `assign_sequence` fehlt bewusst: die
  * Nummernvergabe lehnt der Server als Automation immer ab (sie wird als Feld mit
- * Feldtyp „Vom System vergeben" eingerichtet). Nur zum Anbieten im Editor gedacht –
- * ACTION_TYPES bleibt die vollständige Liste (Labels, Normalisierung).
+ * Feldtyp „Vom System vergeben" eingerichtet). `company_email` fehlt ebenfalls: es
+ * hat (noch) keine Klick-Oberfläche und wird nur über importiertes JSON konfiguriert
+ * – ACTION_TYPES kennt es aber, damit ein Import gültig bleibt. Nur zum Anbieten im
+ * Editor gedacht – ACTION_TYPES bleibt die vollständige Liste (Labels, Normalisierung).
  */
 export const AUTOMATION_ACTION_TYPES: readonly ActionType[] =
-  ACTION_TYPES.filter((t) => t !== 'assign_sequence')
+  ACTION_TYPES.filter((t) => t !== 'assign_sequence' && t !== 'company_email')
 
 /**
  * Nummernkreise, die die Laufzeit kennt (Spiegel von KNOWN_COUNTERS in
@@ -192,6 +194,7 @@ export const ACTION_LABEL: Record<string, string> = {
   assign_sequence: 'Nummer aus Nummernkreis vergeben',
   directus_write: 'In Directus schreiben',
   http_request: 'API-Aufruf (HTTP)',
+  company_email: 'Firmenmail bilden & prüfen',
 }
 
 export const STATUS_LABEL: Record<string, string> = {

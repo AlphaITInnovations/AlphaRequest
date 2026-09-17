@@ -766,6 +766,41 @@ export function validateDefinition(
         }
       }
     }
+    if (ac.type === 'company_email') {
+      // Firmenmail wird beim Verlassen der Phase gebildet und gegen Directus geprüft;
+      // bei Konflikt blockiert der Server die Phase (spiegelt die Server-Regeln).
+      const em = ac.email
+      if (!em) {
+        out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Firmenmail-Konfiguration fehlt.'))
+      } else {
+        if (a.trigger.type !== 'on_exit') {
+          out.push(err(`${path}.action`, anchor, 'INVALID',
+            'Die Firmenmail wird nur beim Verlassen der Phase gebildet '
+            + '(Auslöser „Beim Verlassen der Phase").'))
+        }
+        const emailRefs: Array<[string, string]> = [
+          ['Zielfeld (Firmenmail)', em.targetField],
+          ['Vorname-Feld', em.firstNameField],
+          ['Nachname-Feld', em.lastNameField],
+          ['Firmen-Feld', em.companyField],
+          ['Konflikt-Feld', em.conflictField],
+        ]
+        emailRefs.forEach(([label, key]) => {
+          if (!key?.trim()) {
+            out.push(err(`${path}.action`, anchor, 'REQUIRED', `${label} fehlt.`))
+          } else if (!catalog.has(key)) {
+            out.push(err(`${path}.action`, anchor, 'UNKNOWN_REF',
+              `${label}: Feld „${key}" gibt es nicht.`))
+          }
+        })
+        if (!em.collection?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-Collection fehlt.'))
+        }
+        if (!em.emailField?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-E-Mail-Feld fehlt.'))
+        }
+      }
+    }
     if (ac.type === 'http_request') {
       const h = ac.http
       if (!h) {
