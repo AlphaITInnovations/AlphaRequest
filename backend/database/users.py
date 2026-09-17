@@ -30,6 +30,11 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 
 # ── DDL ───────────────────────────────────────────────────────────────────────
 
+# HINWEIS: Die Spalte `microsoft_id` ist der Personen-Primärschlüssel und hält
+# seit der Umstellung auf E-Mail-Identität die KLEINGESCHRIEBENE dienstliche
+# E-Mail (nicht mehr die Azure-oid). Der Name blieb bewusst, um eine fragile
+# PK-Umbenennung in bestehenden DBs zu vermeiden. get_user/upsert_user
+# normalisieren den Schlüssel defensiv auf lower(), damit Groß/Klein nie driftet.
 USERS_DDL = """
 CREATE TABLE IF NOT EXISTS app_users (
     microsoft_id       VARCHAR(255) PRIMARY KEY,
@@ -106,6 +111,8 @@ def upsert_user(
     email: str,
     role: Optional[str] = None,
 ) -> AppUser:
+    microsoft_id = (microsoft_id or "").strip().lower()   # Personenschlüssel = E-Mail
+    email        = (email or "").strip().lower()
     now          = _now()
     initial_role = role if role in VALID_ROLES else ROLE_NONE
     is_admin     = role == ROLE_ADMIN
@@ -130,6 +137,7 @@ def upsert_user(
     return get_user(microsoft_id)
 
 def get_user(microsoft_id: str) -> Optional[AppUser]:
+    microsoft_id = (microsoft_id or "").strip().lower()   # case-insensitiv per E-Mail
     conn = get_connection()
     try:
         row = _fetchone(conn,

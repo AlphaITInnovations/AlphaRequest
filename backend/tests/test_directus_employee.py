@@ -79,3 +79,33 @@ def test_nicht_gefunden_wird_nicht_gecacht():
     de.lookup_employee("a@b.de", query=q, is_configured=lambda: True)
     de.lookup_employee("a@b.de", query=q, is_configured=lambda: True)
     assert len(calls) == 2   # jedes Mal neu, damit ein neu angelegter Datensatz sofort greift
+
+
+# ── list_employees (Nutzerliste/Cache-Quelle) ────────────────────────────────
+
+def test_list_employees_baut_id_name_mail_klein():
+    calls = []
+    rows = [
+        {"email": "Helmut.Popp@x.org", "first_name": "Helmut", "last_name": "Popp"},
+        {"email": "a@b.de", "first_name": "A", "last_name": ""},
+        {"email": "", "first_name": "Ohne", "last_name": "Mail"},   # ohne Mail -> raus
+        {"first_name": "Gar", "last_name": "Keine"},                 # kein email-Feld -> raus
+    ]
+    out = de.list_employees(query=_q(rows, calls), is_configured=lambda: True)
+    assert out == [
+        {"id": "helmut.popp@x.org", "displayName": "Helmut Popp", "mail": "helmut.popp@x.org"},
+        {"id": "a@b.de", "displayName": "A", "mail": "a@b.de"},
+    ]
+    coll, kw = calls[0]
+    assert coll == "mitarbeitende"
+    assert "email" in kw["fields"] and "first_name" in kw["fields"] and "last_name" in kw["fields"]
+
+
+def test_list_employees_faellt_auf_mail_zurueck_ohne_namen():
+    out = de.list_employees(query=_q([{"email": "x@y.de"}]), is_configured=lambda: True)
+    assert out == [{"id": "x@y.de", "displayName": "x@y.de", "mail": "x@y.de"}]
+
+
+def test_list_employees_nicht_konfiguriert_wirft():
+    with pytest.raises(de.EmployeeLookupError):
+        de.list_employees(query=_q([]), is_configured=lambda: False)

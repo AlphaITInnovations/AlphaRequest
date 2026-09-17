@@ -170,12 +170,22 @@ async def auth_callback(request: Request):
         # Gruppen-GUIDs nur im DEBUG-Log (verraten Org-Struktur, nicht ins INFO-Log).
         logger.debug("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
+        # Personen-Identität = kleingeschriebene dienstliche E-Mail. Das ist der
+        # stabile, in Azure UND Directus vorhandene Schlüssel; das Directus-Gate
+        # (enforce_employee_link) garantiert, dass zu dieser E-Mail ein Mitarbeiter-
+        # Datensatz existiert. Von hier fließt sie als user["id"] in owner_id,
+        # Beobachter, Zuständigkeit, Gruppen-Mitglieder, app_users usw. Die Azure
+        # Object-ID (oid) bleibt nur informativ als user["oid"].
+        email = (id_claims.get("preferred_username")
+                 or id_claims.get("email")
+                 or infos.get("mail") or "").strip().lower()
+        oid = id_claims.get("oid") or id_claims.get("sub")
+
         user_payload = {
-            "id":          id_claims.get("oid") or id_claims.get("sub"),
+            "id":          email or oid,   # Identität = E-Mail (Fallback oid, falls leer)
+            "oid":         oid,            # Azure Object-ID – nur noch informativ
             "displayName": id_claims.get("name") or infos.get("displayName"),
-            "email":       id_claims.get("preferred_username")
-                           or id_claims.get("email")
-                           or infos.get("mail"),
+            "email":       email,
             "phone":       infos.get("phone"),
             "mobile":      infos.get("mobile"),
             "company":     infos.get("company"),

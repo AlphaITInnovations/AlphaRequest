@@ -81,3 +81,39 @@ def lookup_employee(
     if rec is not None:
         _cache[key] = (rec, now() + config.DIRECTUS_EMPLOYEE_CACHE_TTL)
     return rec
+
+
+def list_employees(
+    *,
+    query: Callable[..., list[dict]] = directus_client.query_items,
+    is_configured: Callable[[], bool] = directus_client.is_configured,
+) -> list[dict]:
+    """Alle Mitarbeitenden für die Personen-Dropdowns/-Listen aus Directus.
+
+    Rückgabe je Person: {id, displayName, mail} – id UND mail sind die
+    kleingeschriebene E-Mail (der durchgängige Personenschlüssel). Personen ohne
+    E-Mail werden übersprungen (ohne Schlüssel nicht referenzierbar). Wirft
+    EmployeeLookupError, wenn Directus nicht konfiguriert/erreichbar ist – der
+    Aufrufer (Cache-Sync) entscheidet fail-soft.
+    """
+    if not is_configured():
+        raise EmployeeLookupError("Directus ist nicht konfiguriert")
+
+    email_field = config.DIRECTUS_EMPLOYEE_EMAIL_FIELD
+    name_fields = config.DIRECTUS_EMPLOYEE_NAME_FIELDS
+    fields = list(dict.fromkeys([email_field, *name_fields]))  # dedupe, Reihenfolge
+
+    try:
+        rows = query(config.DIRECTUS_EMPLOYEE_COLLECTION, fields=fields,
+                     limit=config.DIRECTUS_EMPLOYEE_LIST_LIMIT)
+    except directus_client.DirectusError as e:
+        raise EmployeeLookupError(str(e)) from e
+
+    out: list[dict] = []
+    for r in rows:
+        email = str(r.get(email_field) or "").strip().lower()
+        if not email:
+            continue
+        name = " ".join(str(r.get(f)).strip() for f in name_fields if r.get(f)).strip()
+        out.append({"id": email, "displayName": name or email, "mail": email})
+    return out

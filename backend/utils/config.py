@@ -100,6 +100,15 @@ class Config:
     AUTH_BOOTSTRAP_EMAILS = {s.strip().lower() for s in
                             os.getenv("AUTH_BOOTSTRAP_EMAILS", "").split(",") if s.strip()}
 
+    # Nutzerliste (Dropdowns/Beobachter/Zuständige/Mitglieder) kommt aus derselben
+    # Directus-Collection wie die Zuordnung. Der gespeicherte Personenschlüssel ist
+    # die E-Mail (siehe DIRECTUS_EMPLOYEE_EMAIL_FIELD). Der Anzeigename wird aus
+    # diesen Feldern zusammengesetzt (mit Leerzeichen verbunden, leere übersprungen).
+    DIRECTUS_EMPLOYEE_NAME_FIELDS = [s.strip() for s in
+                                    os.getenv("DIRECTUS_EMPLOYEE_NAME_FIELDS",
+                                              "first_name,last_name").split(",") if s.strip()]
+    DIRECTUS_EMPLOYEE_LIST_LIMIT: int = int(os.getenv("DIRECTUS_EMPLOYEE_LIST_LIMIT", "2000"))
+
     @property
     def COMPANIES(self):
         return db.get_companies()
