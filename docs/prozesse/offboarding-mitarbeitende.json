@@ -654,14 +654,19 @@
       "key": "ablauf.freigabe_ueberspringen",
       "label": "Freigabe überspringen",
       "widget": "checkbox",
-      "help": "Überspringt die Freigabe durch Udo Lutz und geht direkt zur Kündigung.",
+      "help": "Nur Sekretariat GL: Wenn gesetzt, geht der Auftrag OHNE Freigabe durch Herrn Lutz (und ohne Freigabe-Mail) direkt in die Kündigung.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": true,
+        "visibleToGroups": [
+          "3250a01a8f234bccab8a74764be1ff31"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -985,6 +990,21 @@
       "layout": [
         {
           "type": "section",
+          "title": "Freigabe",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "ablauf.freigabe_ueberspringen",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
           "title": "Mitarbeiter:in",
           "variant": "base",
           "badge": null,
@@ -1153,21 +1173,6 @@
               "tone": "info",
               "width": "full",
               "visibleWhen": null
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Ablauf",
-          "variant": "default",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "ablauf.freigabe_ueberspringen",
-              "width": "full"
             }
           ]
         }
