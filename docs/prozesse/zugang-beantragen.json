@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "key": "zugang-beantragen",
   "name": "Onboarding Mitarbeiter:innen",
-  "description": null,
+  "description": "Einstellungsprozess neuer Mitarbeiter:innen",
   "icon": "🧑‍💼",
   "titleEditable": true,
   "titleTemplate": "Onboarding Mitarbeiter:innen – {{base.first_name}} {{base.last_name}}",
@@ -35,7 +35,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.salutation",
@@ -68,7 +69,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.first_name",
@@ -88,7 +90,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.last_name",
@@ -108,7 +111,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.private_email",
@@ -128,7 +132,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.private_phone",
@@ -148,7 +153,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.title",
@@ -168,7 +174,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.contract_company",
@@ -188,7 +195,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.location",
@@ -213,7 +221,8 @@
           "source": "name",
           "target": "base.location_name"
         }
-      ]
+      ],
+      "prefill": null
     },
     {
       "key": "base.location_name",
@@ -233,7 +242,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.cost_center",
@@ -258,7 +268,8 @@
           "source": "cost_center_number",
           "target": "base.cost_center_nr"
         }
-      ]
+      ],
+      "prefill": null
     },
     {
       "key": "base.cost_center_nr",
@@ -278,7 +289,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "base.start_date",
@@ -298,7 +310,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.position",
@@ -363,7 +376,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.private_street",
@@ -388,7 +402,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.private_zip",
@@ -421,7 +436,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.private_city",
@@ -446,7 +462,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.geburtsdatum",
@@ -471,7 +488,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.geburtsort",
@@ -496,7 +514,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.homeoffice",
@@ -534,7 +553,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.weekly_hours",
@@ -567,7 +587,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.federal_state",
@@ -657,7 +678,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.department",
@@ -677,7 +699,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.department_other",
@@ -702,7 +725,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.personal_number",
@@ -726,7 +750,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "personal.supervisor_hr_id",
@@ -746,7 +771,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.timebutler.vacation_year",
@@ -779,7 +805,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.timebutler.approver_differs",
@@ -804,7 +831,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.timebutler.supervisor_id",
@@ -829,7 +857,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.datev",
@@ -854,7 +883,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.datev_rights",
@@ -879,7 +909,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.persopro",
@@ -904,7 +935,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.persopro_rights",
@@ -929,7 +961,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.timejob",
@@ -954,7 +987,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.timejob_rights",
@@ -979,7 +1013,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.zvoove",
@@ -1004,7 +1039,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.software.zvoove_rights",
@@ -1029,7 +1065,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.other_systems",
@@ -1054,7 +1091,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.mailboxes.info_mailbox",
@@ -1079,7 +1117,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.mailboxes.additional",
@@ -1104,7 +1143,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.mailboxes.notes",
@@ -1129,7 +1169,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.additional_cost_centers_needed",
@@ -1154,7 +1195,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.additional_cost_centers",
@@ -1179,7 +1221,8 @@
       "mode": null,
       "item": [],
       "directusSource": "niederlassung",
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "fuhrpark.car",
@@ -1213,7 +1256,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "fuhrpark.car_class_number",
@@ -1250,7 +1294,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "fuhrpark.car_from",
@@ -1275,7 +1320,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "konditionen.gehalt",
@@ -1300,7 +1346,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "konditionen.gehalt_probezeit",
@@ -1325,7 +1372,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "konditionen.dreizehntes",
@@ -1359,7 +1407,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "konditionen.dreizehntes_art",
@@ -1393,7 +1442,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "konditionen.halb_wahl",
@@ -1427,7 +1477,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "konditionen.ganz_wahl",
@@ -1461,7 +1512,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "konditionen.sonderkonditionen",
@@ -1486,7 +1538,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "ablauf.freigabe_ueberspringen",
@@ -1511,7 +1564,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     },
     {
       "key": "it.directus_mitarbeiter_id",
@@ -1531,7 +1585,8 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": null
     }
   ],
   "phases": [
@@ -1554,6 +1609,7 @@
       },
       "approval": null,
       "document": null,
+      "escalation": null,
       "fields": [
         {
           "ref": "ablauf.freigabe_ueberspringen",
@@ -2017,11 +2073,13 @@
           "action": {
             "type": "auto_advance",
             "to": null,
+            "recipients": null,
             "template": null,
             "field": null,
             "value": null,
             "counter": null,
-            "directus": null
+            "directus": null,
+            "http": null
           }
         }
       ]
@@ -2056,6 +2114,7 @@
         "onReject": "reject"
       },
       "document": null,
+      "escalation": null,
       "fields": [
         {
           "ref": "dokumente.uploads",
@@ -2370,11 +2429,13 @@
           "action": {
             "type": "auto_advance",
             "to": null,
+            "recipients": null,
             "template": null,
             "field": null,
             "value": null,
             "counter": null,
-            "directus": null
+            "directus": null,
+            "http": null
           }
         }
       ]
@@ -2398,6 +2459,7 @@
       },
       "approval": null,
       "document": null,
+      "escalation": null,
       "fields": [
         {
           "ref": "dokumente.uploads",
@@ -3187,11 +3249,13 @@
           "action": {
             "type": "set_field",
             "to": null,
+            "recipients": null,
             "template": null,
             "field": "it.mailboxes.info_mailbox",
             "value": true,
             "counter": null,
-            "directus": null
+            "directus": null,
+            "http": null
           }
         }
       ]
@@ -3285,6 +3349,7 @@
           }
         }
       },
+      "escalation": null,
       "fields": [],
       "layout": [],
       "constraints": [],
@@ -3309,6 +3374,7 @@
       },
       "approval": null,
       "document": null,
+      "escalation": null,
       "fields": [],
       "layout": [
         {
@@ -3372,6 +3438,7 @@
       },
       "approval": null,
       "document": null,
+      "escalation": null,
       "fields": [
         {
           "ref": "dokumente.uploads",
@@ -3955,6 +4022,7 @@
           "action": {
             "type": "directus_write",
             "to": null,
+            "recipients": null,
             "template": null,
             "field": null,
             "value": null,
@@ -3964,66 +4032,65 @@
               "collection": "mitarbeitende",
               "fieldMap": [
                 {
-                  "source": "base.salutation",
-                  "target": "anrede",
-                  "resolve": null
+                  "target": "salutation",
+                  "source": "base.salutation"
                 },
                 {
-                  "source": "base.first_name",
-                  "target": "vorname",
-                  "resolve": null
+                  "target": "first_name",
+                  "source": "base.first_name"
                 },
                 {
-                  "source": "base.last_name",
-                  "target": "nachname",
-                  "resolve": null
+                  "target": "last_name",
+                  "source": "base.last_name"
                 },
                 {
-                  "source": "personal.private_zip",
-                  "target": "p_plz",
-                  "resolve": null
+                  "target": "personal_zip",
+                  "source": "personal.private_zip"
                 },
                 {
-                  "source": "personal.private_city",
-                  "target": "p_ort",
-                  "resolve": null
+                  "target": "personal_location",
+                  "source": "personal.private_city"
                 },
                 {
-                  "source": "personal.personal_number",
-                  "target": "personalnummer",
-                  "resolve": null
+                  "target": "employee_number",
+                  "source": "personal.personal_number"
                 },
                 {
-                  "source": "base.cost_center",
-                  "target": "stammkostenstelle",
-                  "resolve": null
+                  "target": "cost_center",
+                  "source": "base.cost_center"
                 },
                 {
-                  "source": "base.location",
-                  "target": "niederlassung",
-                  "resolve": null
+                  "target": "branch",
+                  "source": "base.location"
                 },
                 {
-                  "source": "personal.private_street",
-                  "target": "P_Strasse_und_Hausnummer",
-                  "resolve": null
+                  "target": "personal_address",
+                  "source": "personal.private_street"
                 },
                 {
+                  "target": "company",
                   "source": "base.contract_company",
-                  "target": "firma",
                   "resolve": "company_directus_id"
                 },
                 {
-                  "source": null,
-                  "target": "source",
-                  "value": "AlphaRequest",
-                  "resolve": null
+                  "target": "status",
+                  "value": "aktiv",
+                  "source": null
+                },
+                {
+                  "target": "email",
+                  "source": "base.private_email"
+                },
+                {
+                  "target": "private_phone",
+                  "source": "base.private_phone"
                 }
               ],
               "idField": "it.directus_mitarbeiter_id",
               "onError": "block",
-              "matchField": "personalnummer"
-            }
+              "matchField": "employee_number"
+            },
+            "http": null
           }
         }
       ]
