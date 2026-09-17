@@ -61,6 +61,25 @@ def test_prefill_ohne_employee_nutzt_user_quelle():
     assert "b.nachname" not in out                 # employee leer -> nichts gesetzt
 
 
+def test_prefill_ueberspringt_nicht_aufgeloeste_relation_objekt():
+    """Eine Relation, die als Objekt zurückkommt (nicht als Skalar), darf NICHT
+    als Wert landen (sonst „[object Object]"). Der ID-Unterpfad greift dagegen."""
+    user = {"id": "a@b.de", "email": "a@b.de",
+            "employee": {"cost_center": {"id": "7", "name": "AC 20"}}}
+
+    def _d(field):
+        return ProcessDefinition.model_validate({
+            "schemaVersion": 1, "key": "k", "name": "N",
+            "fields": [{"key": "b.kst", "widget": "text",
+                        "prefill": {"source": "employee", "field": field}}],
+            "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                        "fields": [{"ref": "b.kst", "mode": "readonly"}]}],
+        })
+
+    assert "b.kst" not in apply_prefill(_d("cost_center"), {}, user)        # Objekt übersprungen
+    assert apply_prefill(_d("cost_center.id"), {}, user)["b.kst"] == "7"    # Unterpfad greift
+
+
 def test_prefill_source_unbekannt_wird_abgewiesen():
     with pytest.raises(ValueError):
         ProcessDefinition.model_validate({

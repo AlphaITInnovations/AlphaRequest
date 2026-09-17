@@ -26,7 +26,11 @@ export function applyPrefill(
     if (!f.prefill?.field) continue
     const src = f.prefill.source === 'user' ? (profile ?? {}) : employee
     const val = resolvePath(src, f.prefill.field)
-    if (val !== undefined && val !== null && val !== '') out[f.key] = val
+    // Nur Skalare: eine nicht aufgelöste Relation (Objekt/Array) darf nicht als
+    // Wert landen (sonst „[object Object]"). Pfad auf ein Unterfeld zeigen lassen.
+    if (val !== undefined && val !== null && val !== '' && typeof val !== 'object') {
+      out[f.key] = val
+    }
   }
   return out
 }

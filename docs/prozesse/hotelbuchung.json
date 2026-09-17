@@ -146,7 +146,7 @@
       "directusFieldMap": [],
       "prefill": {
         "source": "employee",
-        "field": "cost_center"
+        "field": "cost_center.id"
       }
     },
     {

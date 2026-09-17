@@ -38,6 +38,9 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
             continue
         src = employee if pf.source == "employee" else user
         val = _resolve_path(src, pf.field)
-        if val is not None and val != "":
+        # Nur Skalare übernehmen: eine nicht aufgelöste Relation (dict/list) darf
+        # nicht als Wert landen (sonst „[object Object]"). Dann Pfad auf ein
+        # skalares Unterfeld zeigen lassen, z. B. „cost_center.id".
+        if val is not None and val != "" and not isinstance(val, (dict, list)):
             out[f.key] = val
     return out
