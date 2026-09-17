@@ -555,7 +555,7 @@ def test_selbst_eintragen_gesperrt_austragen_bleibt(setup):
     state["user"] = dict(ITLER)
     assert client.post("/process-tickets/7/watchers", json={}).status_code == 403
     watch.add_watcher(7, "u_it", "IT-Mensch")     # von einem Admin eingetragen
-    r2 = client.delete("/process-tickets/7/watchers/u_it")
+    r2 = client.request("DELETE", "/process-tickets/7/watchers", json={"userId": "u_it"})
     assert r2.status_code == 200 and r2.json()["data"] == []
 
 
@@ -588,12 +588,15 @@ def test_fremde_austragen_nur_ersteller_und_admins(setup):
     client, state, store, _e, watch = setup
     watch.add_watcher(7, "u_x", "Fremd")
     watch.add_watcher(7, "u_andere", "Andere")
+    def _rm():
+        return client.request("DELETE", "/process-tickets/7/watchers",
+                              json={"userId": "u_andere"})
     state["user"] = dict(FREMD)
-    assert client.delete("/process-tickets/7/watchers/u_andere").status_code == 403
+    assert _rm().status_code == 403
     state["user"] = dict(ITLER)                   # zuständige Stelle – NICHT mehr erlaubt
-    assert client.delete("/process-tickets/7/watchers/u_andere").status_code == 403
+    assert _rm().status_code == 403
     state["user"] = dict(ADMIN)
-    assert client.delete("/process-tickets/7/watchers/u_andere").status_code == 200
+    assert _rm().status_code == 200
 
 
 def test_beobachter_eintragen_landet_im_verlauf(setup):

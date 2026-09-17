@@ -1901,13 +1901,17 @@ def add_ticket_watcher(ticket_id: int, body: Optional[WatcherRequest] = None,
                         meta=Meta(total=len(rows), limit=len(rows), offset=0))
 
 
-@router.delete("/process-tickets/{ticket_id}/watchers/{watcher_id}",
+@router.delete("/process-tickets/{ticket_id}/watchers",
                response_model=ListResponse[WatcherOut])
-def remove_ticket_watcher(ticket_id: int, watcher_id: str,
+def remove_ticket_watcher(ticket_id: int, body: Optional[WatcherRequest] = None,
                           user: dict = Depends(get_current_user)):
-    """Beobachtung beenden. Sich selbst immer; andere nur die Ersteller:in + Admins."""
+    """Beobachtung beenden. Die Ziel-ID (jetzt eine E-Mail) kommt im BODY, nicht im
+    Pfad – personenbezogene Daten gehören nicht in URLs/Logs. Ohne `userId`: sich
+    selbst. Sich selbst immer; andere nur die Ersteller:in + Admins."""
     row, defn, gids = _load_for_view(ticket_id, user)
-    if watcher_id != user.get("id") and not _may_manage_watchers(row, user):
+    me = str(user.get("id") or "").strip().lower()
+    watcher_id = (str((body.userId if body else None) or "").strip().lower()) or me
+    if watcher_id != me and not _may_manage_watchers(row, user):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
                         "Nur die Ersteller:in und Admins können andere Beobachter:innen entfernen")
     if watchers.remove_watcher(row["id"], watcher_id):

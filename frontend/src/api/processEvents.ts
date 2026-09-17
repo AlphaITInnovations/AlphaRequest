@@ -75,9 +75,12 @@ export async function addWatcher(
   return data.data
 }
 
+/** Ohne `userId`: sich selbst austragen. Die ID (E-Mail) geht in den BODY, nicht
+ *  in die URL – personenbezogene Daten gehören nicht in URLs/Logs. */
 export async function removeWatcher(
-  ticketId: number, userId: string,
+  ticketId: number, userId?: string | null,
 ): Promise<ProcessWatcher[]> {
-  const { data } = await client.delete(`/process-tickets/${ticketId}/watchers/${userId}`)
+  const { data } = await client.delete(`/process-tickets/${ticketId}/watchers`,
+                                       { data: { userId: userId || null } })
   return data.data
 }
