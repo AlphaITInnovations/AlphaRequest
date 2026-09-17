@@ -281,6 +281,16 @@ async function load() {
   }
 }
 
+/** Nur die Auftragswerte (und den Ticket-Stand) nachladen – ohne Lade-Overlay,
+ *  Definition oder den roten Fehlerbalken zurückzusetzen. Gedacht für den Fall,
+ *  dass der Server beim Weiterschalten bereits Felder gesetzt hat (z. B. den
+ *  Firmenmail-Konflikt), damit diese sofort im Formular erscheinen. */
+async function refreshValues() {
+  const t = await ticketsApi.getTicket(id.value, viewParams.value)
+  ticket.value = t
+  values.value = { ...(t.values || {}) }
+}
+
 async function saveValues() {
   if (!definition.value) return
   const shape = validateValues(definition.value, values.value)
@@ -325,6 +335,13 @@ async function advance() {
     showToast('Phase abgeschlossen')
     router.push('/dashboard')
   } catch (e) {
+    // Firmenmail-Konflikt: der Server hat das Konflikt-Flag und die
+    // vorgeschlagene Adresse bereits gespeichert. Werte nachladen, damit das
+    // Feld sofort sichtbar/editierbar ist (editableWhen greift auf
+    // base.firmenmail_conflict zu) – ohne das Ticket erst verlassen zu müssen.
+    if (issuesFromError(e).some((i) => i.code === 'EMAIL_CONFLICT')) {
+      try { await refreshValues() } catch { /* best-effort, Balken zeigt den Konflikt */ }
+    }
     reportActionError(e, 'Weiterschalten fehlgeschlagen')
   } finally { busy.value = false }
 }
@@ -473,7 +490,10 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
              doppelt gezeigt. -->
         <div class="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)] items-start">
           <!-- Linke Leiste -->
-          <aside class="space-y-4 lg:sticky lg:top-4">
+          <!-- lg:z-30 hebt die Spalte ÜBER die sticky Aktionsleiste (z-20): sonst
+               läge das Beobachter-Dropdown (im sticky-Stacking-Context der aside)
+               hinter der Leiste. -->
+          <aside class="space-y-4 lg:sticky lg:top-4 lg:z-30">
             <!-- Fortschritt (vertikaler Stepper) -->
             <div class="card-section">
               <div class="flex items-center justify-between mb-4">
