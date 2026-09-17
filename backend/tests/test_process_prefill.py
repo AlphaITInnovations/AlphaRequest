@@ -61,23 +61,31 @@ def test_prefill_ohne_employee_nutzt_user_quelle():
     assert "b.nachname" not in out                 # employee leer -> nichts gesetzt
 
 
-def test_prefill_ueberspringt_nicht_aufgeloeste_relation_objekt():
-    """Eine Relation, die als Objekt zurückkommt (nicht als Skalar), darf NICHT
-    als Wert landen (sonst „[object Object]"). Der ID-Unterpfad greift dagegen."""
-    user = {"id": "a@b.de", "email": "a@b.de",
-            "employee": {"cost_center": {"id": "7", "name": "AC 20"}}}
+def _kst_defn(field="cost_center"):
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "b.kst", "widget": "text",
+                    "prefill": {"source": "employee", "field": field}}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "b.kst", "mode": "readonly"}]}],
+    })
 
-    def _d(field):
-        return ProcessDefinition.model_validate({
-            "schemaVersion": 1, "key": "k", "name": "N",
-            "fields": [{"key": "b.kst", "widget": "text",
-                        "prefill": {"source": "employee", "field": field}}],
-            "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
-                        "fields": [{"ref": "b.kst", "mode": "readonly"}]}],
-        })
 
-    assert "b.kst" not in apply_prefill(_d("cost_center"), {}, user)        # Objekt übersprungen
-    assert apply_prefill(_d("cost_center.id"), {}, user)["b.kst"] == "7"    # Unterpfad greift
+def test_prefill_loest_relation_auf_anzeigenamen_auf():
+    """Eine Relation (Objekt) wird auf ihren Namen/Label aufgelöst statt als
+    „[object Object]" zu landen; eine Liste wird verbunden."""
+    d = _kst_defn("cost_center")
+    obj = {"id": "a@b.de", "email": "a@b.de", "employee": {"cost_center": {"id": "7", "name": "IT, EDV"}}}
+    assert apply_prefill(d, {}, obj)["b.kst"] == "IT, EDV"
+
+    lst = {"id": "a@b.de", "email": "a@b.de", "employee": {"cost_center": [{"name": "IT"}, {"name": "EDV"}]}}
+    assert apply_prefill(d, {}, lst)["b.kst"] == "IT, EDV"
+
+
+def test_prefill_ueberspringt_objekt_ohne_anzeigefeld():
+    d = _kst_defn("cost_center")
+    obj = {"id": "a@b.de", "email": "a@b.de", "employee": {"cost_center": {"foo": "bar"}}}
+    assert "b.kst" not in apply_prefill(d, {}, obj)   # kein Anzeigefeld -> nichts gesetzt
 
 
 def test_prefill_source_unbekannt_wird_abgewiesen():

@@ -38,4 +38,14 @@ describe('applyPrefill', () => {
     expect(applyPrefill(fields, null, { vor: 'da' }).vor).toBe('da')
     expect(applyPrefill(fields, { employee: {} }, {}).vor).toBeUndefined()
   })
+
+  it('löst eine Relation (Objekt/Liste) auf den Anzeigenamen auf statt [object Object]', () => {
+    const fields = [field('kst', { source: 'employee', field: 'cost_center' })]
+    expect(applyPrefill(fields, { employee: { cost_center: { id: '7', name: 'IT, EDV' } } }, {}).kst)
+      .toBe('IT, EDV')
+    expect(applyPrefill(fields, { employee: { cost_center: [{ name: 'IT' }, { name: 'EDV' }] } }, {}).kst)
+      .toBe('IT, EDV')
+    // Objekt ohne Anzeigefeld -> nicht gesetzt
+    expect(applyPrefill(fields, { employee: { cost_center: { foo: 'bar' } } }, {}).kst).toBeUndefined()
+  })
 })

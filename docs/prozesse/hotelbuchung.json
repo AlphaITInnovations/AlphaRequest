@@ -128,8 +128,8 @@
     {
       "key": "buchung.kostenstelle",
       "label": "Kostenstelle",
-      "widget": "directus",
-      "help": "Nur Ziffern.",
+      "widget": "text",
+      "help": null,
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -142,11 +142,11 @@
       "assign": null,
       "mode": null,
       "item": [],
-      "directusSource": "kostenstelle",
+      "directusSource": null,
       "directusFieldMap": [],
       "prefill": {
         "source": "employee",
-        "field": "cost_center.id"
+        "field": "cost_center"
       }
     },
     {

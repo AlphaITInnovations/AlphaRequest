@@ -11,6 +11,11 @@ from typing import Any, Optional
 from backend.schemas.process_definition import ProcessDefinition
 
 
+#: Felder, aus denen der Anzeigewert einer Directus-Relation gezogen wird
+#: (in dieser Reihenfolge) – wie in der Profil-Anzeige (lib/profileFields.fmtValue).
+_DISPLAY_FIELDS = ("name", "label", "title", "bezeichnung", "nummer")
+
+
 def _resolve_path(obj: Any, path: str) -> Optional[Any]:
     """dot-Pfad in einem (verschachtelten) dict auflösen; Relationen wie
     „location.name". Listen werden nicht durchlaufen."""
@@ -21,6 +26,23 @@ def _resolve_path(obj: Any, path: str) -> Optional[Any]:
         else:
             return None
     return cur
+
+
+def _display_value(v: Any) -> Optional[Any]:
+    """Einen Feldwert in einen skalaren Anzeigewert überführen: eine Relation
+    (dict) → ihr Name/Label; eine Liste → verbundene Anzeigewerte; ein Skalar
+    bleibt. So landet nie ein „[object Object]" im Feld, und eine als Objekt
+    gelieferte Relation (z. B. cost_center) zeigt trotzdem ihren Namen."""
+    if isinstance(v, dict):
+        for k in _DISPLAY_FIELDS:
+            sv = v.get(k)
+            if isinstance(sv, (str, int, float)) and not isinstance(sv, bool):
+                return sv
+        return None
+    if isinstance(v, list):
+        parts = [str(_display_value(x)) for x in v if _display_value(x) not in (None, "")]
+        return ", ".join(parts) if parts else None
+    return v
 
 
 def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
@@ -37,10 +59,7 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
         if not pf:
             continue
         src = employee if pf.source == "employee" else user
-        val = _resolve_path(src, pf.field)
-        # Nur Skalare übernehmen: eine nicht aufgelöste Relation (dict/list) darf
-        # nicht als Wert landen (sonst „[object Object]"). Dann Pfad auf ein
-        # skalares Unterfeld zeigen lassen, z. B. „cost_center.id".
-        if val is not None and val != "" and not isinstance(val, (dict, list)):
+        val = _display_value(_resolve_path(src, pf.field))
+        if val is not None and val != "":
             out[f.key] = val
     return out
