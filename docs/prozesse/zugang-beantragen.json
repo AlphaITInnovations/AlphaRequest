@@ -321,47 +321,55 @@
       "placeholder": null,
       "options": [
         {
-          "value": "Praktikum / Ausbildung / Werkstudium",
-          "label": "Praktikum / Ausbildung / Werkstudium"
+          "value": "praktikum",
+          "label": "Praktikum"
         },
         {
-          "value": "Teamassistenz",
+          "value": "ausbildung",
+          "label": "Ausbildung"
+        },
+        {
+          "value": "werkstudium",
+          "label": "Werkstudium"
+        },
+        {
+          "value": "teamassistenz",
           "label": "Teamassistenz"
         },
         {
-          "value": "Disposition",
+          "value": "disposition",
           "label": "Disposition"
         },
         {
-          "value": "Niederlassungsleitung",
+          "value": "niederlassungsleitung",
           "label": "Niederlassungsleitung"
         },
         {
-          "value": "Verwaltungsmitarbeitende HQ",
+          "value": "verwaltungsmitarbeitende",
           "label": "Verwaltungsmitarbeitende HQ"
         },
         {
-          "value": "Regionalleitung",
+          "value": "regionalleitung",
           "label": "Regionalleitung"
         },
         {
-          "value": "Regionaldirektion",
+          "value": "regionaldirektion",
           "label": "Regionaldirektion"
         },
         {
-          "value": "Abteilungsleitung / Verwaltung",
+          "value": "abteilungsleitung",
           "label": "Abteilungsleitung / Verwaltung"
         },
         {
-          "value": "Geschäftsbereichsleitung",
+          "value": "geschäftsbereichsleitung",
           "label": "Geschäftsbereichsleitung"
         },
         {
-          "value": "C-Level",
+          "value": "c-level",
           "label": "C-Level"
         },
         {
-          "value": "Geschäftsführung",
+          "value": "geschäftsführung",
           "label": "Geschäftsführung"
         }
       ],
@@ -1278,15 +1286,17 @@
       },
       "computed": {
         "from": "personal.position",
+        "to": null,
+        "op": null,
         "map": {
-          "Disposition": "1",
-          "Niederlassungsleitung": "2",
-          "Abteilungsleitung / Verwaltung": "2",
-          "Regionalleitung": "3",
-          "Regionaldirektion": "4",
-          "Geschäftsbereichsleitung": "5",
-          "Geschäftsführung": "6",
-          "C-Level": "7"
+          "disposition": "1",
+          "niederlassungsleitung": "2",
+          "abteilungsleitung": "2",
+          "regionalleitung": "3",
+          "regionaldirektion": "4",
+          "geschäftsbereichsleitung": "5",
+          "geschäftsführung": "6",
+          "c-level": "7"
         }
       },
       "overridable": false,
@@ -1829,14 +1839,14 @@
             "in": [
               "personal.position",
               [
-                "Disposition",
-                "Niederlassungsleitung",
-                "Abteilungsleitung / Verwaltung",
-                "Regionalleitung",
-                "Regionaldirektion",
-                "Geschäftsbereichsleitung",
-                "C-Level",
-                "Geschäftsführung"
+                "disposition",
+                "niederlassungsleitung",
+                "abteilungsleitung",
+                "regionalleitung",
+                "regionaldirektion",
+                "geschäftsbereichsleitung",
+                "c-level",
+                "geschäftsführung"
               ]
             ]
           },
@@ -1844,14 +1854,14 @@
             "in": [
               "personal.position",
               [
-                "Disposition",
-                "Niederlassungsleitung",
-                "Abteilungsleitung / Verwaltung",
-                "Regionalleitung",
-                "Regionaldirektion",
-                "Geschäftsbereichsleitung",
-                "C-Level",
-                "Geschäftsführung"
+                "disposition",
+                "niederlassungsleitung",
+                "abteilungsleitung",
+                "regionalleitung",
+                "regionaldirektion",
+                "geschäftsbereichsleitung",
+                "c-level",
+                "geschäftsführung"
               ]
             ]
           }
@@ -2038,9 +2048,11 @@
                 "in": [
                   "personal.position",
                   [
-                    "Praktikum / Ausbildung / Werkstudium",
-                    "Teamassistenz",
-                    "Verwaltungsmitarbeitende HQ"
+                    "praktikum",
+                    "ausbildung",
+                    "werkstudium",
+                    "teamassistenz",
+                    "verwaltungsmitarbeitende"
                   ]
                 ]
               }
@@ -4032,58 +4044,88 @@
               "collection": "mitarbeitende",
               "fieldMap": [
                 {
+                  "source": "base.salutation",
                   "target": "salutation",
-                  "source": "base.salutation"
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "base.first_name",
                   "target": "first_name",
-                  "source": "base.first_name"
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "base.last_name",
                   "target": "last_name",
-                  "source": "base.last_name"
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "personal.private_zip",
                   "target": "personal_zip",
-                  "source": "personal.private_zip"
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "personal.private_city",
                   "target": "personal_location",
-                  "source": "personal.private_city"
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "personal.personal_number",
                   "target": "employee_number",
-                  "source": "personal.personal_number"
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "base.cost_center",
                   "target": "cost_center",
-                  "source": "base.cost_center"
+                  "value": null,
+                  "resolve": null
                 },
                 {
-                  "target": "branch",
-                  "source": "base.location"
+                  "source": "base.location",
+                  "target": "location",
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "personal.private_street",
                   "target": "personal_address",
-                  "source": "personal.private_street"
+                  "value": null,
+                  "resolve": null
                 },
                 {
-                  "target": "company",
                   "source": "base.contract_company",
+                  "target": "company",
+                  "value": null,
                   "resolve": "company_directus_id"
                 },
                 {
+                  "source": null,
                   "target": "status",
                   "value": "aktiv",
-                  "source": null
+                  "resolve": null
                 },
                 {
-                  "target": "email",
-                  "source": "base.private_email"
+                  "source": "base.private_email",
+                  "target": "private_mail",
+                  "value": null,
+                  "resolve": null
                 },
                 {
+                  "source": "base.private_phone",
                   "target": "private_phone",
-                  "source": "base.private_phone"
+                  "value": null,
+                  "resolve": null
+                },
+                {
+                  "source": "personal.position",
+                  "target": "position",
+                  "value": null,
+                  "resolve": null
                 }
               ],
               "idField": "it.directus_mitarbeiter_id",
