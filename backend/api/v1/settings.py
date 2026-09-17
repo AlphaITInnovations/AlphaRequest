@@ -331,6 +331,8 @@ class CompanyItem(BaseModel):
     pnr_shared_with: Optional[str] = None
     # alphacore-Firmen-ID (Directus-Fremdschlüssel), optional gepflegt.
     directus_firma_id: Optional[str] = None
+    # E-Mail-Domain der Firma (Basis der automatischen Firmenmail), optional.
+    domain: Optional[str] = None
     # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
     pnr_current: Optional[int] = None
     pnr_warned: bool = False
@@ -365,6 +367,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         mandant = (c.mandant or "").strip() or None
         shared = (c.pnr_shared_with or "").strip() or None
         firma_id = (c.directus_firma_id or "").strip() or None
+        dom = (c.domain or "").strip().lower().lstrip("@") or None
 
         if shared:
             # Teilt den Zähler → kein eigener Bereich.
@@ -373,7 +376,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
             cleaned.append({
                 "name": name, "pnr_from": None, "pnr_to": None,
                 "mandant": mandant, "pnr_shared_with": shared,
-                "directus_firma_id": firma_id,
+                "directus_firma_id": firma_id, "domain": dom,
             })
             continue
 
@@ -390,7 +393,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         cleaned.append({
             "name": name, "pnr_from": pf, "pnr_to": pt,
             "mandant": mandant, "pnr_shared_with": None,
-            "directus_firma_id": firma_id,
+            "directus_firma_id": firma_id, "domain": dom,
         })
 
     if not cleaned:

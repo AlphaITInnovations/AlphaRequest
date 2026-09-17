@@ -113,7 +113,7 @@ def normalize_company(item) -> dict:
     if isinstance(item, str):
         return {"name": item.strip(), "pnr_from": None, "pnr_to": None,
                 "pnr_current": None, "pnr_warned": False, "mandant": None,
-                "pnr_shared_with": None, "directus_firma_id": None}
+                "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
     if isinstance(item, dict):
         return {
             "name": str(item.get("name", "")).strip(),
@@ -126,10 +126,13 @@ def normalize_company(item) -> dict:
             # alphacore-Firmen-ID (Directus-Fremdschlüssel) – vom directus_write
             # per resolve=company_directus_id genutzt.
             "directus_firma_id": _str_or_none(item.get("directus_firma_id")),
+            # E-Mail-Domain der Firma – Basis für die automatische Firmenmail
+            # (vorname.nachname@domain). Ohne führendes @, klein.
+            "domain": (_str_or_none(item.get("domain")) or "").lower().lstrip("@") or None,
         }
     return {"name": "", "pnr_from": None, "pnr_to": None,
             "pnr_current": None, "pnr_warned": False, "mandant": None,
-            "pnr_shared_with": None, "directus_firma_id": None}
+            "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
 
 
 def get_companies_full() -> List[dict]:

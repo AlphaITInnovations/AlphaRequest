@@ -15,6 +15,7 @@ interface CompanyItem {
   mandant: string | null
   pnr_shared_with: string | null
   directus_firma_id: string | null
+  domain: string | null
   pnr_current: number | null
   pnr_warned: boolean
 }
@@ -27,7 +28,7 @@ function mapCompany(c: any): CompanyItem {
   return {
     name: c?.name ?? '', pnr_from: c?.pnr_from ?? null, pnr_to: c?.pnr_to ?? null,
     mandant: c?.mandant ?? null, pnr_shared_with: c?.pnr_shared_with ?? null,
-    directus_firma_id: c?.directus_firma_id ?? null,
+    directus_firma_id: c?.directus_firma_id ?? null, domain: c?.domain ?? null,
     pnr_current: c?.pnr_current ?? null, pnr_warned: !!c?.pnr_warned,
   }
 }
@@ -35,7 +36,7 @@ function serialize(list: CompanyItem[]): string {
   return JSON.stringify(list.map(c => ({
     name: c.name, pnr_from: c.pnr_from, pnr_to: c.pnr_to,
     mandant: c.mandant, pnr_shared_with: c.pnr_shared_with,
-    directus_firma_id: c.directus_firma_id,
+    directus_firma_id: c.directus_firma_id, domain: c.domain,
   })))
 }
 
@@ -52,7 +53,7 @@ async function loadCompanies() {
 
 function addCompany() {
   companies.value.push({ name: '', pnr_from: null, pnr_to: null, mandant: null,
-                         pnr_shared_with: null, directus_firma_id: null,
+                         pnr_shared_with: null, directus_firma_id: null, domain: null,
                          pnr_current: null, pnr_warned: false })
   open(companies.value.length - 1)
 }
@@ -115,6 +116,7 @@ async function saveCompanies() {
       mandant:  (c.mandant ?? '').trim() || null,
       pnr_shared_with: c.pnr_shared_with || null,
       directus_firma_id: (c.directus_firma_id ?? '').trim() || null,
+      domain: (c.domain ?? '').trim().toLowerCase().replace(/^@/, '') || null,
     }))
     const { data } = await client.put('/settings/companies', { companies: payload })
     companies.value = (data.data.companies ?? []).map(mapCompany)
@@ -204,6 +206,15 @@ onMounted(loadCompanies)
           <p class="text-xs text-gray-400 mt-1">
             Wird beim automatischen Anlegen in Directus als Firmen-Fremdschlüssel geschrieben
             (Zuordnung „als alphacore-Firmen-ID auflösen“ in der Automation).
+          </p>
+        </div>
+
+        <div>
+          <label class="lbl">E-Mail-Domain <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input v-model="companies[selected].domain" class="set-input w-full"
+                 placeholder="z. B. alpha-consult.de" />
+          <p class="text-xs text-gray-400 mt-1">
+            Basis der automatischen Firmenmail: vorname.nachname@domain.
           </p>
         </div>
 
