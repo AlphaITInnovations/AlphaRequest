@@ -38,13 +38,19 @@ from backend.utils.mail_templates import MailBranding, render_corporate_email
 
 
 def _user_email(user_id: Optional[str]) -> Optional[str]:
-    """Mail-Adresse einer Person aus dem AD-Cache. None, wenn nicht auflösbar.
+    """Mail-Adresse einer Person. None, wenn nicht auflösbar.
 
-    `get_user` liefert eine `AppUser`-Dataclass (kein dict) – deshalb per
-    getattr. Beides zu unterstützen ist Absicht: Tests reichen hier Dicts herein.
+    Seit der E-Mail-Identität IST der Personenschlüssel bereits die E-Mail – dann
+    direkt zurückgeben (deckt auch nie angemeldete Personen ab, für die es keine
+    app_users-Zeile gibt). Nur für Nicht-E-Mail-Schlüssel (Alt-Daten/Tests mit
+    Platzhalter-IDs) Fallback auf app_users. `get_user` liefert eine `AppUser`-
+    Dataclass (kein dict) – deshalb per getattr; Dicts sind für Tests erlaubt.
     """
     if not user_id:
         return None
+    s = str(user_id).strip()
+    if "@" in s:
+        return s.lower()
     try:
         from backend.database.users import get_user
         row = get_user(user_id)

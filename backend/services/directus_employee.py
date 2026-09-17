@@ -83,6 +83,16 @@ def lookup_employee(
     return rec
 
 
+def display_name_of(record: Optional[dict]) -> Optional[str]:
+    """Anzeigename aus einem Directus-Mitarbeiter-Datensatz (Name-Felder verbunden).
+    None, wenn kein Datensatz/kein Name."""
+    if not record:
+        return None
+    name = " ".join(str(record.get(f)).strip()
+                    for f in config.DIRECTUS_EMPLOYEE_NAME_FIELDS if record.get(f)).strip()
+    return name or None
+
+
 def list_employees(
     *,
     query: Callable[..., list[dict]] = directus_client.query_items,

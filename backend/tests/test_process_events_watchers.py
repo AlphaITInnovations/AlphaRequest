@@ -232,6 +232,18 @@ def test_user_email_versteht_die_appuser_dataclass():
         users_mod.get_user = orig
 
 
+def test_user_email_gibt_email_identitaet_direkt_zurueck():
+    """Seit E-Mail-Identität IST der Personenschlüssel die E-Mail → direkt zurück,
+    ohne app_users (deckt auch nie angemeldete Zuständige/Beobachter ab)."""
+    import backend.database.users as users_mod
+    orig = users_mod.get_user
+    users_mod.get_user = lambda uid: (_ for _ in ()).throw(AssertionError("kein DB-Zugriff nötig"))
+    try:
+        assert pactions._user_email("Helmut.Popp@x.org") == "helmut.popp@x.org"
+    finally:
+        users_mod.get_user = orig
+
+
 # ── Nachtrags-Benachrichtigung ───────────────────────────────────────────────
 
 def _capture():

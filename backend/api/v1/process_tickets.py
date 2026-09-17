@@ -1835,19 +1835,34 @@ class WatcherRequest(BaseModel):
 def _display_name(user_id: str) -> Optional[str]:
     """Anzeigename einer Person (denormalisiert in der Watcher-Zeile).
 
-    `get_user` liefert eine Dataclass, kein dict – deshalb getattr.
+    Zuerst app_users (bereits angemeldete Person). Für nie angemeldete Personen –
+    die man als Beobachter/Zuständige wählen kann, ohne dass eine app_users-Zeile
+    existiert – Fallback auf den Directus-Mitarbeiter-Datensatz per E-Mail. Sonst
+    None (Aufrufer zeigt dann die rohe E-Mail). `get_user` liefert eine Dataclass.
     """
     try:
         from backend.database.users import get_user
         row = get_user(user_id)
-        if row is None:
-            return None
         if isinstance(row, dict):
-            return row.get("displayName") or row.get("display_name") or row.get("email")
-        return getattr(row, "display_name", None) or getattr(row, "email", None)
+            nm = row.get("displayName") or row.get("display_name") or row.get("email")
+            if nm:
+                return nm
+        elif row is not None:
+            nm = getattr(row, "display_name", None) or getattr(row, "email", None)
+            if nm:
+                return nm
     except Exception:
-        logger.warning("Anzeigename für %s nicht auflösbar", user_id)
-        return None
+        logger.warning("Anzeigename für %s nicht auflösbar (app_users)", user_id)
+
+    if user_id and "@" in str(user_id):
+        try:
+            from backend.services import directus_employee
+            nm = directus_employee.display_name_of(directus_employee.lookup_employee(user_id))
+            if nm:
+                return nm
+        except Exception:
+            logger.warning("Anzeigename für %s nicht auflösbar (Directus)", user_id)
+    return None
 
 
 @router.get("/process-tickets/{ticket_id}/watchers", response_model=ListResponse[WatcherOut])

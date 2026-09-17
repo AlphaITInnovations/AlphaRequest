@@ -109,3 +109,10 @@ def test_list_employees_faellt_auf_mail_zurueck_ohne_namen():
 def test_list_employees_nicht_konfiguriert_wirft():
     with pytest.raises(de.EmployeeLookupError):
         de.list_employees(query=_q([]), is_configured=lambda: False)
+
+
+def test_display_name_of():
+    assert de.display_name_of({"first_name": "Helmut", "last_name": "Popp"}) == "Helmut Popp"
+    assert de.display_name_of({"first_name": "A", "last_name": ""}) == "A"
+    assert de.display_name_of({"first_name": "", "last_name": ""}) is None
+    assert de.display_name_of(None) is None
