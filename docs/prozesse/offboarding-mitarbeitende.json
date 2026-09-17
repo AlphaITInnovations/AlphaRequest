@@ -1,0 +1,1762 @@
+{
+  "schemaVersion": 1,
+  "key": "offboarding-mitarbeitende",
+  "name": "Offboarding Mitarbeiter:innen",
+  "description": "Austritt von Mitarbeitenden: Antrag, Freigabe, Kündigung und Durchführung durch die Fachabteilungen.",
+  "icon": null,
+  "titleEditable": true,
+  "titleTemplate": null,
+  "createPermissions": {
+    "everyone": true,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "base.mitarbeiter",
+      "label": "Mitarbeiter:in",
+      "widget": "directus",
+      "help": null,
+      "placeholder": "Name der austretenden Person",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": "mitarbeitende",
+      "directusFieldMap": [
+        {
+          "source": "first_name",
+          "target": "base.mitarbeiter_vorname"
+        },
+        {
+          "source": "last_name",
+          "target": "base.mitarbeiter_nachname"
+        },
+        {
+          "source": "location.name",
+          "target": "base.niederlassung"
+        },
+        {
+          "source": "cost_center.cost_center_number",
+          "target": "base.kostenstelle"
+        },
+        {
+          "source": "private_street",
+          "target": "base.privat_strasse"
+        },
+        {
+          "source": "private_zip",
+          "target": "base.privat_plz"
+        },
+        {
+          "source": "private_city",
+          "target": "base.privat_ort"
+        }
+      ],
+      "prefill": null
+    },
+    {
+      "key": "base.mitarbeiter_vorname",
+      "label": "Vorname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.mitarbeiter_nachname",
+      "label": "Nachname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.niederlassung",
+      "label": "Niederlassung",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.kostenstelle",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.privat_strasse",
+      "label": "Privat: Straße und Hausnummer",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.privat_plz",
+      "label": "Privat: PLZ",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.privat_ort",
+      "label": "Privat: Ort",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.vorgesetzter",
+      "label": "Vorgesetzte:r",
+      "widget": "directus",
+      "help": null,
+      "placeholder": "Vorgesetzte:n auswählen",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": "mitarbeitende",
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.austrittsdatum",
+      "label": "Austrittsdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.kuendigungsart",
+      "label": "Kündigungsart",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "ordentlich",
+          "label": "Ordentlich"
+        },
+        {
+          "value": "ausserordentlich",
+          "label": "Außerordentlich"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.freistellung",
+      "label": "Freistellung",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "ja",
+          "label": "Ja"
+        },
+        {
+          "value": "nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.freistellung_ab",
+      "label": "Freistellung ab",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.hinweise_lutz",
+      "label": "Hinweise für Udo Lutz",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": "Ergänzende Informationen für die Freigabeentscheidung",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.sofortige_sperrung",
+      "label": "Sofortige Sperrung",
+      "widget": "checkbox",
+      "help": "Nach der Freigabe wird die IT sofort per Mail zur Sperrung informiert (Timebutler, Talention u. a.).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.sperrzeitpunkt_art",
+      "label": "Zugriffe sperren ab",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "sofort",
+          "label": "Sofort"
+        },
+        {
+          "value": "datum",
+          "label": "Zu einem Datum"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.sperrzeitpunkt_datum",
+      "label": "Sperrdatum",
+      "widget": "date",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.postfachvollzugriff",
+      "label": "Postfachvollzugriff",
+      "widget": "select",
+      "help": "Vorgesehene Laufzeit 30 Tage. Umsetzung nur nach Freigabe durch Ingo Wiegers.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "ja",
+          "label": "Ja"
+        },
+        {
+          "value": "nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.it_hardware",
+      "label": "IT-Hardware",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "zuruecksenden",
+          "label": "Zurücksenden"
+        },
+        {
+          "value": "behalten",
+          "label": "Behalten"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.it_hardware_begruendung",
+      "label": "Begründung (Hardware behalten)",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.dienstwagen",
+      "label": "Dienstwagen vorhanden",
+      "widget": "checkbox",
+      "help": "Steuert, ob der Fuhrpark in der Durchführung beteiligt wird.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.mailweiterleitung",
+      "label": "Mailweiterleitung",
+      "widget": "select",
+      "help": "Vorgesehene Laufzeit 30 Tage.",
+      "placeholder": null,
+      "options": [
+        {
+          "value": "ja",
+          "label": "Ja"
+        },
+        {
+          "value": "nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.mailweiterleitung_ziel",
+      "label": "Weiterleitung an (E-Mail)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.abwesenheit_variante",
+      "label": "Abwesenheitsmeldung",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "ohne_empfaenger",
+          "label": "Ohne Empfänger"
+        },
+        {
+          "value": "mit_empfaenger",
+          "label": "Mit Empfänger"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.abwesenheit_empfaenger",
+      "label": "Empfänger (Abwesenheitsmeldung)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.abwesenheit_text",
+      "label": "Text der Abwesenheitsmeldung",
+      "widget": "textarea",
+      "help": "Vorgesehene Laufzeit 30 Tage.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "ablauf.freigabe_ueberspringen",
+      "label": "Freigabe überspringen",
+      "widget": "checkbox",
+      "help": "Überspringt die Freigabe durch Udo Lutz und geht direkt zur Kündigung.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "kuendigung.zustelldatum",
+      "label": "Zustelldatum",
+      "widget": "date",
+      "help": "Mit dem Setzen des Zustelldatums und „Ist zugestellt worden\" wird an die Fachabteilungen weitergegeben.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    }
+  ],
+  "phases": [
+    {
+      "key": "antrag",
+      "label": "Antrag",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "advanceLabel": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
+      },
+      "approval": null,
+      "document": null,
+      "escalation": null,
+      "fields": [
+        {
+          "ref": "base.mitarbeiter",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mitarbeiter_vorname",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mitarbeiter_nachname",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.niederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.kostenstelle",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.privat_strasse",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.privat_plz",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.privat_ort",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.vorgesetzter",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.austrittsdatum",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.kuendigungsart",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.freistellung",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.freistellung_ab",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "base.freistellung",
+              "ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "base.freistellung",
+              "ja"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.hinweise_lutz",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.sofortige_sperrung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.sperrzeitpunkt_art",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.sperrzeitpunkt_datum",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "base.sperrzeitpunkt_art",
+              "datum"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "base.sperrzeitpunkt_art",
+              "datum"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.postfachvollzugriff",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.it_hardware",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.it_hardware_begruendung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "base.it_hardware",
+              "behalten"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "base.it_hardware",
+              "behalten"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.dienstwagen",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mailweiterleitung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mailweiterleitung_ziel",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "base.mailweiterleitung",
+              "ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "base.mailweiterleitung",
+              "ja"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_variante",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_empfaenger",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "base.abwesenheit_variante",
+              "mit_empfaenger"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "base.abwesenheit_variante",
+              "mit_empfaenger"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_text",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "ablauf.freigabe_ueberspringen",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Mitarbeiter:in",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "base.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.kostenstelle",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.vorgesetzter",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.austrittsdatum",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Kündigung & Freistellung",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.kuendigungsart",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.freistellung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.freistellung_ab",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.hinweise_lutz",
+              "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Sperrung & IT",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "note",
+              "text": "Sofortige Sperrung wirkt erst nach der Freigabe durch Udo Lutz. Es wird dann automatisch die IT per Mail informiert (u. a. Timebutler, Talention). Das läuft parallel zur Fortsetzung des Hauptprozesses.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": null
+            },
+            {
+              "type": "field",
+              "ref": "base.sofortige_sperrung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "base.sperrzeitpunkt_art",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.sperrzeitpunkt_datum",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.postfachvollzugriff",
+              "width": "half"
+            },
+            {
+              "type": "note",
+              "text": "Postfachvollzugriff: vorgesehene Laufzeit 30 Tage. Umsetzung nur nach Freigabe durch Ingo Wiegers.",
+              "tone": "warning",
+              "width": "full",
+              "visibleWhen": null
+            },
+            {
+              "type": "field",
+              "ref": "base.it_hardware",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.it_hardware_begruendung",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "base.dienstwagen",
+              "width": "full"
+            },
+            {
+              "type": "note",
+              "text": "Dienstwagen: Der Vorgang wird automatisch berücksichtigt – ist ein Dienstwagen vorhanden, wird der Fuhrpark in der Durchführung beteiligt.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": null
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Mailweiterleitung & Abwesenheit",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.mailweiterleitung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mailweiterleitung_ziel",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_variante",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_empfaenger",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_text",
+              "width": "full"
+            },
+            {
+              "type": "note",
+              "text": "Mailweiterleitung und Abwesenheitsmeldung sind für eine Laufzeit von 30 Tagen vorgesehen.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": null
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Ablauf",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "ablauf.freigabe_ueberspringen",
+              "width": "full"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": [
+        {
+          "id": "antrag_abgeschlossen",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": null,
+          "action": {
+            "type": "auto_advance",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null,
+            "directus": null,
+            "http": null,
+            "email": null
+          }
+        }
+      ]
+    },
+    {
+      "key": "freigabe",
+      "label": "Freigabe durch Udo Lutz",
+      "kind": "approval",
+      "view": "approval",
+      "enterStatus": null,
+      "advanceLabel": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "group",
+        "group": "6c3c5ff44ac942c6a9bffb0b7cd9fb35",
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
+      },
+      "approval": {
+        "question": "Soll das Offboarding freigegeben werden?",
+        "approveLabel": "Offboarding freigeben",
+        "rejectLabel": "Ablehnen",
+        "externalLink": true,
+        "emailBody": "Es liegt ein neues Offboarding zur Freigabe vor:\n\nMitarbeiter:in: {{base.mitarbeiter_vorname}} {{base.mitarbeiter_nachname}}\nNiederlassung: {{base.niederlassung}}\nKostenstelle: {{base.kostenstelle}}\nAustrittsdatum: {{base.austrittsdatum}}\nKündigungsart: {{base.kuendigungsart}}\nFreistellung: {{base.freistellung}} (ab {{base.freistellung_ab}})\nSofortige Sperrung: {{base.sofortige_sperrung}}\nMailweiterleitung: {{base.mailweiterleitung}}\nIT-Hardware: {{base.it_hardware}}\nDienstwagen: {{base.dienstwagen}}\n\nHinweise: {{base.hinweise_lutz}}\n",
+        "linkMaxAge": "P7D",
+        "requireReason": true,
+        "decisionField": null,
+        "reasonField": null,
+        "onReject": "reject"
+      },
+      "document": null,
+      "escalation": null,
+      "fields": [],
+      "layout": [],
+      "constraints": [],
+      "automations": [
+        {
+          "id": "freigabe_ueberspringen",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": {
+            "truthy": "ablauf.freigabe_ueberspringen"
+          },
+          "action": {
+            "type": "auto_advance",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null,
+            "directus": null,
+            "http": null,
+            "email": null
+          }
+        }
+      ]
+    },
+    {
+      "key": "kuendigung",
+      "label": "Kündigung",
+      "kind": "task",
+      "view": "document",
+      "enterStatus": null,
+      "advanceLabel": "Ist zugestellt worden",
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "group",
+        "group": "3250a01a8f234bccab8a74764be1ff31",
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
+      },
+      "approval": null,
+      "document": {
+        "templateHtml": "",
+        "filename": "Kündigung_{{base.mitarbeiter_nachname}}_{{base.mitarbeiter_vorname}}",
+        "title": "Kündigung",
+        "bindings": {
+          "vorname": {
+            "field": "base.mitarbeiter_vorname",
+            "offset": null
+          },
+          "nachname": {
+            "field": "base.mitarbeiter_nachname",
+            "offset": null
+          },
+          "privat_straße_und_hausnummer": {
+            "field": "base.privat_strasse",
+            "offset": null
+          },
+          "privat_plz": {
+            "field": "base.privat_plz",
+            "offset": null
+          },
+          "privat_ort": {
+            "field": "base.privat_ort",
+            "offset": null
+          },
+          "niederlassung": {
+            "field": "base.niederlassung",
+            "offset": null
+          },
+          "austrittsdatum": {
+            "field": "base.austrittsdatum",
+            "offset": null
+          },
+          "kuendigungsart": {
+            "field": "base.kuendigungsart",
+            "offset": null
+          },
+          "zustelldatum": {
+            "field": "kuendigung.zustelldatum",
+            "offset": null
+          },
+          "aktuelles_datum": {
+            "field": "@today",
+            "offset": null
+          }
+        }
+      },
+      "escalation": {
+        "enabled": true,
+        "stages": [
+          {
+            "afterDays": 4,
+            "repeatDays": null,
+            "recipients": [
+              "responsible"
+            ],
+            "message": "Erinnerung: Kündigung zustellen und Zustellung bestätigen (Tag 4).",
+            "raisePriority": false
+          },
+          {
+            "afterDays": 6,
+            "repeatDays": null,
+            "recipients": [
+              "responsible"
+            ],
+            "message": "Erinnerung: Kündigung zustellen und Zustellung bestätigen (Tag 6).",
+            "raisePriority": false
+          },
+          {
+            "afterDays": 8,
+            "repeatDays": null,
+            "recipients": [
+              "responsible"
+            ],
+            "message": "Erinnerung: Kündigung zustellen und Zustellung bestätigen (Tag 8).",
+            "raisePriority": false
+          }
+        ]
+      },
+      "fields": [
+        {
+          "ref": "base.mitarbeiter_vorname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mitarbeiter_nachname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.niederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.austrittsdatum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.kuendigungsart",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "kuendigung.zustelldatum",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Kündigung",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "note",
+              "text": "Kündigung aus der hinterlegten Vorlage erzeugen. Die Privatadresse wird aus AlphaCore (Directus) der ausgewählten Person übernommen.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": null
+            },
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_vorname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_nachname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.austrittsdatum",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.kuendigungsart",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Zustellung",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "note",
+              "text": "Einziger Status-Button: „Ist zugestellt worden\". Erst mit gesetztem Zustelldatum wird an die Fachabteilungen weitergegeben (harte Sperre). Nach Erzeugung der Kündigung erinnern Mails an Tag 4, 6 und 8.",
+              "tone": "warning",
+              "width": "full",
+              "visibleWhen": null
+            },
+            {
+              "type": "field",
+              "ref": "kuendigung.zustelldatum",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": [
+        {
+          "id": "sofortige_sperrung_mail",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": {
+            "truthy": "base.sofortige_sperrung"
+          },
+          "action": {
+            "type": "notify",
+            "to": null,
+            "recipients": [
+              "group:b66f749021c34618a8b8aca13ed4328c"
+            ],
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null,
+            "directus": null,
+            "http": null,
+            "email": null
+          }
+        }
+      ]
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung durch Fachabteilungen",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "advanceLabel": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "fromField": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_MARKETING_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "7c88310d535140359d4b021d3754193f",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "b66f749021c34618a8b8aca13ed4328c",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "8b71e13442814e519068cf3fce470559",
+            "required": true,
+            "when": {
+              "truthy": "base.dienstwagen"
+            }
+          }
+        ],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
+      },
+      "approval": null,
+      "document": null,
+      "escalation": null,
+      "fields": [
+        {
+          "ref": "base.mitarbeiter_vorname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mitarbeiter_nachname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.niederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.kostenstelle",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.austrittsdatum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.kuendigungsart",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.freistellung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.sofortige_sperrung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.postfachvollzugriff",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mailweiterleitung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mailweiterleitung_ziel",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_variante",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.it_hardware",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.dienstwagen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Austritt",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_vorname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_nachname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.kostenstelle",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.austrittsdatum",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.kuendigungsart",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.freistellung",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Maßnahmen",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.sofortige_sperrung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.postfachvollzugriff",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mailweiterleitung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mailweiterleitung_ziel",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_variante",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.it_hardware",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.dienstwagen",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}
