@@ -486,6 +486,10 @@ class FieldRef(_Base):
     required: bool = False
     requiredWhen: Optional[dict] = None
     visibleWhen: Optional[dict] = None
+    #: Schaltet ein sonst read-only Feld BEDINGT editierbar (gleiche DSL). Nutzung
+    #: z. B.: Feld ist read-only vorbelegt, wird aber bei einem Konflikt-Flag
+    #: bearbeitbar. Wirkt additiv zum `mode`.
+    editableWhen: Optional[dict] = None
 
     @model_validator(mode="after")
     def _check_dsl(self) -> "FieldRef":
@@ -493,6 +497,8 @@ class FieldRef(_Base):
             validate_condition(self.requiredWhen, f"{self.ref}.requiredWhen")
         if self.visibleWhen is not None:
             validate_condition(self.visibleWhen, f"{self.ref}.visibleWhen")
+        if self.editableWhen is not None:
+            validate_condition(self.editableWhen, f"{self.ref}.editableWhen")
         return self
 
 

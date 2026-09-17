@@ -106,6 +106,7 @@ export function normalizeFieldRef(v: any): FieldRef {
     required: bool(v?.required, false),        // Default false
     requiredWhen: cond(v?.requiredWhen),
     visibleWhen: cond(v?.visibleWhen),
+    editableWhen: cond(v?.editableWhen),
   }
 }
 

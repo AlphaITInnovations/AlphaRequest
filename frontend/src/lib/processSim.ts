@@ -125,9 +125,12 @@ export function renderFields(
     const required = visible && (ref.required
       || (!!ref.requiredWhen && evaluate(ref.requiredWhen as Condition, values)))
     const modeOk = ref.mode === 'editable' || ref.mode === 'append_only'
+    // editableWhen schaltet ein sonst read-only Feld bedingt editierbar (live gegen
+    // den Tippstand, wie visibleWhen) – additiv zum Modus.
+    const editWhenOk = !!ref.editableWhen && evaluate(ref.editableWhen as Condition, values)
     // Die Server-Liste kennt zusätzlich die Rolle (zuständig? Aufsicht?) – ohne
     // sie (Editor-Vorschau) entscheidet allein der Phasen-Modus.
-    const editable = visible && modeOk
+    const editable = visible && (modeOk || editWhenOk)
       && (ctx.editableKeys ? ctx.editableKeys.has(ref.ref) : true)
     out.push({ ref, field, visible, required, editable })
   }

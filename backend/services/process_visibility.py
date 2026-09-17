@@ -111,7 +111,14 @@ def editable_field_keys(defn: ProcessDefinition, phase: PhaseDef, ctx: ViewerCtx
     fmap = {f.key: f for f in defn.fields}
     out = set()
     for fr in phase.fields:
-        if fr.mode not in (FieldMode.editable, FieldMode.append_only):
+        mode_editable = fr.mode in (FieldMode.editable, FieldMode.append_only)
+        # editableWhen schaltet ein sonst read-only Feld BEDINGT editierbar (z. B.
+        # bei einem Konflikt-Flag). Für die Formular-Auskunft (ignore_conditions)
+        # grundsätzlich anbieten – die Live-Auswertung macht das Formular selbst;
+        # im Schreibschutz muss die Bedingung gegen die Werte erfüllt sein.
+        cond_editable = getattr(fr, "editableWhen", None) is not None and (
+            ignore_conditions or evaluate(fr.editableWhen, values))
+        if not (mode_editable or cond_editable):
             continue
         f = fmap.get(fr.ref)
         if f is None or not _effective_can_see(f, ctx, fmap):

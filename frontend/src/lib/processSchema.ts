@@ -234,7 +234,8 @@ export function blankAssign(): AssignSpec {
 
 /** ACHTUNG: required=false – anders als bei DepartmentRule. */
 export function blankFieldRef(ref: string): FieldRef {
-  return { ref, mode: 'editable', required: false, requiredWhen: null, visibleWhen: null }
+  return { ref, mode: 'editable', required: false, requiredWhen: null, visibleWhen: null,
+    editableWhen: null }
 }
 
 /** ACHTUNG: required=true – anders als bei FieldRef. */

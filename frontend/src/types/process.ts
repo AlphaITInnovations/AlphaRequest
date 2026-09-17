@@ -136,6 +136,8 @@ export interface FieldRef {
   required: boolean
   requiredWhen: Condition | null
   visibleWhen: Condition | null
+  /** Schaltet ein sonst read-only Feld bedingt editierbar (additiv zum mode). */
+  editableWhen: Condition | null
 }
 
 export interface DepartmentRule {

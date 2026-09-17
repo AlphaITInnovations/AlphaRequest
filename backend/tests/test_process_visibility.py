@@ -156,3 +156,23 @@ def test_writable_keys_no_unlock_via_noneditable_body():
     submitted = {"ctrl": "x", "secret": "evil"}  # Angreifer versucht Freischaltung über readonly ctrl
     allowed = writable_keys(defn, defn.phases[0], FULL, stored, submitted)
     assert "secret" not in allowed              # bleibt gesperrt (ctrl aus Body ignoriert)
+
+
+def test_editable_when_unlocks_readonly_field():
+    """editableWhen schaltet ein read-only Feld bedingt editierbar (z. B. bei Konflikt)."""
+    defn = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "mail", "widget": "text"}, {"key": "conflict", "widget": "checkbox"}],
+        "phases": [{"key": "p", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [
+                        {"ref": "mail", "mode": "readonly", "editableWhen": {"truthy": "conflict"}},
+                        {"ref": "conflict", "mode": "editable"}]}],
+    })
+    ph = defn.phases[0]
+    assert editable_field_keys(defn, ph, FULL, {"conflict": False}) == {"conflict"}
+    assert editable_field_keys(defn, ph, FULL, {"conflict": True}) == {"conflict", "mail"}
+    # Formular-Auskunft (ignore_conditions) bietet das Feld grundsätzlich an
+    assert "mail" in editable_field_keys(defn, ph, FULL, {"conflict": False}, ignore_conditions=True)
+    # Schreibschutz greift streng gegen die Werte
+    assert "mail" not in writable_keys(defn, ph, FULL, {"conflict": False}, {"mail": "x"})
+    assert "mail" in writable_keys(defn, ph, FULL, {"conflict": True}, {"mail": "x"})
