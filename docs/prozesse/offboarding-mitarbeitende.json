@@ -1077,21 +1077,6 @@
             },
             {
               "type": "field",
-              "ref": "base.dienstwagen",
-              "width": "full"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Mailweiterleitung & Abwesenheit",
-          "variant": "default",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
               "ref": "base.mailweiterleitung",
               "width": "half"
             },
@@ -1121,6 +1106,21 @@
               "tone": "info",
               "width": "full",
               "visibleWhen": null
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.dienstwagen",
+              "width": "full"
             }
           ]
         }
