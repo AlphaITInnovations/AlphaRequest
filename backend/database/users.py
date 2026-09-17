@@ -30,14 +30,14 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 
 # ── DDL ───────────────────────────────────────────────────────────────────────
 
-# HINWEIS: Die Spalte `microsoft_id` ist der Personen-Primärschlüssel und hält
-# seit der Umstellung auf E-Mail-Identität die KLEINGESCHRIEBENE dienstliche
-# E-Mail (nicht mehr die Azure-oid). Der Name blieb bewusst, um eine fragile
-# PK-Umbenennung in bestehenden DBs zu vermeiden. get_user/upsert_user
-# normalisieren den Schlüssel defensiv auf lower(), damit Groß/Klein nie driftet.
+# Die Spalte `user_id` ist der Personen-Primärschlüssel und hält die
+# KLEINGESCHRIEBENE dienstliche E-Mail (E-Mail-Identität, nicht die Azure-oid).
+# get_user/upsert_user normalisieren defensiv auf lower(), damit Groß/Klein nie
+# driftet. Bestehende DBs (Spalte hieß microsoft_id) werden per
+# USERS_TOLERANT_MIGRATIONS idempotent umbenannt.
 USERS_DDL = """
 CREATE TABLE IF NOT EXISTS app_users (
-    microsoft_id       VARCHAR(255) PRIMARY KEY,
+    user_id       VARCHAR(255) PRIMARY KEY,
     display_name       VARCHAR(255) NOT NULL,
     email              VARCHAR(255) NOT NULL,
     role               VARCHAR(32)  NOT NULL DEFAULT 'none',
@@ -53,11 +53,18 @@ USERS_MIGRATIONS = [
     "ALTER TABLE app_users ADD COLUMN IF NOT EXISTS admin_via_group TINYINT(1) NOT NULL DEFAULT 0",
 ]
 
+# Bestehende DBs (Spalte hieß microsoft_id) idempotent auf user_id umstellen.
+# Läuft im FEHLERTOLERANTEN Migrations-Block: auf einer frischen DB (Spalte
+# heißt schon user_id) schlägt das CHANGE fehl und wird bewusst verschluckt.
+USERS_TOLERANT_MIGRATIONS = [
+    "ALTER TABLE app_users CHANGE COLUMN microsoft_id user_id VARCHAR(255) NOT NULL",
+]
+
 # ── Model ─────────────────────────────────────────────────────────────────────
 
 @dataclass
 class AppUser:
-    microsoft_id:      str
+    user_id:      str
     display_name:      str
     email:             str
     role:              str
@@ -74,7 +81,7 @@ class AppUser:
         except Exception:
             parsed_extra = []
         return cls(
-            microsoft_id=row["microsoft_id"],
+            user_id=row["user_id"],
             display_name=row["display_name"],
             email=row["email"],
             role=row["role"],
@@ -106,12 +113,12 @@ def _now() -> str:
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 def upsert_user(
-    microsoft_id: str,
+    user_id: str,
     display_name: str,
     email: str,
     role: Optional[str] = None,
 ) -> AppUser:
-    microsoft_id = (microsoft_id or "").strip().lower()   # Personenschlüssel = E-Mail
+    user_id = (user_id or "").strip().lower()   # Personenschlüssel = E-Mail
     email        = (email or "").strip().lower()
     now          = _now()
     initial_role = role if role in VALID_ROLES else ROLE_NONE
@@ -121,7 +128,7 @@ def upsert_user(
     try:
         _exec(conn, """
             INSERT INTO app_users
-                (microsoft_id, display_name, email, role, extra_permissions, created_at, last_login)
+                (user_id, display_name, email, role, extra_permissions, created_at, last_login)
             VALUES
                 (%s, %s, %s, %s, '[]', %s, %s)
             ON DUPLICATE KEY UPDATE
@@ -129,19 +136,19 @@ def upsert_user(
                 email        = VALUES(email),
                 last_login   = VALUES(last_login),
                 role         = IF(%s, VALUES(role), role)
-        """, (microsoft_id, display_name, email, initial_role, now, now, is_admin))
+        """, (user_id, display_name, email, initial_role, now, now, is_admin))
         conn.commit()
     finally:
         conn.close()
 
-    return get_user(microsoft_id)
+    return get_user(user_id)
 
-def get_user(microsoft_id: str) -> Optional[AppUser]:
-    microsoft_id = (microsoft_id or "").strip().lower()   # case-insensitiv per E-Mail
+def get_user(user_id: str) -> Optional[AppUser]:
+    user_id = (user_id or "").strip().lower()   # case-insensitiv per E-Mail
     conn = get_connection()
     try:
         row = _fetchone(conn,
-            "SELECT * FROM app_users WHERE microsoft_id = %s", (microsoft_id,))
+            "SELECT * FROM app_users WHERE user_id = %s", (user_id,))
         return AppUser.from_row(row) if row else None
     finally:
         conn.close()
@@ -156,7 +163,7 @@ def list_users() -> list[AppUser]:
         conn.close()
 
 
-def set_user_role(microsoft_id: str, role: str) -> AppUser:
+def set_user_role(user_id: str, role: str) -> AppUser:
     if role not in VALID_ROLES:
         raise ValueError(f"Ungültige Rolle: {role!r}. Erlaubt: {VALID_ROLES}")
     conn = get_connection()
@@ -164,70 +171,70 @@ def set_user_role(microsoft_id: str, role: str) -> AppUser:
         # Manuelle Rollenvergabe → als NICHT gruppen-basiert markieren, damit ein
         # so gesetzter Admin beim Login nicht automatisch entzogen wird.
         _exec(conn,
-            "UPDATE app_users SET role = %s, admin_via_group = 0 WHERE microsoft_id = %s",
-            (role, microsoft_id))
+            "UPDATE app_users SET role = %s, admin_via_group = 0 WHERE user_id = %s",
+            (role, user_id))
         conn.commit()
     finally:
         conn.close()
-    return get_user(microsoft_id)
+    return get_user(user_id)
 
 
-def set_group_admin(microsoft_id: str) -> Optional[AppUser]:
+def set_group_admin(user_id: str) -> Optional[AppUser]:
     """Setzt/bestätigt die Admin-Rolle als gruppen-basiert (AD-Admin-Gruppe)."""
     conn = get_connection()
     try:
         _exec(conn,
-            "UPDATE app_users SET role = %s, admin_via_group = 1 WHERE microsoft_id = %s",
-            (ROLE_ADMIN, microsoft_id))
+            "UPDATE app_users SET role = %s, admin_via_group = 1 WHERE user_id = %s",
+            (ROLE_ADMIN, user_id))
         conn.commit()
     finally:
         conn.close()
-    return get_user(microsoft_id)
+    return get_user(user_id)
 
 
-def revoke_group_admin(microsoft_id: str) -> Optional[AppUser]:
+def revoke_group_admin(user_id: str) -> Optional[AppUser]:
     """Entzieht die Admin-Rolle NUR, wenn sie gruppen-basiert war."""
     conn = get_connection()
     try:
         _exec(conn,
             "UPDATE app_users SET role = %s, admin_via_group = 0 "
-            "WHERE microsoft_id = %s AND role = %s AND admin_via_group = 1",
-            (ROLE_NONE, microsoft_id, ROLE_ADMIN))
+            "WHERE user_id = %s AND role = %s AND admin_via_group = 1",
+            (ROLE_NONE, user_id, ROLE_ADMIN))
         conn.commit()
     finally:
         conn.close()
-    return get_user(microsoft_id)
+    return get_user(user_id)
 
 
-def get_user_permissions(microsoft_id: str) -> List[str]:
-    user = get_user(microsoft_id)
+def get_user_permissions(user_id: str) -> List[str]:
+    user = get_user(user_id)
     return user.permissions if user else []
 
 
-def set_extra_permissions(microsoft_id: str, perms: List[str]) -> None:
+def set_extra_permissions(user_id: str, perms: List[str]) -> None:
     conn = get_connection()
     try:
         _exec(conn,
-            "UPDATE app_users SET extra_permissions = %s WHERE microsoft_id = %s",
-            (json.dumps(perms, ensure_ascii=False), microsoft_id))
+            "UPDATE app_users SET extra_permissions = %s WHERE user_id = %s",
+            (json.dumps(perms, ensure_ascii=False), user_id))
         conn.commit()
     finally:
         conn.close()
 
 
-def add_extra_permission(microsoft_id: str, perm: str) -> AppUser:
-    user = get_user(microsoft_id)
+def add_extra_permission(user_id: str, perm: str) -> AppUser:
+    user = get_user(user_id)
     if not user:
-        raise ValueError(f"User {microsoft_id!r} nicht gefunden")
+        raise ValueError(f"User {user_id!r} nicht gefunden")
     extras = user.extra_permissions
     if perm not in extras:
-        set_extra_permissions(microsoft_id, extras + [perm])
-    return get_user(microsoft_id)
+        set_extra_permissions(user_id, extras + [perm])
+    return get_user(user_id)
 
 
-def remove_extra_permission(microsoft_id: str, perm: str) -> AppUser:
-    user = get_user(microsoft_id)
+def remove_extra_permission(user_id: str, perm: str) -> AppUser:
+    user = get_user(user_id)
     if not user:
-        raise ValueError(f"User {microsoft_id!r} nicht gefunden")
-    set_extra_permissions(microsoft_id, [p for p in user.extra_permissions if p != perm])
-    return get_user(microsoft_id)
+        raise ValueError(f"User {user_id!r} nicht gefunden")
+    set_extra_permissions(user_id, [p for p in user.extra_permissions if p != perm])
+    return get_user(user_id)

@@ -196,7 +196,7 @@ async def auth_callback(request: Request):
 
         # User anlegen / last_login aktualisieren (Rolle wird separat synchronisiert)
         db_user = upsert_user(
-            microsoft_id=user_payload["id"],
+            user_id=user_payload["id"],
             display_name=user_payload["displayName"] or "",
             email=user_payload["email"] or "",
         )

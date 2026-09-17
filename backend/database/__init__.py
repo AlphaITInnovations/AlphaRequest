@@ -1,6 +1,6 @@
 from backend.database.connection import get_connection, _exec
 from backend.database.settings import DDL_SETTINGS
-from backend.database.users import USERS_DDL, USERS_MIGRATIONS
+from backend.database.users import USERS_DDL, USERS_MIGRATIONS, USERS_TOLERANT_MIGRATIONS
 from backend.database.audit_log import AUDIT_LOG_DDL
 from backend.database.attachments import ATTACHMENTS_DDL, ATTACHMENTS_MIGRATIONS
 from backend.database.process_definitions import (
@@ -55,13 +55,20 @@ def init_db():
     try:
         conn = get_connection()
         try:
-            for migration in (list(ATTACHMENTS_MIGRATIONS)
+            # JEDE Migration einzeln tolerieren: eine, die nicht greift (z. B. die
+            # microsoft_id→user_id-Umbenennung auf einer bereits umbenannten/frischen
+            # DB), darf die übrigen NICHT überspringen.
+            for migration in (list(USERS_TOLERANT_MIGRATIONS)
+                              + list(ATTACHMENTS_MIGRATIONS)
                               + list(PROCESS_DEFINITIONS_MIGRATIONS)
                               + list(PROCESS_TICKETS_MIGRATIONS)
                               + list(PROCESS_TICKET_EVENTS_MIGRATIONS)
                               + list(PROCESS_TIMER_FIRES_MIGRATIONS)
                               + list(PROCESS_TEMPLATES_MIGRATIONS)):
-                _exec(conn, migration)
+                try:
+                    _exec(conn, migration)
+                except Exception as e:
+                    logger.warning("Migration übersprungen (%s…): %s", migration[:60], e)
             conn.commit()
         finally:
             conn.close()

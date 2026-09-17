@@ -144,7 +144,7 @@ def _load_legacy_user_permissions() -> dict[str, list[str]]:
                 continue
             typ = perm[len("create_"):]
             if typ in result:
-                result[typ].append(user.microsoft_id)
+                result[typ].append(user.user_id)
     return result
 
 

@@ -220,7 +220,7 @@ def test_user_email_versteht_die_appuser_dataclass():
     """`get_user` liefert eine Dataclass, kein dict. Mit `.get()` lief das in ein
     stilles None – jede persönliche Mail wäre auf die Zentraladresse gefallen."""
     from backend.database.users import AppUser
-    u = AppUser(microsoft_id="u_it", display_name="IT", email="it@example.org",
+    u = AppUser(user_id="u_it", display_name="IT", email="it@example.org",
                 role="user", extra_permissions=[], created_at="t", last_login="t")
     import backend.database.users as users_mod
     orig = users_mod.get_user

@@ -7,7 +7,7 @@ import { useSaver } from '@/composables/settingsSave'
 const { showToast } = useToast()
 
 interface AppUser {
-  microsoft_id: string; display_name: string; email: string
+  user_id: string; display_name: string; email: string
   role: string; extra: string[]; last_login: string
 }
 
@@ -66,12 +66,12 @@ async function _loadAppUsers() {
   appUsers.value = data.data.map((u: any) => {
     const rolePerms = ROLE_PERMISSIONS[u.role] ?? []
     const item: AppUser = {
-      microsoft_id: u.microsoft_id, display_name: u.display_name, email: u.email,
+      user_id: u.user_id, display_name: u.display_name, email: u.email,
       role: u.role, last_login: u.last_login,
       extra: (u.permissions ?? []).filter((p: string) => !rolePerms.includes(p)),
     }
-    snap[item.microsoft_id] = serialize(item)
-    newPermInput.value[item.microsoft_id] = ''
+    snap[item.user_id] = serialize(item)
+    newPermInput.value[item.user_id] = ''
     return item
   })
   snapshot.value = snap
@@ -79,32 +79,32 @@ async function _loadAppUsers() {
 
 // Alle Änderungen NUR lokal – gespeichert wird über die Sticky-Bar.
 function addExtra(u: AppUser) {
-  const perm = (newPermInput.value[u.microsoft_id] || '').trim()
+  const perm = (newPermInput.value[u.user_id] || '').trim()
   if (!perm) return
   if (!u.extra.includes(perm)) u.extra.push(perm)
-  newPermInput.value[u.microsoft_id] = ''
+  newPermInput.value[u.user_id] = ''
 }
 function removeExtra(u: AppUser, perm: string) { u.extra = u.extra.filter(p => p !== perm) }
 function toggleExpand(id: string) { expandedUser.value = expandedUser.value === id ? null : id }
 
 async function saveUsers() {
-  const changed = appUsers.value.filter(u => serialize(u) !== snapshot.value[u.microsoft_id])
+  const changed = appUsers.value.filter(u => serialize(u) !== snapshot.value[u.user_id])
   if (changed.length === 0) return
   setSaving(true)
   try {
     for (const u of changed) {
-      const prev = JSON.parse(snapshot.value[u.microsoft_id] || '{"role":"none","extra":[]}')
+      const prev = JSON.parse(snapshot.value[u.user_id] || '{"role":"none","extra":[]}')
       if (u.role !== prev.role) {
-        await client.patch(`/settings/app-users/${u.microsoft_id}/role`, { role: u.role })
+        await client.patch(`/settings/app-users/${u.user_id}/role`, { role: u.role })
       }
       const prevExtra: string[] = prev.extra ?? []
       for (const p of u.extra.filter(x => !prevExtra.includes(x))) {
-        await client.patch(`/settings/app-users/${u.microsoft_id}/permissions/add`, { permission: p })
+        await client.patch(`/settings/app-users/${u.user_id}/permissions/add`, { permission: p })
       }
       for (const p of prevExtra.filter((x: string) => !u.extra.includes(x))) {
-        await client.patch(`/settings/app-users/${u.microsoft_id}/permissions/remove`, { permission: p })
+        await client.patch(`/settings/app-users/${u.user_id}/permissions/remove`, { permission: p })
       }
-      snapshot.value[u.microsoft_id] = serialize(u)
+      snapshot.value[u.user_id] = serialize(u)
     }
     showToast('Gespeichert', true)
   } catch {
@@ -114,7 +114,7 @@ async function saveUsers() {
   }
 }
 
-const dirty = computed(() => appUsers.value.some(u => serialize(u) !== snapshot.value[u.microsoft_id]))
+const dirty = computed(() => appUsers.value.some(u => serialize(u) !== snapshot.value[u.user_id]))
 const { setSaving } = useSaver({ dirty, save: saveUsers, reset: () => loadAppUsers() })
 
 onMounted(loadAppUsers)
@@ -177,7 +177,7 @@ onMounted(loadAppUsers)
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100 dark:divide-white/[0.04]">
-          <template v-for="u in filteredAppUsers" :key="u.microsoft_id">
+          <template v-for="u in filteredAppUsers" :key="u.user_id">
             <tr class="hover:bg-gray-50 dark:hover:bg-[#263040] transition">
               <td class="px-5 py-3.5 font-medium text-gray-900 dark:text-white">{{ u.display_name }}</td>
               <td class="px-5 py-3.5 text-gray-500 dark:text-gray-400 text-xs">{{ u.email }}</td>
@@ -212,16 +212,16 @@ onMounted(loadAppUsers)
                 </div>
               </td>
               <td class="px-5 py-3.5">
-                <button @click="toggleExpand(u.microsoft_id)" class="text-xs text-gray-400 hover:text-[#3EAAB8] transition">
-                  {{ expandedUser === u.microsoft_id ? '▲ Schließen' : '▼ Permissions' }}
+                <button @click="toggleExpand(u.user_id)" class="text-xs text-gray-400 hover:text-[#3EAAB8] transition">
+                  {{ expandedUser === u.user_id ? '▲ Schließen' : '▼ Permissions' }}
                 </button>
               </td>
             </tr>
-            <tr v-if="expandedUser === u.microsoft_id" class="bg-gray-50 dark:bg-[#1C2535]">
+            <tr v-if="expandedUser === u.user_id" class="bg-gray-50 dark:bg-[#1C2535]">
               <td colspan="6" class="px-5 py-3">
                 <div class="flex items-center gap-3 flex-wrap">
                   <span class="text-xs text-gray-500 dark:text-gray-400">Extra Permission hinzufügen:</span>
-                  <input v-model="newPermInput[u.microsoft_id]" @keydown.enter.prevent="addExtra(u)"
+                  <input v-model="newPermInput[u.user_id]" @keydown.enter.prevent="addExtra(u)"
                          placeholder="z. B. create_hardware" class="set-input text-xs py-1.5 w-56" />
                   <button @click="addExtra(u)" class="btn-primary text-xs py-1.5">Hinzufügen</button>
                   <span class="text-xs text-gray-400 italic">

@@ -168,7 +168,7 @@ def _diff_companies(old_list, new_list):
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AppUserOut(BaseModel):
-    microsoft_id: str
+    user_id: str
     display_name: str
     email: str
     role: str
@@ -192,7 +192,7 @@ class AddRemovePermissionIn(BaseModel):
 
 def _user_out(u) -> AppUserOut:
     return AppUserOut(
-        microsoft_id=u.microsoft_id,
+        user_id=u.user_id,
         display_name=u.display_name,
         email=u.email,
         role=u.role,
@@ -201,8 +201,8 @@ def _user_out(u) -> AppUserOut:
     )
 
 
-def _get_user_or_404(microsoft_id: str):
-    u = get_user(microsoft_id)
+def _get_user_or_404(user_id: str):
+    u = get_user(user_id)
     if not u:
         raise HTTPException(404, "User nicht gefunden")
     return u
@@ -216,74 +216,74 @@ def get_app_users(user: dict = Depends(get_current_user)):
     return DataResponse(data=[_user_out(u) for u in list_users()])
 
 
-@router.patch("/settings/app-users/{microsoft_id}/role", response_model=DataResponse[AppUserOut])
+@router.patch("/settings/app-users/{user_id}/role", response_model=DataResponse[AppUserOut])
 def update_user_role(
-    microsoft_id: str,
+    user_id: str,
     payload: SetRoleIn,
     user: dict = Depends(get_current_user),
 ):
     require_admin(user)
     if payload.role not in VALID_ROLES:
         raise HTTPException(400, f"Ungültige Rolle. Erlaubt: {', '.join(VALID_ROLES)}")
-    result = _user_out(set_user_role(microsoft_id, payload.role))
-    _audit(user, "user_role_changed", entity_type="user", entity_id=microsoft_id,
+    result = _user_out(set_user_role(user_id, payload.role))
+    _audit(user, "user_role_changed", entity_type="user", entity_id=user_id,
            summary=f"{result.display_name}: Rolle → {payload.role}", details={"role": payload.role})
     return DataResponse(data=result)
 
 
 # ── User Permissions ──────────────────────────────────────────────────────────
 
-@router.get("/settings/app-users/{microsoft_id}/permissions", response_model=DataResponse[list[str]])
+@router.get("/settings/app-users/{user_id}/permissions", response_model=DataResponse[list[str]])
 def get_user_permissions(
-    microsoft_id: str,
+    user_id: str,
     user: dict = Depends(get_current_user),
 ):
     require_admin(user)
-    return DataResponse(data=_get_user_or_404(microsoft_id).permissions)
+    return DataResponse(data=_get_user_or_404(user_id).permissions)
 
 
-@router.put("/settings/app-users/{microsoft_id}/permissions", response_model=DataResponse[AppUserOut])
+@router.put("/settings/app-users/{user_id}/permissions", response_model=DataResponse[AppUserOut])
 def set_user_permissions(
-    microsoft_id: str,
+    user_id: str,
     payload: SetPermissionsIn,
     user: dict = Depends(get_current_user),
 ):
     """Ersetzt extra_permissions komplett."""
     require_admin(user)
-    u = _get_user_or_404(microsoft_id)
+    u = _get_user_or_404(user_id)
     # Nur extra_permissions setzen – Rollen-Permissions bleiben implizit erhalten
     role_perms = set(u.permissions) - set(u.extra_permissions)
     new_extras = [p for p in payload.permissions if p not in role_perms]
-    set_extra_permissions(microsoft_id, new_extras)
-    _audit(user, "user_permissions_set", entity_type="user", entity_id=microsoft_id,
+    set_extra_permissions(user_id, new_extras)
+    _audit(user, "user_permissions_set", entity_type="user", entity_id=user_id,
            summary=f"{u.display_name}: Rechte gesetzt", details={"permissions": new_extras})
-    return DataResponse(data=_user_out(_get_user_or_404(microsoft_id)))
+    return DataResponse(data=_user_out(_get_user_or_404(user_id)))
 
 
-@router.patch("/settings/app-users/{microsoft_id}/permissions/add", response_model=DataResponse[AppUserOut])
+@router.patch("/settings/app-users/{user_id}/permissions/add", response_model=DataResponse[AppUserOut])
 def add_user_permission(
-    microsoft_id: str,
+    user_id: str,
     payload: AddRemovePermissionIn,
     user: dict = Depends(get_current_user),
 ):
     require_admin(user)
-    _get_user_or_404(microsoft_id)
-    _audit(user, "user_permission_added", entity_type="user", entity_id=microsoft_id,
+    _get_user_or_404(user_id)
+    _audit(user, "user_permission_added", entity_type="user", entity_id=user_id,
            details={"permission": payload.permission})
-    return DataResponse(data=_user_out(add_extra_permission(microsoft_id, payload.permission)))
+    return DataResponse(data=_user_out(add_extra_permission(user_id, payload.permission)))
 
 
-@router.patch("/settings/app-users/{microsoft_id}/permissions/remove", response_model=DataResponse[AppUserOut])
+@router.patch("/settings/app-users/{user_id}/permissions/remove", response_model=DataResponse[AppUserOut])
 def remove_user_permission(
-    microsoft_id: str,
+    user_id: str,
     payload: AddRemovePermissionIn,
     user: dict = Depends(get_current_user),
 ):
     require_admin(user)
-    _get_user_or_404(microsoft_id)
-    _audit(user, "user_permission_removed", entity_type="user", entity_id=microsoft_id,
+    _get_user_or_404(user_id)
+    _audit(user, "user_permission_removed", entity_type="user", entity_id=user_id,
            details={"permission": payload.permission})
-    return DataResponse(data=_user_out(remove_extra_permission(microsoft_id, payload.permission)))
+    return DataResponse(data=_user_out(remove_extra_permission(user_id, payload.permission)))
 
 
 # ── ENV / Config ──────────────────────────────────────────────────────────────
