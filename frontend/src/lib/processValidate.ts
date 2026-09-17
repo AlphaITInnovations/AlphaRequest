@@ -587,7 +587,11 @@ export function validateDefinition(
       })
     })
     if (ph.layout.length) {
-      const missing = [...phaseRefs].filter((r) => !placed.has(r))
+      // Versteckte Felder (mode='hidden') tragen nur einen Wert und werden im
+      // Formular nie gerendert – sie brauchen keinen Layout-Platz und landen
+      // auch nicht sichtbar unter „Weitere Angaben".
+      const hidden = new Set(ph.fields.filter((fr) => fr.mode === 'hidden').map((fr) => fr.ref))
+      const missing = [...phaseRefs].filter((r) => !placed.has(r) && !hidden.has(r))
       if (missing.length) {
         out.push(warn(`${p}.layout`, `pe-phase-${i}`, 'UNPLACED',
           `${missing.length} Feld(er) sind nicht im Layout platziert und erscheinen `

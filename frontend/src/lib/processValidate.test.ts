@@ -397,6 +397,18 @@ describe('validateDefinition – Layout', () => {
     expect(errorCount(issues)).toBe(0)
   })
 
+  it('meldet versteckte (hidden) Felder nicht als unplatziert', () => {
+    // Ein Feld mit mode='hidden' trägt nur einen Wert und wird nie gerendert –
+    // es braucht keinen Layout-Platz und darf keinen UNPLACED-Hinweis auslösen.
+    const d = defn({
+      fields: [{ key: 'a', widget: 'text' }, { key: 'b', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'a' }, { ref: 'b', mode: 'hidden' }],
+        layout: [{ type: 'section', items: [{ type: 'field', ref: 'a' }] }] }],
+    })
+    expect(validateDefinition(d).some((x) => x.code === 'UNPLACED')).toBe(false)
+  })
+
   it('warnt bei leeren Design-Elementen', () => {
     const d = withLayout([{ type: 'section', items: [
       { type: 'field', ref: 'a' }, { type: 'field', ref: 'b' },
