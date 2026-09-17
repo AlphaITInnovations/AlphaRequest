@@ -23,7 +23,11 @@
       "mode": null,
       "item": [],
       "directusSource": null,
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "first_name"
+      }
     },
     {
       "key": "buchung.antragsteller_name",
@@ -41,7 +45,11 @@
       "overridable": false,
       "assign": null,
       "mode": null,
-      "item": []
+      "item": [],
+      "prefill": {
+        "source": "employee",
+        "field": "last_name"
+      }
     },
     {
       "key": "buchung.antragsteller_email",
@@ -67,7 +75,11 @@
       "overridable": false,
       "assign": null,
       "mode": null,
-      "item": []
+      "item": [],
+      "prefill": {
+        "source": "employee",
+        "field": "email"
+      }
     },
     {
       "key": "buchung.niederlassung",
@@ -85,7 +97,11 @@
       "overridable": false,
       "assign": null,
       "mode": null,
-      "item": []
+      "item": [],
+      "prefill": {
+        "source": "employee",
+        "field": "location.name"
+      }
     },
     {
       "key": "buchung.telefonnummer",
@@ -103,7 +119,11 @@
       "overridable": false,
       "assign": null,
       "mode": null,
-      "item": []
+      "item": [],
+      "prefill": {
+        "source": "employee",
+        "field": "phone"
+      }
     },
     {
       "key": "buchung.kostenstelle",
@@ -123,7 +143,11 @@
       "mode": null,
       "item": [],
       "directusSource": "kostenstelle",
-      "directusFieldMap": []
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "cost_center"
+      }
     },
     {
       "key": "buchung.anreisedatum",
@@ -506,43 +530,43 @@
       "fields": [
         {
           "ref": "buchung.antragsteller_vorname",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
           "ref": "buchung.antragsteller_name",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
           "ref": "buchung.antragsteller_email",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
           "ref": "buchung.niederlassung",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
           "ref": "buchung.telefonnummer",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
         {
           "ref": "buchung.kostenstelle",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null
         },
