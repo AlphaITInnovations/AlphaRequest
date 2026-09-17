@@ -211,6 +211,54 @@ def is_responsible(defn: Optional[ProcessDefinition], row: dict, user: dict,
     return False
 
 
+def _phase_groups(row: dict, phase) -> set:
+    """Zuständige Gruppen einer BELIEBIGEN Phase (nicht nur der aktuellen)."""
+    r = phase.responsibility
+    if r.kind == ResponsibilityKind.group and r.group:
+        return {r.group}
+    if r.kind == ResponsibilityKind.group_from_field:
+        picked = (row.get("values") or {}).get(r.fromField or "")
+        return {picked} if picked else set()
+    if r.kind == ResponsibilityKind.departments:
+        return {dr.group for dr in r.rule if dr.group}
+    return set()
+
+
+def is_responsible_for_phase(defn: Optional[ProcessDefinition], row: dict, phase,
+                             user: dict, group_ids: Iterable[str]) -> bool:
+    """Wie `is_responsible`, aber für eine BESTIMMTE Phase (z. B. die Dokument-Phase),
+    unabhängig davon, welche Phase gerade aktuell ist."""
+    if defn is None or phase is None:
+        return False
+    uid = user.get("id")
+    r = phase.responsibility
+    if r.kind == ResponsibilityKind.owner:
+        return bool(uid) and row.get("owner_id") == uid
+    if r.kind == ResponsibilityKind.user:
+        return bool(uid) and r.user == uid
+    if r.kind == ResponsibilityKind.assignable:
+        picked = (row.get("values") or {}).get(r.fromField or "")
+        return bool(uid) and picked == uid
+    if r.kind in (ResponsibilityKind.group, ResponsibilityKind.departments,
+                  ResponsibilityKind.group_from_field):
+        return bool(set(group_ids) & _phase_groups(row, phase))
+    return False
+
+
+def may_generate_document(defn: Optional[ProcessDefinition], row: dict, user: dict,
+                          group_ids: Iterable[str]) -> bool:
+    """Darf die Person das Dokument (z. B. den Arbeitsvertrag) erzeugen? NUR die für
+    die DOKUMENT-Phase zuständige Stelle und Admins – ausdrücklich NICHT Ersteller:in,
+    Beobachter:innen oder andere Beteiligte. Gate an der Dokument-Phase (nicht der
+    aktuellen), damit „wer erzeugt das Dokument" eindeutig ist."""
+    if is_admin(user):
+        return True
+    if defn is None:
+        return False
+    docphase = next((p for p in defn.phases if p.document is not None), None)
+    return is_responsible_for_phase(defn, row, docphase, user, group_ids)
+
+
 def may_view(defn: Optional[ProcessDefinition], row: dict, user: dict,
              group_ids: Iterable[str], watcher_ids: Iterable[str] = ()) -> bool:
     """Darf der/die Nutzende diesen Auftrag öffnen?

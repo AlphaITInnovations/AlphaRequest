@@ -37,6 +37,10 @@ const props = defineProps<{
 const { showToast } = useToast()
 
 const spec = computed(() => props.phase.document)
+/** Erzeugen darf NUR die für die Phase zuständige Stelle (bzw. Admin) – das
+ *  Backend liefert das als Ability. Alle anderen (Beobachter:innen, Beteiligte,
+ *  Voll-Sicht) sehen nur einen Hinweis, keinen Knopf, und können nichts erzeugen. */
+const darfErzeugen = computed(() => props.ticket.abilities?.export_document === true)
 const busy = ref(false)
 const editor = ref<HTMLElement | null>(null)
 
@@ -126,7 +130,7 @@ function drucken() {
   <div class="card-section">
     <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
       <h3 class="section-title mb-0">{{ spec?.title || 'Dokument' }}</h3>
-      <div class="flex items-center gap-2">
+      <div v-if="darfErzeugen" class="flex items-center gap-2">
         <!-- HTML-Modus: Zurücksetzen / Drucken / Word -->
         <template v-if="isHtml">
           <button v-if="!readonly" @click="fuelle" :disabled="busy" class="btn-secondary text-xs">
@@ -153,9 +157,23 @@ function drucken() {
       </div>
     </div>
 
+    <!-- Nicht zuständig: nur ein Hinweis, kein Knopf, keine Vorschau. -->
+    <template v-if="!darfErzeugen">
+      <div class="rounded-xl border border-gray-200 dark:border-white/10
+                  bg-gray-50 dark:bg-[#1A2130] p-6 text-sm text-gray-600 dark:text-gray-300">
+        <p class="font-medium text-gray-800 dark:text-gray-100 mb-1">
+          {{ spec?.title || 'Dokument' }} wird gerade erstellt
+        </p>
+        <p>
+          Dieses Dokument wird von der zuständigen Stelle erstellt. Sobald der
+          Auftrag weitergeht, werden Sie – sofern Sie beteiligt sind – benachrichtigt.
+        </p>
+      </div>
+    </template>
+
     <!-- .docx-Modus: nur der Button oben. Die eingesetzten/auszufüllenden Werte
          zeigt das Editor-Modal – hier bewusst keine zweite Übersicht. -->
-    <template v-if="!isHtml">
+    <template v-else-if="!isHtml">
       <p class="text-sm text-gray-500 dark:text-gray-400">
         „Ausfüllen &amp; exportieren" öffnet die Vorschau des ganzen Dokuments zum
         Ausfüllen und Export als Word oder PDF.

@@ -235,16 +235,15 @@ def _field_access(row: dict, defn: Optional[ProcessDefinition], phase, ctx: vis.
 
 def _may_export_document(row: dict, defn: Optional[ProcessDefinition],
                          user: Optional[dict], group_ids) -> bool:
-    """Darf diese Person den ausgefüllten Vertrag exportieren? BEWUSST UNABHÄNGIG
-    vom Entry-Modus: der Fachabteilungs-Link (?abteilung=…) und die Admin-Ansicht
-    engen nur die Feld-SICHT ein, nicht das Export-Recht. Baut denselben echten
-    Gate wie `_docx_fill_prep` (Vollsicht/Admin aus den ECHTEN Gruppen), damit die
-    UI-Ability zum Endpunkt passt – sonst zeigt der Abteilungs-Link die
-    Dokument-Phase für die zuständige Stelle fälschlich als gesperrt."""
+    """Darf diese Person das Dokument (z. B. den Arbeitsvertrag) erzeugen? NUR die
+    für die AKTUELLE Phase zuständige Stelle und Admins – ausdrücklich NICHT
+    Beobachter:innen, sonstige Beteiligte oder Voll-Sicht-Leser (die Dokument-Phase
+    setzt grantsFullView, das darf das Erzeugen NICHT freischalten). `may_edit` =
+    zuständig-für-die-aktuelle-Phase ODER Admin, aus den ECHTEN Gruppen (unabhängig
+    vom Entry-Modus/Abteilungs-Link). Spiegelt den Gate in `_docx_fill_prep`."""
     if not user or defn is None:
         return False
-    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=set(group_ids or ()))
-    return bool(ctx.full_view or ctx.is_admin)
+    return acc.may_generate_document(defn, row, user, group_ids)
 
 
 def _redact_responsibility(resp: Optional[dict], defn: Optional[ProcessDefinition],
@@ -942,11 +941,14 @@ def _docx_fill_prep(row, defn, docphase, user):
     (filter_values), landet also als Lücke, nicht im Klartext. Wirft 403.
     """
     gids = vis.user_group_ids(user)
-    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
-    if not (ctx.full_view or ctx.is_admin):
+    # Erzeugen darf NUR die für die aktuelle Phase zuständige Stelle (bzw. Admin) –
+    # nicht Beobachter:innen/Voll-Sicht-Leser. Die Feld-SICHT (confidential) filtert
+    # danach zusätzlich über den ctx.
+    if not acc.may_generate_document(defn, row, user, gids):
         raise api_error(403, ErrorCode.TICKET_FORBIDDEN,
-                        "Nur die zuständige Stelle bzw. Vollsicht darf den "
-                        "ausgefüllten Vertrag exportieren")
+                        "Nur die zuständige Stelle bzw. Admins dürfen das Dokument "
+                        "erzeugen")
+    ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
     values = vis.filter_values(defn, row.get("values") or {}, ctx)
     catalog = {f.key: f for f in defn.fields}
     bindings = dict(docphase.document.bindings) if docphase.document else {}

@@ -533,8 +533,9 @@ def test_abilities_fuer_den_ersteller(setup):
     # Ersteller:in darf Beobachter:innen verwalten (prozessübergreifend), auch wenn
     # gerade eine Fachabteilung zuständig ist.
     assert a["manage_watchers"] is True and a["reopen"] is False
-    # Owner hat Vollsicht (is_owner) → darf das Dokument sehen/exportieren.
-    assert a["export_document"] is True
+    # Das Dokument (Arbeitsvertrag) darf NUR die zuständige Stelle der Dokument-
+    # Phase (bzw. Admin) erzeugen – NICHT die Ersteller:in, auch nicht mit Vollsicht.
+    assert a["export_document"] is False
 
 
 def test_abilities_reopen_nur_bei_fertigem_auftrag(setup):
