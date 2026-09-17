@@ -3584,6 +3584,14 @@
           "visibleWhen": null
         },
         {
+          "ref": "base.firmenmailadresse",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
           "ref": "base.private_phone",
           "mode": "readonly",
           "required": false,
@@ -3885,6 +3893,11 @@
             {
               "type": "field",
               "ref": "base.private_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.firmenmailadresse",
               "width": "half"
             },
             {
