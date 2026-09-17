@@ -84,7 +84,7 @@
     {
       "key": "buchung.niederlassung",
       "label": "Niederlassung",
-      "widget": "text",
+      "widget": "directus",
       "help": null,
       "placeholder": "z. B. Hamburg",
       "options": [],
@@ -100,8 +100,10 @@
       "item": [],
       "prefill": {
         "source": "employee",
-        "field": "location.name"
-      }
+        "field": "location"
+      },
+      "directusSource": "niederlassung",
+      "directusFieldMap": []
     },
     {
       "key": "buchung.telefonnummer",
@@ -128,7 +130,7 @@
     {
       "key": "buchung.kostenstelle",
       "label": "Kostenstelle",
-      "widget": "text",
+      "widget": "directus",
       "help": null,
       "placeholder": null,
       "options": [],
@@ -142,7 +144,7 @@
       "assign": null,
       "mode": null,
       "item": [],
-      "directusSource": null,
+      "directusSource": "kostenstelle",
       "directusFieldMap": [],
       "prefill": {
         "source": "employee",

@@ -12,7 +12,7 @@ import type { SimFieldError, SimViewer } from '@/lib/processSim'
 import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorCode, errorMessage, issuesFromError } from '@/lib/processErrors'
-import { emptySources, loadOptionSources } from '@/lib/processSources'
+import { emptySources, loadOptionSources, loadDirectusLabels } from '@/lib/processSources'
 import { applyComputed } from '@/lib/conditionDsl'
 import { applyPrefill } from '@/lib/processPrefill'
 import { renderMailTemplate } from '@/lib/mailTemplate'
@@ -144,6 +144,12 @@ async function loadProcess(key: string) {
     // Stammdaten vorbelegen; der Server setzt sie beim Anlegen erneut autoritativ.
     await ensureProfile()
     values.value = applyPrefill(definition.value.fields, profile.value, {})
+    // Vorbelegte Directus-Felder (Kostenstelle/Niederlassung) speichern die ID –
+    // die zugehörigen Labels für die read-only Anzeige nachladen (sonst rohe ID).
+    try {
+      const labels = await loadDirectusLabels(definition.value, values.value)
+      sources.value = { ...sources.value, directusLabels: labels }
+    } catch { /* fail-soft: dann bleibt die ID stehen */ }
     pendingAttachments.value = {}
     pendingWatchers.value = []
     errors.value = []
