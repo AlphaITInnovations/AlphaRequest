@@ -388,6 +388,16 @@ def _sequence_error(exc: "seq.SequenceError"):
     return api_error(500, "PERSONALNUMMER_FAILED", str(exc))
 
 
+def _email_conflict_error(exc: "engine.EmailConflict"):
+    """Firmenmail-Konflikt beim Phasenabschluss → 422 mit Feld-Fehler. Das Feld ist
+    per editableWhen jetzt änderbar; die Meldung markiert es (rot) im Formular."""
+    msg = ("Diese Firmenmail existiert bereits – bitte anpassen."
+           if exc.reason == "exists" else
+           "Die Firmenmail entspricht nicht den Exchange-Vorgaben – bitte anpassen.")
+    return api_error(422, ErrorCode.VALIDATION_FAILED, "Firmenmail-Konflikt",
+                     fields=[{"path": exc.field, "code": "EMAIL_CONFLICT", "message": msg}])
+
+
 def _watcher_ids(ticket_id) -> set:
     """Beobachter-IDs – fail-closed: nicht ladbar heißt „keine Beobachter“, also
     kein Zugriff über diesen Weg (statt versehentlich allen Zugriff zu geben)."""
@@ -666,6 +676,8 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
             engine.transition(row, defn, actor=user)
         except seq.SequenceError as exc:
             raise _sequence_error(exc)
+        except engine.EmailConflict as exc:
+            raise _email_conflict_error(exc)
     else:
         _safe_restamp(row, defn)
     return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn),
@@ -1221,6 +1233,8 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
                 engine.transition(row, defn)
             except seq.SequenceError as exc:
                 raise _sequence_error(exc)
+            except engine.EmailConflict as exc:
+                raise _email_conflict_error(exc)
         else:
             _safe_restamp(row, defn)
     return DataResponse(data=_out(row, defn, ctx, user, gids))
@@ -1263,6 +1277,8 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
         raise api_error(409, "TICKET_CONFLICT", str(exc))
     except seq.SequenceError as exc:
         raise _sequence_error(exc)
+    except engine.EmailConflict as exc:
+        raise _email_conflict_error(exc)
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn,
                                   _read_ctx(user, row, defn, gids),

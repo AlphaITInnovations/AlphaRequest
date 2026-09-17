@@ -303,6 +303,9 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
         changes["values"] = {action.field: action.value}
     elif t == ActionType.auto_advance:
         changes["advance"] = True
+    elif t == ActionType.company_email:
+        from backend.services import company_email_action as cea
+        changes = cea.execute(action, row, defn, phase)
     elif t == ActionType.directus_write:
         from backend.services import directus_write_action as dwa
         changes = dwa.execute(action, row, defn, phase)

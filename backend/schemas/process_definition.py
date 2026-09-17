@@ -117,6 +117,9 @@ class ActionType(str, Enum):
     set_status = "set_status"
     assign_sequence = "assign_sequence"
     auto_advance = "auto_advance"
+    #: Automatische Firmenmail (vorname.nachname@firmendomain) + blockierende
+    #: Directus-Eindeutigkeitsprüfung beim Phasen-Verlassen (services/company_email_action).
+    company_email = "company_email"
     #: Datensatz in Directus anlegen/ändern/löschen (services/directus_write).
     directus_write = "directus_write"
     #: Beliebiger ausgehender HTTP-/API-Aufruf (services/http_action). URL, Header
@@ -672,6 +675,24 @@ class HttpRequestSpec(_Base):
         return self
 
 
+class EmailSpec(_Base):
+    """Automatische Firmenmail + Directus-Eindeutigkeitsprüfung (blockierend beim
+    Phasen-Verlassen). Die Mail wird aus Vor-/Nachname und der E-Mail-Domain der
+    gewählten Firma gebildet (vorname.nachname@domain, transliteriert, klein) –
+    aber nur, wenn `targetField` leer ist (manuelle Eingabe hat Vorrang). Existiert
+    sie schon in `collection`.`emailField` (oder ist das Format Exchange-untauglich),
+    wird `conflictField` gesetzt und die Phase NICHT abgeschlossen; das Feld lässt
+    sich per editableWhen dann ändern."""
+    targetField: str      # Zielfeld der Mail, z. B. base.firmenmailadresse
+    firstNameField: str   # z. B. base.first_name
+    lastNameField: str    # z. B. base.last_name
+    companyField: str     # Firmenname → Domain-Lookup (z. B. base.contract_company)
+    collection: str       # Directus-Collection, z. B. mitarbeitende
+    emailField: str       # Feld in der Collection, z. B. email
+    conflictField: str    # bool-Feld, das bei Konflikt gesetzt wird
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
 class Action(_Base):
     type: ActionType
     to: Optional[str] = None         # Empfänger-Resolver (notify/escalate)
@@ -684,6 +705,7 @@ class Action(_Base):
     counter: Optional[str] = None    # bei assign_sequence
     directus: Optional[DirectusWriteSpec] = None   # bei directus_write
     http: Optional[HttpRequestSpec] = None         # bei http_request
+    email: Optional[EmailSpec] = None              # bei company_email
 
     @model_validator(mode="after")
     def _action_rules(self) -> "Action":
@@ -692,6 +714,11 @@ class Action(_Base):
             raise ValueError("`directus` ist nur bei action directus_write erlaubt")
         if t != ActionType.http_request and self.http is not None:
             raise ValueError("`http` ist nur bei action http_request erlaubt")
+        if t != ActionType.company_email and self.email is not None:
+            raise ValueError("`email` ist nur bei action company_email erlaubt")
+        if t == ActionType.company_email and self.email is None:
+            raise ValueError("action company_email erfordert `email` (Ziel-/Namens-/"
+                             "Firmen-/Directus-Felder)")
         if t == ActionType.http_request and self.http is None:
             raise ValueError("action http_request erfordert `http` (URL, Methode, …)")
         if t == ActionType.directus_write:
@@ -755,6 +782,17 @@ class Automation(_Base):
     def _check_guard(self) -> "Automation":
         if self.guard is not None:
             validate_condition(self.guard, f"automation[{self.id}].guard")
+        return self
+
+    @model_validator(mode="after")
+    def _company_email_on_exit(self) -> "Automation":
+        """company_email blockiert den Phasenabschluss – das wirkt nur im synchronen
+        on_exit-Pfad (VOR dem Persistieren des Übergangs). Anderswo liefe es über den
+        fehlerschluckenden fire()-Pfad und die Blockade wäre wirkungslos."""
+        if self.action.type == ActionType.company_email \
+                and self.trigger.type != TriggerType.on_exit:
+            raise ValueError(f"automation[{self.id}]: action company_email ist nur mit "
+                             f"Auslöser on_exit erlaubt (die Blockade wirkt nur dort).")
         return self
 
     @model_validator(mode="after")

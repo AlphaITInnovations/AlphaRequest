@@ -201,6 +201,36 @@ def run_department_done_blocking(row: dict, defn: ProcessDefinition,
     return changes
 
 
+class EmailConflict(Exception):
+    """Die automatische Firmenmail existiert schon in Directus (oder ist Exchange-
+    untauglich) – der Phasenabschluss wird abgebrochen. Das Konflikt-Flag wurde
+    bereits persistiert (Feld ist per editableWhen änderbar)."""
+    def __init__(self, field: str, reason: Optional[str]):
+        self.field = field
+        self.reason = reason
+        super().__init__(f"Firmenmail-Konflikt ({reason}) in {field}")
+
+
+def run_exit_blocking(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef]) -> None:
+    """Blockierende on_exit-Automation `company_email` VOR dem Übergang: bildet/prüft
+    die Firmenmail, persistiert das Ergebnis (Mail + Konflikt-Flag, rev-geschützt über
+    apply_action_changes) und wirft bei Konflikt EmailConflict – so bricht der Übergang
+    ab, das Flag bleibt aber gesetzt. Läuft SYNCHRON, nicht über das fehlerschluckende
+    fire()."""
+    if phase is None:
+        return
+    for a in list(defn.automations) + list(phase.automations):
+        if (a.trigger.type != TriggerType.on_exit
+                or a.action.type != ActionType.company_email
+                or not guard_passes(a, row)):
+            continue
+        changes = actions.run_action(a.action, row, defn, phase, sender=SENDER)
+        actions.apply_action_changes(row, defn, changes, store)
+        _audit_fired(row, phase, a, None)
+        if changes.get("email_conflict"):
+            raise EmailConflict(a.action.email.targetField, changes.get("email_conflict_reason"))
+
+
 # ── Timer neu stempeln ────────────────────────────────────────────────────────
 
 def restamp(row: dict, defn: Optional[ProcessDefinition]) -> None:
@@ -264,6 +294,12 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
         if vergeben and expected_rev is not None:
             # Die Vergabe hat selbst (rev-geschützt) geschrieben – sonst kollidierte
             # der Übergang gleich mit der eigenen Nummern-Schreibung.
+            expected_rev = row.get("rev")
+        # Blockierende Firmenmail-Prüfung VOR den normalen on_exit-Automationen: bei
+        # Konflikt bricht der Übergang hier ab (EmailConflict); das Konflikt-Flag
+        # wurde persistiert. run_exit_blocking hat ggf. Werte geschrieben → rev frisch.
+        run_exit_blocking(row, defn, old_phase)
+        if expected_rev is not None:
             expected_rev = row.get("rev")
         run_inline(row, defn, old_phase, {TriggerType.on_exit})
         # Eine on_exit-Automation mit Schreibwirkung (set_field/set_priority/…) hat
