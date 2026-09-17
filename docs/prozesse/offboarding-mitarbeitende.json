@@ -357,7 +357,7 @@
       "key": "base.sofortige_sperrung",
       "label": "Sofortige Sperrung",
       "widget": "checkbox",
-      "help": "Nach der Freigabe wird die IT sofort per Mail zur Sperrung informiert (Timebutler, Talention u. a.).",
+      "help": "Sperrung sofort ohne Datum. Nach der Freigabe wird die IT sofort per Mail zur Sperrung informiert (Timebutler, Talention u. a.).",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -375,38 +375,8 @@
       "prefill": null
     },
     {
-      "key": "base.sperrzeitpunkt_art",
-      "label": "Zugriffe sperren ab",
-      "widget": "select",
-      "help": null,
-      "placeholder": null,
-      "options": [
-        {
-          "value": "sofort",
-          "label": "Sofort"
-        },
-        {
-          "value": "datum",
-          "label": "Zu einem Datum"
-        }
-      ],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": [],
-      "prefill": null
-    },
-    {
       "key": "base.sperrzeitpunkt_datum",
-      "label": "Sperrdatum",
+      "label": "Zugriffe sperren ab",
       "widget": "date",
       "help": null,
       "placeholder": null,
@@ -559,10 +529,10 @@
     },
     {
       "key": "base.mailweiterleitung_ziel",
-      "label": "Weiterleitung an (E-Mail)",
-      "widget": "text",
+      "label": "Weiterleitung an",
+      "widget": "directus",
       "help": null,
-      "placeholder": null,
+      "placeholder": "Mitarbeiter:in auswählen",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -574,7 +544,7 @@
       "assign": null,
       "mode": null,
       "item": [],
-      "directusSource": null,
+      "directusSource": "mitarbeitende",
       "directusFieldMap": [],
       "prefill": null
     },
@@ -611,9 +581,9 @@
     {
       "key": "base.abwesenheit_empfaenger",
       "label": "Empfänger (Abwesenheitsmeldung)",
-      "widget": "text",
+      "widget": "directus",
       "help": null,
-      "placeholder": null,
+      "placeholder": "Mitarbeiter:in auswählen",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -625,7 +595,7 @@
       "assign": null,
       "mode": null,
       "item": [],
-      "directusSource": null,
+      "directusSource": "mitarbeitende",
       "directusFieldMap": [],
       "prefill": null
     },
@@ -851,28 +821,18 @@
           "editableWhen": null
         },
         {
-          "ref": "base.sperrzeitpunkt_art",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
           "ref": "base.sperrzeitpunkt_datum",
           "mode": "editable",
           "required": false,
           "requiredWhen": {
-            "==": [
-              "base.sperrzeitpunkt_art",
-              "datum"
-            ]
+            "not": {
+              "truthy": "base.sofortige_sperrung"
+            }
           },
           "visibleWhen": {
-            "==": [
-              "base.sperrzeitpunkt_art",
-              "datum"
-            ]
+            "not": {
+              "truthy": "base.sofortige_sperrung"
+            }
           },
           "editableWhen": null
         },
@@ -1090,11 +1050,6 @@
             },
             {
               "type": "field",
-              "ref": "base.sperrzeitpunkt_art",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "base.sperrzeitpunkt_datum",
               "width": "half"
             },
@@ -1124,13 +1079,6 @@
               "type": "field",
               "ref": "base.dienstwagen",
               "width": "full"
-            },
-            {
-              "type": "note",
-              "text": "Dienstwagen: Der Vorgang wird automatisch berücksichtigt – ist ein Dienstwagen vorhanden, wird der Fuhrpark in der Durchführung beteiligt.",
-              "tone": "info",
-              "width": "full",
-              "visibleWhen": null
             }
           ]
         },
