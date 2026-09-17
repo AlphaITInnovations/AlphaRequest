@@ -136,6 +136,48 @@
       "prefill": null
     },
     {
+      "key": "base.firmenmailadresse",
+      "label": "Firmenmailadresse",
+      "widget": "text",
+      "help": "Wird beim Abschluss automatisch als vorname.nachname@firmendomain gebildet und in Directus geprüft. Ist sie schon vergeben, bitte hier anpassen.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.firmenmail_conflict",
+      "label": "Firmenmail-Konflikt",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
       "key": "base.private_phone",
       "label": "Private Telefonnummer",
       "widget": "text",
@@ -2917,6 +2959,24 @@
               "Ja"
             ]
           }
+        },
+        {
+          "ref": "base.firmenmailadresse",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": {
+            "truthy": "base.firmenmail_conflict"
+          }
+        },
+        {
+          "ref": "base.firmenmail_conflict",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
         }
       ],
       "layout": [
@@ -2961,6 +3021,11 @@
             {
               "type": "field",
               "ref": "base.private_email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.firmenmailadresse",
               "width": "half"
             },
             {
@@ -3268,6 +3333,37 @@
             "counter": null,
             "directus": null,
             "http": null
+          }
+        },
+        {
+          "id": "firmenmail_bilden_pruefen",
+          "trigger": {
+            "type": "on_exit",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": null,
+          "action": {
+            "type": "company_email",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null,
+            "directus": null,
+            "http": null,
+            "email": {
+              "targetField": "base.firmenmailadresse",
+              "firstNameField": "base.first_name",
+              "lastNameField": "base.last_name",
+              "companyField": "base.contract_company",
+              "collection": "mitarbeitende",
+              "emailField": "email",
+              "conflictField": "base.firmenmail_conflict"
+            }
           }
         }
       ]
