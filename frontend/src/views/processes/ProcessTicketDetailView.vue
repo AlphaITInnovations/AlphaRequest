@@ -196,16 +196,33 @@ const isExportPhase = computed(() => phase.value?.view === 'export')
 /** Dokument-Phase (view=document): Vertrag/Dokument aus Vorlage, Inline-Editor + Word-Export. */
 const isDocumentPhase = computed(() => phase.value?.view === 'document')
 
-/** Hat die Phase überhaupt (bedingt) bearbeitbare Felder? Dokument-Phasen haben
- *  meist ein leeres Layout; NUR wenn dort echte editierbare Felder liegen (z. B.
- *  Fuhrpark im Arbeitsvertrag), soll zusätzlich zum Dokument ein Formular zum
- *  Anpassen erscheinen. */
+/** Ist ein Phasen-Feld für die aktuelle Sicht sichtbar? Der Server liefert die
+ *  Sicht-Allowlist (visible_fields); ohne sie (alte Antwort) nicht ausblenden. */
+function refVisible(ref: string): boolean {
+  const vis = viewer.value.visibleKeys
+  return !vis || vis.has(ref)
+}
+
+/** Feld-Refs dieser Phase, die tatsächlich gerendert werden (sichtbar + nicht
+ *  hidden). Grundlage fürs „Formular zeigen?" UND fürs Ausblenden aus der
+ *  Gesamt-Leseansicht. */
+const phaseVisibleRefs = computed(() =>
+  (phase.value?.fields ?? [])
+    .filter((fr) => fr.mode !== 'hidden' && refVisible(fr.ref))
+    .map((fr) => fr.ref))
+
+/** Hat die Phase für DIESE Sicht bearbeitbare, sichtbare Felder? Dokument-Phasen
+ *  haben meist ein leeres Layout; nur wenn dort echte, für die Person sichtbare
+ *  editierbare Felder liegen (z. B. Fuhrpark im Arbeitsvertrag), soll zusätzlich
+ *  zum Dokument ein Formular erscheinen (sonst stünde ein leeres „keine
+ *  sichtbaren Felder" da). */
 const phaseHasEditableFields = computed(() =>
   (phase.value?.fields ?? []).some(
-    (fr) => fr.mode === 'editable' || fr.mode === 'append_only' || !!fr.editableWhen))
+    (fr) => (fr.mode === 'editable' || fr.mode === 'append_only' || !!fr.editableWhen)
+            && fr.mode !== 'hidden' && refVisible(fr.ref)))
 
 /** Wird das Phasen-Formular gezeigt? In normalen Phasen wie bisher; in
- *  Dokument-Phasen nur, wenn sie eigene editierbare Felder haben. */
+ *  Dokument-Phasen nur, wenn sie eigene (sichtbare) editierbare Felder haben. */
 const showPhaseForm = computed(() =>
   abilities.value.edit && !!phase.value && !isExportPhase.value
   && (!isDocumentPhase.value || phaseHasEditableFields.value))
@@ -214,7 +231,7 @@ const showPhaseForm = computed(() =>
  *  ausgeblendet, damit sie in einer Dokument-Phase nicht doppelt (bearbeitbar
  *  oben, read-only unten) erscheinen. */
 const phaseFormKeys = computed(() =>
-  showPhaseForm.value ? (phase.value?.fields ?? []).map((fr) => fr.ref) : [])
+  showPhaseForm.value ? phaseVisibleRefs.value : [])
 
 const dirty = computed(() =>
   JSON.stringify(values.value) !== JSON.stringify(ticket.value?.values ?? {}))
