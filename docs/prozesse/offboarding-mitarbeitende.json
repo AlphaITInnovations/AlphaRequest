@@ -5,11 +5,14 @@
   "description": "Austritt von Mitarbeitenden: Antrag, Freigabe, Kündigung und Durchführung durch die Fachabteilungen.",
   "icon": null,
   "titleEditable": true,
-  "titleTemplate": null,
+  "titleTemplate": "Offboarding Mitarbeiter:innen – {{base.mitarbeiter_vorname}} {{base.mitarbeiter_nachname}}",
   "createPermissions": {
-    "everyone": true,
-    "groups": [],
-    "users": []
+    "everyone": false,
+    "groups": [
+      "3250a01a8f234bccab8a74764be1ff31"
+    ],
+    "users": [],
+    "executives": true
   },
   "fields": [
     {
