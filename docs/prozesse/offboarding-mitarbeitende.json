@@ -399,36 +399,6 @@
       "prefill": null
     },
     {
-      "key": "base.postfachvollzugriff",
-      "label": "Postfachvollzugriff",
-      "widget": "select",
-      "help": "Vorgesehene Laufzeit 30 Tage. Umsetzung nur nach Freigabe durch Ingo Wiegers.",
-      "placeholder": null,
-      "options": [
-        {
-          "value": "ja",
-          "label": "Ja"
-        },
-        {
-          "value": "nein",
-          "label": "Nein"
-        }
-      ],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": null,
-      "directusFieldMap": [],
-      "prefill": null
-    },
-    {
       "key": "base.it_hardware",
       "label": "IT-Hardware",
       "widget": "select",
@@ -552,21 +522,33 @@
       "prefill": null
     },
     {
-      "key": "base.abwesenheit_variante",
-      "label": "Abwesenheitsmeldung",
-      "widget": "select",
+      "key": "base.abwesenheit_benoetigt",
+      "label": "Abwesenheitsmeldung einrichten?",
+      "widget": "checkbox",
       "help": null,
       "placeholder": null,
-      "options": [
-        {
-          "value": "ohne_empfaenger",
-          "label": "Ohne Empfänger"
-        },
-        {
-          "value": "mit_empfaenger",
-          "label": "Mit Empfänger"
-        }
-      ],
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.abwesenheit_mit_empfaenger",
+      "label": "Mit Verweis auf eine andere Mailadresse",
+      "widget": "checkbox",
+      "help": null,
+      "placeholder": null,
+      "options": [],
       "optionsSource": null,
       "allowOther": false,
       "valueShape": null,
@@ -583,31 +565,10 @@
     },
     {
       "key": "base.abwesenheit_empfaenger",
-      "label": "Empfänger (Abwesenheitsmeldung)",
-      "widget": "directus",
+      "label": "Empfänger-Mailadresse",
+      "widget": "text",
       "help": null,
-      "placeholder": "Mitarbeiter:in auswählen",
-      "options": [],
-      "optionsSource": null,
-      "allowOther": false,
-      "valueShape": null,
-      "constraints": null,
-      "visibility": null,
-      "computed": null,
-      "overridable": false,
-      "assign": null,
-      "mode": null,
-      "item": [],
-      "directusSource": "mitarbeitende",
-      "directusFieldMap": [],
-      "prefill": null
-    },
-    {
-      "key": "base.abwesenheit_text",
-      "label": "Text der Abwesenheitsmeldung",
-      "widget": "textarea",
-      "help": "Vorgesehene Laufzeit 30 Tage.",
-      "placeholder": null,
+      "placeholder": "z. B. team@firma.de",
       "options": [],
       "optionsSource": null,
       "allowOther": false,
@@ -840,14 +801,6 @@
           "editableWhen": null
         },
         {
-          "ref": "base.postfachvollzugriff",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
           "ref": "base.it_hardware",
           "mode": "editable",
           "required": false,
@@ -908,11 +861,29 @@
           "editableWhen": null
         },
         {
-          "ref": "base.abwesenheit_variante",
+          "ref": "ablauf.freigabe_ueberspringen",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_benoetigt",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_mit_empfaenger",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "truthy": "base.abwesenheit_benoetigt"
+          },
           "editableWhen": null
         },
         {
@@ -920,33 +891,25 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": {
-            "==": [
-              "base.abwesenheit_variante",
-              "mit_empfaenger"
+            "and": [
+              {
+                "truthy": "base.abwesenheit_benoetigt"
+              },
+              {
+                "truthy": "base.abwesenheit_mit_empfaenger"
+              }
             ]
           },
           "visibleWhen": {
-            "==": [
-              "base.abwesenheit_variante",
-              "mit_empfaenger"
+            "and": [
+              {
+                "truthy": "base.abwesenheit_benoetigt"
+              },
+              {
+                "truthy": "base.abwesenheit_mit_empfaenger"
+              }
             ]
           },
-          "editableWhen": null
-        },
-        {
-          "ref": "base.abwesenheit_text",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
-          "ref": "ablauf.freigabe_ueberspringen",
-          "mode": "editable",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
           "editableWhen": null
         }
       ],
@@ -1053,8 +1016,7 @@
               "type": "note",
               "text": "Sofortige Sperrung wirkt erst nach der Freigabe durch Udo Lutz. Es wird dann automatisch die IT per Mail informiert (u. a. Timebutler, Talention). Das läuft parallel zur Fortsetzung des Hauptprozesses.",
               "tone": "info",
-              "width": "full",
-              "visibleWhen": null
+              "width": "full"
             },
             {
               "type": "field",
@@ -1067,16 +1029,10 @@
               "width": "half"
             },
             {
-              "type": "field",
-              "ref": "base.postfachvollzugriff",
-              "width": "half"
-            },
-            {
               "type": "note",
-              "text": "Postfachvollzugriff: vorgesehene Laufzeit 30 Tage. Umsetzung nur nach Freigabe durch Ingo Wiegers.",
+              "text": "Postfach-Vollzugriff gibt es aus Datenschutzgründen nicht mehr. Bitte bei Bedarf per E-Mail an Herrn Wiegers wenden.",
               "tone": "warning",
-              "width": "full",
-              "visibleWhen": null
+              "width": "full"
             },
             {
               "type": "field",
@@ -1100,8 +1056,13 @@
             },
             {
               "type": "field",
-              "ref": "base.abwesenheit_variante",
-              "width": "half"
+              "ref": "base.abwesenheit_benoetigt",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_mit_empfaenger",
+              "width": "full"
             },
             {
               "type": "field",
@@ -1109,16 +1070,44 @@
               "width": "half"
             },
             {
-              "type": "field",
-              "ref": "base.abwesenheit_text",
-              "width": "full"
+              "type": "note",
+              "text": "Abwesenheitstext, der eingerichtet wird:\n\nVielen Dank für Ihre Nachricht.\n\nDieses E-Mail-Postfach existiert nicht mehr. Eingehende Nachrichten werden nicht automatisch weitergeleitet.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": {
+                "and": [
+                  {
+                    "truthy": "base.abwesenheit_benoetigt"
+                  },
+                  {
+                    "not": {
+                      "truthy": "base.abwesenheit_mit_empfaenger"
+                    }
+                  }
+                ]
+              }
             },
             {
               "type": "note",
-              "text": "Mailweiterleitung und Abwesenheitsmeldung sind für eine Laufzeit von 30 Tagen vorgesehen.",
+              "text": "Abwesenheitstext, der eingerichtet wird:\n\nVielen Dank für Ihre Nachricht.\n\nDieses E-Mail-Postfach existiert nicht mehr. Eingehende Nachrichten werden nicht automatisch weitergeleitet.\nBitte wenden Sie sich an die oben angegebene Mailadresse.",
               "tone": "info",
               "width": "full",
-              "visibleWhen": null
+              "visibleWhen": {
+                "and": [
+                  {
+                    "truthy": "base.abwesenheit_benoetigt"
+                  },
+                  {
+                    "truthy": "base.abwesenheit_mit_empfaenger"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "note",
+              "text": "Mailweiterleitung und Abwesenheitsmeldung laufen ohne gesonderte Freigabe maximal 30 Tage.",
+              "tone": "info",
+              "width": "full"
             }
           ]
         },
@@ -1581,14 +1570,6 @@
           "editableWhen": null
         },
         {
-          "ref": "base.postfachvollzugriff",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
           "ref": "base.mailweiterleitung",
           "mode": "readonly",
           "required": false,
@@ -1605,14 +1586,6 @@
           "editableWhen": null
         },
         {
-          "ref": "base.abwesenheit_variante",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
           "ref": "base.it_hardware",
           "mode": "readonly",
           "required": false,
@@ -1622,6 +1595,30 @@
         },
         {
           "ref": "base.dienstwagen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_benoetigt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_mit_empfaenger",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_empfaenger",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -1690,11 +1687,6 @@
             },
             {
               "type": "field",
-              "ref": "base.postfachvollzugriff",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "base.mailweiterleitung",
               "width": "half"
             },
@@ -1705,17 +1697,27 @@
             },
             {
               "type": "field",
-              "ref": "base.abwesenheit_variante",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "base.it_hardware",
               "width": "half"
             },
             {
               "type": "field",
               "ref": "base.dienstwagen",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_benoetigt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_mit_empfaenger",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_empfaenger",
               "width": "half"
             }
           ]
