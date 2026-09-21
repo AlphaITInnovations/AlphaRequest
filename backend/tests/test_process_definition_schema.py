@@ -471,6 +471,47 @@ def test_document_bindings_unknown_field_rejected():
         ProcessDefinition.model_validate(_defn_with_document({"name": "gibtsnicht"}))
 
 
+def test_single_document_migriert_zu_documents_liste():
+    d = ProcessDefinition.model_validate(_defn_with_document({"name": "base.name"}))
+    ph = next(p for p in d.phases if p.key == "vertrag")
+    assert ph.document is None                       # Alt-Feld geräumt
+    assert [x.key for x in ph.documents] == ["dokument"]
+
+
+def test_mehrere_documents_je_phase():
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "vertrag", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"},
+        "documents": [
+            {"key": "arbeitsvertrag", "title": "Arbeitsvertrag", "filename": "AV",
+             "bindings": {"n": "base.name"}},
+            {"key": "fragebogen", "title": "Fragebogen", "filename": "FB", "bindings": {}},
+        ]})
+    out = ProcessDefinition.model_validate(d)
+    ph = next(p for p in out.phases if p.key == "vertrag")
+    assert [x.key for x in ph.documents] == ["arbeitsvertrag", "fragebogen"]
+
+
+def test_documents_doppelter_key_abgelehnt():
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "vertrag", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"},
+        "documents": [{"key": "x", "bindings": {}}, {"key": "x", "bindings": {}}]})
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_view_document_ohne_documents_abgelehnt():
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "leer", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"}})       # view=document, aber keine documents
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
 def test_document_bindings_collection_field_rejected():
     with pytest.raises(ValidationError):     # eintraege ist eine collection
         ProcessDefinition.model_validate(_defn_with_document({"eintr": "eintraege"}))
@@ -484,7 +525,8 @@ def test_document_binding_today_source_valid():
 def test_document_binding_offset_und_string_coercion():
     d = ProcessDefinition.model_validate(_defn_with_document(
         {"a": "base.name", "b": {"field": "base.name", "offset": -20}}))
-    doc = next(p for p in d.phases if p.key == "vertrag").document
+    # Einzelnes `document` wird beim Laden nach documents[] migriert.
+    doc = next(p for p in d.phases if p.key == "vertrag").documents[0]
     assert doc.bindings["a"].field == "base.name" and doc.bindings["a"].offset is None
     assert doc.bindings["b"].field == "base.name" and doc.bindings["b"].offset == -20
 

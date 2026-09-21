@@ -372,7 +372,7 @@ def test_document_export_fuellt_docx_vorlage(client, monkeypatch, tmp_path):
     tplfile.write_bytes(html_to_docx("<p>Name {{name}} in {{ort}}, Stadt {{stadt}}.</p>"))
     monkeypatch.setattr(
         tpl_db, "get_template",
-        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v.docx"}
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v.docx"}
                             if key == "doc" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
 
@@ -407,7 +407,7 @@ def test_document_export_respektiert_confidential(client, monkeypatch, tmp_path)
     tplfile.write_bytes(html_to_docx("<p>{{name}} verdient {{gehalt}}.</p>"))
     monkeypatch.setattr(
         tpl_db, "get_template",
-        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
                             if key == "conf" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
 
@@ -442,7 +442,7 @@ def test_document_fields_liefert_marker_mit_werten(client, monkeypatch, tmp_path
     tplfile.write_bytes(html_to_docx("<p>{{name}} in {{ort}}, Stadt {{stadt}}.</p>"))
     monkeypatch.setattr(
         tpl_db, "get_template",
-        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
                             if key == "doc" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
 
@@ -470,7 +470,7 @@ def test_document_export_overrides_gewinnen(client, monkeypatch, tmp_path):
     tplfile.write_bytes(html_to_docx("<p>{{name}} in {{ort}}, Stadt {{stadt}}.</p>"))
     monkeypatch.setattr(
         tpl_db, "get_template",
-        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
                             if key == "doc" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
 
@@ -499,7 +499,7 @@ def test_document_export_pdf_ueber_libreoffice(client, monkeypatch, tmp_path):
     tplfile.write_bytes(html_to_docx("<p>{{name}}</p>"))
     monkeypatch.setattr(
         tpl_db, "get_template",
-        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
                             if key == "doc" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
     seen = {}
@@ -529,7 +529,7 @@ def test_document_export_pdf_konvertierungsfehler(client, monkeypatch, tmp_path)
     tplfile.write_bytes(html_to_docx("<p>{{name}}</p>"))
     monkeypatch.setattr(
         tpl_db, "get_template",
-        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
                             if key == "doc" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
     def _boom(b):
@@ -556,7 +556,7 @@ def test_document_export_offset_und_aktuelles_datum(client, monkeypatch, tmp_pat
     tplfile.write_bytes(html_to_docx("<p>{{name}}: {{zusatz}} am {{heute}}.</p>"))
     monkeypatch.setattr(
         tpl_db, "get_template",
-        lambda key, phase: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v"}
                             if key == "calc" and phase == "vertrag" else None))
     monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
 
@@ -596,7 +596,7 @@ def test_document_export_ohne_vorlage_meldet_fehler(client, monkeypatch):
     """.docx-Modus ohne hinterlegte Vorlage (und ohne HTML): statt einer leeren
     Datei ein klarer 409 – der Admin soll erst eine Vorlage hochladen."""
     from backend.database import process_templates as tpl_db
-    monkeypatch.setattr(tpl_db, "get_template", lambda key, phase: None)
+    monkeypatch.setattr(tpl_db, "get_template", lambda key, phase, doc=None: None)
 
     tid = client.post("/process-tickets",
                       json={"processKey": "doc", "values": {"base.name": "Max"}}

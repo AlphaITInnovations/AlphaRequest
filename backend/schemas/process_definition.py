@@ -997,6 +997,10 @@ class DocumentSpec(_Base):
     vorausgefüllt, im Editor angepasst und als Word/PDF exportiert. `filename`
     darf ebenfalls Platzhalter enthalten (z. B. Arbeitsvertrag_{{base.last_name}}).
     """
+    #: Stabiler Schlüssel des Dokuments INNERHALB der Phase (mehrere Dokumente je
+    #: Phase möglich, z. B. Word-Vertrag + PDF-Fragebogen). Leer nur bei der
+    #: Alt-Form (einzelnes `document`), die beim Laden auf „dokument" gehoben wird.
+    key: str = ""
     templateHtml: str = ""
     filename: str = "Dokument"
     title: str = "Dokument"
@@ -1123,8 +1127,12 @@ class PhaseDef(_Base):
     responsibility: Responsibility
     #: Pflicht bei kind=approval, sonst verboten.
     approval: Optional[ApprovalSpec] = None
-    #: Pflicht bei view=document, sonst verboten.
+    #: Alt-Form: EINE Dokument-Vorlage. Wird beim Laden nach `documents` migriert
+    #: (Key „dokument"); neue Definitionen nutzen direkt `documents`.
     document: Optional[DocumentSpec] = None
+    #: Dokument-Vorlagen dieser Phase: Pflicht bei view=document, sonst leer.
+    #: Mehrere möglich (jede .docx ODER PDF, je eigener Key/Titel/Dateiname/Bindings).
+    documents: list[DocumentSpec] = Field(default_factory=list)
     #: Optional: Erinnerungen/Eskalation, solange das Ticket in dieser Phase liegt.
     escalation: Optional[EscalationSpec] = None
     fields: list[FieldRef] = Field(default_factory=list)
@@ -1140,6 +1148,24 @@ class PhaseDef(_Base):
         if not re.fullmatch(r"[a-z0-9_]+", v or ""):
             raise ValueError(f"ungültiger Phasen-Key „{v}“ (erlaubt: a-z0-9_)")
         return v
+
+    @model_validator(mode="after")
+    def _migrate_and_check_documents(self) -> "PhaseDef":
+        """Alt-Form (einzelnes `document`) auf `documents` heben und die
+        Dokument-Keys prüfen (Slug, nicht leer, eindeutig innerhalb der Phase)."""
+        if self.document is not None and not self.documents:
+            legacy = self.document
+            self.documents = [legacy.model_copy(update={"key": legacy.key or "dokument"})]
+            self.document = None
+        seen: set[str] = set()
+        for i, d in enumerate(self.documents):
+            if not re.fullmatch(r"[a-z0-9_]+", d.key or ""):
+                raise ValueError(f"Phase „{self.key}“.documents[{i}]: ungültiger document.key "
+                                 f"„{d.key}“ (erlaubt: a-z0-9_)")
+            if d.key in seen:
+                raise ValueError(f"Phase „{self.key}“: doppelter document.key „{d.key}“")
+            seen.add(d.key)
+        return self
 
     @field_validator("enterStatus")
     @classmethod
@@ -1570,23 +1596,25 @@ class ProcessDefinition(_Base):
         # zusammen, und jede {{variable}} der Vorlage muss ein Katalog-Feld sein
         # (sonst bliebe im Vertrag eine leere Stelle, ohne dass es auffällt).
         for p in self.phases:
-            if (p.view == PhaseView.document) != (p.document is not None):
+            # view=document ⇔ mindestens eine Dokument-Vorlage (documents; die
+            # Alt-Form `document` wurde in PhaseDef bereits nach documents migriert).
+            if (p.view == PhaseView.document) != bool(p.documents):
                 raise ValueError(
-                    f"Phase „{p.key}“: „view=document“ und eine Dokument-Vorlage gehören "
-                    f"zusammen – bitte beides setzen oder beides weglassen")
-            if p.document is not None:
-                from backend.services import mail_template as _mt
-                feld_je_key = {f.key: f for f in self.fields}
-                for txt in (p.document.templateHtml, p.document.filename):
+                    f"Phase „{p.key}“: „view=document“ und mindestens eine Dokument-Vorlage "
+                    f"gehören zusammen – bitte beides setzen oder beides weglassen")
+            from backend.services import mail_template as _mt
+            feld_je_key = {f.key: f for f in self.fields}
+            for doc in p.documents:
+                for txt in (doc.templateHtml, doc.filename):
                     for ref in _mt.field_refs(txt):
-                        _need(ref, f"Phase „{p.key}“.document (Variable «{ref}»)")
+                        _need(ref, f"Phase „{p.key}“.documents[„{doc.key}“] (Variable «{ref}»)")
                 # bindings: jeder zugeordnete Marker muss auf ein einsetzbares
                 # (skalares) Katalog-Feld ODER die Sonderquelle @today zeigen.
-                for marker, binding in p.document.bindings.items():
+                for marker, binding in doc.bindings.items():
                     fieldkey = binding.field
                     if fieldkey == TODAY_BINDING:
                         continue                       # aktuelles Datum – kein Katalog-Feld
-                    _need(fieldkey, f"Phase „{p.key}“.document.bindings[„{marker}“]")
+                    _need(fieldkey, f"Phase „{p.key}“.documents[„{doc.key}“].bindings[„{marker}“]")
                     f = feld_je_key.get(fieldkey)
                     # Nicht einsetzbar: Anhang/Wiederholgruppe (kein Text) sowie
                     # Personen-/Gruppenauswahl (trägt nur eine rohe ID, die der
@@ -1595,9 +1623,9 @@ class ProcessDefinition(_Base):
                                            Widget.user, Widget.group)
                               or f.optionsSource in (OptionsSource.users, OptionsSource.groups)):
                         raise ValueError(
-                            f"Phase „{p.key}“.document.bindings[„{marker}“]: Feld „{fieldkey}“ "
-                            f"lässt sich nicht in den Vertrag einsetzen (Anhang, Wiederholgruppe "
-                            f"oder Personen-/Gruppenauswahl)")
+                            f"Phase „{p.key}“.documents[„{doc.key}“].bindings[„{marker}“]: Feld "
+                            f"„{fieldkey}“ lässt sich nicht in den Vertrag einsetzen (Anhang, "
+                            f"Wiederholgruppe oder Personen-/Gruppenauswahl)")
 
         # server_generated-Felder füllt ausschließlich der Server. Wären sie in
         # einer Phase editierbar, könnte der Client eine vergebene Nummer setzen

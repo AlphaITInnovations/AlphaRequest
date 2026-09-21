@@ -848,6 +848,8 @@ def get_pinned_definition(ticket_id: int, user: dict = Depends(get_current_user)
 
 
 class DocumentExportRequest(BaseModel):
+    #: Welches Dokument der Phase (documents[].key). Leer = das erste.
+    document: Optional[str] = None
     #: Nur für den Alt-Weg (keine .docx-Vorlage hinterlegt): das im Client
     #: gefüllte HTML der Dokument-Vorlage. Mit hochgeladener .docx-Vorlage
     #: irrelevant – dann füllt der Server die Vorlage selbst.
@@ -922,31 +924,42 @@ _MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 
 
 def _pick_docphase(defn, runtime):
-    """Die Dokument-Phase der Definition: die aktuelle, sonst die erste mit einer
-    Vorlage. `None`, wenn es keine gibt."""
+    """Die Dokument-Phase der Definition: die aktuelle, sonst die erste mit
+    Vorlagen. `None`, wenn es keine gibt."""
     if defn is None:
         return None
     cur = pr.current_phase(defn, runtime or {})
-    if cur is not None and cur.document is not None:
+    if cur is not None and cur.documents:
         return cur
-    return next((p for p in defn.phases if p.document is not None), None)
+    return next((p for p in defn.phases if p.documents), None)
 
 
-def _load_docx_template(row, docphase):
-    """Die .docx-Vorlage je (Prozess, Phase) laden – `None`, falls keine hinterlegt.
-    Fehler beim Lookup schlucken (still auf „keine Vorlage" degradieren)."""
+def _pick_document(docphase, document_key):
+    """Das gewünschte Dokument der Phase (documents[].key); leerer Key = das erste.
+    `None`, wenn es die Phase/das Dokument nicht gibt."""
+    if docphase is None or not docphase.documents:
+        return None
+    if document_key:
+        return next((d for d in docphase.documents if d.key == document_key), None)
+    return docphase.documents[0]
+
+
+def _load_template_row(row, docphase, doc):
+    """Die Vorlage je (Prozess, Phase, Dokument) laden – `None`, falls keine
+    hinterlegt. Fehler beim Lookup schlucken (still auf „keine Vorlage" degradieren)."""
     from backend.database import process_templates as tpl_db
-    if docphase is None or not row.get("process_key"):
+    if docphase is None or doc is None or not row.get("process_key"):
         return None
     try:
-        return tpl_db.get_template(row["process_key"], docphase.key)
+        return tpl_db.get_template(row["process_key"], docphase.key, doc.key)
     except Exception:
         logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", row.get("id"))
         return None
 
 
-def _docx_fill_prep(row, defn, docphase, user):
-    """Gate (Vollsicht/Admin) + sichtbarkeitsgefilterte Werte + Katalog + bindings.
+def _docx_fill_prep(row, defn, doc, user):
+    """Gate (Vollsicht/Admin) + sichtbarkeitsgefilterte Werte + Katalog + bindings
+    des gewählten Dokuments.
 
     §5.1: Der gefüllte Vertrag trägt auch vertrauliche Werte (Gehalt …) – nur
     Vollsicht/Admin, und selbst dort bleibt ein `confidential`-Feld gesperrt
@@ -963,7 +976,7 @@ def _docx_fill_prep(row, defn, docphase, user):
     ctx = vis.build_viewer_ctx(user, row, defn, group_ids=gids)
     values = vis.filter_values(defn, row.get("values") or {}, ctx)
     catalog = {f.key: f for f in defn.fields}
-    bindings = dict(docphase.document.bindings) if docphase.document else {}
+    bindings = dict(doc.bindings) if doc else {}
     return values, catalog, bindings
 
 
@@ -1005,9 +1018,10 @@ def _read_template_bytes(tpl) -> bytes:
 
 
 @router.get("/process-tickets/{ticket_id}/document:fields")
-def document_fields(ticket_id: int, user: dict = Depends(get_current_user)):
-    """Marker der .docx-Vorlage + vorausgefüllte (sichtbarkeitsgefilterte) Werte –
-    Grundlage für den Editor im Frontend. 409, falls keine Vorlage hinterlegt."""
+def document_fields(ticket_id: int, document: str = "", user: dict = Depends(get_current_user)):
+    """Marker der Vorlage (eines Dokuments) + vorausgefüllte (sichtbarkeits-
+    gefilterte) Werte – Grundlage für den Editor im Frontend. 409, falls keine
+    Vorlage hinterlegt."""
     row = store.get(ticket_id)
     if not row:
         raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
@@ -1019,17 +1033,21 @@ def document_fields(ticket_id: int, user: dict = Depends(get_current_user)):
     # 409-Zweige unten Nicht-Lesern die Existenz/Dokument-Lage des Auftrags.
     _assert_view(row, defn, user)
     docphase = _pick_docphase(defn, row.get("runtime"))
-    if defn is None or docphase is None:
-        raise api_error(409, "TEMPLATE_MISSING", "Diese Phase hat keine Dokument-Vorlage.")
-    tpl = _load_docx_template(row, docphase)
+    doc = _pick_document(docphase, document)
+    if defn is None or docphase is None or doc is None:
+        raise api_error(409, "TEMPLATE_MISSING", "Diese Phase hat kein solches Dokument.")
+    tpl = _load_template_row(row, docphase, doc)
     if tpl is None:
         raise api_error(409, "TEMPLATE_MISSING",
-                        "Für diese Dokument-Phase ist keine Vorlage hinterlegt. "
-                        "Bitte im Prozess-Editor eine .docx-Vorlage hochladen.")
-    values, catalog, bindings = _docx_fill_prep(row, defn, docphase, user)
-    from backend.services import docx_fill
+                        "Für dieses Dokument ist keine Vorlage hinterlegt. "
+                        "Bitte im Prozess-Editor eine .docx- oder PDF-Vorlage hochladen.")
+    values, catalog, bindings = _docx_fill_prep(row, defn, doc, user)
+    from backend.services import docx_fill, pdf_fill, template_format
     from backend.services import mail_template as mt
-    markers = docx_fill.find_placeholders(_read_template_bytes(tpl))
+    tpl_bytes = _read_template_bytes(tpl)
+    tpl_format = template_format.detect(tpl_bytes)
+    markers = (pdf_fill.find_placeholders(tpl_bytes) if tpl_format == template_format.PDF
+               else docx_fill.find_placeholders(tpl_bytes))
     out = []
     for m in markers:
         b = bindings.get(m)
@@ -1053,9 +1071,9 @@ def document_fields(ticket_id: int, user: dict = Depends(get_current_user)):
             return str(row.get("id") or "")
         return mt.format_value(values.get(token))
 
-    doc = docphase.document
     filename = _safe_filename(mt.substitute((doc.filename if doc else "") or "Dokument", _resolve))
     return DataResponse(data={"filename": filename, "phase": docphase.key,
+                              "document": doc.key, "format": tpl_format,
                               "title": (doc.title if doc else None), "markers": out})
 
 
@@ -1080,12 +1098,12 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
         defn = None
 
     docphase = _pick_docphase(defn, row.get("runtime"))
-    tpl = _load_docx_template(row, docphase)
+    doc = _pick_document(docphase, body.document or "")
+    tpl = _load_template_row(row, docphase, doc)
 
-    if tpl is not None and docphase is not None:
-        values, catalog, bindings = _docx_fill_prep(row, defn, docphase, user)
-        doc = docphase.document
-        from backend.services import docx_fill
+    if tpl is not None and docphase is not None and doc is not None:
+        values, catalog, bindings = _docx_fill_prep(row, defn, doc, user)
+        from backend.services import docx_fill, pdf_fill, template_format
         from backend.services import mail_template as mt
         # Editor-Werte (overrides) haben Vorrang; leere Marker bleiben Lücke.
         if body.overrides is not None:
@@ -1100,11 +1118,20 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                 return str(row.get("id") or "")
             return mt.format_value(values.get(token))
 
-        data = docx_fill.fill_docx(_read_template_bytes(tpl), fill_values, mark=body.highlight)
         name = _safe_filename(
             body.filename or mt.substitute((doc.filename if doc else "") or "Dokument", _resolve))
+        tpl_bytes = _read_template_bytes(tpl)
+
+        # PDF-Vorlage: AcroForm-Feldwerte serverseitig füllen → natives PDF (kein
+        # LibreOffice-Umweg, egal was body.format sagt; highlight ist bei PDF ohne Wirkung).
+        if template_format.detect(tpl_bytes) == template_format.PDF:
+            pdf = pdf_fill.fill_pdf(tpl_bytes, fill_values)
+            return Response(content=pdf, media_type="application/pdf",
+                            headers={"Content-Disposition": _content_disposition(name + ".pdf")})
+
+        data = docx_fill.fill_docx(tpl_bytes, fill_values, mark=body.highlight)
         if body.format == "pdf":
-            # Originalgetreu über LibreOffice (Vorschau + PDF-Export).
+            # .docx originalgetreu über LibreOffice rendern (Vorschau + PDF-Export).
             from backend.services import docx_to_pdf
             try:
                 pdf = docx_to_pdf.convert(data)

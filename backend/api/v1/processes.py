@@ -29,6 +29,8 @@ import html
 
 from backend.services import attachment_storage as storage
 from backend.services import docx_fill
+from backend.services import pdf_fill
+from backend.services import template_format
 from backend.services import process_actions as pactions
 from backend.services import process_delete as pdel
 from backend.services import process_permissions as perms
@@ -707,12 +709,24 @@ def confirm_process_delete(body: ConfirmDeleteRequest,
 # System-Prozessen gesetzt werden.
 
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_PDF_MIME = "application/pdf"
 
 
 def _safe_docname(name: Optional[str]) -> str:
     base = (name or "Vorlage.docx").strip() or "Vorlage.docx"
     keep = "".join(c for c in base if c.isalnum() or c in " _-.()äöüÄÖÜß").strip()
     return (keep or "Vorlage.docx")[:150]
+
+
+def _template_placeholders(data: bytes) -> list[str]:
+    """{{marker}} der Vorlage – formatabhängig (PDF = AcroForm-Feldwerte, sonst .docx)."""
+    if template_format.is_pdf(data):
+        return pdf_fill.find_placeholders(data)
+    return docx_fill.find_placeholders(data)
+
+
+def _template_mime(data: bytes) -> str:
+    return _PDF_MIME if template_format.is_pdf(data) else _DOCX_MIME
 
 
 def _content_disposition(filename: str) -> str:
@@ -730,12 +744,16 @@ def _template_bytes(row: dict) -> bytes:
 
 
 def _template_info(row: dict) -> dict:
+    fmt = template_format.DOCX
     try:
-        placeholders = docx_fill.find_placeholders(_template_bytes(row))
+        data = _template_bytes(row)
+        fmt = template_format.detect(data)
+        placeholders = _template_placeholders(data)
     except Exception:
         logger.exception("Vorlage %s nicht lesbar", row.get("process_key"))
         placeholders = []
-    return {"exists": True, "filename": row.get("original_filename"),
+    return {"exists": True, "documentKey": row.get("document_key"),
+            "format": fmt, "filename": row.get("original_filename"),
             "size": row.get("size_bytes"), "placeholders": placeholders,
             "uploaded_at": str(row.get("uploaded_at") or ""),
             "uploaded_by": row.get("uploaded_by_name")}
@@ -775,35 +793,43 @@ def test_escalation_mail(payload: EscalationTestIn, user: dict = Depends(get_cur
 
 
 @router.get("/processes/{key}/phases/{phase}/document-template")
-def get_document_template(key: str, phase: str, user: dict = Depends(get_current_user)):
-    """Info zur Vorlage + Liste der gefundenen {{marker}} (für die Zuordnung)."""
+def get_document_template(key: str, phase: str, document: str = tpl_db.DEFAULT_DOCUMENT_KEY,
+                          user: dict = Depends(get_current_user)):
+    """Info zur Vorlage EINES Dokuments + Liste der gefundenen {{marker}}."""
     _require_manage(user)
-    row = tpl_db.get_template(key, phase)
+    row = tpl_db.get_template(key, phase, document)
     return DataResponse(data=_template_info(row) if row else {"exists": False})
 
 
 @router.post("/processes/{key}/phases/{phase}/document-template")
-async def upload_document_template(key: str, phase: str, file: UploadFile = File(...),
+async def upload_document_template(key: str, phase: str,
+                                   document: str = tpl_db.DEFAULT_DOCUMENT_KEY,
+                                   file: UploadFile = File(...),
                                    user: dict = Depends(get_current_user)):
-    """Vorlage (.docx) hochladen/ersetzen. Gibt die gefundenen Marker zurück."""
+    """Vorlage (.docx ODER PDF) für EIN Dokument hochladen/ersetzen. Gibt die
+    gefundenen Marker + das Format zurück."""
     _require_admin(user)
-    if not (file.filename or "").lower().endswith(".docx"):
+    name = (file.filename or "").lower()
+    if not (name.endswith(".docx") or name.endswith(".pdf")):
         raise api_error(422, ErrorCode.VALIDATION_FAILED,
-                        "Nur Word-Dateien (.docx) werden als Vorlage unterstützt")
+                        "Nur Word- (.docx) oder PDF-Dateien werden als Vorlage unterstützt")
     max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
     try:
         stored_path, size, _sha = storage.save_stream(file.file, max_bytes=max_bytes)
     except storage.FileTooLarge:
         raise api_error(413, "FILE_TOO_LARGE", f"Datei zu groß (max. {config.MAX_UPLOAD_MB} MB)")
-    # Lesbarkeit prüfen (gültiges .docx?) – sonst den Blob gleich wieder entfernen.
+    # Lesbarkeit prüfen (gültige .docx/PDF?) – sonst den Blob gleich wieder entfernen.
     try:
-        placeholders = docx_fill.find_placeholders(_template_bytes({"stored_path": stored_path}))
+        data = _template_bytes({"stored_path": stored_path})
+        fmt = template_format.detect(data)
+        placeholders = _template_placeholders(data)
     except Exception:
         storage.delete(stored_path)
-        raise api_error(422, "INVALID_DOCX",
-                        "Die Datei ließ sich nicht als Word-Dokument (.docx) lesen")
-    old = tpl_db.get_template(key, phase)
-    tpl_db.set_template(process_key=key, phase_key=phase, stored_path=stored_path,
+        raise api_error(422, "INVALID_TEMPLATE",
+                        "Die Datei ließ sich nicht als Word- (.docx) oder PDF-Vorlage lesen")
+    old = tpl_db.get_template(key, phase, document)
+    tpl_db.set_template(process_key=key, phase_key=phase, document_key=document,
+                        stored_path=stored_path,
                         original_filename=_safe_docname(file.filename),
                         content_type=file.content_type, size_bytes=size,
                         uploaded_by_id=user.get("id"),
@@ -813,33 +839,37 @@ async def upload_document_template(key: str, phase: str, file: UploadFile = File
     record_audit(action="process_template_uploaded", actor_id=user.get("id"),
                  actor_name=user.get("displayName") or "", entity_type="process",
                  entity_id=key,
-                 summary=f"Dokument-Vorlage für „{key}“ (Phase „{phase}“) hochgeladen ({size} B)",
-                 details={"phase": phase, "filename": _safe_docname(file.filename),
-                          "placeholders": placeholders})
-    row = tpl_db.get_template(key, phase)
+                 summary=f"Dokument-Vorlage „{document}“ für „{key}“ (Phase „{phase}“) "
+                         f"hochgeladen ({fmt}, {size} B)",
+                 details={"phase": phase, "document": document, "format": fmt,
+                          "filename": _safe_docname(file.filename), "placeholders": placeholders})
+    row = tpl_db.get_template(key, phase, document)
     return DataResponse(data=_template_info(row))
 
 
 @router.get("/processes/{key}/phases/{phase}/document-template/download")
-def download_document_template(key: str, phase: str, user: dict = Depends(get_current_user)):
+def download_document_template(key: str, phase: str, document: str = tpl_db.DEFAULT_DOCUMENT_KEY,
+                               user: dict = Depends(get_current_user)):
     _require_manage(user)
-    row = tpl_db.get_template(key, phase)
+    row = tpl_db.get_template(key, phase, document)
     if not row:
         raise api_error(404, "TEMPLATE_NOT_FOUND", "Keine Vorlage hinterlegt")
-    return Response(content=_template_bytes(row), media_type=_DOCX_MIME,
+    data = _template_bytes(row)
+    return Response(content=data, media_type=_template_mime(data),
                     headers={"Content-Disposition":
                              _content_disposition(_safe_docname(row["original_filename"]))})
 
 
 @router.delete("/processes/{key}/phases/{phase}/document-template")
-def delete_document_template(key: str, phase: str, user: dict = Depends(get_current_user)):
+def delete_document_template(key: str, phase: str, document: str = tpl_db.DEFAULT_DOCUMENT_KEY,
+                             user: dict = Depends(get_current_user)):
     _require_admin(user)
-    row = tpl_db.delete_template(key, phase)
+    row = tpl_db.delete_template(key, phase, document)
     if row and row.get("stored_path"):
         storage.delete(row["stored_path"])
     record_audit(action="process_template_deleted", actor_id=user.get("id"),
                  actor_name=user.get("displayName") or "", entity_type="process",
                  entity_id=key,
-                 summary=f"Dokument-Vorlage für „{key}“ (Phase „{phase}“) entfernt",
-                 details={"phase": phase})
+                 summary=f"Dokument-Vorlage „{document}“ für „{key}“ (Phase „{phase}“) entfernt",
+                 details={"phase": phase, "document": document})
     return DataResponse(data={"exists": False})

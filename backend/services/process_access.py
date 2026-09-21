@@ -255,7 +255,7 @@ def may_generate_document(defn: Optional[ProcessDefinition], row: dict, user: di
         return True
     if defn is None:
         return False
-    docphase = next((p for p in defn.phases if p.document is not None), None)
+    docphase = next((p for p in defn.phases if p.documents), None)
     return is_responsible_for_phase(defn, row, docphase, user, group_ids)
 
 
