@@ -109,11 +109,6 @@ const serverAbilities = computed(() => ticket.value?.abilities ?? {
   reopen: false, archive: false, delete: false, export_document: false,
 })
 
-/** Darf diese Person das Dokument/den Vertrag der Dokument-Phase sehen? Nur
- *  Vollsicht/Admin (Server). Beobachter:innen/Involvierte sehen stattdessen nur
- *  einen Hinweis – der Vertrag trägt vertrauliche Angaben (Gehalt …). */
-const darfDokument = computed(() => !!serverAbilities.value.export_document)
-
 /** LESEN ist der Standard, Bearbeiten das Opt-in (?ansicht=bearbeiten): so gibt
  *  es keinen URL-Parameter, dessen ENTFERNEN mehr Oberfläche freischaltet. Den
  *  Parameter von Hand anzuhängen bringt nichts Verbotenes – die Knöpfe hängen
@@ -571,8 +566,18 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               :departments="ticket.responsibility.departments"
               :group-name="groupName" />
 
-            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) -->
-            <template v-if="abilities.edit && phase && !isExportPhase && !isDocumentPhase">
+            <!-- Dokument-Phase: Dokument-Karten GANZ OBEN. DocumentView zeigt je
+                 Dokument einen „Ausfüllen & exportieren"-Button (zuständige Stelle/
+                 Admin) ODER einen Hinweis „wird erstellt" (Beobachter:innen). Die
+                 übrigen (berechtigten) Feld-Abschnitte stehen darunter. -->
+            <DocumentView v-if="isDocumentPhase && phase"
+                          :definition="definition" :ticket="ticket" :phase="phase"
+                          :sources="sources" :readonly="!abilities.edit" />
+
+            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) – auch
+                 in Dokument-Phasen, damit Basis-/Personaldaten etc. im Rahmen der
+                 Berechtigung sichtbar und bearbeitbar bleiben. -->
+            <template v-if="abilities.edit && phase && !isExportPhase">
               <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                           :viewer="viewer" :errors="errors" :sources="sources"
                           :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
@@ -590,35 +595,14 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             </template>
 
             <!-- Export-Phase: druckbare Zusammenfassung. Sonst die vollständige
-                 Leseansicht – aber NUR, wenn nicht bearbeitet wird (beim Bearbeiten
-                 zeigt das Formular die Felder bereits, kein doppeltes Rendern). -->
+                 Leseansicht – nur, wenn nicht bearbeitet wird (das Formular zeigt die
+                 Felder sonst schon; die Dokument-Karten stehen ohnehin davor). -->
             <SchemaExportView
               v-if="isExportPhase"
               :definition="definition" :ticket="ticket" :phase="phase"
               :viewer="viewer" :sources="sources"
               @exported="showToast('PDF erzeugt')"
               @failed="showViewError($event)" />
-            <!-- Dokument-Phase: Vertrag aus Vorlage, Inline-Editor + Word-Export.
-                 NUR Vollsicht/Admin sehen das Dokument (der Vertrag trägt
-                 vertrauliche Angaben); Beobachter:innen/Involvierte bekommen nur
-                 einen Hinweis. In der Leseansicht readonly. -->
-            <template v-else-if="isDocumentPhase && phase">
-              <DocumentView
-                v-if="darfDokument"
-                :definition="definition" :ticket="ticket" :phase="phase"
-                :sources="sources" :readonly="!abilities.edit" />
-              <div v-else class="card-section flex items-start gap-3">
-                <span class="text-xl leading-none">🔒</span>
-                <div>
-                  <h3 class="section-title mb-1">{{ ticket.current_phase_label || 'Dokument' }}</h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-300">
-                    Das Dokument wird gerade in der Phase
-                    „{{ ticket.current_phase_label || 'Dokumenterstellung' }}“ erstellt und ist
-                    hier nicht einsehbar. Sobald diese Phase abgeschlossen ist, geht der Auftrag weiter.
-                  </p>
-                </div>
-              </div>
-            </template>
             <div v-else-if="!abilities.edit" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"

@@ -1,28 +1,15 @@
 <script setup lang="ts">
 /**
- * Dokument-Phase (view='document') – ZWEI Modi, die sich aus der Definition
- * ergeben (kein Zugriff auf den Manage-Endpunkt nötig):
+ * Dokument-Phase (view='document'): je konfiguriertem Dokument eine Karte.
  *
- *  1. .docx-VORLAGE (Standard, `document.templateHtml` leer): eine im Editor
- *     hochgeladene Word-Datei ist die Vorlage. Beim Export füllt der SERVER die
- *     {{marker}} aus den Auftragswerten (Zuordnung = `document.bindings`) und
- *     lässt alles andere im Dokument unverändert. Kein Inline-Editor – die Datei
- *     kommt fertig zurück; übrige Lücken füllt Sekretariat GL in Word nach.
- *
- *  2. HTML-VORLAGE (Alt-Weg, `document.templateHtml` gesetzt): eine HTML-Vorlage
- *     mit {{feld.key}} wird clientseitig vorausgefüllt, inline bearbeitet und der
- *     Stand serverseitig nach .docx gewandelt.
- *
- * Sicherheit (nur HTML-Modus): die VORLAGE ist admin-verfasst, die WERTE stammen
- * aus Nutzereingaben und werden vor dem innerHTML escaped.
+ * Die für die Dokument-Phase zuständige Stelle (bzw. Admin) sieht je Dokument
+ * „Ausfüllen & exportieren" (öffnet den Editor mit Server-Vorschau + Word/PDF-
+ * Export); Beobachter:innen/Beteiligte sehen nur den Hinweis, dass das Dokument
+ * erstellt wird. Vorlagen-Format (Word .docx ODER PDF-Formular) und Füllung
+ * liegen serverseitig – der Client wählt nur AUS, welches Dokument.
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import type { OptionSources, PhaseDef, ProcessDefinition, ProcessTicketOut } from '@/types/process'
-import { renderMailTemplate } from '@/lib/mailTemplate'
-import { fieldValueText } from '@/lib/processFieldFormat'
-import { exportTicketDocument } from '@/api/processTickets'
-import { errorMessage } from '@/lib/processErrors'
-import { useToast } from '@/composables/useToast'
 import DocumentEditorModal from '@/components/process/form/DocumentEditorModal.vue'
 
 const props = defineProps<{
@@ -30,181 +17,45 @@ const props = defineProps<{
   ticket: ProcessTicketOut
   phase: PhaseDef
   sources?: OptionSources
-  /** Leseansicht: Dokument zeigen + exportieren, aber nicht inline bearbeiten. */
+  /** Leseansicht (kein Bearbeiten) – der Export bleibt für Berechtigte erlaubt. */
   readonly?: boolean
 }>()
 
-const { showToast } = useToast()
-
-const spec = computed(() => props.phase.document)
 /** Erzeugen darf NUR die für die Phase zuständige Stelle (bzw. Admin) – das
- *  Backend liefert das als Ability. Alle anderen (Beobachter:innen, Beteiligte,
- *  Voll-Sicht) sehen nur einen Hinweis, keinen Knopf, und können nichts erzeugen. */
+ *  Backend liefert das als Ability. Alle anderen sehen nur einen Hinweis. */
 const darfErzeugen = computed(() => props.ticket.abilities?.export_document === true)
-const busy = ref(false)
-const editor = ref<HTMLElement | null>(null)
 
-const catalog = computed(() => new Map(props.definition.fields.map((f) => [f.key, f])))
-
-/** .docx-Modus, sobald KEINE HTML-Vorlage hinterlegt ist (der Normalfall). */
-const isHtml = computed(() => !!spec.value?.templateHtml?.trim())
-
-/** Roh-Text eines Platzhalters: {{title}}/{{id}} plus jedes Katalog-Feld. */
-function rawValue(token: string): string {
-  if (token === 'title') return String(props.ticket.title ?? '')
-  if (token === 'id') return String(props.ticket.id ?? '')
-  const f = catalog.value.get(token)
-  if (!f) return ''
-  const text = fieldValueText(f, (props.ticket.values ?? {})[token], props.sources)
-  return text === '—' ? '' : text   // leeres Feld → leere Stelle, kein Strich
-}
-
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-const dateiname = computed(() =>
-  renderMailTemplate(spec.value?.filename ?? 'Dokument', rawValue).trim() || 'Dokument')
-
-/** Datei herunterladen (Blob → temporärer Link). */
-function download(blob: Blob) {
-  const url = URL.createObjectURL(blob)
-  try {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${dateiname.value}.docx`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
-}
-
-// ── .docx-Modus ──────────────────────────────────────────────────────────────
-
-/** Editor-Modal: ganzes .docx previewen, Felder ausfüllen/korrigieren, exportieren. */
-const showEditor = ref(false)
-
-// ── HTML-Modus (Alt-Weg) ─────────────────────────────────────────────────────
-
-const gefuelltHtml = computed(() =>
-  renderMailTemplate(spec.value?.templateHtml ?? '', (t) => esc(rawValue(t))))
-
-/** Editor-Inhalt EINMAL setzen – nicht reaktiv (sonst überschriebe jede Ticket-
- *  Aktualisierung die Anpassungen des Bearbeiters). Ticket-Wechsel füllt neu. */
-function fuelle() {
-  if (editor.value) editor.value.innerHTML = gefuelltHtml.value
-}
-onMounted(() => { if (isHtml.value) fuelle() })
-watch(() => props.ticket.id, () => { if (isHtml.value) fuelle() })
-
-async function htmlExport() {
-  const html = editor.value?.innerHTML ?? gefuelltHtml.value
-  busy.value = true
-  try {
-    download(await exportTicketDocument(props.ticket.id, { html, filename: dateiname.value }))
-  } catch (e) {
-    showToast(errorMessage(e, 'Word-Export fehlgeschlagen'), false)
-  } finally {
-    busy.value = false
-  }
-}
-
-function drucken() {
-  const html = editor.value?.innerHTML ?? gefuelltHtml.value
-  const w = window.open('', '_blank')
-  if (!w) { showToast('Bitte Pop-ups erlauben, um zu drucken', false); return }
-  w.document.write('<!doctype html><html><head><meta charset="utf-8">'
-    + `<title>${dateiname.value}</title>`
-    + '<style>body{font-family:Arial,Helvetica,sans-serif;max-width:800px;margin:2rem auto;'
-    + 'padding:0 1rem;line-height:1.55;color:#111}h1{font-size:1.5rem}h2{font-size:1.25rem}'
-    + 'h3{font-size:1.1rem}</style></head><body>' + html + '</body></html>')
-  w.document.close()
-  w.focus()
-  w.print()
-}
+/** document.key des gerade offenen Editor-Modals (null = keins offen). */
+const openDoc = ref<string | null>(null)
 </script>
 
 <template>
-  <div class="card-section">
-    <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
-      <h3 class="section-title mb-0">{{ spec?.title || 'Dokument' }}</h3>
-      <div v-if="darfErzeugen" class="flex items-center gap-2">
-        <!-- HTML-Modus: Zurücksetzen / Drucken / Word -->
-        <template v-if="isHtml">
-          <button v-if="!readonly" @click="fuelle" :disabled="busy" class="btn-secondary text-xs">
-            Zurücksetzen
-          </button>
-          <button @click="drucken" :disabled="busy" class="btn-secondary text-xs">
-            Drucken / PDF
-          </button>
-          <button v-if="!readonly" @click="htmlExport" :disabled="busy"
-                  class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
-                         disabled:opacity-40 transition">
-            {{ busy ? 'Wird erzeugt…' : 'Als Word exportieren' }}
-          </button>
-        </template>
-        <!-- .docx-Modus: Editor-Modal öffnen (Vorschau + Felder + Word/PDF).
-             Bewusst OHNE readonly-Guard: exportieren darf jede:r mit Vollsicht;
-             wer kein Recht hat, sieht im Modal die Server-Meldung (403/keine
-             Vorlage). -->
-        <button v-else @click="showEditor = true"
-                class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
-                       disabled:opacity-40 transition">
-          Ausfüllen &amp; exportieren
-        </button>
+  <section class="card-section space-y-3">
+    <h3 class="section-title mb-0">Dokumente</h3>
+
+    <div v-for="doc in phase.documents" :key="doc.key"
+         class="rounded-xl border border-gray-200 dark:border-white/10 px-4 py-3
+                flex items-center justify-between gap-3 flex-wrap">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+          {{ doc.title || 'Dokument' }}
+        </p>
+        <p v-if="!darfErzeugen" class="text-xs text-gray-500 dark:text-gray-400">
+          Wird von der zuständigen Stelle erstellt. Sobald der Auftrag weitergeht,
+          werden Sie – sofern Sie beteiligt sind – benachrichtigt.
+        </p>
+        <p v-else class="text-xs text-gray-400">
+          Vorschau ausfüllen und als Word oder PDF exportieren.
+        </p>
       </div>
+      <button v-if="darfErzeugen" type="button" @click="openDoc = doc.key"
+              class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
+                     transition shrink-0">
+        Ausfüllen &amp; exportieren
+      </button>
     </div>
 
-    <!-- Nicht zuständig: nur ein Hinweis, kein Knopf, keine Vorschau. -->
-    <template v-if="!darfErzeugen">
-      <div class="rounded-xl border border-gray-200 dark:border-white/10
-                  bg-gray-50 dark:bg-[#1A2130] p-6 text-sm text-gray-600 dark:text-gray-300">
-        <p class="font-medium text-gray-800 dark:text-gray-100 mb-1">
-          {{ spec?.title || 'Dokument' }} wird gerade erstellt
-        </p>
-        <p>
-          Dieses Dokument wird von der zuständigen Stelle erstellt. Sobald der
-          Auftrag weitergeht, werden Sie – sofern Sie beteiligt sind – benachrichtigt.
-        </p>
-      </div>
-    </template>
-
-    <!-- .docx-Modus: nur der Button oben. Die eingesetzten/auszufüllenden Werte
-         zeigt das Editor-Modal – hier bewusst keine zweite Übersicht. -->
-    <template v-else-if="!isHtml">
-      <p class="text-sm text-gray-500 dark:text-gray-400">
-        „Ausfüllen &amp; exportieren" öffnet die Vorschau des ganzen Dokuments zum
-        Ausfüllen und Export als Word oder PDF.
-      </p>
-    </template>
-
-    <!-- HTML-Modus: Inline-Editor -->
-    <template v-else>
-      <p class="text-xs text-gray-400 mb-2">
-        <template v-if="readonly">Vorschau mit den Auftragsdaten. Bearbeiten und Word-Export
-          über die Bearbeitungsansicht.</template>
-        <template v-else>Vorschau mit den Auftragsdaten – direkt im Text anpassbar. Der Export
-          nimmt genau diesen Stand.</template>
-      </p>
-      <div ref="editor" :contenteditable="!readonly" spellcheck="false"
-           class="doc-editor rounded-xl border border-gray-200 dark:border-white/10
-                  bg-white dark:bg-[#1A2130] text-gray-900 dark:text-gray-100 p-6 min-h-[320px]
-                  text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
-    </template>
-
-    <DocumentEditorModal v-if="showEditor" :ticket-id="ticket.id" @close="showEditor = false" />
-  </div>
+    <DocumentEditorModal v-if="openDoc" :ticket-id="ticket.id" :document-key="openDoc"
+                         @close="openDoc = null" />
+  </section>
 </template>
-
-<!-- Nicht scoped: die Regeln müssen auf den per innerHTML eingesetzten
-     Dokument-Inhalt greifen (Tailwind-Preflight setzt Überschriften sonst platt). -->
-<style>
-.doc-editor h1 { font-size: 1.5rem; font-weight: 700; margin: 0.6em 0 0.3em; }
-.doc-editor h2 { font-size: 1.25rem; font-weight: 700; margin: 0.6em 0 0.3em; }
-.doc-editor h3 { font-size: 1.1rem; font-weight: 600; margin: 0.5em 0 0.3em; }
-.doc-editor p { margin: 0.45em 0; }
-.doc-editor ul { list-style: disc; padding-left: 1.5em; margin: 0.45em 0; }
-.doc-editor ol { list-style: decimal; padding-left: 1.5em; margin: 0.45em 0; }
-</style>

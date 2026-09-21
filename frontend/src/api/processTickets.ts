@@ -58,35 +58,42 @@ export interface DocumentField {
 export interface DocumentFields {
   filename: string
   phase: string
+  /** Dokument-Key innerhalb der Phase. */
+  document?: string
+  /** Vorlagen-Format (bei 'pdf' liefert der Export nativ PDF). */
+  format?: 'docx' | 'pdf'
   title: string | null
   markers: DocumentField[]
 }
 
-/** Marker + vorausgefüllte (sichtbarkeitsgefilterte) Werte der Dokument-Vorlage. */
-export async function getDocumentFields(id: number): Promise<DocumentFields> {
-  const { data } = await client.get(`/process-tickets/${id}/document:fields`)
+/** Marker + vorausgefüllte (sichtbarkeitsgefilterte) Werte der Vorlage EINES Dokuments. */
+export async function getDocumentFields(id: number, documentKey = ''): Promise<DocumentFields> {
+  const { data } = await client.get(`/process-tickets/${id}/document:fields`,
+    { params: documentKey ? { document: documentKey } : {} })
   return data.data
 }
 
 export async function exportTicketDocument(
   id: number,
   opts: {
+    document?: string
     html?: string; filename?: string
     overrides?: Record<string, string>
     /** NUR Vorschau: eingesetzte Werte markieren (Hervorhebung). Export = false. */
     highlight?: boolean
-    /** 'docx' (Standard) oder 'pdf' (Server rendert per LibreOffice). */
+    /** 'docx' (Standard) oder 'pdf' (Server rendert per LibreOffice). Bei einer
+     *  PDF-Vorlage liefert der Server ohnehin nativ PDF, unabhängig davon. */
     format?: 'docx' | 'pdf'
   } = {},
 ): Promise<Blob> {
-  // Mit hochgeladener .docx-Vorlage fuellt der Server selbst (html irrelevant);
+  // Mit hochgeladener .docx/PDF-Vorlage fuellt der Server selbst (html irrelevant);
   // `overrides` sind die Editor-Werte (manuelle Felder + Korrekturen). Ohne
   // Vorlage kommt das im Client gefuellte HTML mit.
   try {
     const { data } = await client.post(
       `/process-tickets/${id}/document:export`,
-      { html: opts.html, filename: opts.filename, overrides: opts.overrides,
-        highlight: opts.highlight, format: opts.format },
+      { document: opts.document, html: opts.html, filename: opts.filename,
+        overrides: opts.overrides, highlight: opts.highlight, format: opts.format },
       { responseType: 'blob' })
     return data as Blob
   } catch (e) {

@@ -42,6 +42,9 @@ export async function getPublished(key: string): Promise<ProcessOut> {
 
 export interface DocumentTemplateInfo {
   exists: boolean
+  /** Format der hinterlegten Vorlage. */
+  format?: 'docx' | 'pdf'
+  documentKey?: string
   filename?: string
   size?: number
   /** Alle in der Vorlage gefundenen {{marker}} (zum Zuordnen). */
@@ -50,33 +53,35 @@ export interface DocumentTemplateInfo {
   uploaded_by?: string | null
 }
 
-/** URL der Vorlage je (Prozess, Phase). */
+/** URL der Vorlage je (Prozess, Phase). Das Dokument wählt der `document`-Query. */
 function templateUrl(key: string, phaseKey: string): string {
   return `/processes/${encodeURIComponent(key)}/phases/${encodeURIComponent(phaseKey)}`
     + '/document-template'
 }
 
 export async function getDocumentTemplate(
-  key: string, phaseKey: string,
+  key: string, phaseKey: string, documentKey = 'dokument',
 ): Promise<DocumentTemplateInfo> {
-  const { data } = await client.get(templateUrl(key, phaseKey))
+  const { data } = await client.get(templateUrl(key, phaseKey), { params: { document: documentKey } })
   return data.data
 }
 
 export async function uploadDocumentTemplate(
-  key: string, phaseKey: string, file: File,
+  key: string, phaseKey: string, file: File, documentKey = 'dokument',
 ): Promise<DocumentTemplateInfo> {
   const form = new FormData()
   form.append('file', file)
   // Content-Type NICHT setzen: der Browser ergänzt die multipart-Boundary
   // (der Axios-Client setzt global JSON – hier mit undefined überschreiben).
   const { data } = await client.post(templateUrl(key, phaseKey), form,
-    { headers: { 'Content-Type': undefined } })
+    { headers: { 'Content-Type': undefined }, params: { document: documentKey } })
   return data.data
 }
 
-export async function deleteDocumentTemplate(key: string, phaseKey: string): Promise<void> {
-  await client.delete(templateUrl(key, phaseKey))
+export async function deleteDocumentTemplate(
+  key: string, phaseKey: string, documentKey = 'dokument',
+): Promise<void> {
+  await client.delete(templateUrl(key, phaseKey), { params: { document: documentKey } })
 }
 
 /** Rohe Definition einer Version (Export-Datei). */

@@ -19,7 +19,11 @@ import {
 import { errorMessage } from '@/lib/processErrors'
 import { useToast } from '@/composables/useToast'
 
-const props = defineProps<{ ticketId: number }>()
+const props = defineProps<{
+  ticketId: number
+  /** Welches Dokument der Phase (leer = erstes/Standard-Dokument). */
+  documentKey?: string
+}>()
 const emit = defineEmits<{ close: [] }>()
 
 // Doppelte geschweifte Klammern nicht direkt ins <template> (Vue liest sie als
@@ -33,6 +37,9 @@ const loadError = ref<string | null>(null)
 const fields = ref<DocumentField[]>([])
 const filename = ref('Dokument')
 const docTitle = ref<string | null>(null)
+/** Vorlagen-Format: bei 'pdf' liefert der Server nativ PDF – dann gibt es keinen
+ *  Word-Export (die Vorlage IST ein PDF). */
+const templateFormat = ref<'docx' | 'pdf'>('docx')
 
 const previewBusy = ref(false)
 const exporting = ref(false)
@@ -58,10 +65,11 @@ async function load() {
   loading.value = true
   loadError.value = null
   try {
-    const data = await getDocumentFields(props.ticketId)
+    const data = await getDocumentFields(props.ticketId, props.documentKey)
     fields.value = data.markers.map((m) => ({ ...m }))
     filename.value = data.filename || 'Dokument'
     docTitle.value = data.title
+    templateFormat.value = data.format === 'pdf' ? 'pdf' : 'docx'
     await refreshPreview()
   } catch (e) {
     loadError.value = errorMessage(e, 'Die Vorlage konnte nicht geladen werden.')
@@ -81,7 +89,7 @@ async function refreshPreview(): Promise<boolean> {
   previewBusy.value = true
   try {
     const blob = await exportTicketDocument(props.ticketId,
-      { overrides: overrides(), filename: filename.value, format: 'pdf' })
+      { document: props.documentKey, overrides: overrides(), filename: filename.value, format: 'pdf' })
     if (seq !== renderSeq) return false          // ein neuerer Lauf hat übernommen
     pdfBlob = blob
     const next = URL.createObjectURL(blob)
@@ -139,7 +147,7 @@ async function exportDocx() {
   exporting.value = true
   try {
     const blob = await exportTicketDocument(props.ticketId,
-      { overrides: overrides(), filename: filename.value, format: 'docx' })
+      { document: props.documentKey, overrides: overrides(), filename: filename.value, format: 'docx' })
     triggerDownload(blob, `${filename.value}.docx`)
   } catch (e) {
     showToast(errorMessage(e, 'Word-Export fehlgeschlagen.'), false)
@@ -235,14 +243,23 @@ onBeforeUnmount(() => {
         <!-- Fuß -->
         <div class="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-white/10 px-5 py-3">
           <button class="btn-secondary text-sm" :disabled="exporting" @click="close">Abbrechen</button>
-          <button class="btn-secondary text-sm" :disabled="loading || exporting || !!loadError"
-                  @click="exportPdf">
+          <!-- Word-Export nur bei Word-Vorlage. Bei einer PDF-Vorlage IST das
+               Ergebnis ein PDF – dann ist „Als PDF" die primäre Aktion. -->
+          <button v-if="templateFormat === 'docx'" class="btn-secondary text-sm"
+                  :disabled="loading || exporting || !!loadError" @click="exportPdf">
             {{ exporting ? 'Erzeuge …' : 'Als PDF' }}
           </button>
-          <button class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
+          <button v-if="templateFormat === 'docx'"
+                  class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
                          disabled:opacity-40 transition"
                   :disabled="loading || exporting || !!loadError" @click="exportDocx">
             Als Word (.docx)
+          </button>
+          <button v-else
+                  class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
+                         disabled:opacity-40 transition"
+                  :disabled="loading || exporting || !!loadError" @click="exportPdf">
+            {{ exporting ? 'Erzeuge …' : 'Als PDF herunterladen' }}
           </button>
         </div>
       </div>

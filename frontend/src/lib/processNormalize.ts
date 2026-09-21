@@ -297,11 +297,21 @@ function normDocument(v: any): DocumentSpec | null {
     }
   }
   return {
+    key: String(v.key ?? ''),
     templateHtml: String(v.templateHtml ?? ''),
     filename: String(v.filename ?? 'Dokument'),
     title: String(v.title ?? 'Dokument'),
     bindings,
   }
+}
+
+/** Dokument-Vorlagen einer Phase + Migration der Alt-Form (einzelnes `document`
+ *  → Liste mit Key „dokument"). */
+function normDocuments(v: any): DocumentSpec[] {
+  const list = arr(v?.documents).map(normDocument).filter(Boolean) as DocumentSpec[]
+  if (list.length) return list
+  const legacy = normDocument(v?.document)
+  return legacy ? [{ ...legacy, key: legacy.key || 'dokument' }] : []
 }
 
 function normEscalationStage(v: any): EscalationStage {
@@ -339,7 +349,9 @@ export function normalizePhase(v: any): PhaseDef {
     grantsFullView: bool(v?.grantsFullView),
     responsibility: normResponsibility(v?.responsibility),
     approval: normApproval(v?.approval),
-    document: normDocument(v?.document),
+    // Alt-Form `document` wird nach `documents` migriert (document bleibt null).
+    document: null,
+    documents: normDocuments(v),
     escalation: normEscalation(v?.escalation),
     fields: arr(v?.fields).map(normalizeFieldRef),
     layout: arr(v?.layout).map(normLayoutSection),

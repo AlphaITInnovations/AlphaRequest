@@ -342,6 +342,8 @@ export interface ApprovalSpec {
  *  Platzhaltern (plus {{title}}, {{id}}), zur Laufzeit vorausgefüllt, im Editor
  *  anpassbar und als Word/PDF exportierbar. */
 export interface DocumentSpec {
+  /** Stabiler Schlüssel des Dokuments innerhalb der Phase (mehrere möglich). */
+  key: string
   templateHtml: string
   filename: string
   title: string
@@ -399,8 +401,12 @@ export interface PhaseDef {
   responsibility: Responsibility
   /** Pflicht bei kind='approval', sonst `null` (der Server lehnt ihn sonst ab). */
   approval: ApprovalSpec | null
-  /** Pflicht bei view='document', sonst `null`. */
+  /** Alt-Form: eine einzelne Dokument-Vorlage. Wird beim Normalisieren nach
+   *  `documents` migriert; neue Definitionen nutzen `documents`. */
   document: DocumentSpec | null
+  /** Dokument-Vorlagen der Phase (Pflicht bei view='document', sonst leer).
+   *  Mehrere möglich, jede .docx ODER PDF. */
+  documents: DocumentSpec[]
   /** Optional: Erinnerungen/Eskalation, solange das Ticket in dieser Phase liegt. */
   escalation: EscalationSpec | null
   fields: FieldRef[]

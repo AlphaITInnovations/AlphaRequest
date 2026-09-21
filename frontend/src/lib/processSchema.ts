@@ -273,13 +273,14 @@ export function blankApproval(question = ''): ApprovalSpec {
 
 /** Leere Dokument-Vorlage (view=document). Ein Start-Template, damit die Phase
  *  gültig ist; die eigentliche Vorlage wird darunter bearbeitet. */
-export function blankDocument(): DocumentSpec {
-  // Neuer Standard: eine hochgeladene .docx-Vorlage + Marker-Zuordnung (bindings).
-  // templateHtml bleibt leer (nur noch Alt-Prozesse nutzen den HTML-Weg).
+export function blankDocument(key = 'dokument'): DocumentSpec {
+  // Neuer Standard: eine hochgeladene .docx- oder PDF-Vorlage + Marker-Zuordnung
+  // (bindings). templateHtml bleibt leer (nur noch Alt-Prozesse nutzen HTML).
   // Dateiname OHNE Platzhalter: ein {{feld}}-Default würde bei Prozessen ohne
   // genau dieses Feld sofort einen UNKNOWN_REF-Fehler werfen und das Speichern
   // sperren (der Admin kann später eigene Platzhalter eintragen).
   return {
+    key,
     templateHtml: '',
     filename: 'Dokument',
     title: 'Dokument',
@@ -317,6 +318,7 @@ export function blankPhase(key: string, kind: PhaseKind = 'task'): PhaseDef {
     responsibility: blankResponsibility(kind === 'review' ? 'departments' : 'owner'),
     approval: kind === 'approval' ? blankApproval() : null,
     document: null,
+    documents: [],
     escalation: null,
     fields: [], layout: [], constraints: [], automations: [],
   }

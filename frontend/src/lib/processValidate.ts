@@ -392,22 +392,22 @@ export function validateDefinition(
       }
     }
 
-    // Dokument-Phase: Ansicht „Dokument" und die Vorlage gehören zusammen; jede
-    // {{variable}} muss ein Katalog-Feld sein (wie serverseitig geprüft).
-    const doc = ph.document
-    if ((ph.view === 'document') !== !!doc) {
+    // Dokument-Phase: Ansicht „Dokument" und mindestens eine Vorlage gehören
+    // zusammen; jede {{variable}} muss ein Katalog-Feld sein (wie serverseitig).
+    const docs = ph.documents ?? []
+    if ((ph.view === 'document') !== (docs.length > 0)) {
       out.push(err(`${p}.view`, anchor, 'INVALID',
-        'Die Ansicht „Dokument" und eine Dokument-Vorlage gehören zusammen – '
+        'Die Ansicht „Dokument" und mindestens eine Dokument-Vorlage gehören zusammen – '
         + 'entweder beides oder keins.'))
     }
-    if (doc) {
+    for (const doc of docs) {
       for (const ref of [...mailFieldRefs(doc.templateHtml), ...mailFieldRefs(doc.filename)]) {
         if (!catalog.has(ref)) {
           out.push(err(`${p}.document`, anchor, 'UNKNOWN_REF',
             `Vorlagen-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
         }
       }
-      // Marker-Zuordnungen (.docx-Vorlage): jedes zugeordnete Feld muss existieren
+      // Marker-Zuordnungen (.docx/PDF-Vorlage): jedes zugeordnete Feld muss existieren
       // und als Text einsetzbar sein (collection/attachment lehnt der Server ab).
       // Die Sonderquelle @today (aktuelles Datum) ist kein Katalog-Feld.
       for (const [marker, binding] of Object.entries(doc.bindings ?? {})) {
