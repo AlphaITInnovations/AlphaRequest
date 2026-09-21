@@ -36,11 +36,12 @@ def test_fachabteilungen_wirken_ad_gruppen_nicht():
     res = build_create_permissions(
         {}, {"zugang-beantragen": [FACH_IT, AD_GUID, FACH_HR]},
         department_group_ids={FACH_IT, FACH_HR})
-    perms = res.permissions["zugang-beantragen"]
+    # Alt-Tickettyp „zugang-beantragen" → neuer Prozess-Key „onboarding-mitarbeitende".
+    perms = res.permissions["onboarding-mitarbeitende"]
     assert perms["groups"] == sorted([FACH_IT, FACH_HR])
     # Nicht stillschweigend mitgeschrieben, sondern gemeldet.
     assert AD_GUID not in perms["groups"]
-    assert res.ineffective_groups["zugang-beantragen"] == [AD_GUID]
+    assert res.ineffective_groups["onboarding-mitarbeitende"] == [AD_GUID]
 
 
 def test_unbekannter_tickettyp_wird_gemeldet_nicht_geraten():

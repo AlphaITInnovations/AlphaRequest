@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import example from '../../../docs/prozesse/zugang-beantragen.json'
+import example from '../../../docs/prozesse/onboarding-mitarbeitende.json'
 import { normalizeDefinition } from './processNormalize'
 import { errorCount, validateDefinition } from './processValidate'
 
@@ -12,7 +12,7 @@ import { errorCount, validateDefinition } from './processValidate'
  */
 const DEFN = normalizeDefinition(example)
 
-describe('Beispiel-Prozess (docs/prozesse/zugang-beantragen)', () => {
+describe('Beispiel-Prozess (docs/prozesse/onboarding-mitarbeitende)', () => {
   it('ist ohne Fehler gültig', () => {
     expect(errorCount(validateDefinition(DEFN))).toBe(0)
   })

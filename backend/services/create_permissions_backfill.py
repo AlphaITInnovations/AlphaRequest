@@ -48,7 +48,7 @@ LEGACY_TYPE_TO_PROCESS_KEY: dict[str, str] = {
     "niederlassung-schliessen": "niederlassung-schliessen",
     "niederlassung-umzug": "niederlassung-umzug",
     "einstellung": "einstellung",
-    "zugang-beantragen": "zugang-beantragen",
+    "zugang-beantragen": "onboarding-mitarbeitende",
     "zugang-sperren": "zugang-sperren",
     "marketing-stellenanzeige": "marketing-stellenanzeige",
     "hotelbuchung": "hotelbuchung",

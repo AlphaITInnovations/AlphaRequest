@@ -17,7 +17,7 @@ per Admin-Aktion „Prozesse einspielen" auf jeder Installation eingespielt werd
 
 ## Dateien
 
-- `zugang-beantragen.json` – aktueller Stand des Onboarding-Prozesses
+- `onboarding-mitarbeitende.json` – aktueller Stand des Onboarding-Prozesses
   („Onboarding Mitarbeiter:innen", Export v11: 61 Felder, Phasen
   `erstellung → freigabe → bearbeitung → arbeitsvertrag → vertragsruecklauf →
   durchfuehrung`). Direkt in die eigene Instanz re-importierbar, da mit den echten

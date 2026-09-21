@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "key": "zugang-beantragen",
+  "key": "onboarding-mitarbeitende",
   "name": "Onboarding Mitarbeiter:innen",
   "description": "Einstellungsprozess neuer Mitarbeiter:innen",
   "icon": "🧑‍💼",
@@ -1668,105 +1668,120 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "dokumente.uploads",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.salutation",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.first_name",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.last_name",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.private_email",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.private_phone",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.title",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.contract_company",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.location",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.cost_center",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.start_date",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.gehalt",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.gehalt_probezeit",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.dreizehntes",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.dreizehntes_art",
@@ -1783,7 +1798,8 @@
               "konditionen.dreizehntes",
               "Ja"
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.halb_wahl",
@@ -1820,7 +1836,8 @@
                 ]
               }
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.ganz_wahl",
@@ -1857,21 +1874,24 @@
                 ]
               }
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.sonderkonditionen",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.position",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car",
@@ -1906,7 +1926,8 @@
                 "geschäftsführung"
               ]
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car_class_number",
@@ -1918,7 +1939,8 @@
               "fuhrpark.car",
               "Ja"
             ]
-          }
+          },
+          "editableWhen": null
         }
       ],
       "layout": [
@@ -2133,7 +2155,8 @@
             "value": null,
             "counter": null,
             "directus": null,
-            "http": null
+            "http": null,
+            "email": null
           }
         }
       ]
@@ -2175,98 +2198,112 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.salutation",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.first_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.last_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.private_email",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.private_phone",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.title",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.contract_company",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.location_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.cost_center_nr",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.start_date",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.gehalt",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.gehalt_probezeit",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.dreizehntes",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.dreizehntes_art",
@@ -2278,7 +2315,8 @@
               "konditionen.dreizehntes",
               "Ja"
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.halb_wahl",
@@ -2300,7 +2338,8 @@
                 ]
               }
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.ganz_wahl",
@@ -2322,21 +2361,24 @@
                 ]
               }
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.sonderkonditionen",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.position",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         }
       ],
       "layout": [
@@ -2489,7 +2531,8 @@
             "value": null,
             "counter": null,
             "directus": null,
-            "http": null
+            "http": null,
+            "email": null
           }
         }
       ]
@@ -2520,98 +2563,112 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.salutation",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.first_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.last_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.private_email",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.private_phone",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.title",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.contract_company",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.location_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.cost_center_nr",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.start_date",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.gehalt",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.gehalt_probezeit",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.dreizehntes",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "konditionen.dreizehntes_art",
@@ -2623,7 +2680,8 @@
               "konditionen.dreizehntes",
               "Ja"
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.halb_wahl",
@@ -2645,7 +2703,8 @@
                 ]
               }
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.ganz_wahl",
@@ -2667,84 +2726,96 @@
                 ]
               }
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "konditionen.sonderkonditionen",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.position",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.private_street",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.private_zip",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.private_city",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.geburtsdatum",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.geburtsort",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.homeoffice",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.weekly_hours",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.federal_state",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.department",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.department_other",
@@ -2761,35 +2832,40 @@
               "personal.department",
               "Sonstige"
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "personal.supervisor_hr_id",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.personal_number",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.timebutler.vacation_year",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.timebutler.approver_differs",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.timebutler.supervisor_id",
@@ -2800,14 +2876,16 @@
           },
           "visibleWhen": {
             "truthy": "it.timebutler.approver_differs"
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "it.software.datev",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.datev_rights",
@@ -2818,14 +2896,16 @@
           },
           "visibleWhen": {
             "truthy": "it.software.datev"
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "it.software.persopro",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.persopro_rights",
@@ -2836,14 +2916,16 @@
           },
           "visibleWhen": {
             "truthy": "it.software.persopro"
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "it.software.timejob",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.timejob_rights",
@@ -2854,14 +2936,16 @@
           },
           "visibleWhen": {
             "truthy": "it.software.timejob"
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "it.software.zvoove",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.zvoove_rights",
@@ -2872,28 +2956,32 @@
           },
           "visibleWhen": {
             "truthy": "it.software.zvoove"
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "it.other_systems",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.mailboxes.info_mailbox",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.mailboxes.additional",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.mailboxes.notes",
@@ -2904,14 +2992,16 @@
           },
           "visibleWhen": {
             "truthy": "it.mailboxes.additional"
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "it.additional_cost_centers_needed",
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.additional_cost_centers",
@@ -2922,14 +3012,16 @@
           },
           "visibleWhen": {
             "truthy": "it.additional_cost_centers_needed"
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car_class_number",
@@ -2941,7 +3033,8 @@
               "fuhrpark.car",
               "Ja"
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car_from",
@@ -2958,7 +3051,8 @@
               "fuhrpark.car",
               "Ja"
             ]
-          }
+          },
+          "editableWhen": null
         },
         {
           "ref": "base.firmenmailadresse",
@@ -3332,7 +3426,8 @@
             "value": true,
             "counter": null,
             "directus": null,
-            "http": null
+            "http": null,
+            "email": null
           }
         },
         {
@@ -3553,35 +3648,40 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.salutation",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.first_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.last_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.private_email",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.firmenmailadresse",
@@ -3596,259 +3696,296 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.title",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.contract_company",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.location_name",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.cost_center_nr",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "base.start_date",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.private_street",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.private_zip",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.private_city",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.homeoffice",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.weekly_hours",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.federal_state",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.department",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.department_other",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.personal_number",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.supervisor_hr_id",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.timebutler.vacation_year",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.timebutler.approver_differs",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.timebutler.supervisor_id",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.datev",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.datev_rights",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.persopro",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.persopro_rights",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.timejob",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.timejob_rights",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.zvoove",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.software.zvoove_rights",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.other_systems",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.mailboxes.info_mailbox",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.mailboxes.additional",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.mailboxes.notes",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.additional_cost_centers_needed",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "it.additional_cost_centers",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car_class_number",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "fuhrpark.car_from",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         },
         {
           "ref": "personal.position",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null
+          "visibleWhen": null,
+          "editableWhen": null
         }
       ],
       "layout": [
@@ -4235,13 +4372,26 @@
                   "target": "position",
                   "value": null,
                   "resolve": null
+                },
+                {
+                  "source": "base.firmenmailadresse",
+                  "target": "email",
+                  "value": null,
+                  "resolve": null
+                },
+                {
+                  "source": "base.title",
+                  "target": "job_title",
+                  "value": null,
+                  "resolve": null
                 }
               ],
               "idField": "it.directus_mitarbeiter_id",
               "onError": "block",
               "matchField": "employee_number"
             },
-            "http": null
+            "http": null,
+            "email": null
           }
         }
       ]
