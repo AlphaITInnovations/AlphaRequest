@@ -60,10 +60,13 @@ export interface FieldVisibility {
 /** Wire-Name ist `from` (Python: from_ mit alias). `op="days_between"` bildet die
  *  Tagesdifferenz `to − from` zweier Datumsfelder; sonst Kopie/`map`-Lookup. */
 export interface ComputedSpec {
-  from: string
+  /** Quellfeld (op=copy/days_between). Bei op="template" leer. */
+  from?: string | null
   to?: string | null
   op?: string | null
   map?: Record<string, unknown> | null
+  /** Textvorlage für op="template": {{feld.key}}-Platzhalter. */
+  template?: string | null
 }
 
 /**

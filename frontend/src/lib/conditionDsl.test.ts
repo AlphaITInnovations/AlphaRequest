@@ -79,4 +79,12 @@ describe('applyComputed (mirror of backend)', () => {
     expect(applyComputed(nights, { an: '2026-09-18', ab: '2026-09-16' }).naechte).toBeNull()
     expect(applyComputed(nights, { an: 'morgen', ab: '2026-09-18' }).naechte).toBeNull()
   })
+
+  it('template: {{feld}} wird eingesetzt; leeres Feld ergibt leere Stelle (wie Backend)', () => {
+    const tpl = [{ key: 'text', computed: { op: 'template', template: 'An: {{adr}}' } }]
+    expect(applyComputed(tpl, { adr: 'team@x.de' }).text).toBe('An: team@x.de')
+    expect(applyComputed(tpl, {}).text).toBe('An: ')          // leer statt „—“
+    // non-overridable → überschreibt mitgeschickten Wert
+    expect(applyComputed(tpl, { adr: 'a@b.de', text: 'alt' }).text).toBe('An: a@b.de')
+  })
 })

@@ -323,27 +323,44 @@ class FieldVisibility(_Base):
 
 
 class ComputedSpec(_Base):
-    from_: str = Field(alias="from")
+    #: Quellfeld für op=copy/days_between. Bei op="template" nicht gesetzt (die
+    #: Quellen stehen dort als {{feld}} in `template`).
+    from_: Optional[str] = Field(default=None, alias="from")
     #: Zweites Quellfeld – nur für op="days_between" (das Enddatum). Das Ergebnis
     #: ist die Tagesdifferenz `to − from`.
     to: Optional[str] = None
     #: Ableitungs-Operation. None/"copy" = Quellwert 1:1 kopieren bzw. per `map`
     #: übersetzen (bisheriges Verhalten). "days_between" = Ganzzahl-Tagesdifferenz
-    #: zweier Datumsfelder (from, to); leere, ungültige oder negative Differenzen
-    #: ergeben einen leeren Wert.
+    #: zweier Datumsfelder (from, to). "template" = Textvorlage mit {{feld}}-
+    #: Platzhaltern, die aus anderen Feldwerten zusammengesetzt wird.
     op: Optional[str] = None
     #: Optionaler Lookup: Quellwert → abgeleiteter Wert. Ohne `map` wird der
     #: Quellwert 1:1 kopiert (bisheriges Verhalten). Mit `map` wird er übersetzt
     #: (z. B. Position → Fahrzeuggruppe); ein nicht enthaltener Quellwert ergibt
     #: einen leeren Wert.
     map: Optional[dict[str, Any]] = None
+    #: Textvorlage für op="template": Platzhalter {{feld.key}} werden durch die
+    #: (formatierten) Werte anderer Felder ersetzt.
+    template: Optional[str] = None
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     @model_validator(mode="after")
     def _op_rules(self) -> "ComputedSpec":
-        if self.op not in (None, "copy", "days_between"):
+        if self.op not in (None, "copy", "days_between", "template"):
             raise ValueError(f"computed.op „{self.op}“ ist unbekannt "
-                             f"(erlaubt: copy, days_between)")
+                             f"(erlaubt: copy, days_between, template)")
+        if self.op == "template":
+            if not (self.template and self.template.strip()):
+                raise ValueError("computed.op=template benötigt `template` "
+                                 "(Textvorlage mit {{feld}}-Platzhaltern)")
+            if self.from_ or self.to is not None or self.map is not None:
+                raise ValueError("computed.op=template kombiniert nicht mit from/to/map")
+            return self
+        # copy / days_between: `from` ist Pflicht, `template` nicht erlaubt.
+        if not self.from_:
+            raise ValueError("computed erfordert `from` (Quellfeld)")
+        if self.template is not None:
+            raise ValueError("computed.template ist nur für op=template zulässig")
         if self.op == "days_between":
             if not self.to:
                 raise ValueError("computed.op=days_between benötigt ein zweites "
@@ -1327,6 +1344,19 @@ class ProcessDefinition(_Base):
                           Widget.user, Widget.company, Widget.group, Widget.server_generated}
         for f in self.fields:
             if f.computed:
+                if f.computed.op == "template":
+                    # {{feld}}-Platzhalter müssen Katalog-Felder sein; nicht-skalare
+                    # Felder lassen sich nicht als Text einsetzen.
+                    from backend.services import mail_template as _mt
+                    _fmap = {x.key: x for x in self.fields}
+                    for ref in _mt.field_refs(f.computed.template):
+                        _need(ref, f"Feld „{f.key}“.computed.template (Variable «{ref}»)")
+                        src = _fmap.get(ref)
+                        if src is not None and src.widget in (Widget.collection, Widget.attachment):
+                            raise ValueError(
+                                f"Feld „{f.key}“.computed.template: «{ref}» verweist auf ein "
+                                f"„{src.widget.value}“-Feld und lässt sich nicht als Text einsetzen")
+                    continue
                 _need(f.computed.from_, f"Feld „{f.key}“.computed.from")
                 if f.computed.op == "days_between":
                     _need(f.computed.to, f"Feld „{f.key}“.computed.to")

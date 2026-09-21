@@ -53,14 +53,21 @@ def _mirrors_hidden_confidential(f: FieldDef, ctx: ViewerCtx, fmap: dict, seen: 
     Position)."""
     if not f.computed:
         return False
-    src = fmap.get(f.computed.from_)
-    if src is None or src.key in seen:
-        return False
-    seen.add(src.key)
-    src_conf = bool(src.visibility and src.visibility.confidential)
-    if src_conf and not can_see_field(src, ctx):
-        return True
-    return _mirrors_hidden_confidential(src, ctx, fmap, seen)
+    # Quellfelder: bei op=template alle {{feld}}-Platzhalter, sonst das eine from-Feld.
+    if f.computed.op == "template":
+        from backend.services import mail_template as _mt
+        srcs = [fmap.get(r) for r in _mt.field_refs(f.computed.template)]
+    else:
+        srcs = [fmap.get(f.computed.from_)]
+    for src in srcs:
+        if src is None or src.key in seen:
+            continue
+        seen.add(src.key)
+        if bool(src.visibility and src.visibility.confidential) and not can_see_field(src, ctx):
+            return True
+        if _mirrors_hidden_confidential(src, ctx, fmap, seen):
+            return True
+    return False
 
 
 def _effective_can_see(f: FieldDef, ctx: ViewerCtx, fmap: dict, _seen: Optional[set] = None) -> bool:

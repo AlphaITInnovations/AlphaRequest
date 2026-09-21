@@ -118,6 +118,29 @@ def test_computed_mirror_inherits_source_visibility():
     assert filter_values(CONF_MIRROR, vals, outsider) == {}
 
 
+# ── op=template: eine Textvorlage, die eine vertrauliche Quelle referenziert,
+#    leckt sie NICHT (harte Sperre greift auch über {{feld}}-Platzhalter) ──
+
+TPL_MIRROR = ProcessDefinition.model_validate({
+    "schemaVersion": 1, "key": "k", "name": "N",
+    "fields": [
+        {"key": "salary", "widget": "text", "visibility": {"confidential": True, "visibleToGroups": ["g_hr"]}},
+        {"key": "brief", "widget": "textarea",
+         "computed": {"op": "template", "template": "Gehalt: {{salary}}"}},
+    ],
+    "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                "fields": [{"ref": "salary", "mode": "editable"}]}],
+})
+
+
+def test_template_mirror_inherits_confidential_source():
+    vals = {"salary": "90k", "brief": "Gehalt: 90k"}
+    hr = ViewerCtx(full_view=False, is_admin=False, group_ids={"g_hr"})
+    outsider = ViewerCtx(full_view=True, is_admin=False, group_ids=set())  # Vollsicht, aber nicht HR
+    assert filter_values(TPL_MIRROR, vals, hr) == vals
+    assert filter_values(TPL_MIRROR, vals, outsider) == {}   # Vorlage leckt salary nicht
+
+
 # ── Fuhrpark-Fall: computed aus NICHT-vertraulicher, nur gruppen-eingeschränkter
 #    Quelle ist über die EIGENE Sichtbarkeit des computed-Felds erreichbar ──
 

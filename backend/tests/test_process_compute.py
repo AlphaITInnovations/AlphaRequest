@@ -200,3 +200,57 @@ def test_computed_map_leitet_fahrzeugklasse_aus_position_ab():
         out = apply_computed(defn, {"personal.position": ohne,
                                     "fuhrpark.car_class_number": "9"})
         assert out.get("fuhrpark.car_class_number") is None, ohne
+
+
+# ── op="template" (Textvorlage mit {{feld}}-Platzhaltern) ──────────────────────
+
+TPL_DEFN = ProcessDefinition.model_validate({
+    "schemaVersion": 1, "key": "tpl", "name": "TPL",
+    "fields": [
+        {"key": "base.adresse", "widget": "text"},
+        {"key": "base.text", "widget": "textarea",
+         "computed": {"op": "template", "template": "Hinweis.\nBitte an: {{base.adresse}}"}},
+    ],
+    "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                "fields": [{"ref": "base.adresse"}, {"ref": "base.text", "mode": "readonly"}]}],
+})
+
+
+def test_template_setzt_feldwert_ein():
+    out = apply_computed(TPL_DEFN, {"base.adresse": "team@x.de"})
+    assert out["base.text"] == "Hinweis.\nBitte an: team@x.de"
+
+
+def test_template_leeres_feld_ergibt_leere_stelle():
+    out = apply_computed(TPL_DEFN, {})
+    assert out["base.text"] == "Hinweis.\nBitte an: "     # leer statt „—“
+
+
+def test_template_op_braucht_template():
+    with pytest.raises(Exception):
+        ProcessDefinition.model_validate({
+            "schemaVersion": 1, "key": "x", "name": "X",
+            "fields": [{"key": "a", "widget": "textarea", "computed": {"op": "template"}}],
+            "phases": [{"key": "s", "kind": "start", "responsibility": {"kind": "owner"},
+                        "fields": [{"ref": "a"}]}]})
+
+
+def test_template_unbekannte_referenz_wird_abgelehnt():
+    with pytest.raises(Exception):
+        ProcessDefinition.model_validate({
+            "schemaVersion": 1, "key": "x", "name": "X",
+            "fields": [{"key": "a", "widget": "textarea",
+                        "computed": {"op": "template", "template": "{{gibtsnicht}}"}}],
+            "phases": [{"key": "s", "kind": "start", "responsibility": {"kind": "owner"},
+                        "fields": [{"ref": "a"}]}]})
+
+
+def test_template_kombiniert_nicht_mit_from():
+    with pytest.raises(Exception):
+        ProcessDefinition.model_validate({
+            "schemaVersion": 1, "key": "x", "name": "X",
+            "fields": [{"key": "b", "widget": "text"},
+                       {"key": "a", "widget": "textarea",
+                        "computed": {"op": "template", "template": "{{b}}", "from": "b"}}],
+            "phases": [{"key": "s", "kind": "start", "responsibility": {"kind": "owner"},
+                        "fields": [{"ref": "a"}, {"ref": "b"}]}]})

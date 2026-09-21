@@ -58,7 +58,8 @@ describe('renameRefsInDefinition – benennt nur echte Referenzen um', () => {
   })
 
   it('zieht computed.from nach', () => {
-    expect(R.fields[2].computed).toEqual({ from: 'urlaubstage' })
+    // op/map/template bleiben erhalten (normalisierte Form trägt map: null).
+    expect(R.fields[2].computed).toEqual({ from: 'urlaubstage', map: null })
   })
 
   it('ersetzt in Bedingungen NUR die Feld-Referenz, nicht den Vergleichswert', () => {

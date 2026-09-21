@@ -39,6 +39,19 @@ def _days_between(a: Any, b: Any) -> Optional[int]:
     return diff if diff >= 0 else None
 
 
+def _render_template(template: Optional[str], values: dict) -> str:
+    """Textvorlage auflösen: {{feld.key}} → (formatierter) Feldwert. Leere Felder
+    ergeben eine leere Stelle (nicht „—“ wie in Mails), damit der Text sauber
+    bleibt. Der Frontend-Spiegel (lib/conditionDsl.ts) hält dieselbe Logik."""
+    from backend.services import mail_template as mt
+
+    def resolve(ref: str) -> str:
+        v = values.get(ref)
+        return "" if v is None or v == "" else mt.format_value(v)
+
+    return mt.substitute(template, resolve)
+
+
 def stamp_server_fields(defn: ProcessDefinition, values: dict, stored: dict, *,
                         actor: str, now_iso: str) -> dict:
     """Setzt server_stamped-Unterfelder in collection-Einträgen serverseitig.
@@ -90,6 +103,10 @@ def apply_computed(defn: ProcessDefinition, values: dict) -> dict:
                 # Tagesdifferenz zweier Datumsfelder (z. B. Übernachtungen =
                 # Abreise − Anreise).
                 derived = _days_between(out.get(c.from_), out.get(c.to))
+            elif c.op == "template":
+                # Textvorlage: {{feld}} durch die (formatierten) Werte ersetzen;
+                # leere Felder ergeben eine leere Stelle (nicht „—“).
+                derived = _render_template(c.template, out)
             else:
                 src_val = out.get(c.from_)
                 # Mit `map` wird der Quellwert übersetzt (z. B. Position →

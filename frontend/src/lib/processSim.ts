@@ -12,6 +12,7 @@ import type {
 } from '@/types/process'
 import { evaluate, applyComputed, isEmpty } from '@/lib/conditionDsl'
 import { backToTarget } from '@/lib/processSchema'
+import { mailFieldRefs } from '@/lib/mailTemplate'
 
 export interface SimViewer {
   fullView: boolean
@@ -60,11 +61,18 @@ function mirrorsHiddenConfidential(
   f: FieldDef, ctx: SimViewer, byKey: Map<string, FieldDef>, seen = new Set<string>(),
 ): boolean {
   if (!f.computed) return false
-  const src = byKey.get(f.computed.from)
-  if (!src || seen.has(src.key)) return false
-  seen.add(src.key)
-  if (src.visibility?.confidential && !canSeeField(src, ctx)) return true
-  return mirrorsHiddenConfidential(src, ctx, byKey, seen)
+  // Quellfelder: bei op=template alle {{feld}}-Platzhalter, sonst das eine from-Feld.
+  const refs = f.computed.op === 'template'
+    ? mailFieldRefs(f.computed.template)
+    : (f.computed.from ? [f.computed.from] : [])
+  for (const rk of refs) {
+    const src = byKey.get(rk)
+    if (!src || seen.has(src.key)) continue
+    seen.add(src.key)
+    if (src.visibility?.confidential && !canSeeField(src, ctx)) return true
+    if (mirrorsHiddenConfidential(src, ctx, byKey, seen)) return true
+  }
+  return false
 }
 
 /** Sichtbarkeit inkl. Quelle. Kommt die Sichtbarkeit vom Server (`visibleKeys`),

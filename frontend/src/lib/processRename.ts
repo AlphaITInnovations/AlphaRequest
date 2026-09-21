@@ -45,6 +45,18 @@ export function renameRefsInCondition(
 
 const ref = (v: string | null, from: string, to: string) => (v === from ? to : v)
 
+/** computed unverändert kopieren, nur die vorhandenen Quell-Refs (from/to)
+ *  umbenennen. op/map/template bleiben erhalten; nicht gesetzte Keys werden NICHT
+ *  ergänzt (sonst wiche die kanonische Form ab). */
+function renameComputed(
+  c: NonNullable<ProcessDefinition['fields'][number]['computed']>, from: string, to: string,
+) {
+  const out = { ...c }
+  if (out.from) out.from = ref(out.from, from, to)
+  if (out.to) out.to = ref(out.to, from, to)
+  return out
+}
+
 export function renameRefsInDefinition(
   defn: ProcessDefinition, from: string, to: string,
 ): ProcessDefinition {
@@ -53,7 +65,7 @@ export function renameRefsInDefinition(
     fields: defn.fields.map((f) => ({
       ...f,
       key: f.key === from ? to : f.key,
-      computed: f.computed ? { from: ref(f.computed.from, from, to) as string } : null,
+      computed: f.computed ? renameComputed(f.computed, from, to) : null,
       // Nummernvergabe: das Firmen-Feld ist eine echte Referenzposition.
       assign: f.assign ? { ...f.assign, companyRef: ref(f.assign.companyRef, from, to) } : null,
     })),

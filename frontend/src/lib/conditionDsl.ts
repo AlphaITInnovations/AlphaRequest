@@ -67,8 +67,31 @@ export function isEmpty(v: unknown): boolean {
 
 export interface ComputedFieldDef {
   key: string
-  computed?: { from: string; to?: string | null; op?: string | null; map?: Record<string, unknown> | null } | null
+  computed?: {
+    from?: string | null; to?: string | null; op?: string | null
+    map?: Record<string, unknown> | null; template?: string | null
+  } | null
   overridable?: boolean
+}
+
+/** Feldwert für eine Textvorlage aufbereiten – Spiegel von
+ *  mail_template.format_value, aber leere Werte ergeben '' (keine „—“). */
+function formatForTemplate(v: unknown): string {
+  if (v === null || v === undefined || v === '') return ''
+  if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
+  if (Array.isArray(v)) {
+    return v.filter((x) => typeof x !== 'object').map((x) => formatForTemplate(x)).join(', ')
+  }
+  if (typeof v === 'object') return ''
+  const s = String(v)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : s
+}
+
+/** Textvorlage auflösen (Spiegel von process_compute._render_template). */
+function renderTemplate(template: string | null | undefined, values: Values): string {
+  return (template ?? '').replace(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g,
+    (_m, ref) => formatForTemplate(values[ref]))
 }
 
 /**
@@ -105,9 +128,12 @@ export function applyComputed(fields: ComputedFieldDef[], values: Values): Value
       let derived: unknown
       if (c.op === 'days_between') {
         // Tagesdifferenz zweier Datumsfelder (z. B. Übernachtungen).
-        derived = daysBetween(out[c.from], out[c.to ?? ''])
+        derived = daysBetween(out[c.from ?? ''], out[c.to ?? ''])
+      } else if (c.op === 'template') {
+        // Textvorlage: {{feld}} durch die (formatierten) Werte ersetzen.
+        derived = renderTemplate(c.template, out)
       } else {
-        const src = out[c.from]
+        const src = out[c.from ?? '']
         const m = c.map
         // Exakt wie das Backend (process_compute.apply_computed): map.get(src) über
         // die EIGENEN String-Schlüssel. Nicht-String-Quellen und nicht enthaltene

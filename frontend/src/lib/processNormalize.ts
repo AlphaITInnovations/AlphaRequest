@@ -59,6 +59,11 @@ function normSubField(v: any): SubField {
 export function normalizeField(v: any): FieldDef {
   // `from_` (Python-Feldname) beim Einlesen tolerieren, `from` ausgeben.
   const from = v?.computed?.from ?? v?.computed?.from_
+  const op = v?.computed?.op ? String(v.computed.op) : null
+  const template = op === 'template' && typeof v?.computed?.template === 'string'
+    ? v.computed.template : null
+  // computed gilt, wenn eine Quelle (from) ODER eine Textvorlage (op=template) da ist.
+  const hasComputed = !!from || !!template
   return {
     key: String(v?.key ?? ''),
     label: str(v?.label),
@@ -71,13 +76,16 @@ export function normalizeField(v: any): FieldDef {
     valueShape: str(v?.valueShape),
     constraints: normConstraints(v?.constraints),
     visibility: normVisibility(v?.visibility),
-    computed: from
-      ? { from: String(from),
+    computed: hasComputed
+      ? (template
+          // Textvorlage (op=template): from/to/map bleiben leer.
+          ? { from: null, op: 'template', template }
           // `op`/`to` (z. B. days_between) beim Round-Trip erhalten – sonst ginge
           // eine importierte Datumsdifferenz beim Speichern im Editor verloren.
-          ...(v?.computed?.op ? { op: String(v.computed.op) } : {}),
-          ...(v?.computed?.to ? { to: String(v.computed.to) } : {}),
-          map: (v?.computed?.map && typeof v.computed.map === 'object') ? v.computed.map : null }
+          : { from: String(from),
+              ...(op ? { op } : {}),
+              ...(v?.computed?.to ? { to: String(v.computed.to) } : {}),
+              map: (v?.computed?.map && typeof v.computed.map === 'object') ? v.computed.map : null })
       : null,
     overridable: bool(v?.overridable),
     // `action` ist serverseitig Pflicht und darf nur assign_sequence sein –

@@ -161,7 +161,15 @@ export function validateDefinition(
           `Unbekannte Fachabteilung „${g}" in der Sichtbarkeit.`))
       }
     })
-    if (f.computed && !catalog.has(f.computed.from)) {
+    if (f.computed?.op === 'template') {
+      // op=template: die {{feld}}-Platzhalter müssen Katalog-Felder sein.
+      for (const ref of mailFieldRefs(f.computed.template)) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${p}.computed`, anchor, 'UNKNOWN_REF',
+            `Textvorlage verweist auf „${ref}" – dieses Feld gibt es nicht.`))
+        }
+      }
+    } else if (f.computed && !catalog.has(f.computed.from ?? '')) {
       out.push(err(`${p}.computed`, anchor, 'UNKNOWN_REF',
         `Abgeleitet aus „${f.computed.from}" – dieses Feld gibt es nicht.`))
     }
