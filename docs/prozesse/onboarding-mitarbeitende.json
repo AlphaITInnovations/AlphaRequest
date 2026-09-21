@@ -2219,6 +2219,31 @@
             "http": null,
             "email": null
           }
+        },
+        {
+          "id": "location_neu_dropdown_leeren",
+          "trigger": {
+            "type": "on_exit",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": {
+            "truthy": "base.location_neu"
+          },
+          "action": {
+            "type": "set_field",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": "base.location",
+            "value": "",
+            "counter": null,
+            "directus": null,
+            "http": null,
+            "email": null
+          }
         }
       ]
     },
