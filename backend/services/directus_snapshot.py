@@ -70,7 +70,11 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
 
         base = sources_db.query_fields(src)
         want = base + [b.source for b in f.directusFieldMap if b.source not in base]
-        eq = {src["valueField"]: {"_eq": cur}}
+        # `_in` statt `_eq`: der Wert wird IMMER als String gespeichert; ein `_eq`
+        # gegen einen numerischen Primärschlüssel (id) trifft je nach Directus/
+        # Spaltentyp nicht, während `_in` (genau wie das Label-Auflösen, das
+        # funktioniert) den Wert zuverlässig matcht.
+        eq = {src["valueField"]: {"_in": [cur]}}
         flt = {"_and": [src["filter"], eq]} if src.get("filter") else eq
         try:
             recs = query(src["collection"], fields=want, filter=flt, limit=1)

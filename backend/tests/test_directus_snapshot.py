@@ -34,7 +34,7 @@ def test_fills_targets_on_new_value():
     assert out["firma"] == "Alpha"            # String-Ziel
     assert out["kstnum"] == 4711              # Zahl-Ziel korrekt gecoerct
     assert calls["coll"] == "kst"
-    assert calls["kw"]["filter"] == {"nummer": {"_eq": "4711"}}
+    assert calls["kw"]["filter"] == {"nummer": {"_in": ["4711"]}}
     assert "firma.name" in calls["kw"]["fields"]
 
 
@@ -103,4 +103,4 @@ def test_source_filter_merged_into_lookup():
         return [{"nummer": 1, "firma": {"name": "A"}}]
 
     ds.apply_snapshots(_defn(), {"kst": "1"}, {}, get_source=lambda k: src, query=query)
-    assert calls["kw"]["filter"] == {"_and": [{"aktiv": {"_eq": True}}, {"nummer": {"_eq": "1"}}]}
+    assert calls["kw"]["filter"] == {"_and": [{"aktiv": {"_eq": True}}, {"nummer": {"_in": ["1"]}}]}
