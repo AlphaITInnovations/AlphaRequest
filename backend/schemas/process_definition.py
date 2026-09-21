@@ -596,6 +596,23 @@ class Trigger(_Base):
         return self
 
 
+class DirectusWriteCondition(_Base):
+    """Bedingung für eine Feld-Zuordnung: die Zuordnung wird NUR geschrieben, wenn
+    das Prozess-Feld `field` (als Text verglichen) gleich `equals` ist. Damit lässt
+    sich z. B. `has_car=true` nur setzen, wenn `fuhrpark.car` == „Ja". Trifft die
+    Bedingung nicht zu, bleibt das Directus-Zielfeld unangetastet."""
+    field: str
+    #: Vergleichswert; gegen den (als Text normalisierten) Prozesswert geprüft
+    #: (Bool → "true"/"false"). Ein Select speichert seinen Options-Wert, z. B. „Ja".
+    equals: Union[bool, int, float, str] = ""
+
+    @model_validator(mode="after")
+    def _cond_rules(self) -> "DirectusWriteCondition":
+        if not str(self.field).strip():
+            raise ValueError("Bedingung einer Directus-Zuordnung braucht ein Prozess-Feld (`field`)")
+        return self
+
+
 class DirectusWriteBinding(_Base):
     """Eine Feld-Zuordnung fürs Schreiben nach Directus. Der Wert kommt entweder
     aus einem Prozess-Feld (`source`) ODER ist ein fester Wert (`value`) und wird
@@ -603,11 +620,17 @@ class DirectusWriteBinding(_Base):
 
     `resolve` übersetzt den Quellwert optional vor dem Schreiben (siehe
     DirectusWriteResolve) – z. B. Firmenname → alphacore-Firmen-ID; nur mit
-    `source` sinnvoll, nicht bei einem festen `value`."""
+    `source` sinnvoll, nicht bei einem festen `value`.
+
+    `when` macht die Zuordnung bedingt: sie wird nur geschrieben, wenn das dort
+    genannte Prozess-Feld dem Vergleichswert entspricht (siehe
+    DirectusWriteCondition). Ohne `when` wird immer geschrieben (bisheriges
+    Verhalten)."""
     source: Optional[str] = None
     target: str
-    value: Optional[str] = None
+    value: Optional[Union[bool, int, float, str]] = None
     resolve: Optional[DirectusWriteResolve] = None
+    when: Optional[DirectusWriteCondition] = None
 
     @model_validator(mode="after")
     def _binding_rules(self) -> "DirectusWriteBinding":
@@ -1492,6 +1515,9 @@ class ProcessDefinition(_Base):
                     # Feste Werte (value) haben kein Prozess-Feld als Quelle.
                     if b.source:
                         _need(b.source, f"automation[{a.id}].directus.fieldMap[{j}].source")
+                    # Bedingung (when): das getestete Feld muss im Katalog existieren.
+                    if b.when is not None:
+                        _need(b.when.field, f"automation[{a.id}].directus.fieldMap[{j}].when.field")
                     if not b.target.strip():
                         raise ValueError(
                             f"automation[{a.id}].directus.fieldMap[{j}].target: "

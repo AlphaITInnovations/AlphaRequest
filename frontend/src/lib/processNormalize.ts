@@ -186,12 +186,22 @@ function normDirectusWrite(v: any): DirectusWriteSpec | null {
       const hasValue = b?.value !== undefined && b?.value !== null
       const bind: any = { target: String(b?.target ?? '') }
       if (hasValue) {
-        // Fester Wert: kein Prozess-Feld, kein resolve.
-        bind.value = String(b.value)
+        // Fester Wert: kein Prozess-Feld, kein resolve. Bool/Zahl typgetreu
+        // erhalten (z. B. has_car=true), sonst als Text.
+        bind.value = (typeof b.value === 'boolean' || typeof b.value === 'number')
+          ? b.value : String(b.value)
         bind.source = null
       } else {
         bind.source = String(b?.source ?? '')
         if (b?.resolve === 'company_directus_id') bind.resolve = 'company_directus_id'
+      }
+      // Bedingung (when): nur übernehmen, wenn ein Feld angegeben ist.
+      if (b?.when && typeof b.when === 'object' && String(b.when.field ?? '').trim()) {
+        const eq = b.when.equals
+        bind.when = {
+          field: String(b.when.field),
+          equals: (typeof eq === 'boolean' || typeof eq === 'number') ? eq : String(eq ?? ''),
+        }
       }
       return bind
     }),

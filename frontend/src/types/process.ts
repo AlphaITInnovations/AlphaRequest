@@ -181,11 +181,20 @@ export interface Trigger {
  *  Firmenname → an der lokalen Firma hinterlegte alphacore-Firmen-ID. */
 export type DirectusWriteResolve = 'company_directus_id'
 
+/** Bedingung einer Feld-Zuordnung: nur schreiben, wenn `field` (als Text) gleich
+ *  `equals` ist – z. B. has_car=true nur bei fuhrpark.car == „Ja". */
+export interface DirectusWriteCondition {
+  field: string
+  equals: string | number | boolean
+}
+
 export interface DirectusWriteBinding {
-  source: string | null   // Prozess-Feld-Key (leer bei festem Wert)
-  target: string          // Directus-Feld
-  value?: string | null   // fester Wert statt Prozess-Feld (genau eines von source/value)
+  source: string | null            // Prozess-Feld-Key (leer bei festem Wert)
+  target: string                   // Directus-Feld
+  value?: string | number | boolean | null  // fester Wert statt Prozess-Feld (genau eines von source/value)
   resolve?: DirectusWriteResolve | null
+  /** Optionale Bedingung: Zuordnung nur schreiben, wenn sie zutrifft. */
+  when?: DirectusWriteCondition | null
 }
 
 export type DirectusWriteOnError = 'continue' | 'block'

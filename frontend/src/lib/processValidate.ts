@@ -751,6 +751,16 @@ export function validateDefinition(
           if (!b.target?.trim()) {
             out.push(err(`${path}.action.directus.${j}`, anchor, 'REQUIRED', 'Directus-Zielfeld fehlt.'))
           }
+          // Bedingung (when): das getestete Prozess-Feld muss existieren.
+          if (b.when) {
+            if (!b.when.field?.trim()) {
+              out.push(err(`${path}.action.directus.${j}`, anchor, 'REQUIRED',
+                'Bedingung braucht ein Prozess-Feld.'))
+            } else if (!catalog.has(b.when.field)) {
+              out.push(err(`${path}.action.directus.${j}`, anchor, 'UNKNOWN_REF',
+                `Bedingungs-Feld „${b.when.field}" gibt es nicht.`))
+            }
+          }
           // Spiegelt die Server-Regel: „als Firmen-ID auflösen" nur bei widget=company
           // (nur für ein Prozess-Feld, nicht bei einem festen Wert).
           if (!hasValue && b.resolve === 'company_directus_id' && widgetByKey.get(b.source as string) !== 'company') {

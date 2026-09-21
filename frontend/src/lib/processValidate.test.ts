@@ -564,6 +564,29 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(errorCount(validateDefinition(d))).toBe(0)
   })
 
+  it('akzeptiert eine bedingte Zuordnung (when) auf ein bekanntes Feld', () => {
+    const d = defn({
+      fields: [{ key: 'car', widget: 'select', options: [{ value: 'Ja' }, { value: 'Nein' }] },
+               { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'car' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'c', idField: 'mid', fieldMap: [
+            { value: true, target: 'has_car', when: { field: 'car', equals: 'Ja' } }] } } }] }] })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('lehnt eine Bedingung (when) auf ein unbekanntes Feld ab', () => {
+    const d = defn({
+      fields: [{ key: 'car', widget: 'select', options: [{ value: 'Ja' }] }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'car' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'create', collection: 'c', idField: 'mid', fieldMap: [
+            { value: true, target: 'has_car', when: { field: 'ghost', equals: 'Ja' } }] } } }] }] })
+    expect(codes(d)).toContain('UNKNOWN_REF')
+  })
+
   it('lehnt onError=block ab, wenn der Auslöser nicht on_department_done ist', () => {
     const d = defn({
       fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],

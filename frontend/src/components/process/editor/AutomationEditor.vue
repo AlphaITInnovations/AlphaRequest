@@ -169,20 +169,59 @@ function setDwResolve(i: number, on: boolean) {
     return next
   }) })
 }
-/** Quelle einer Zuordnung umstellen: Prozess-Feld ODER fester Wert. Beim Wechsel
- *  die jeweils andere Seite (+ resolve) verwerfen, damit genau eines gesetzt ist. */
-function setDwSourceKind(i: number, kind: string) {
+function patchDwMap(i: number, next: (b: DirectusWriteBinding) => DirectusWriteBinding) {
   const cur = a.value.action.directus ?? blankDirectus()
-  patchDirectus({ fieldMap: cur.fieldMap.map((b, j): DirectusWriteBinding => {
-    if (j !== i) return b
-    if (kind === 'const') return { target: b.target, source: null, value: b.value ?? '' }
-    return { target: b.target, source: b.source ?? '' }
-  }) })
+  patchDirectus({ fieldMap: cur.fieldMap.map((b, j) => (j === i ? next(b) : b)) })
+}
+/** Bedingung (when) unverändert übernehmen – aber NUR, wenn eine existiert.
+ *  Kein `when: null` schreiben: die Normalisierung lässt den Schlüssel dann weg,
+ *  ein explizites null würde den Dirty-Vergleich fälschlich auslösen. */
+function keepWhen(base: DirectusWriteBinding, prev: DirectusWriteBinding): DirectusWriteBinding {
+  return prev.when ? { ...base, when: prev.when } : base
+}
+/** Quelle einer Zuordnung umstellen: Prozess-Feld ODER fester Wert. Beim Wechsel
+ *  die jeweils andere Seite (+ resolve) verwerfen, damit genau eines gesetzt ist.
+ *  Die Bedingung (when) bleibt erhalten – sie gilt unabhängig von der Quelle. */
+function setDwSourceKind(i: number, kind: string) {
+  patchDwMap(i, (b): DirectusWriteBinding => keepWhen(kind === 'const'
+    ? { target: b.target, source: null, value: b.value ?? '' }
+    : { target: b.target, source: b.source ?? '' }, b))
 }
 function setDwConst(i: number, value: string) {
-  const cur = a.value.action.directus ?? blankDirectus()
-  patchDirectus({ fieldMap: cur.fieldMap.map((b, j): DirectusWriteBinding =>
-    (j === i ? { target: b.target, source: null, value } : b)) })
+  patchDwMap(i, (b): DirectusWriteBinding => keepWhen({ target: b.target, source: null, value }, b))
+}
+// ── Fester Wert: Typ (Text / Ja-Nein / Zahl) ─────────────────────────────────
+function dwConstKind(b: DirectusWriteBinding): 'text' | 'bool' | 'num' {
+  if (typeof b.value === 'boolean') return 'bool'
+  if (typeof b.value === 'number') return 'num'
+  return 'text'
+}
+function setDwConstKind(i: number, kind: string) {
+  const value = kind === 'bool' ? true : kind === 'num' ? 0 : ''
+  patchDwMap(i, (b): DirectusWriteBinding => keepWhen({ target: b.target, source: null, value }, b))
+}
+function setDwConstBool(i: number, value: boolean) {
+  patchDwMap(i, (b): DirectusWriteBinding => keepWhen({ target: b.target, source: null, value }, b))
+}
+function setDwConstNum(i: number, raw: string) {
+  const n = Number(raw)
+  patchDwMap(i, (b): DirectusWriteBinding =>
+    keepWhen({ target: b.target, source: null, value: Number.isFinite(n) ? n : 0 }, b))
+}
+// ── Bedingung (when): Zuordnung nur schreiben, wenn ein Feld == Wert ──────────
+function setDwWhenEnabled(i: number, on: boolean) {
+  patchDwMap(i, (b): DirectusWriteBinding => {
+    if (on) return { ...b, when: b.when ?? { field: '', equals: '' } }
+    const rest = { ...b }             // Bedingung ganz entfernen (kein `when: null`)
+    delete rest.when
+    return rest
+  })
+}
+function setDwWhen(i: number, part: 'field' | 'equals', value: string) {
+  patchDwMap(i, (b): DirectusWriteBinding => ({
+    ...b,
+    when: { field: b.when?.field ?? '', equals: b.when?.equals ?? '', [part]: value },
+  }))
 }
 
 // ── API-Aufruf (http_request) ────────────────────────────────────────────────
@@ -610,9 +649,25 @@ watch(dwCollection, (c) => {
                 <option value="field">Prozess-Feld</option>
                 <option value="const">Fester Wert</option>
               </select>
-              <input v-if="b.value != null" class="afi flex-1" :value="b.value"
-                     placeholder="Fester Wert, z. B. AlphaRequest"
-                     @input="setDwConst(i, val($event))" />
+              <div v-if="b.value != null" class="flex-1 flex items-center gap-1 min-w-0">
+                <select class="afi w-20 shrink-0" :value="dwConstKind(b)"
+                        @change="setDwConstKind(i, val($event))">
+                  <option value="text">Text</option>
+                  <option value="bool">Ja/Nein</option>
+                  <option value="num">Zahl</option>
+                </select>
+                <select v-if="dwConstKind(b) === 'bool'" class="afi flex-1 min-w-0"
+                        :value="String(b.value)"
+                        @change="setDwConstBool(i, val($event) === 'true')">
+                  <option value="true">Ja (true)</option>
+                  <option value="false">Nein (false)</option>
+                </select>
+                <input v-else-if="dwConstKind(b) === 'num'" type="number" class="afi flex-1 min-w-0"
+                       :value="b.value as number" @input="setDwConstNum(i, val($event))" />
+                <input v-else class="afi flex-1 min-w-0" :value="b.value as string"
+                       placeholder="Fester Wert, z. B. AlphaRequest"
+                       @input="setDwConst(i, val($event))" />
+              </div>
               <select v-else class="afi flex-1" :value="b.source"
                       @change="setDwMap(i, 'source', val($event))">
                 <option value="">Prozess-Feld…</option>
@@ -639,6 +694,28 @@ watch(dwCollection, (c) => {
                 – nur für ein Firmen-Feld gültig
               </span>
             </label>
+
+            <!-- Bedingung (optional): Zuordnung nur schreiben, wenn ein Feld == Wert
+                 (z. B. has_car nur bei fuhrpark.car = „Ja"). -->
+            <label class="mt-1 ml-1 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+              <input type="checkbox" :checked="!!b.when"
+                     class="h-3.5 w-3.5 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]"
+                     @change="setDwWhenEnabled(i, ($event.target as HTMLInputElement).checked)" />
+              Nur schreiben, wenn …
+            </label>
+            <div v-if="b.when" class="mt-1 ml-1 flex items-center gap-2">
+              <select class="afi flex-1 text-sm min-w-0" :value="b.when.field"
+                      @change="setDwWhen(i, 'field', val($event))">
+                <option value="">Feld wählen…</option>
+                <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+                <option v-if="b.when.field && !keys.includes(b.when.field)" :value="b.when.field">
+                  {{ b.when.field }} (unbekannt)
+                </option>
+              </select>
+              <span class="text-gray-400 text-sm shrink-0">=</span>
+              <input class="afi flex-1 text-sm min-w-0" :value="String(b.when.equals ?? '')"
+                     placeholder="Wert, z. B. Ja" @input="setDwWhen(i, 'equals', val($event))" />
+            </div>
           </div>
           <p v-if="!dwCollection" class="text-xs text-gray-400 mt-2">
             Zuerst oben eine Collection wählen – dann stehen die Directus-Felder zur Auswahl.

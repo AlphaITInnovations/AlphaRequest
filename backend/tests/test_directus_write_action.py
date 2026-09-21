@@ -232,3 +232,77 @@ def test_binding_braucht_genau_source_oder_value():
     with pytest.raises(ValidationError):
         DirectusWriteBinding(value="x", target="s", resolve="company_directus_id")  # value+resolve
     assert DirectusWriteBinding(value="AlphaRequest", target="source").value == "AlphaRequest"
+
+
+# ── Typgetreue feste Werte (Bool/Zahl) ────────────────────────────────────────
+
+def test_fester_wert_bool_bleibt_bool():
+    # value=true muss ein echter Bool bleiben (nicht "true") – Directus-Boolean-Feld.
+    b = DirectusWriteBinding(value=True, target="has_car")
+    assert b.value is True
+    spec = DirectusWriteSpec(operation=DirectusOperation.create, collection="mitarbeiter",
+                             idField="it.directus_id", fieldMap=[b])
+    assert dwa.build_payload(spec, {}) == {"has_car": True}
+
+
+def test_fester_wert_false_wird_geschrieben():
+    # False ist ein gültiger fester Wert (nicht „leer") und muss geschrieben werden.
+    spec = DirectusWriteSpec(operation=DirectusOperation.create, collection="mitarbeiter",
+                             idField="it.directus_id",
+                             fieldMap=[DirectusWriteBinding(value=False, target="has_car")])
+    assert dwa.build_payload(spec, {}) == {"has_car": False}
+
+
+def test_fester_wert_string_bleibt_string():
+    # Bestehendes Verhalten: ein Text-Konstante bleibt Text (kein Bool-Coercing).
+    assert DirectusWriteBinding(value="aktiv", target="status").value == "aktiv"
+
+
+# ── Bedingte Zuordnung (when) ─────────────────────────────────────────────────
+
+def _car_spec():
+    """has_car=true NUR wenn fuhrpark.car == „Ja"; vorname immer."""
+    from backend.schemas.process_definition import DirectusWriteCondition
+    return DirectusWriteSpec(
+        operation=DirectusOperation.create, collection="mitarbeiter", idField="it.directus_id",
+        fieldMap=[
+            DirectusWriteBinding(source="base.first_name", target="vorname"),
+            DirectusWriteBinding(value=True, target="has_car",
+                                 when=DirectusWriteCondition(field="fuhrpark.car", equals="Ja")),
+        ])
+
+
+def test_when_erfuellt_schreibt():
+    out = dwa.build_payload(_car_spec(), {"base.first_name": "Max", "fuhrpark.car": "Ja"})
+    assert out == {"vorname": "Max", "has_car": True}
+
+
+def test_when_nicht_erfuellt_ueberspringt():
+    out = dwa.build_payload(_car_spec(), {"base.first_name": "Max", "fuhrpark.car": "Nein"})
+    assert out == {"vorname": "Max"}                      # has_car GAR NICHT geschrieben
+
+
+def test_when_fehlender_wert_ueberspringt():
+    out = dwa.build_payload(_car_spec(), {"base.first_name": "Max"})
+    assert out == {"vorname": "Max"}
+
+
+def test_when_gilt_auch_fuer_source_bindung():
+    from backend.schemas.process_definition import DirectusWriteCondition
+    spec = DirectusWriteSpec(
+        operation=DirectusOperation.create, collection="mitarbeiter", idField="it.directus_id",
+        fieldMap=[DirectusWriteBinding(source="fuhrpark.car_class_number", target="car_class",
+                                       when=DirectusWriteCondition(field="fuhrpark.car", equals="Ja"))])
+    assert dwa.build_payload(spec, {"fuhrpark.car": "Nein", "fuhrpark.car_class_number": "B3"}) == {}
+    assert dwa.build_payload(spec, {"fuhrpark.car": "Ja", "fuhrpark.car_class_number": "B3"}) == {"car_class": "B3"}
+
+
+def test_when_bool_feld_matcht_true_text():
+    # Ein Boolean-Prozessfeld True entspricht equals="true".
+    from backend.schemas.process_definition import DirectusWriteCondition
+    spec = DirectusWriteSpec(
+        operation=DirectusOperation.create, collection="mitarbeiter", idField="it.directus_id",
+        fieldMap=[DirectusWriteBinding(value="ja", target="flag",
+                                       when=DirectusWriteCondition(field="opt_in", equals="true"))])
+    assert dwa.build_payload(spec, {"opt_in": True}) == {"flag": "ja"}
+    assert dwa.build_payload(spec, {"opt_in": False}) == {}

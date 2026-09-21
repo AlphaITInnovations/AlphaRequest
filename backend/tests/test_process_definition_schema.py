@@ -619,3 +619,28 @@ def test_directus_write_matchfield_kein_fester_wert():
                    "fieldMap": [{"source": "a", "target": "name"},
                                 {"value": "AlphaRequest", "target": "source"}]}}}]
     _reject(d)   # Suchschlüssel darf kein fester Wert sein
+
+
+def test_directus_write_bedingte_zuordnung_ok():
+    # has_car=true (echter Bool) NUR wenn Feld „car" == „Ja".
+    d = _base(fields=[{"key": "car", "widget": "select",
+                       "options": [{"value": "Ja"}, {"value": "Nein"}]},
+                      {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "car"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [
+                       {"value": True, "target": "has_car", "when": {"field": "car", "equals": "Ja"}}]}}}]
+    dfn = ProcessDefinition.model_validate(d)
+    b = dfn.phases[0].automations[0].action.directus.fieldMap[0]
+    assert b.value is True and b.when.field == "car" and b.when.equals == "Ja"
+
+
+def test_directus_write_bedingung_feld_muss_existieren():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [
+                       {"value": True, "target": "has_car", "when": {"field": "ghost", "equals": "Ja"}}]}}}]
+    _reject(d)   # Bedingungs-Feld „ghost" ist nicht im Katalog

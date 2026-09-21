@@ -43,8 +43,13 @@ def build_payload(spec, values: dict, *, companies=None) -> dict:
                 f"Firmen für die Directus-Auflösung nicht lesbar: {exc}") from exc
     out: dict = {}
     for b in spec.fieldMap:
+        # Bedingte Zuordnung: trifft die Bedingung nicht zu, wird das Zielfeld gar
+        # nicht geschrieben (z. B. has_car nur bei fuhrpark.car == „Ja").
+        if not _condition_holds(getattr(b, "when", None), values):
+            continue
         # Feste Zuordnung: den konfigurierten Wert unverändert schreiben (kein
-        # Prozess-Feld, kein resolve, keine Leer-Auslassung).
+        # Prozess-Feld, kein resolve, keine Leer-Auslassung). value kann ein
+        # echter Bool/Zahl-Wert sein (z. B. has_car=true) – darum nicht auf "" prüfen.
         const = getattr(b, "value", None)
         if const is not None:
             out[b.target] = const
@@ -57,6 +62,28 @@ def build_payload(spec, values: dict, *, companies=None) -> dict:
             continue
         out[b.target] = v
     return out
+
+
+def _as_text(v) -> str:
+    """Wert für den Bedingungs-Vergleich vereinheitlichen: Bool → "true"/"false",
+    None → "", sonst str(). So passt ein Select-Wert („Ja") ebenso wie ein
+    Boolean-Feld (True == „true")."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if v is None:
+        return ""
+    return str(v)
+
+
+def _condition_holds(when, values: dict) -> bool:
+    """True, wenn keine Bedingung gesetzt ist oder das Prozess-Feld dem
+    Vergleichswert (als Text) entspricht."""
+    if when is None:
+        return True
+    field = getattr(when, "field", None)
+    if not field:
+        return True
+    return _as_text(values.get(field)) == _as_text(getattr(when, "equals", None))
 
 
 def _resolve_value(resolve, raw, companies: list) -> Optional[str]:
