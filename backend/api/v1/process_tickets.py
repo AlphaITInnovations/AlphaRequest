@@ -610,6 +610,12 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     # Autor/Zeitstempel serverseitig setzen, dann Directus-Snapshot der Auswahl,
     # dann abgeleitete Felder füllen (computed darf auf Snapshot-Werte zugreifen).
     values = compute.stamp_server_fields(defn, values, {}, actor=_actor_name(user), now_iso=now)
+    # Snapshot-Zielfelder sind read-only und wurden vom Schreibschutz verworfen.
+    # Beim Anlegen die im Formular live gefüllten Werte als Rückfall übernehmen:
+    # gelingt der autoritative Re-Fetch, überschreibt er sie; scheitert er (Directus
+    # findet den Datensatz nicht), bleiben die gezeigten Werte erhalten – sonst
+    # stünde alles leer (Basisdaten, Titel-Vorlage …).
+    values = directus_snapshot.seed_snapshot_targets(defn, values, submitted)
     values = directus_snapshot.apply_snapshots(defn, values, {})
     values = compute.apply_computed(defn, values)
 

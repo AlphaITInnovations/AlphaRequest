@@ -79,7 +79,41 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
             continue
 
         rec = recs[0] if recs else None
+        if rec is None:
+            # Schlüssel gesetzt, aber KEIN Datensatz gefunden (z. B. Typ-/Quelle-
+            # Mismatch beim valueField oder ein Directus-Hänger). Die Zielfelder
+            # NICHT leeren – die im Formular gezeigten Werte bleiben stehen; ein
+            # späterer erfolgreicher Snapshot überschreibt sie autoritativ. Ohne das
+            # stünde nach dem Anlegen alles leer (inkl. Titel-Vorlage).
+            logger.warning("Directus-Snapshot: kein Datensatz für %s=%r in „%s“ – "
+                           "Zielfelder unverändert gelassen", f.key, cur, src.get("collection"))
+            continue
         for b in f.directusFieldMap:
-            val = sources_db.resolve_path(rec, b.source) if rec else None
-            out[b.target] = _coerce(val, widget_by_key.get(b.target))
+            out[b.target] = _coerce(sources_db.resolve_path(rec, b.source),
+                                    widget_by_key.get(b.target))
+    return out
+
+
+def snapshot_target_keys(defn: ProcessDefinition) -> set:
+    """Alle Prozess-Felder, die Ziel eines directus-Auto-Fills sind."""
+    return {b.target for f in defn.fields
+            if f.widget == Widget.directus and f.directusFieldMap
+            for b in f.directusFieldMap}
+
+
+def seed_snapshot_targets(defn: ProcessDefinition, values: dict, submitted: dict) -> dict:
+    """Read-only Snapshot-Ziele mit den im Formular live gefüllten Werten vorbelegen,
+    wo noch nichts steht (neue Kopie).
+
+    Hintergrund: Die Zielfelder sind read-only und werden vom Schreibschutz beim
+    Anlegen verworfen. Findet der autoritative Re-Fetch den Datensatz, überschreibt
+    er diese Vorbelegung ohnehin; scheitert er, bleiben wenigstens die gezeigten
+    Werte erhalten statt leer. Es werden NUR Ziele gefüllt, die die Auswahl schon
+    mitgeschickt hat – vertrauliche Ziele stehen dort nicht (sie werden clientseitig
+    gar nicht live gefüllt) und bleiben damit dem autoritativen Snapshot vorbehalten."""
+    targets = snapshot_target_keys(defn)
+    out = dict(values)
+    for t in targets:
+        if out.get(t) in (None, "") and submitted.get(t) not in (None, ""):
+            out[t] = submitted[t]
     return out

@@ -75,6 +75,25 @@ def test_missing_source_skips():
     assert out.get("firma") is None
 
 
+def test_no_record_leaves_targets():
+    # Schlüssel gesetzt, aber Re-Fetch findet NICHTS (z. B. Typ-Mismatch beim
+    # valueField): Zielfelder dürfen NICHT geleert werden (sonst leere Basisdaten
+    # + Titel nach dem Anlegen).
+    out = ds.apply_snapshots(_defn(), {"kst": "4711", "firma": "Alpha", "kstnum": 4711}, {},
+                             get_source=lambda k: SRC, query=lambda *a, **k: [])
+    assert out["firma"] == "Alpha" and out["kstnum"] == 4711
+
+
+def test_seed_snapshot_targets_fills_only_empty():
+    d = _defn()
+    # Leere Ziele werden aus den (live gefüllten) Formularwerten vorbelegt …
+    out = ds.seed_snapshot_targets(d, {"kst": "1"}, {"kst": "1", "firma": "Alpha", "kstnum": 42})
+    assert out["firma"] == "Alpha" and out["kstnum"] == 42
+    # … bestehende Ziele aber nicht überschrieben, und Nicht-Ziele ignoriert.
+    out2 = ds.seed_snapshot_targets(d, {"firma": "Da"}, {"firma": "Neu", "fremd": "x"})
+    assert out2["firma"] == "Da" and "fremd" not in out2
+
+
 def test_source_filter_merged_into_lookup():
     calls = {}
     src = {**SRC, "filter": {"aktiv": {"_eq": True}}}
