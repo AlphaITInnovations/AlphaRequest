@@ -585,6 +585,33 @@
       "prefill": null
     },
     {
+      "key": "base.abwesenheit_text",
+      "label": "Abwesenheitstext (mit Empfänger)",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": {
+        "from": null,
+        "to": null,
+        "op": "template",
+        "map": null,
+        "template": "Vielen Dank für Ihre Nachricht.\n\nDieses E-Mail-Postfach existiert nicht mehr. Eingehende Nachrichten werden nicht automatisch weitergeleitet.\nBitte wenden Sie sich an die Mailadresse: {{base.abwesenheit_empfaenger}}"
+      },
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
       "key": "ablauf.freigabe_ueberspringen",
       "label": "Freigabe überspringen",
       "widget": "checkbox",
@@ -911,6 +938,23 @@
             ]
           },
           "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_text",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "truthy": "base.abwesenheit_benoetigt"
+              },
+              {
+                "truthy": "base.abwesenheit_mit_empfaenger"
+              }
+            ]
+          },
+          "editableWhen": null
         }
       ],
       "layout": [
@@ -1016,7 +1060,8 @@
               "type": "note",
               "text": "Sofortige Sperrung wirkt erst nach der Freigabe durch Udo Lutz. Es wird dann automatisch die IT per Mail informiert (u. a. Timebutler, Talention). Das läuft parallel zur Fortsetzung des Hauptprozesses.",
               "tone": "info",
-              "width": "full"
+              "width": "full",
+              "visibleWhen": null
             },
             {
               "type": "field",
@@ -1032,7 +1077,8 @@
               "type": "note",
               "text": "Postfach-Vollzugriff gibt es aus Datenschutzgründen nicht mehr. Bitte bei Bedarf per E-Mail an Herrn Wiegers wenden.",
               "tone": "warning",
-              "width": "full"
+              "width": "full",
+              "visibleWhen": null
             },
             {
               "type": "field",
@@ -1088,26 +1134,16 @@
               }
             },
             {
-              "type": "note",
-              "text": "Abwesenheitstext, der eingerichtet wird:\n\nVielen Dank für Ihre Nachricht.\n\nDieses E-Mail-Postfach existiert nicht mehr. Eingehende Nachrichten werden nicht automatisch weitergeleitet.\nBitte wenden Sie sich an die oben angegebene Mailadresse.",
-              "tone": "info",
-              "width": "full",
-              "visibleWhen": {
-                "and": [
-                  {
-                    "truthy": "base.abwesenheit_benoetigt"
-                  },
-                  {
-                    "truthy": "base.abwesenheit_mit_empfaenger"
-                  }
-                ]
-              }
+              "type": "field",
+              "ref": "base.abwesenheit_text",
+              "width": "full"
             },
             {
               "type": "note",
               "text": "Mailweiterleitung und Abwesenheitsmeldung laufen ohne gesonderte Freigabe maximal 30 Tage.",
               "tone": "info",
-              "width": "full"
+              "width": "full",
+              "visibleWhen": null
             }
           ]
         },
@@ -1624,6 +1660,23 @@
           "requiredWhen": null,
           "visibleWhen": null,
           "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_text",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "truthy": "base.abwesenheit_benoetigt"
+              },
+              {
+                "truthy": "base.abwesenheit_mit_empfaenger"
+              }
+            ]
+          },
+          "editableWhen": null
         }
       ],
       "layout": [
@@ -1719,6 +1772,11 @@
               "type": "field",
               "ref": "base.abwesenheit_empfaenger",
               "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.abwesenheit_text",
+              "width": "full"
             }
           ]
         }
