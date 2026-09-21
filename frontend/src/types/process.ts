@@ -415,6 +415,8 @@ export interface CreatePermissions {
   groups: string[]
   /** Einzelne Personen (User-IDs). */
   users: string[]
+  /** Alle Vorgesetzten (Directus-Mitarbeiterfeld `is_executive`). */
+  executives: boolean
 }
 
 export interface ProcessDefinition {

@@ -9,13 +9,28 @@ from typing import Iterable, Optional
 from backend.database.users import PERM_ADMIN
 from backend.schemas.process_definition import ProcessDefinition
 
+#: Wahrheitswerte, wie sie das Directus-Feld `is_executive` liefern kann
+#: (Boolean-Feld = true/false; defensiv auch gängige Kodierungen).
+_TRUTHY = {True, 1, "1", "true", "True", "ja", "yes"}
+
+
+def is_executive(user: dict) -> bool:
+    """Ist `user` laut Directus-Stammdaten (user["employee"].is_executive) Vorgesetzte:r?
+
+    Kein DB-Zugriff: der Mitarbeiterdatensatz hängt bereits an der Session
+    (core/dependencies.py setzt user["employee"]). Fehlt er/das Feld → nein.
+    """
+    emp = user.get("employee") or {}
+    return emp.get("is_executive") in _TRUTHY
+
 
 def may_create(defn: ProcessDefinition, user: dict,
                group_ids: Optional[Iterable[str]] = None) -> bool:
     """Darf `user` einen Auftrag dieses Prozesses anlegen?
 
     Reihenfolge: Admin darf immer · „jeder" · Person explizit genannt ·
-    Mitglied einer berechtigten Gruppe. Sonst nein (Default-Deny).
+    Mitglied einer berechtigten Gruppe · Vorgesetzte:r (is_executive). Sonst nein
+    (Default-Deny).
     """
     perms = set(user.get("permissions") or [])
     if PERM_ADMIN in perms:
@@ -31,6 +46,9 @@ def may_create(defn: ProcessDefinition, user: dict,
 
     allowed = set(cp.groups or [])
     if allowed and set(group_ids or ()) & allowed:
+        return True
+
+    if cp.executives and is_executive(user):
         return True
     return False
 

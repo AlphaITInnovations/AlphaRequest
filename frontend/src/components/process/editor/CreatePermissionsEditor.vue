@@ -45,6 +45,7 @@ const unknownUsers = computed(() =>
 const summary = computed(() => {
   if (props.modelValue.everyone) return 'Alle angemeldeten Personen'
   const parts: string[] = []
+  if (props.modelValue.executives) parts.push('alle Vorgesetzten')
   const gs = (props.modelValue.groups ?? []).length
   const us = (props.modelValue.users ?? []).length
   if (gs) parts.push(`${gs} Gruppe${gs === 1 ? '' : 'n'}`)
@@ -69,6 +70,19 @@ const summary = computed(() => {
         Alle angemeldeten Personen
         <span class="block text-[11px] text-gray-400">
           Überschreibt die Auswahl unten.
+        </span>
+      </span>
+    </label>
+
+    <label :class="modelValue.everyone ? 'opacity-40 pointer-events-none' : ''"
+           class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 mb-3">
+      <input type="checkbox" :checked="modelValue.executives"
+             class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]"
+             @change="patch({ executives: ($event.target as HTMLInputElement).checked })" />
+      <span>
+        Alle Vorgesetzten
+        <span class="block text-[11px] text-gray-400">
+          Personen mit gesetztem Directus-Mitarbeiterfeld <code>is_executive</code> – zusätzlich zur Auswahl unten.
         </span>
       </span>
     </label>

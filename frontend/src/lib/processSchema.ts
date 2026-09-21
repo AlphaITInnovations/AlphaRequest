@@ -377,7 +377,7 @@ export function blankAutomation(id: string): Automation {
 
 export function blankCreatePermissions(): CreatePermissions {
   // Restriktiver Default: ein neuer Prozess ist zunächst nur für Admins anlegbar.
-  return { everyone: false, groups: [], users: [] }
+  return { everyone: false, groups: [], users: [], executives: false }
 }
 
 export function blankDefinition(key: string, name: string): ProcessDefinition {

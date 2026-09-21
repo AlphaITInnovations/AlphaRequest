@@ -1188,6 +1188,10 @@ class CreatePermissions(_Base):
     groups: list[str] = Field(default_factory=list)
     #: Einzelne Personen (User-IDs), für Ausnahmen.
     users: list[str] = Field(default_factory=list)
+    #: Alle Vorgesetzten dürfen anlegen (Directus-Mitarbeiterfeld `is_executive`).
+    #: Wirkt zusätzlich zu groups/users; die Auswertung liest den an der Session
+    #: hängenden Mitarbeiterdatensatz (user["employee"]).
+    executives: bool = False
 
 
 class ProcessDefinition(_Base):

@@ -17,6 +17,8 @@ def defn(key="p", **cp):
 ADMIN = {"id": "u_admin", "permissions": ["view", "manage", "admin"]}
 USER = {"id": "u1", "permissions": ["view"]}
 OTHER = {"id": "u2", "permissions": ["view"]}
+EXEC = {"id": "u_exec", "permissions": ["view"], "employee": {"is_executive": True}}
+NON_EXEC = {"id": "u3", "permissions": ["view"], "employee": {"is_executive": False}}
 
 
 def test_default_ist_nur_admin():
@@ -47,6 +49,16 @@ def test_gruppe():
     assert may_create(d, USER, []) is False
 
 
+def test_vorgesetzte_is_executive():
+    """executives=True → alle mit Directus-Feld is_executive dürfen anlegen."""
+    d = defn(executives=True)
+    assert may_create(d, EXEC) is True
+    assert may_create(d, NON_EXEC) is False          # employee vorhanden, aber is_executive falsch
+    assert may_create(d, USER) is False              # gar kein employee-Datensatz
+    # Ohne das Flag hilft is_executive nicht.
+    assert may_create(defn(executives=False), EXEC) is False
+
+
 def test_admin_umgeht_alles():
     d = defn(everyone=False, groups=["g_x"], users=[])
     assert may_create(d, ADMIN, []) is True
@@ -64,7 +76,8 @@ def test_rechte_wandern_beim_export_mit():
     """createPermissions ist Teil der Definition – Export/Import nimmt sie mit."""
     d = defn(groups=["g_it"], users=["u1"], everyone=False)
     dumped = d.model_dump(by_alias=True)
-    assert dumped["createPermissions"] == {"everyone": False, "groups": ["g_it"], "users": ["u1"]}
+    assert dumped["createPermissions"] == {
+        "everyone": False, "groups": ["g_it"], "users": ["u1"], "executives": False}
     again = ProcessDefinition.model_validate(dumped)
     assert may_create(again, USER, ["g_it"]) is True
 

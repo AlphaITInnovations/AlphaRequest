@@ -135,6 +135,7 @@ function normCreatePermissions(v: any): CreatePermissions {
     everyone: bool(v?.everyone),
     groups: arr(v?.groups).map((g) => String(g)).filter(Boolean),
     users: arr(v?.users).map((u) => String(u)).filter(Boolean),
+    executives: bool(v?.executives),
   }
 }
 
