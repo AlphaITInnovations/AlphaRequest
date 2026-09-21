@@ -270,7 +270,28 @@
       "key": "base.location_name",
       "label": "Niederlassung",
       "widget": "text",
-      "help": "Automatisch aus der gewählten Niederlassung übernommen.",
+      "help": "Bei Directus-Auswahl automatisch übernommen; bei „Niederlassung existiert noch nicht“ hier als Freitext eintragen.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.location_neu",
+      "label": "Niederlassung existiert noch nicht",
+      "widget": "checkbox",
+      "help": "Wenn gesetzt, wird die Niederlassung als Freitext erfasst (statt aus dem Directus-Dropdown) und NICHT in AlphaCore angelegt.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -1736,12 +1757,42 @@
           "editableWhen": null
         },
         {
-          "ref": "base.location",
+          "ref": "base.location_neu",
           "mode": "editable",
-          "required": true,
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
           "editableWhen": null
+        },
+        {
+          "ref": "base.location",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "not": {
+              "truthy": "base.location_neu"
+            }
+          },
+          "visibleWhen": {
+            "not": {
+              "truthy": "base.location_neu"
+            }
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.location_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": {
+            "truthy": "base.location_neu"
+          },
+          "visibleWhen": {
+            "truthy": "base.location_neu"
+          },
+          "editableWhen": {
+            "truthy": "base.location_neu"
+          }
         },
         {
           "ref": "base.cost_center",
@@ -2019,7 +2070,17 @@
             },
             {
               "type": "field",
+              "ref": "base.location_neu",
+              "width": "full"
+            },
+            {
+              "type": "field",
               "ref": "base.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.location_name",
               "width": "half"
             },
             {
