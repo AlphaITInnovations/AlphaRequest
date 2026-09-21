@@ -196,6 +196,26 @@ const isExportPhase = computed(() => phase.value?.view === 'export')
 /** Dokument-Phase (view=document): Vertrag/Dokument aus Vorlage, Inline-Editor + Word-Export. */
 const isDocumentPhase = computed(() => phase.value?.view === 'document')
 
+/** Hat die Phase überhaupt (bedingt) bearbeitbare Felder? Dokument-Phasen haben
+ *  meist ein leeres Layout; NUR wenn dort echte editierbare Felder liegen (z. B.
+ *  Fuhrpark im Arbeitsvertrag), soll zusätzlich zum Dokument ein Formular zum
+ *  Anpassen erscheinen. */
+const phaseHasEditableFields = computed(() =>
+  (phase.value?.fields ?? []).some(
+    (fr) => fr.mode === 'editable' || fr.mode === 'append_only' || !!fr.editableWhen))
+
+/** Wird das Phasen-Formular gezeigt? In normalen Phasen wie bisher; in
+ *  Dokument-Phasen nur, wenn sie eigene editierbare Felder haben. */
+const showPhaseForm = computed(() =>
+  abilities.value.edit && !!phase.value && !isExportPhase.value
+  && (!isDocumentPhase.value || phaseHasEditableFields.value))
+
+/** Feld-Keys, die das Phasen-Formular rendert – in der Gesamt-Leseansicht
+ *  ausgeblendet, damit sie in einer Dokument-Phase nicht doppelt (bearbeitbar
+ *  oben, read-only unten) erscheinen. */
+const phaseFormKeys = computed(() =>
+  showPhaseForm.value ? (phase.value?.fields ?? []).map((fr) => fr.ref) : [])
+
 const dirty = computed(() =>
   JSON.stringify(values.value) !== JSON.stringify(ticket.value?.values ?? {}))
 
@@ -296,9 +316,10 @@ async function saveValues() {
     values.value = { ...(ticket.value.values || {}) }
     errors.value = []
     showToast('Gespeichert')
-    // Speichern heißt: hier fertig für jetzt – zurück zur Übersicht (einheitlich
-    // mit „Speichern & später weiterbearbeiten" im Basis-Ticket).
-    router.push('/dashboard')
+    // In Dokument-Phasen auf der Seite BLEIBEN: so kann direkt nach dem Speichern
+    // das Dokument mit den neuen Werten erzeugt werden (ticket/values sind aus der
+    // Antwort schon aktualisiert). Sonst wie bisher zurück zur Übersicht.
+    if (!isDocumentPhase.value) router.push('/dashboard')
   } catch (e) {
     reportActionError(e, 'Speichern fehlgeschlagen')
   } finally { busy.value = false }
@@ -575,11 +596,12 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                           :sources="sources" :readonly="!abilities.edit" />
 
             <!-- Formular der aktuellen Phase (nur für die zuständige Stelle).
-                 NICHT in Dokument-Phasen: die sammeln keine Daten (ihr Layout ist
-                 leer), sie erzeugen Dokumente. Dort steht stattdessen die
-                 Gesamt-Leseansicht unten – so sehen Bearbeitende wie Beobachtende
-                 die (berechtigten) Basis-/Personaldaten. -->
-            <template v-if="abilities.edit && phase && !isExportPhase && !isDocumentPhase">
+                 In Dokument-Phasen normalerweise NICHT (leeres Layout → nur die
+                 Gesamt-Leseansicht unten). Ausnahme: hat die Dokument-Phase eigene
+                 editierbare Felder (z. B. Fuhrpark im Arbeitsvertrag), erscheint
+                 zusätzlich zum Dokument ein Formular zum Anpassen – gespeicherte
+                 Änderungen fließen in die erzeugten Dokumente. -->
+            <template v-if="showPhaseForm && phase">
               <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                           :viewer="viewer" :errors="errors" :sources="sources"
                           :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
@@ -606,11 +628,14 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               @exported="showToast('PDF erzeugt')"
               @failed="showViewError($event)" />
             <!-- Gesamt-Leseansicht: für Beobachtende IMMER, und in Dokument-Phasen
-                 auch für die Bearbeitenden (dort gibt es kein Phasen-Formular). -->
+                 auch für die Bearbeitenden. Felder, die oben schon im Phasen-
+                 Formular stehen (z. B. Fuhrpark), werden hier ausgeblendet, damit
+                 sie nicht doppelt erscheinen. -->
             <div v-else-if="!abilities.edit || isDocumentPhase" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
-                                  :sources="sources" :ticket-id="ticket.id" :view="viewParams.view" />
+                                  :sources="sources" :ticket-id="ticket.id" :view="viewParams.view"
+                                  :exclude-keys="phaseFormKeys" />
             </div>
 
             <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen

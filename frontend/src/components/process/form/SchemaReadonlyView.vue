@@ -41,6 +41,9 @@ const props = defineProps<{
   ticketId?: number | null
   /** Entry-Modus für die Feld-Sicht der Anhänge (`admin` = voller Blick). */
   view?: string | null
+  /** Feld-Keys, die hier NICHT gezeigt werden (weil sie an anderer Stelle – z. B.
+   *  im Phasen-Formular – bereits erscheinen). Verhindert Doppelanzeige. */
+  excludeKeys?: string[]
 }>()
 
 const catalog = computed<FieldDef[]>(() => props.definition?.fields ?? [])
@@ -48,6 +51,10 @@ const vals = computed<Record<string, unknown>>(() => props.values ?? {})
 
 const allowed = computed<Set<string>>(() =>
   props.definition ? visibleFieldKeys(props.definition, props.viewer) : new Set<string>())
+
+const excluded = computed<Set<string>>(() => new Set(props.excludeKeys ?? []))
+/** Wird ein Feld hier angezeigt? Sichtbar für die Rolle UND nicht ausgeschlossen. */
+const shows = (key: string): boolean => allowed.value.has(key) && !excluded.value.has(key)
 
 // ── Abschnitte aufbauen ──────────────────────────────────────────────────────
 
@@ -78,7 +85,7 @@ const phaseBlocks = computed<Block[]>(() => {
           const f = byKey.get(it.rendered.field.key)
           // Zusätzliches Sichtbarkeits-Gate: resolveLayout kennt nur die Phase,
           // der Katalog-Filter entscheidet über vertrauliche Felder.
-          return f && allowed.value.has(f.key) ? [fieldRow(f, it.cols)] : []
+          return f && shows(f.key) ? [fieldRow(f, it.cols)] : []
         }
         // Deko bleibt auch in der Lese-Ansicht: Hinweisboxen erklären die Werte,
         // und ohne sie stünde ein reiner Hinweis-Abschnitt plötzlich leer da.
@@ -100,7 +107,7 @@ const mergedBlocks = computed<Block[]>(() => {
       section: section(m.title, m.variant),
       rows: m.refs.flatMap((ref): Row[] => {
         const f = byKey.get(ref)
-        return f && allowed.value.has(f.key) ? [fieldRow(f, 6)] : []
+        return f && shows(f.key) ? [fieldRow(f, 6)] : []
       }),
     }))
     .filter((b) => b.rows.length > 0)
@@ -112,7 +119,7 @@ const blocks = computed<Block[]>(() => {
   const shown = new Set<string>()
   for (const b of out) for (const r of b.rows) if (r.kind === 'field') shown.add(r.f.key)
 
-  const rest = catalog.value.filter((f) => allowed.value.has(f.key) && !shown.has(f.key))
+  const rest = catalog.value.filter((f) => shows(f.key) && !shown.has(f.key))
   if (!rest.length) return out
 
   const restRows = rest.map((f) => fieldRow(f, 6))
