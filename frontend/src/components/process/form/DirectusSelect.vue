@@ -20,7 +20,11 @@ const props = withDefaults(defineProps<{
   initialLabel?: string
   disabled?: boolean
   invalid?: boolean
-}>(), { initialLabel: '', disabled: false, invalid: false })
+  /** Prozess-/Phasen-Schlüssel: erlauben dem Server, die directusFieldMap-Quellfelder
+   *  mitzuladen, damit die Snapshot-Zielfelder live (bei der Auswahl) füllen. */
+  processKey?: string
+  phaseKey?: string
+}>(), { initialLabel: '', disabled: false, invalid: false, processKey: '', phaseKey: '' })
 
 const emit = defineEmits<{ select: [sel: { value: string; record: Record<string, any> } | null] }>()
 
@@ -74,7 +78,9 @@ async function fetchOptions(search: string) {
   loading.value = true
   errorMsg.value = null
   try {
-    const res = await sourceOptions(sourceKey(), search)
+    const res = await sourceOptions(sourceKey(), search, {
+      process: props.processKey, field: props.field.key, phase: props.phaseKey,
+    })
     if (mine !== seq) return                 // veraltete Antwort verwerfen (latest-wins)
     options.value = res.options
     errorMsg.value = res.error

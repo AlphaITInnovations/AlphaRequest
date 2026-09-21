@@ -54,9 +54,19 @@ export async function previewSource(src: DirectusSource): Promise<{ options: Dir
   return data.data
 }
 
-export async function sourceOptions(key: string, search = ''): Promise<{ options: DirectusOption[]; error: string | null }> {
-  const { data } = await client.get(`/directus/sources/${encodeURIComponent(key)}/options`,
-    { params: search ? { search } : {} })
+/** process/field/phase: lässt den Server die directusFieldMap-Quellfelder dieses
+ *  Feldes mitladen, damit die Snapshot-Zielfelder LIVE (bei der Auswahl) füllen. */
+export async function sourceOptions(
+  key: string,
+  search = '',
+  ctx?: { process?: string | null; field?: string | null; phase?: string | null },
+): Promise<{ options: DirectusOption[]; error: string | null }> {
+  const params: Record<string, string> = {}
+  if (search) params.search = search
+  if (ctx?.process) params.process = ctx.process
+  if (ctx?.field) params.field = ctx.field
+  if (ctx?.phase) params.phase = ctx.phase
+  const { data } = await client.get(`/directus/sources/${encodeURIComponent(key)}/options`, { params })
   return data.data
 }
 

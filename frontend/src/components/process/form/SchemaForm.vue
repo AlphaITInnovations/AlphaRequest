@@ -188,6 +188,8 @@ function onDirectusPick(field: FieldDef, sel: { value: string; record: Record<st
               :disabled="disabled || !row.r.editable"
               :invalid="!!errorFor(row.r.field.key)"
               :sources="sources"
+              :process-key="definition?.key"
+              :phase-key="phase?.key"
               @update:model-value="setValue(row.r.field.key, $event)"
               @directus-pick="onDirectusPick(row.r.field, $event)"
             />

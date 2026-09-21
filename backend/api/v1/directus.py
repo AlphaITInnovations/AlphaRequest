@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from backend.core.dependencies import get_current_user
 from backend.database import directus_sources as store
+from backend.database import process_definitions as defs_db
 from backend.database.audit_log import record_audit
 from backend.database.users import PERM_ADMIN
 from backend.schemas.responses import DataResponse, ErrorCode, api_error
@@ -143,20 +144,57 @@ def preview_source(body: SourceIn, user: dict = Depends(get_current_user)):
 
 # ── Live-Optionen einer gespeicherten Quelle (für Formulare) ──────────────────
 
+def _live_fill_fields(source_key: str, process: Optional[str], field: Optional[str],
+                      phase: Optional[str]) -> list[str]:
+    """Zusätzliche Directus-Quellpfade, damit ein directus-Feld seine Snapshot-
+    Zielfelder schon BEI DER AUSWAHL (live) füllen kann – statt erst beim Speichern.
+
+    Serverseitig aus der VERÖFFENTLICHTEN Definition hergeleitet, nicht vom Client:
+    so lässt sich kein beliebiges Directus-Feld abfragen. Zusätzlich auf die in
+    dieser Phase SICHTBAREN (nicht-hidden, nicht-confidential) Zielfelder
+    beschränkt – damit verdeckte Snapshot-Ziele (z. B. Privatadresse) NICHT in die
+    Options-Liste gelangen. Fehlt Prozess/Feld/Phase → leer (kein Live-Fill)."""
+    if not (process and field and phase):
+        return []
+    raw = (defs_db.get_published(process) or {}).get("definition") or {}
+    fdef = next((f for f in raw.get("fields", [])
+                 if f.get("key") == field and f.get("directusSource") == source_key), None)
+    ph = next((p for p in raw.get("phases", []) if p.get("key") == phase), None)
+    if not fdef or not ph:
+        return []
+    visible = {r.get("ref") for r in ph.get("fields", []) if r.get("mode") != "hidden"}
+    confidential = {f.get("key") for f in raw.get("fields", [])
+                    if (f.get("visibility") or {}).get("confidential")}
+    out: list[str] = []
+    for b in (fdef.get("directusFieldMap") or []):
+        tgt, srcpath = b.get("target"), b.get("source")
+        if srcpath and tgt in visible and tgt not in confidential and srcpath not in out:
+            out.append(srcpath)
+    return out
+
+
 @router.get("/directus/sources/{key}/options")
 def source_options(key: str, search: Optional[str] = None, limit: int = 50,
+                   process: Optional[str] = None, field: Optional[str] = None,
+                   phase: Optional[str] = None,
                    user: dict = Depends(get_current_user)):
     """Optionen einer gespeicherten Quelle – fail-soft: bei fehlender Konfiguration
     oder Directus-Fehler eine leere Liste + Hinweis, damit das Formular nutzbar
-    bleibt (die Auswahl ist dann eben leer)."""
+    bleibt (die Auswahl ist dann eben leer).
+
+    process/field/phase (optional): lädt zusätzlich die directusFieldMap-Quellfelder
+    dieses Feldes mit, damit die Snapshot-Zielfelder live gefüllt werden können
+    (siehe _live_fill_fields)."""
     src = store.get(key)
     if not src:
         raise api_error(404, "DIRECTUS_SOURCE_UNKNOWN", f"Quelle „{key}“ nicht gefunden")
     if not dc.is_configured():
         return DataResponse(data={"options": [], "error": "Directus ist nicht konfiguriert"})
     eff_limit = max(1, min(src["limit"], limit))
+    want = store.query_fields(src)
+    want = want + [p for p in _live_fill_fields(key, process, field, phase) if p not in want]
     try:
-        records = dc.query_items(src["collection"], fields=store.query_fields(src),
+        records = dc.query_items(src["collection"], fields=want,
                                  filter=src["filter"], sort=src["sort"] or None,
                                  limit=eff_limit, search=search or None)
     except dc.DirectusError as exc:

@@ -19,7 +19,10 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   invalid?: boolean
   sources?: OptionSources
-}>(), { disabled: false, invalid: false })
+  /** Kontext fürs Live-Fill der directusFieldMap (siehe DirectusSelect). */
+  processKey?: string
+  phaseKey?: string
+}>(), { disabled: false, invalid: false, processKey: '', phaseKey: '' })
 
 const emit = defineEmits<{
   'update:modelValue': [value: unknown]
@@ -291,6 +294,8 @@ const readonlyText = computed(() => {
       :initial-label="directusInitialLabel"
       :disabled="disabled"
       :invalid="invalid"
+      :process-key="processKey"
+      :phase-key="phaseKey"
       @select="(sel) => emit('directus-pick', sel)"
     />
 
