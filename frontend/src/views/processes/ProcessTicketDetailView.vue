@@ -574,10 +574,12 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                           :definition="definition" :ticket="ticket" :phase="phase"
                           :sources="sources" :readonly="!abilities.edit" />
 
-            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle) – auch
-                 in Dokument-Phasen, damit Basis-/Personaldaten etc. im Rahmen der
-                 Berechtigung sichtbar und bearbeitbar bleiben. -->
-            <template v-if="abilities.edit && phase && !isExportPhase">
+            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle).
+                 NICHT in Dokument-Phasen: die sammeln keine Daten (ihr Layout ist
+                 leer), sie erzeugen Dokumente. Dort steht stattdessen die
+                 Gesamt-Leseansicht unten – so sehen Bearbeitende wie Beobachtende
+                 die (berechtigten) Basis-/Personaldaten. -->
+            <template v-if="abilities.edit && phase && !isExportPhase && !isDocumentPhase">
               <SchemaForm :definition="definition" :phase="phase" :model-value="values"
                           :viewer="viewer" :errors="errors" :sources="sources"
                           :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
@@ -603,7 +605,9 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               :viewer="viewer" :sources="sources"
               @exported="showToast('PDF erzeugt')"
               @failed="showViewError($event)" />
-            <div v-else-if="!abilities.edit" class="card-section">
+            <!-- Gesamt-Leseansicht: für Beobachtende IMMER, und in Dokument-Phasen
+                 auch für die Bearbeitenden (dort gibt es kein Phasen-Formular). -->
+            <div v-else-if="!abilities.edit || isDocumentPhase" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
                                   :sources="sources" :ticket-id="ticket.id" :view="viewParams.view" />

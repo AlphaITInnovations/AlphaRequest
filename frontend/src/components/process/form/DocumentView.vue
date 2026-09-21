@@ -25,6 +25,11 @@ const props = defineProps<{
  *  Backend liefert das als Ability. Alle anderen sehen nur einen Hinweis. */
 const darfErzeugen = computed(() => props.ticket.abilities?.export_document === true)
 
+/** Der „Ausfüllen & exportieren"-Knopf gehört in die BEARBEITUNGSansicht: in der
+ *  Leseansicht (readonly, ?ansicht=lesen) wird er komplett ausgeblendet – auch
+ *  für die zuständige Stelle. Gearbeitet wird nur über die richtigen Einstiege. */
+const kannErzeugen = computed(() => darfErzeugen.value && !props.readonly)
+
 /** document.key des gerade offenen Editor-Modals (null = keins offen). */
 const openDoc = ref<string | null>(null)
 </script>
@@ -40,15 +45,18 @@ const openDoc = ref<string | null>(null)
         <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
           {{ doc.title || 'Dokument' }}
         </p>
-        <p v-if="!darfErzeugen" class="text-xs text-gray-500 dark:text-gray-400">
+        <p v-if="kannErzeugen" class="text-xs text-gray-400">
+          Vorschau ausfüllen und als Word oder PDF exportieren.
+        </p>
+        <p v-else-if="darfErzeugen" class="text-xs text-gray-500 dark:text-gray-400">
+          Zum Ausfüllen &amp; Exportieren in die Bearbeitung wechseln.
+        </p>
+        <p v-else class="text-xs text-gray-500 dark:text-gray-400">
           Wird von der zuständigen Stelle erstellt. Sobald der Auftrag weitergeht,
           werden Sie – sofern Sie beteiligt sind – benachrichtigt.
         </p>
-        <p v-else class="text-xs text-gray-400">
-          Vorschau ausfüllen und als Word oder PDF exportieren.
-        </p>
       </div>
-      <button v-if="darfErzeugen" type="button" @click="openDoc = doc.key"
+      <button v-if="kannErzeugen" type="button" @click="openDoc = doc.key"
               class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
                      transition shrink-0">
         Ausfüllen &amp; exportieren
