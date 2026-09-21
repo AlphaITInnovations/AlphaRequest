@@ -703,7 +703,7 @@
         },
         {
           "ref": "base.mitarbeiter_vorname",
-          "mode": "hidden",
+          "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
@@ -711,7 +711,7 @@
         },
         {
           "ref": "base.mitarbeiter_nachname",
-          "mode": "hidden",
+          "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
@@ -978,6 +978,16 @@
               "type": "field",
               "ref": "base.mitarbeiter",
               "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_vorname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_nachname",
+              "width": "half"
             },
             {
               "type": "field",
