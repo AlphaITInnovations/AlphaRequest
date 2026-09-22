@@ -27,7 +27,7 @@ from backend.database.audit_log import record_audit
 from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN
 from backend.schemas.process_definition import (
-    TODAY_BINDING, ProcessDefinition, ResponsibilityKind,
+    TODAY_BINDING, PhaseKind, ProcessDefinition, ResponsibilityKind,
 )
 from backend.schemas.responses import (
     DataResponse, ListResponse, Meta, api_error, ErrorCode,
@@ -36,6 +36,7 @@ from backend.services import process_access as acc
 from backend.services import directus_client as dc
 from backend.services import directus_snapshot
 from backend.services import process_actions as pactions
+from backend.services import process_approval as pa
 from backend.services import process_compute as compute
 from backend.services import process_engine as engine
 from backend.services import process_events as events
@@ -106,6 +107,12 @@ class TicketAbilities(BaseModel):
     #: Beobachter:innen/Involvierte OHNE Vollsicht bekommen stattdessen nur einen
     #: Hinweis, dass das Dokument gerade erstellt wird.
     export_document: bool = False
+    #: Admin-Eingriff in einer OFFENEN Freigabe-Phase (view=admin): direkt
+    #: genehmigen/ablehnen bzw. die Freigabe-Mail erneut senden. `decide_approval`
+    #: ist nur wahr, solange noch nicht entschieden wurde; `resend_approval` gilt
+    #: für jede offene Freigabe-Phase. Verbindlich bleiben die Endpunkte.
+    decide_approval: bool = False
+    resend_approval: bool = False
 
 
 class ProcessTicketOut(BaseModel):
@@ -195,6 +202,14 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
     gids = set(group_ids or ())
     darf_bearbeiten = acc.may_edit(defn, row, user, gids) and not _is_terminal(row)
     ist_owner = bool(user.get("id")) and row.get("owner_id") == user.get("id")
+    # Freigabe-Eingriff (Admin): nur wenn die AKTUELLE Phase eine offene Freigabe
+    # ist. `decide_approval` fällt weg, sobald entschieden wurde (die Phase ist dann
+    # ohnehin schon weiter – doppelte Absicherung gegen ein Rennen mit dem Mail-Link).
+    rt = row.get("runtime") or {}
+    cur_phase = pr.current_phase(defn, rt) if defn else None
+    ist_freigabe = bool(cur_phase is not None and cur_phase.kind == PhaseKind.approval
+                        and cur_phase.approval is not None
+                        and not _is_terminal(row) and acc.is_admin(user))
     return TicketAbilities(
         edit=darf_bearbeiten,
         internal_comment=acc.is_process_staff(defn, user, gids),
@@ -210,6 +225,8 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
         delete=acc.is_admin(user),
         completable_departments=completable_departments or [],
         export_document=can_export_document,
+        decide_approval=ist_freigabe and pr.phase_decision(rt, rt.get("current_index", 0)) is None,
+        resend_approval=ist_freigabe,
     )
 
 
@@ -2066,6 +2083,199 @@ def set_process_ticket_title(ticket_id: int, body: SetTitleRequest,
             raise api_error(409, "TICKET_CONFLICT", str(exc))
         events.write(row, events.TITLE_CHANGED, actor_id=user.get("id"),
                      actor_name=_actor_name(user), details={"from": old, "to": new})
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn, gids), user, gids))
+
+
+# ── Admin: Freigabe entscheiden / Freigabe-Mail erneut senden ────────────────
+# Genau derselbe Weg wie die Freigabe per Mail-Link (services/process_approval +
+# api/v1/process_approval), nur ANGEMELDET und admin-only: die handelnde Person
+# steht im Verlauf/Audit (via=admin). Die Zustands-Maschine wird NICHT nachgebaut,
+# nur ihre Primitive (pa.apply_decision, engine.transition, pr.reject/send_back,
+# pactions.notify_*) werden wiederverwendet.
+
+def _persist_decision(row: dict, runtime: dict, values: Optional[dict]) -> dict:
+    """Entscheidung festschreiben, BEVOR sie wirkt (Einmaligkeit) – rev-geschützt.
+    Spiegelt api/v1/process_approval._persist_decision; `next_timer_due_at` muss
+    durchgereicht werden, sonst nullt `update_runtime` den Timer."""
+    fresh = store.update_runtime(
+        row["id"], runtime_json=json.dumps(runtime, ensure_ascii=False),
+        status=row["status"], next_timer_due_at=row.get("next_timer_due_at"),
+        expected_rev=row.get("rev"))
+    row = dict(fresh) if fresh else row
+    if values is not None:
+        fresh = store.update_values(row["id"], json.dumps(values, ensure_ascii=False),
+                                    expected_rev=row.get("rev"))
+        row = dict(fresh) if fresh else row
+    return row
+
+
+def _admin_reject(row: dict, defn, phase, reason: Optional[str], user: dict) -> dict:
+    """Endgültige Ablehnung (onReject ohne back_to). Spiegelt den Mail-Link-_reject,
+    aber mit der handelnden Person im Verlauf und der Terminal-Metrik wie der
+    angemeldete :reject-Weg."""
+    runtime = pr.reject(row["runtime"])
+    try:
+        fresh = store.update_runtime(row["id"],
+                                     runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                     status="rejected", expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+    if fresh:
+        row = dict(fresh)
+    from backend.metrics.process_metrics import record_process_terminal
+    record_process_terminal("rejected")
+    events.record(row, events.REJECTED, actor_id=user.get("id"),
+                  actor_name=_actor_name(user), phase_key=phase.key,
+                  details={"via": "admin"})
+    _melde_ablehnung(row, defn, reason or "", _actor_name(user))
+    return row
+
+
+def _admin_send_back(row: dict, defn, phase, ziel: Optional[str], reason: Optional[str],
+                     user: dict) -> dict:
+    """Rücksprung (onReject = back_to:<phase>). Spiegelt den Mail-Link-_send_back."""
+    try:
+        runtime, status = pr.send_back(defn, row["runtime"], utcnow_iso(), ziel or "",
+                                       row.get("values") or {})
+    except ValueError as exc:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, str(exc))
+    try:
+        fresh = store.update_runtime(row["id"],
+                                     runtime_json=json.dumps(runtime, ensure_ascii=False),
+                                     status=status, expected_rev=row.get("rev"))
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+    if fresh:
+        row = dict(fresh)
+    ziel_phase = pr.current_phase(defn, row.get("runtime") or {})
+    events.record(row, events.APPROVAL_SENT_BACK, actor_id=user.get("id"),
+                  actor_name=_actor_name(user), phase_key=phase.key,
+                  details={"to_phase": ziel, "via": "admin"})
+    engine.run_inline(row, defn, ziel_phase, {TriggerType.on_enter})
+    try:
+        pactions.notify_sent_back(row, defn, ziel_phase, reason=reason,
+                                  by_name=_actor_name(user))
+    except Exception:
+        logger.exception("Nachbesserungs-Mail für #%s fehlgeschlagen", row.get("id"))
+    _safe_restamp(row, defn)
+    return row
+
+
+def _apply_approval_decision(row: dict, defn, user: dict, phase, idx: int, *,
+                             act: str, reason: Optional[str]) -> dict:
+    spec = phase.approval
+    folge, ziel = pa.follow_up(spec) if act == pa.REJECT else ("advance", None)
+
+    # 1) Entscheidung FESTSCHREIBEN, bevor sie wirkt (Einmaligkeit). by = Admin-ID.
+    runtime, values = pa.apply_decision(row, spec, idx, act=act, reason=reason,
+                                        now_iso=utcnow_iso(),
+                                        by=user.get("id"), by_name=_actor_name(user))
+    try:
+        row = _persist_decision(row, runtime, values)
+    except store.ProcessTicketConflict as exc:
+        raise api_error(409, "TICKET_CONFLICT", str(exc))
+
+    # 2) Protokoll: Verlauf (best-effort) + eigene Audit-Zeile mit der handelnden
+    #    Person. Die Begründung steht nur dann im Verlaufs-Text, wenn sie NICHT in
+    #    ein Feld geht (§5.1: sonst Zweitkanal an der Feld-Sicht vorbei).
+    events.record(row, events.APPROVAL_DECIDED, actor_id=user.get("id"),
+                  actor_name=_actor_name(user), phase_key=phase.key,
+                  body=(None if spec.reasonField else reason),
+                  details={"act": act, "via": "admin", "follow_up": folge,
+                           "reason_in_field": bool(spec.reasonField and reason)})
+    record_audit(action="process_approval_decided", actor_id=user.get("id"),
+                 actor_name=_actor_name(user), actor_type="user",
+                 entity_type="process_ticket", entity_id=str(row["id"]),
+                 summary=f"Freigabe „{phase.label or phase.key}“ (Admin): {act}",
+                 details={"phase": phase.key, "act": act, "follow_up": folge,
+                          "target_phase": ziel, "via": "admin",
+                          "epoch": (row.get("runtime") or {}).get("epoch")})
+
+    # 3) Wirkung – dieselben Wege wie der Mail-Link. NIE pr.advance direkt: nur die
+    #    Engine lässt on_exit/on_enter, Nummernvergabe und Folge-Mail laufen.
+    if act == pa.APPROVE:
+        try:
+            engine.transition(row, defn, expected_rev=row.get("rev"), actor=user)
+        except store.ProcessTicketConflict as exc:
+            raise api_error(409, "TICKET_CONFLICT", str(exc))
+        except seq.SequenceError as exc:
+            raise _sequence_error(exc)
+        except engine.EmailConflict as exc:
+            raise _email_conflict_error(exc)
+        return row
+    if folge == "send_back":
+        return _admin_send_back(row, defn, phase, ziel, reason, user)
+    return _admin_reject(row, defn, phase, reason, user)
+
+
+class DecideApprovalRequest(BaseModel):
+    act: str            # "approve" | "reject"
+    reason: str = ""
+
+
+@router.post("/process-tickets/{ticket_id}:decide", response_model=DataResponse[ProcessTicketOut])
+def decide_approval(ticket_id: int, body: DecideApprovalRequest,
+                    user: dict = Depends(get_current_user)):
+    """Admin entscheidet über die Freigabe der AKTUELLEN Phase (genehmigen/ablehnen).
+
+    Nimmt exakt denselben Weg wie der Mail-Link (Entscheidung festschreiben →
+    Verlauf/Audit → Wirkung), nur angemeldet und admin-only. 409, wenn der Auftrag
+    nicht in einer offenen Freigabe steht oder bereits entschieden wurde; eine
+    Ablehnung folgt `approval.onReject` (Ablehnen oder Rücksprung)."""
+    row = _admin_row_or_error(ticket_id, user, "über eine Freigabe entscheiden")
+    if _is_terminal(row):
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag ist abgeschlossen/abgelehnt")
+    defn = _load_pinned_defn(row)
+    runtime = row.get("runtime") or {}
+    idx = int(runtime.get("current_index", 0))
+    phase = pr.current_phase(defn, runtime)
+    if phase is None or phase.kind != PhaseKind.approval or phase.approval is None:
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag steht nicht in einer Freigabe-Phase")
+    if pr.phase_decision(runtime, idx) is not None:
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Über diese Freigabe wurde bereits entschieden")
+    try:
+        act = pa.normalize_action(body.act)
+        grund = pa.normalize_reason(phase.approval, act, body.reason)
+    except pa.ApprovalError as exc:
+        pfad = "reason" if exc.code in ("reason_required", "reason_too_long") else "act"
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, exc.message,
+                        fields=[{"path": pfad, "code": exc.code.upper(), "message": exc.message}])
+    row = _apply_approval_decision(row, defn, user, phase, idx, act=act, reason=grund)
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn, gids), user, gids))
+
+
+@router.post("/process-tickets/{ticket_id}:resend-approval",
+             response_model=DataResponse[ProcessTicketOut])
+def resend_approval_mail(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Die Freigabe-Mail (JA/NEIN-Links + Anhänge) der AKTUELLEN Phase erneut senden.
+
+    Wie :remind, aber auf Freigabe-Phasen begrenzt und mit eigenem Verlaufs-/
+    Audit-Eintrag (approval_mail_resent). Die Links werden mit dem AKTUELLEN Epoch
+    neu erzeugt (ältere Links sterben). Best-effort wie :remind: die Mail ist beim
+    Protokollieren schon raus, ein Log-Fehler darf keinen 500 → Doppelversand
+    auslösen. 409 außerhalb einer offenen Freigabe-Phase."""
+    row = _admin_row_or_error(ticket_id, user, "die Freigabemail erneut senden")
+    if _is_terminal(row):
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag ist abgeschlossen/abgelehnt")
+    defn = _load_pinned_defn(row)
+    phase = pr.current_phase(defn, row.get("runtime") or {})
+    if phase is None or phase.kind != PhaseKind.approval or phase.approval is None:
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag steht nicht in einer Freigabe-Phase")
+    try:
+        recips = pactions.notify_phase_entry(row, defn, phase) or []
+    except Exception:
+        logger.exception("Freigabemail-Resend für #%s fehlgeschlagen", ticket_id)
+        recips = []
+    events.record(row, events.APPROVAL_MAIL_RESENT, actor_id=user.get("id"),
+                  actor_name=_actor_name(user), phase_key=phase.key,
+                  details={"phase": phase.key, "recipients": recips})
     gids = vis.user_group_ids(user)
     return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn, gids), user, gids))
 

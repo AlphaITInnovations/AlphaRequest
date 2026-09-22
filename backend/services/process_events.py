@@ -51,6 +51,8 @@ TITLE_CHANGED = "title_changed"
 APPROVAL_DECIDED = "approval_decided"
 APPROVAL_SENT_BACK = "approval_sent_back"
 APPROVAL_NO_RECIPIENT = "approval_no_recipient"
+#: Admin hat die Freigabe-Mail der aktuellen Phase erneut versendet.
+APPROVAL_MAIL_RESENT = "approval_mail_resent"
 
 
 def _audit(ticket_id: int, action: str, *, actor_id, actor_name, actor_type,

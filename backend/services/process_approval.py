@@ -237,6 +237,7 @@ def decision_values(spec: ApprovalSpec, values: dict, *, act: str,
 
 def apply_decision(row: dict, spec: ApprovalSpec, index: int, *, act: str,
                    reason: Optional[str], now_iso: str,
+                   by: Optional[str] = None,
                    by_name: str = ACTOR_NAME) -> tuple[dict, Optional[dict]]:
     """Entscheidung festschreiben: Runtime-Eintrag + optionale Feldwerte.
 
@@ -244,13 +245,17 @@ def apply_decision(row: dict, spec: ApprovalSpec, index: int, *, act: str,
     decisionField/reasonField nichts geändert hat – dann spart sich der Aufrufer
     einen Schreibvorgang.
 
+    `by` ist die ID der handelnden Person. Der Mail-Link-Weg hat keine (bleibt
+    None → im Runtime steht nur der Kanal-Name `by_name`); entscheidet dagegen ein
+    angemeldeter Admin im System, wird die echte User-ID mitgeschrieben.
+
     Reihenfolge im Aufrufer: ERST das hier persistieren, DANN die Wirkung
     (Weiterschalten/Ablehnen/Rücksprung) auslösen. Bricht etwas dazwischen ab,
     ist der Auftrag „entschieden, aber nicht weitergeschaltet“ – das kann ein
     Mensch korrigieren. Umgekehrt wäre eine Doppel-Ausführung möglich.
     """
     runtime = pr.set_phase_decision(
-        row.get("runtime") or {}, index, act=act, by=None, by_name=by_name,
+        row.get("runtime") or {}, index, act=act, by=by, by_name=by_name,
         at=now_iso,
         # Steht die Begründung in einem Feld, gehört sie NICHT zusätzlich in den
         # Runtime – der geht ungefiltert an jede Person mit Leserecht (§5.1).

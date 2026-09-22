@@ -158,6 +158,24 @@ export async function remindResponsible(id: number): Promise<ProcessTicketOut> {
   return data.data
 }
 
+/** Admin: über die Freigabe der AKTUELLEN Phase entscheiden (genehmigen/ablehnen).
+ *  Grund ist bei Ablehnung Pflicht, wenn der Prozess `requireReason` setzt – der
+ *  Server antwortet sonst mit 422. Eine Ablehnung folgt `approval.onReject`
+ *  (endgültig ablehnen oder Rücksprung). */
+export async function decideApproval(
+  id: number, act: 'approve' | 'reject', reason = '',
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:decide`, { act, reason })
+  return data.data
+}
+
+/** Admin: die Freigabe-Mail (JA/NEIN-Links + Anhänge) der aktuellen Phase erneut
+ *  senden. Die Links werden mit dem aktuellen Stand neu erzeugt. */
+export async function resendApprovalMail(id: number): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:resend-approval`)
+  return data.data
+}
+
 /** Admin: Auftragstitel korrigieren (jeder Status; steht im Verlauf). */
 export async function setTicketTitle(id: number, title: string): Promise<ProcessTicketOut> {
   const { data } = await client.post(`/process-tickets/${id}:set-title`, { title })

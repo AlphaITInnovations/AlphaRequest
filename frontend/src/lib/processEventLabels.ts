@@ -134,8 +134,9 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
     case 'approval_decided': {
       const act = str(ev.details?.act)
       const wie = act === 'approve' ? 'freigegeben' : act === 'reject' ? 'abgelehnt' : 'entschieden'
-      const via = str(ev.details?.via) === 'mail_link' ? ' (per Mail-Link)' : ''
-      return `Freigabe: ${wie}${via}`
+      const via = str(ev.details?.via)
+      const viaTxt = via === 'mail_link' ? ' (per Mail-Link)' : via === 'admin' ? ' (Admin)' : ''
+      return `Freigabe: ${wie}${viaTxt}`
     }
     case 'approval_sent_back':
       return `Zur Nachbesserung zurückgegeben (Phase „${phase(ev.details?.phase, ctx)}“)`
@@ -150,6 +151,13 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
       return n
         ? `Erinnerung gesendet (${n} Empfänger:in${n === 1 ? '' : 'nen'})`
         : 'Erinnerung gesendet'
+    }
+    case 'approval_mail_resent': {
+      const rec = ev.details?.recipients
+      const n = Array.isArray(rec) ? rec.length : 0
+      return n
+        ? `Freigabe-Mail erneut gesendet (${n} Empfänger:in${n === 1 ? '' : 'nen'})`
+        : 'Freigabe-Mail erneut gesendet'
     }
     case 'title_changed': {
       const to = str(ev.details?.to)
@@ -206,6 +214,7 @@ export function eventIcon(ev: ProcessEvent): string {
     case 'approval_sent_back': return 'reopen'
     case 'approval_no_recipient': return 'warn'
     case 'reminder_sent': return 'automation'
+    case 'approval_mail_resent': return 'automation'
     case 'title_changed': return 'edit'
     default: return 'dot'
   }

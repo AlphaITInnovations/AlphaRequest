@@ -591,6 +591,11 @@ export interface TicketAbilities {
   /** Darf das Dokument/den Vertrag einer Dokument-Phase sehen und exportieren
    *  (Vollsicht/Admin). Sonst nur ein Hinweis, dass es gerade erstellt wird. */
   export_document?: boolean
+  /** Admin-Eingriff in einer OFFENEN Freigabe-Phase (Admin-Ansicht): direkt
+   *  genehmigen/ablehnen (`decide_approval`, nur solange nicht entschieden) bzw.
+   *  die Freigabe-Mail erneut senden (`resend_approval`). */
+  decide_approval?: boolean
+  resend_approval?: boolean
 }
 
 export interface ProcessTicketOut {

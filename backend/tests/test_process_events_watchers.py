@@ -530,7 +530,8 @@ def test_abilities_fuer_zustaendige_fachabteilung(setup):
     # NICHT die zuständige Fachabteilung.
     assert a == {"edit": True, "internal_comment": True, "manage_watchers": False,
                  "attach": True, "reopen": False, "archive": False, "delete": False,
-                 "completable_departments": ["g_it"], "export_document": False}
+                 "completable_departments": ["g_it"], "export_document": False,
+                 "decide_approval": False, "resend_approval": False}
 
 
 def test_abilities_fuer_den_ersteller(setup):

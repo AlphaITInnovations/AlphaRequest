@@ -258,6 +258,80 @@ async function erinnern() {
   } finally { busy.value = false }
 }
 
+// ── Freigabe entscheiden / Freigabe-Mail erneut senden ───────────────────────
+// Nur wenn die AKTUELLE Phase eine offene Freigabe ist – der Server liefert die
+// Flags (Admin + Freigabe-Phase + noch nicht entschieden). Der Weg ist derselbe
+// wie beim Mail-Link (Entscheidung + onReject-Folge), nur angemeldet.
+
+const kannEntscheiden = computed(() => !!props.ticket.abilities?.decide_approval)
+const kannFreigabeMail = computed(() => !!props.ticket.abilities?.resend_approval)
+/** Steht der Auftrag (für mich als Admin) in einer OFFENEN Freigabe-Phase?
+ *  `resend_approval` gilt für die ganze offene Freigabe-Phase; `decide_approval`
+ *  fällt schon weg, sobald eine Entscheidung PERSISTIERT ist (auch im seltenen
+ *  „entschieden, aber nicht weitergeschaltet"-Zustand, wenn engine.transition nach
+ *  dem Festschreiben scheitert). Für das Ausblenden des generischen Ablehnens
+ *  brauchen wir „ist Freigabe-Phase", nicht „darf noch entscheiden". */
+const inFreigabe = computed(() => kannEntscheiden.value || kannFreigabeMail.value)
+
+/** Freigabe-Block der AKTUELLEN Phase (für Frage/Beschriftungen/Pflichtgrund). */
+const freigabeSpec = computed(() => {
+  const p = props.definition.phases.find((ph) => ph.key === props.ticket.current_phase)
+  return p?.approval ?? null
+})
+/** Ablehnung = Rücksprung statt endgültig (approval.onReject = back_to:<phase>). */
+const istRuecksprung = computed(() =>
+  (freigabeSpec.value?.onReject ?? '').startsWith('back_to:'))
+
+async function genehmigen() {
+  const frage = freigabeSpec.value?.question || 'Freigabe erteilen?'
+  if (!confirm(`Freigabe GENEHMIGEN?\n\n„${frage}"\n\n`
+    + 'Der Auftrag wird weitergeschaltet. Steht im Verlauf.')) return
+  busy.value = true
+  try {
+    await ticketsApi.decideApproval(props.ticket.id, 'approve')
+    showToast('Freigabe genehmigt')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Genehmigen fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+async function freigabeAblehnen() {
+  const pflicht = !!freigabeSpec.value?.requireReason
+  const grund = prompt(istRuecksprung.value
+    ? 'Freigabe ablehnen – zurück zur Nachbesserung.\nBegründung'
+      + (pflicht ? ' (Pflicht):' : ' (optional):')
+    : 'Freigabe ABLEHNEN.\nBegründung'
+      + (pflicht ? ' (Pflicht' : ' (optional')
+      + ', geht per Mail an die Ersteller:in und steht im Verlauf):')
+  if (grund === null) return
+  if (pflicht && !grund.trim()) {
+    showToast('Für die Ablehnung ist eine Begründung nötig', false); return
+  }
+  busy.value = true
+  try {
+    await ticketsApi.decideApproval(props.ticket.id, 'reject', grund.trim())
+    showToast(istRuecksprung.value ? 'Zur Nachbesserung zurückgegeben' : 'Freigabe abgelehnt')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Ablehnen fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+async function freigabeMailErneut() {
+  if (!confirm('Freigabe-Mail erneut senden?\n\nDie Entscheidungs-Mail (JA/NEIN-Links + '
+    + 'Anhänge) geht erneut an die zuständige Stelle. Ältere Links verlieren ihre '
+    + 'Gültigkeit. Kein Zustandswechsel.')) return
+  busy.value = true
+  try {
+    await ticketsApi.resendApprovalMail(props.ticket.id)
+    showToast('Freigabe-Mail erneut gesendet')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Freigabe-Mail konnte nicht gesendet werden')
+  } finally { busy.value = false }
+}
+
 // ── Titel bearbeiten ──────────────────────────────────────────────────────────
 
 const showTitle = ref(false)
@@ -320,6 +394,37 @@ const nextDueAt = computed(() => props.ticket.next_timer_due_at ?? null)
         <span class="text-gray-700 dark:text-gray-200">{{ fmtDateTime(nextDueAt) }}</span></span>
     </div>
 
+    <!-- Freigabe entscheiden (nur in einer OFFENEN Freigabe-Phase). Prominent, weil
+         das hier die eigentliche Aktion ist – nicht ein Notfall-Werkzeug. -->
+    <div v-if="inFreigabe"
+         class="rounded-xl border border-[#3EAAB8]/50 bg-[#3EAAB8]/[0.07] p-4 space-y-2.5">
+      <p class="text-sm font-medium text-gray-800 dark:text-gray-100">
+        📋 Freigabe dieser Phase
+        <span v-if="freigabeSpec?.question"
+              class="font-normal text-gray-500 dark:text-gray-400">— „{{ freigabeSpec.question }}"</span>
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <button v-if="kannEntscheiden" @click="genehmigen" :disabled="busy"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                       bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition">
+          ✅ {{ freigabeSpec?.approveLabel || 'Genehmigen' }}
+        </button>
+        <button v-if="kannEntscheiden" @click="freigabeAblehnen" :disabled="busy"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                       border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-300
+                       hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition">
+          {{ istRuecksprung ? '↩️ Zurück zur Nachbesserung'
+             : ('🚫 ' + (freigabeSpec?.rejectLabel || 'Ablehnen')) }}
+        </button>
+        <button v-if="kannFreigabeMail" @click="freigabeMailErneut" :disabled="busy"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                       border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                       hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+          ✉️ Freigabe-Mail erneut senden
+        </button>
+      </div>
+    </div>
+
     <div class="flex flex-wrap gap-2">
       <button v-if="zustFeld && !terminal" @click="showZust = !showZust" :disabled="busy"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
@@ -354,7 +459,13 @@ const nextDueAt = computed(() => props.ticket.next_timer_due_at ?? null)
                      hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
         ✏️ Titel bearbeiten
       </button>
-      <button v-if="!terminal" @click="ablehnen" :disabled="busy"
+      <!-- In einer offenen Freigabe-Phase führt die Ablehnung über die Freigabe-
+           Aktion oben (die die Entscheidung protokolliert und onReject/Rücksprung
+           beachtet) – der generische Reject bliebe daran vorbei. Deshalb an
+           `inFreigabe` (ganze offene Freigabe-Phase) gehängt, NICHT an
+           `kannEntscheiden`: sonst käme der Knopf im seltenen „entschieden, aber
+           nicht weitergeschaltet"-Zustand zurück und umginge onReject. -->
+      <button v-if="!terminal && !inFreigabe" @click="ablehnen" :disabled="busy"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
                      border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-300
                      hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition">
