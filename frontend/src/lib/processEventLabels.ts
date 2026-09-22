@@ -144,6 +144,17 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
       return 'Freigabe-Mail konnte nicht zugestellt werden – keine Verteiler-Adresse hinterlegt'
     case 'priority_changed':
       return 'Priorität geändert'
+    case 'reminder_sent': {
+      const rec = ev.details?.recipients
+      const n = Array.isArray(rec) ? rec.length : 0
+      return n
+        ? `Erinnerung gesendet (${n} Empfänger:in${n === 1 ? '' : 'nen'})`
+        : 'Erinnerung gesendet'
+    }
+    case 'title_changed': {
+      const to = str(ev.details?.to)
+      return to ? `Titel geändert: „${to}“` : 'Titel geändert'
+    }
     default:
       // Unbekannte Aktion ehrlich als Rohwert zeigen.
       return ev.action
@@ -194,6 +205,8 @@ export function eventIcon(ev: ProcessEvent): string {
     case 'approval_decided': return ev.details?.act === 'reject' ? 'reject' : 'check'
     case 'approval_sent_back': return 'reopen'
     case 'approval_no_recipient': return 'warn'
+    case 'reminder_sent': return 'automation'
+    case 'title_changed': return 'edit'
     default: return 'dot'
   }
 }

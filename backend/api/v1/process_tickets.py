@@ -701,6 +701,8 @@ class ArchiveRow(BaseModel):
     phase: Optional[str] = None
     phase_label: Optional[str] = None
     is_owner: bool = False
+    #: Ersteller:in – für das globale Archiv (Aufsicht) als Spalte/Filter nützlich.
+    owner_name: str = ""
     created_at: str = ""
     updated_at: str = ""
 
@@ -723,6 +725,9 @@ _ARCHIVE_SCAN_CAP = 2000
 @router.get("/process-tickets/archive", response_model=DataResponse[ArchivePage])
 def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Query(None),
                  status: Optional[str] = Query(None), process_key: Optional[str] = Query(None),
+                 created_by: Optional[str] = Query(None),
+                 date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                 date_field: str = Query("updated"), sort: str = Query("updated_desc"),
                  scope: str = Query("mine"), limit: int = Query(25, ge=1, le=100),
                  offset: int = Query(0, ge=0)):
     """Archiv (jeder Status), gleiche Struktur für zwei Reichweiten:
@@ -749,60 +754,84 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
         except Exception:
             logger.warning("Beobachtungen fürs Archiv nicht ladbar – fail-closed")
 
-    # Eine Zeile MEHR holen, um „genau cap" (vollständig) von „> cap" (gekürzt) zu
-    # unterscheiden – sonst meldete es bei exakt cap Aufträgen fälschlich truncated.
-    rows = store.list_all_lightweight(limit=_ARCHIVE_SCAN_CAP + 1)
-    truncated = len(rows) > _ARCHIVE_SCAN_CAP
-    rows = rows[:_ARCHIVE_SCAN_CAP]
-    # Günstige Vorfilter (reduzieren die Zeilen VOR der Beteiligungsprüfung).
-    if q:
-        ql = q.lower()
-        rows = [r for r in rows if ql in (r.get("title") or "").lower()]
-    if status:
-        sset = {s.strip() for s in status.split(",") if s.strip()}
-        if sset:
-            rows = [r for r in rows if r.get("status") in sset]
-    if process_key:
-        rows = [r for r in rows if r.get("process_key") == process_key]
-
     defn_cache: dict = {}
-    if global_scope:
-        # Aufsicht sieht ALLES – keine Beteiligungsprüfung.
-        included: set = {r["id"] for r in rows}
-    else:
-        # Beteiligung je Auftrag: Ersteller/Beobachter/aktuell zuständig ODER Gruppe/
-        # Fachabteilung in einer bereits ERREICHTEN Phase (nicht schon, weil sie laut
-        # Definition irgendwann zuständig wäre – archive_involved wertet die Runtime aus).
-        included = set()
-        for r in rows:
-            try:
-                defn = _load_pinned_defn(r, defn_cache)
-            except Exception:
-                defn = None
-            if acc.archive_involved(defn, r, user, gids, is_watcher=(r["id"] in watched)):
-                included.add(r["id"])
 
-    filtered = [r for r in rows if r["id"] in included]   # bewahrt updated_at-DESC
-    total = len(filtered)
-    page = filtered[offset:offset + limit]
-    items: list[ArchiveRow] = []
-    for r in page:
+    def _item(r: dict) -> ArchiveRow:
         try:
-            defn = _load_pinned_defn(r, defn_cache)       # on demand (global: erst hier)
+            defn = _load_pinned_defn(r, defn_cache)
         except Exception:
             defn = None
         phase = pr.current_phase(defn, r.get("runtime") or {}) if defn else None
-        items.append(ArchiveRow(
+        return ArchiveRow(
             id=r["id"], process_key=r["process_key"], process_version=r["process_version"],
             title=r.get("title") or "", status=r["status"],
             priority=r.get("priority") or "normal",
             phase=phase.key if phase else None,
             phase_label=(phase.label or phase.key) if phase else None,
             is_owner=bool(uid and r.get("owner_id") == uid),
+            owner_name=r.get("owner_name") or "",
             created_at=(r.get("created_at") or "")[:10],
-            updated_at=(r.get("updated_at") or "")[:10]))
-    return DataResponse(data=ArchivePage(items=items, total=total, limit=limit,
-                                         offset=offset, truncated=truncated))
+            updated_at=(r.get("updated_at") or "")[:10])
+
+    # GLOBAL (Aufsicht): keine Beteiligungsprüfung je Zeile → direkt in SQL
+    # filtern, sortieren und pagen. Skaliert auf beliebig viele Aufträge (kein
+    # 2000er-Deckel, kein Kürzen) – gerade die Datums-/Ersteller-Filter fänden
+    # sonst nur im Aktualitäts-Fenster.
+    if global_scope:
+        rows, total = store.list_global_archive(
+            status=[s.strip() for s in status.split(",") if s.strip()] if status else None,
+            process_key=process_key or None, created_by=created_by or None, q=q or None,
+            date_from=date_from or None, date_to=date_to or None,
+            date_field=date_field, sort=sort, limit=limit, offset=offset)
+        return DataResponse(data=ArchivePage(items=[_item(r) for r in rows], total=total,
+                                             limit=limit, offset=offset, truncated=False))
+
+    # PERSÖNLICH: Beteiligung läuft je Zeile in Python → gedeckelter Scan
+    # (`truncated` meldet, wenn die Grenze greift). Eine Zeile MEHR holen, um
+    # „genau cap" (vollständig) von „> cap" (gekürzt) zu unterscheiden.
+    rows = store.list_all_lightweight(limit=_ARCHIVE_SCAN_CAP + 1)
+    truncated = len(rows) > _ARCHIVE_SCAN_CAP
+    rows = rows[:_ARCHIVE_SCAN_CAP]
+    # Günstige Vorfilter (reduzieren die Zeilen VOR der Beteiligungsprüfung).
+    if q:
+        ql = q.lower()
+        rows = [r for r in rows if ql in (r.get("title") or "").lower()
+                or ql in f"#{r.get('id')}" or ql in str(r.get("id") or "")
+                or ql in (r.get("owner_name") or "").lower()]
+    if status:
+        sset = {s.strip() for s in status.split(",") if s.strip()}
+        if sset:
+            rows = [r for r in rows if r.get("status") in sset]
+    if process_key:
+        rows = [r for r in rows if r.get("process_key") == process_key]
+    if created_by:
+        cb = created_by.lower()
+        rows = [r for r in rows if cb in (r.get("owner_name") or "").lower()]
+    if date_from or date_to:
+        col = "created_at" if date_field == "created" else "updated_at"
+        lo = (date_from or "")[:10]
+        hi = (date_to or "")[:10]
+        rows = [r for r in rows
+                if (not lo or (r.get(col) or "")[:10] >= lo)
+                and (not hi or (r.get(col) or "")[:10] <= hi)]
+    included: set = set()
+    for r in rows:
+        try:
+            defn = _load_pinned_defn(r, defn_cache)
+        except Exception:
+            defn = None
+        if acc.archive_involved(defn, r, user, gids, is_watcher=(r["id"] in watched)):
+            included.add(r["id"])
+    filtered = [r for r in rows if r["id"] in included]   # bewahrt updated_at-DESC
+    _SORTS = {"updated_desc": ("updated_at", True), "updated_asc": ("updated_at", False),
+              "created_desc": ("created_at", True), "created_asc": ("created_at", False)}
+    sort_col, sort_rev = _SORTS.get(sort, ("updated_at", True))
+    if sort != "updated_desc":   # Default ist schon so sortiert
+        filtered.sort(key=lambda r: (str(r.get(sort_col) or ""), r["id"]), reverse=sort_rev)
+    total = len(filtered)
+    page = filtered[offset:offset + limit]
+    return DataResponse(data=ArchivePage(items=[_item(r) for r in page], total=total,
+                                         limit=limit, offset=offset, truncated=truncated))
 
 
 @router.get("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
@@ -1626,6 +1655,10 @@ class SetPhaseRequest(BaseModel):
     reason: str = ""
 
 
+class SetTitleRequest(BaseModel):
+    title: str
+
+
 class RawValuesRequest(BaseModel):
     values: dict
     reason: str = ""
@@ -1831,6 +1864,62 @@ def _admin_row_or_error(ticket_id: int, user: dict, aktion: str) -> dict:
     if not acc.is_admin(user):
         raise api_error(403, ErrorCode.ADMIN_REQUIRED, f"Nur Admins können {aktion}")
     return row
+
+
+@router.post("/process-tickets/{ticket_id}:remind", response_model=DataResponse[ProcessTicketOut])
+def remind_responsible(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Zuständigkeits-Benachrichtigung der AKTUELLEN Phase erneut auslösen (Nudge).
+
+    Für liegengebliebene Aufträge: dieselbe Mail wie beim Betreten der Phase geht
+    erneut an die zuständige Stelle (Freigabe-Phase: die Entscheidungs-Mail mit
+    Links; Beobachter:innen nur die Info-Mail). KEIN Zustandswechsel. Terminale
+    Aufträge haben keine zuständige Stelle → 409.
+    """
+    row = _admin_row_or_error(ticket_id, user, "eine Erinnerung senden")
+    if _is_terminal(row):
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Der Auftrag ist abgeschlossen/abgelehnt – es gibt keine zuständige Stelle")
+    defn = _load_pinned_defn(row)
+    phase = pr.current_phase(defn, row.get("runtime") or {})
+    try:
+        recips = pactions.notify_phase_entry(row, defn, phase) or []
+    except Exception:
+        logger.exception("Erinnerung für #%s fehlgeschlagen", ticket_id)
+        recips = []
+    # Die Mail ist bereits raus (unumkehrbar) – der Verlaufs-/Audit-Eintrag darf
+    # deshalb NICHT werfen: record() ist best-effort. Sonst käme nach dem Versand
+    # ein 500, und ein Retry schickte eine zweite Erinnerung.
+    events.record(row, events.REMINDER_SENT, actor_id=user.get("id"), actor_name=_actor_name(user),
+                  details={"phase": phase.key if phase else None, "recipients": recips})
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn, gids), user, gids))
+
+
+@router.post("/process-tickets/{ticket_id}:set-title", response_model=DataResponse[ProcessTicketOut])
+def set_process_ticket_title(ticket_id: int, body: SetTitleRequest,
+                             user: dict = Depends(get_current_user)):
+    """Auftragstitel korrigieren (Admin, jeder Status). Steht im Verlauf/Audit."""
+    row = _admin_row_or_error(ticket_id, user, "den Titel ändern")
+    new = (body.title or "").strip()
+    if not new:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Titel fehlt",
+                        fields=[{"path": "title", "code": "REQUIRED",
+                                 "message": "Bitte einen Titel angeben"}])
+    old = row.get("title") or ""
+    defn = _load_pinned_defn(row)
+    if new != old:
+        try:
+            # Werte unverändert lassen, nur den Titel setzen (values_json wird
+            # mitgeschrieben – deshalb den vorhandenen Bestand erneut serialisieren).
+            row = store.update_values(
+                ticket_id, values_json=json.dumps(row.get("values") or {}, ensure_ascii=False),
+                title=new, expected_rev=row.get("rev"))
+        except store.ProcessTicketConflict as exc:
+            raise api_error(409, "TICKET_CONFLICT", str(exc))
+        events.write(row, events.TITLE_CHANGED, actor_id=user.get("id"),
+                     actor_name=_actor_name(user), details={"from": old, "to": new})
+    gids = vis.user_group_ids(user)
+    return DataResponse(data=_out(row, defn, _read_ctx(user, row, defn, gids), user, gids))
 
 
 # Slash-Pfad statt `:aktion`-Suffix: Roh-Werte sind eine UNTER-RESSOURCE (wie

@@ -152,6 +152,18 @@ export async function archiveTicket(id: number, reason: string): Promise<Process
   return data.data
 }
 
+/** Admin: Zuständigkeits-Mail der aktuellen Phase erneut auslösen (Nudge). */
+export async function remindResponsible(id: number): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:remind`)
+  return data.data
+}
+
+/** Admin: Auftragstitel korrigieren (jeder Status; steht im Verlauf). */
+export async function setTicketTitle(id: number, title: string): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:set-title`, { title })
+  return data.data
+}
+
 /** Admin: Auftrag endgültig löschen. Der Audit-Eintrag überlebt die Löschung. */
 export async function deleteTicket(id: number): Promise<void> {
   await client.delete(`/process-tickets/${id}`)

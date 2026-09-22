@@ -320,6 +320,15 @@ class FakeStore:
     def set_next_timer(self, tid, v, expected_rev=None):
         self.rows[tid]["next_timer_due_at"] = v
 
+    def update_values(self, tid, values_json, title=None, expected_rev=None):
+        r = self.rows[tid]
+        r["values"] = json.loads(values_json)
+        r["values_json"] = values_json
+        if title is not None:
+            r["title"] = title
+        r["rev"] += 1
+        return dict(r)
+
 
 class FakeDefs:
     def get_definition(self, key, ver):
@@ -660,3 +669,58 @@ def test_abilities_nennen_die_notfallaktionen(setup):
     state["user"] = dict(ITLER)
     b = client.get("/process-tickets/7").json()["data"]["abilities"]
     assert b["archive"] is False and b["delete"] is False
+
+
+# ── Admin-Betriebswerkzeuge: Erinnerung + Titel ──────────────────────────────
+
+def test_remind_nur_admin(setup):
+    client, state, *_ = setup
+    state["user"] = dict(OWNER)
+    assert client.post("/process-tickets/7:remind").status_code == 403
+
+
+def test_remind_schreibt_verlaufseintrag(setup, monkeypatch):
+    client, state, store, evstore, _w = setup
+    # notify_phase_entry ist in setup auf [] gepatcht – die Empfänger sind hier egal.
+    state["user"] = dict(ADMIN)
+    r = client.post("/process-tickets/7:remind")
+    assert r.status_code == 200
+    assert any(e["action"] == "reminder_sent" for e in evstore.rows)
+
+
+def test_remind_terminal_409(setup):
+    client, state, store, *_ = setup
+    store.rows[7]["status"] = "archived"
+    state["user"] = dict(ADMIN)
+    assert client.post("/process-tickets/7:remind").status_code == 409
+
+
+def test_set_title_nur_admin(setup):
+    client, state, *_ = setup
+    state["user"] = dict(OWNER)
+    assert client.post("/process-tickets/7:set-title", json={"title": "Neu"}).status_code == 403
+
+
+def test_set_title_leer_422(setup):
+    client, state, *_ = setup
+    state["user"] = dict(ADMIN)
+    assert client.post("/process-tickets/7:set-title", json={"title": "   "}).status_code == 422
+
+
+def test_set_title_aendert_und_auditiert(setup):
+    client, state, store, evstore, _w = setup
+    state["user"] = dict(ADMIN)
+    r = client.post("/process-tickets/7:set-title", json={"title": "Korrigierter Titel"})
+    assert r.status_code == 200
+    assert r.json()["data"]["title"] == "Korrigierter Titel"
+    assert store.rows[7]["title"] == "Korrigierter Titel"
+    ev = [e for e in evstore.rows if e["action"] == "title_changed"]
+    assert ev and ev[0]["details"]["to"] == "Korrigierter Titel"
+
+
+def test_set_title_terminal_erlaubt(setup):
+    # Titel darf auch bei abgeschlossenen Aufträgen korrigiert werden.
+    client, state, store, *_ = setup
+    store.rows[7]["status"] = "archived"
+    state["user"] = dict(ADMIN)
+    assert client.post("/process-tickets/7:set-title", json={"title": "X"}).status_code == 200

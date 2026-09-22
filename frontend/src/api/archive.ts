@@ -19,6 +19,8 @@ export interface ArchiveRow {
   phase: string | null
   phase_label: string | null
   is_owner: boolean
+  /** Ersteller:in (für das globale Archiv als Spalte/Filter). */
+  owner_name: string
   created_at: string
   updated_at: string
 }
@@ -32,9 +34,14 @@ export interface ArchivePage {
   truncated: boolean
 }
 
+export type ArchiveSort = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc'
+
 export async function listArchive(
   params: {
     q?: string; status?: string[]; process_key?: string
+    /** Nur globales Archiv (Aufsicht): Ersteller-Substring, Datumsbereich, Sortierung. */
+    created_by?: string; date_from?: string; date_to?: string
+    date_field?: 'created' | 'updated'; sort?: ArchiveSort
     scope?: 'mine' | 'global'; limit?: number; offset?: number
   } = {},
 ): Promise<ArchivePage> {

@@ -188,6 +188,30 @@ class FakeStore:
     def list_all_lightweight(self, limit=2000, include_runtime=True):
         return [dict(r) for r in self.rows.values()][:limit]
 
+    def list_global_archive(self, *, status=None, process_key=None, created_by=None, q=None,
+                            date_from=None, date_to=None, date_field="updated",
+                            sort="updated_desc", limit=25, offset=0):
+        rows = [dict(r) for r in self.rows.values()]
+        if status:
+            rows = [r for r in rows if r.get("status") in status]
+        if process_key:
+            rows = [r for r in rows if r.get("process_key") == process_key]
+        if created_by:
+            cb = created_by.lower()
+            rows = [r for r in rows if cb in str(r.get("owner_name") or "").lower()]
+        if q:
+            ql = q.lower()
+            rows = [r for r in rows if ql in str(r.get("title") or "").lower()
+                    or ql in str(r.get("owner_name") or "").lower() or ql in str(r.get("id"))]
+        col = "created_at" if date_field == "created" else "updated_at"
+        if date_from:
+            rows = [r for r in rows if str(r.get(col) or "")[:10] >= date_from[:10]]
+        if date_to:
+            rows = [r for r in rows if str(r.get(col) or "")[:10] <= date_to[:10]]
+        scol = "created_at" if sort.startswith("created") else "updated_at"
+        rows.sort(key=lambda r: (str(r.get(scol) or ""), r["id"]), reverse=sort.endswith("desc"))
+        return rows[offset:offset + limit], len(rows)
+
     def values_for_tickets(self, ids):
         return {int(i): dict(self.rows[int(i)]["values"]) for i in ids if int(i) in self.rows}
 

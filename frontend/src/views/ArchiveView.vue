@@ -14,7 +14,7 @@ import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
-import { listArchive, type ArchiveRow } from '@/api/archive'
+import { listArchive, type ArchiveRow, type ArchiveSort } from '@/api/archive'
 import { archiveTicket, deleteTicket } from '@/api/processTickets'
 import { listProcesses } from '@/api/processes'
 import { STATUS_LABEL } from '@/lib/processSchema'
@@ -41,13 +41,40 @@ const statuses = ref<string[]>([])
 const processKey = ref('')
 const katalog = ref<{ key: string; name: string }[]>([])
 
+// Zusatz-Filter NUR im globalen Archiv (Aufsicht): Ersteller, Zeitraum, Sortierung.
+const createdBy = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
+const dateField = ref<'created' | 'updated'>('updated')
+const sort = ref<ArchiveSort>('updated_desc')
+
 function toggleStatus(s: string) {
   statuses.value = statuses.value.includes(s)
     ? statuses.value.filter((x) => x !== s)
     : [...statuses.value, s]
 }
-function reset() { statuses.value = []; processKey.value = ''; q.value = '' }
-const hatFilter = computed(() => !!(statuses.value.length || processKey.value || q.value.trim()))
+function reset() {
+  statuses.value = []; processKey.value = ''; q.value = ''
+  createdBy.value = ''; dateFrom.value = ''; dateTo.value = ''
+  dateField.value = 'updated'; sort.value = 'updated_desc'
+}
+const hatFilter = computed(() => !!(
+  statuses.value.length || processKey.value || q.value.trim()
+  || createdBy.value.trim() || dateFrom.value || dateTo.value
+  || sort.value !== 'updated_desc' || dateField.value !== 'updated'))
+
+/** Schnellwahl: die letzten N Tage (bis heute) auf das gewählte Datumsfeld.
+ *  LOKALES Datum (nicht UTC) – sonst läge der Bereich nachts einen Tag daneben
+ *  und passte nicht zum, was der Datums-Picker zeigt. */
+function quickRange(days: number) {
+  const p = (n: number) => String(n).padStart(2, '0')
+  const iso = (d: Date) => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  const to = new Date()
+  const from = new Date()
+  from.setDate(from.getDate() - days)
+  dateFrom.value = iso(from)
+  dateTo.value = iso(to)
+}
 
 const STATUS_CLASS: Record<string, string> = {
   in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
@@ -133,6 +160,12 @@ async function load() {
       q: q.value.trim() || undefined,
       status: statuses.value.length ? statuses.value : undefined,
       process_key: processKey.value || undefined,
+      // Zusatz-Filter gelten nur im globalen Archiv (im UI nur dort sichtbar).
+      created_by: isGlobal.value ? (createdBy.value.trim() || undefined) : undefined,
+      date_from: isGlobal.value ? (dateFrom.value || undefined) : undefined,
+      date_to: isGlobal.value ? (dateTo.value || undefined) : undefined,
+      date_field: isGlobal.value ? dateField.value : undefined,
+      sort: isGlobal.value ? sort.value : undefined,
       limit: PAGE, offset: offset.value,
     })
     if (mine !== reqSeq) return
@@ -161,21 +194,20 @@ function open(row: ArchiveRow) {
 function vor() { if (hatVor.value) { offset.value = Math.max(0, offset.value - PAGE); load() } }
 function weiter() { if (hatWeiter.value) { offset.value += PAGE; load() } }
 
-// Suche: bei Eingabe zurück auf Seite 1 (entprellt).
+// Suche (+ Ersteller-Suche): bei Eingabe zurück auf Seite 1 (entprellt).
 let suchTimer: ReturnType<typeof setTimeout> | null = null
-watch(q, () => {
+watch([q, createdBy], () => {
   if (suchTimer) clearTimeout(suchTimer)
   suchTimer = setTimeout(() => { offset.value = 0; load() }, 300)
 })
-// Status/Prozess: sofort neu laden (zurück auf Seite 1).
-watch([statuses, processKey], () => { offset.value = 0; load() })
+// Status/Prozess/Zeitraum/Sortierung: sofort neu laden (zurück auf Seite 1).
+watch([statuses, processKey, dateFrom, dateTo, dateField, sort],
+      () => { offset.value = 0; load() })
 // Reichweite gewechselt (persönlich ↔ global): Vue Router verwendet DIESELBE
 // Komponente wieder, onMounted läuft nicht erneut. Beide Archive sind unabhängig →
 // Filter/Seite zurücksetzen und mit dem neuen Scope frisch laden.
 watch(() => props.scope, () => {
-  statuses.value = []
-  processKey.value = ''
-  q.value = ''
+  reset()
   offset.value = 0
   load()
 })
@@ -245,6 +277,36 @@ onMounted(async () => {
         </button>
       </div>
 
+      <!-- Zusatz-Filter der Aufsicht (nur globales Archiv): Ersteller, Zeitraum,
+           Sortierung. Im persönlichen Archiv bewusst ausgeblendet (dort ist alles
+           „von mir"). -->
+      <div v-if="isGlobal" class="flex items-center gap-2 flex-wrap mb-4">
+        <input v-model="createdBy" type="search" placeholder="Ersteller:in…"
+               class="afi !py-1 text-sm w-auto" />
+        <div class="flex items-center gap-1">
+          <select v-model="dateField" class="afi !py-1 text-sm w-auto" title="Datumsfeld">
+            <option value="updated">Geändert</option>
+            <option value="created">Erstellt</option>
+          </select>
+          <input v-model="dateFrom" type="date" class="afi !py-1 text-sm w-auto" title="von" />
+          <span class="text-gray-400 text-sm">–</span>
+          <input v-model="dateTo" type="date" class="afi !py-1 text-sm w-auto" title="bis" />
+        </div>
+        <div class="flex items-center gap-1">
+          <button v-for="d in [7, 30, 90]" :key="d" type="button" @click="quickRange(d)"
+                  class="text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-white/15
+                         text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition">
+            {{ d }} T
+          </button>
+        </div>
+        <select v-model="sort" class="afi !py-1 text-sm w-auto ml-auto" title="Sortierung">
+          <option value="updated_desc">Zuletzt geändert</option>
+          <option value="updated_asc">Zuerst geändert</option>
+          <option value="created_desc">Neueste zuerst</option>
+          <option value="created_asc">Älteste zuerst</option>
+        </select>
+      </div>
+
       <div v-if="truncated"
            class="mb-3 rounded-xl border border-amber-200 dark:border-amber-500/30
                   bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
@@ -302,8 +364,10 @@ onMounted(async () => {
               </p>
               <div class="text-xs text-gray-400 flex items-center gap-2 flex-wrap mt-0.5">
                 <span>#{{ r.id }}</span>
-                <span v-if="r.is_owner" class="text-[#3EAAB8]">· von mir angelegt</span>
+                <span v-if="isGlobal && r.owner_name">· von {{ r.owner_name }}</span>
+                <span v-else-if="r.is_owner" class="text-[#3EAAB8]">· von mir angelegt</span>
                 <span v-if="!terminal(r.status) && r.phase_label">· {{ r.phase_label }}</span>
+                <span v-if="isGlobal">· erstellt {{ r.created_at }}</span>
                 <span>· aktualisiert {{ r.updated_at }}</span>
               </div>
             </div>

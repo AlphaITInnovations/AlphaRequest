@@ -124,6 +124,61 @@ def list_tickets(*, status: Optional[str] = None, process_key: Optional[str] = N
     return [_row_to_dict(r) for r in rows], total
 
 
+_ARCHIVE_SORTS = {
+    "updated_desc": "updated_at DESC, id DESC",
+    "updated_asc": "updated_at ASC, id ASC",
+    "created_desc": "created_at DESC, id DESC",
+    "created_asc": "created_at ASC, id ASC",
+}
+
+
+def list_global_archive(*, status: Optional[list] = None, process_key: Optional[str] = None,
+                        created_by: Optional[str] = None, q: Optional[str] = None,
+                        date_from: Optional[str] = None, date_to: Optional[str] = None,
+                        date_field: str = "updated", sort: str = "updated_desc",
+                        limit: int = 25, offset: int = 0) -> tuple[list[dict], int]:
+    """Globales Archiv (Aufsicht): serverseitig gefiltert, sortiert und gepaged.
+
+    ANDERS als das persönliche Archiv (das je Zeile in Python auf Beteiligung
+    prüft und deshalb einen 2000er-Scan deckelt) hat das globale Archiv KEINE
+    Zeilen-Prüfung – deshalb kann es direkt in SQL filtern/sortieren/pagen und
+    skaliert auf beliebig viele Aufträge (kein Kürzen). Suche trifft Titel,
+    Ersteller-Name und die ID; Datumsbereich tagesgenau (inklusive) auf Erstell-
+    oder Änderungsdatum."""
+    where: list = []
+    params: list = []
+    if status:
+        where.append("status IN (" + ", ".join(["%s"] * len(status)) + ")")
+        params.extend(status)
+    if process_key:
+        where.append("process_key=%s"); params.append(process_key)
+    if created_by:
+        where.append("owner_name LIKE %s"); params.append(f"%{created_by}%")
+    if q:
+        where.append("(title LIKE %s OR owner_name LIKE %s OR CAST(id AS CHAR) LIKE %s)")
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+    date_col = "created_at" if date_field == "created" else "updated_at"
+    if date_from:
+        where.append(f"{date_col} >= %s"); params.append(f"{date_from[:10]} 00:00:00")
+    if date_to:
+        where.append(f"{date_col} <= %s"); params.append(f"{date_to[:10]} 23:59:59")
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    order = _ARCHIVE_SORTS.get(sort, _ARCHIVE_SORTS["updated_desc"])
+    conn = get_connection()
+    try:
+        total_row = _fetchone(conn, f"SELECT COUNT(*) AS n FROM process_tickets{clause}", tuple(params))
+        total = int(total_row["n"]) if total_row else 0
+        rows = _fetchall(
+            conn,
+            f"SELECT {_LIST_COLS_RUNTIME} FROM process_tickets{clause} "
+            f"ORDER BY {order} LIMIT %s OFFSET %s",
+            tuple(params) + (limit, offset),
+        )
+    finally:
+        conn.close()
+    return [_row_to_list_dict(r) for r in rows], total
+
+
 # ── Write ───────────────────────────────────────────────────────────────────
 
 def create(*, process_key: str, process_version: int, title: str, status: str,

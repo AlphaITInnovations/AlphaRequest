@@ -242,6 +242,59 @@ async function loeschen() {
     busy.value = false
   }
 }
+
+// ── Erinnerung an die zuständige Stelle (Nudge) ──────────────────────────────
+
+async function erinnern() {
+  if (!confirm('Erinnerung senden?\n\nDie Zuständigkeits-Mail der aktuellen Phase wird '
+    + 'erneut ausgelöst (bei Freigabe-Phasen die Entscheidungs-Mail). Kein Zustandswechsel.')) return
+  busy.value = true
+  try {
+    await ticketsApi.remindResponsible(props.ticket.id)
+    showToast('Erinnerung gesendet')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Erinnerung konnte nicht gesendet werden')
+  } finally { busy.value = false }
+}
+
+// ── Titel bearbeiten ──────────────────────────────────────────────────────────
+
+const showTitle = ref(false)
+const titleText = ref('')
+function titelOeffnen() { titleText.value = props.ticket.title || ''; showTitle.value = true }
+
+async function titelSpeichern() {
+  const t = titleText.value.trim()
+  if (!t) { showToast('Der Titel darf nicht leer sein', false); return }
+  busy.value = true
+  try {
+    await ticketsApi.setTicketTitle(props.ticket.id, t)
+    showTitle.value = false
+    showToast('Titel geändert')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Titel konnte nicht geändert werden')
+  } finally { busy.value = false }
+}
+
+// ── Fälligkeit / Timing (nur Anzeige) ─────────────────────────────────────────
+
+function fmtDateTime(ts: string | null | undefined): string {
+  if (!ts) return '—'
+  const s = ts.endsWith('Z') || /[+-]\d\d:\d\d$/.test(ts) ? ts : `${ts}Z`
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? ts : d.toLocaleString('de-DE',
+    { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+/** „In dieser Phase seit": Eintrittszeitpunkt der aktuellen Phase aus der Runtime. */
+const phaseEnteredAt = computed(() => {
+  const rt = props.ticket.runtime
+  const i = rt?.current_index ?? 0
+  return rt?.phases?.[i]?.entered_at ?? null
+})
+/** Nächster Timer (Erinnerung/Eskalation), den der Scheduler feuern wird. */
+const nextDueAt = computed(() => props.ticket.next_timer_due_at ?? null)
 </script>
 
 <template>
@@ -259,6 +312,14 @@ async function loeschen() {
       </span>
     </div>
 
+    <!-- Timing (nur Anzeige): wie lange schon in dieser Phase + nächster Timer. -->
+    <div class="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+      <span>🕒 In dieser Phase seit:
+        <span class="text-gray-700 dark:text-gray-200">{{ fmtDateTime(phaseEnteredAt) }}</span></span>
+      <span>⏰ Nächste Erinnerung/Eskalation:
+        <span class="text-gray-700 dark:text-gray-200">{{ fmtDateTime(nextDueAt) }}</span></span>
+    </div>
+
     <div class="flex flex-wrap gap-2">
       <button v-if="zustFeld && !terminal" @click="showZust = !showZust" :disabled="busy"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
@@ -270,6 +331,12 @@ async function loeschen() {
                      bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition">
         {{ terminal ? '🔓 Wiedereröffnen' : '🔀 Phase wechseln' }}
       </button>
+      <button v-if="!terminal" @click="erinnern" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                     hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+        🔔 Erinnerung senden
+      </button>
       <button v-if="abteilungen.length && !terminal" @click="showDept = !showDept" :disabled="busy"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
                      bg-[#3EAAB8] hover:bg-[#2B7D89] text-white disabled:opacity-50 transition">
@@ -280,6 +347,12 @@ async function loeschen() {
                      border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
                      hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
         🧬 Raw-JSON bearbeiten
+      </button>
+      <button @click="titelOeffnen" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                     hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+        ✏️ Titel bearbeiten
       </button>
       <button v-if="!terminal" @click="ablehnen" :disabled="busy"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
@@ -418,6 +491,29 @@ async function loeschen() {
         <div class="flex justify-end gap-2">
           <button @click="showRaw = false" class="btn-secondary text-sm">Abbrechen</button>
           <button @click="rawSpeichern" :disabled="busy" class="btn-primary text-sm">
+            {{ busy ? 'Wird gespeichert…' : 'Speichern' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Titel bearbeiten (Modal) -->
+    <div v-if="showTitle" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/50" @click="showTitle = false" />
+      <div class="relative w-full max-w-lg rounded-2xl bg-white dark:bg-[#212B3A]
+                  border border-gray-200 dark:border-white/10 shadow-xl p-6 space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">✏️</span>
+          <h3 class="font-semibold text-gray-900 dark:text-white">Titel bearbeiten</h3>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Korrigiert den Auftragstitel (z. B. falsch generiert). Die Änderung steht im Verlauf.
+        </p>
+        <input v-model="titleText" class="afi w-full" maxlength="300"
+               placeholder="Auftragstitel" @keyup.enter="titelSpeichern" />
+        <div class="flex justify-end gap-2">
+          <button @click="showTitle = false" class="btn-secondary text-sm">Abbrechen</button>
+          <button @click="titelSpeichern" :disabled="busy" class="btn-primary text-sm">
             {{ busy ? 'Wird gespeichert…' : 'Speichern' }}
           </button>
         </div>
