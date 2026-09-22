@@ -612,29 +612,6 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                           :definition="definition" :ticket="ticket" :phase="phase"
                           :sources="sources" :readonly="!abilities.edit" />
 
-            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle).
-                 In Dokument-Phasen normalerweise NICHT (leeres Layout → nur die
-                 Gesamt-Leseansicht unten). Ausnahme: hat die Dokument-Phase eigene
-                 editierbare Felder (z. B. Fuhrpark im Arbeitsvertrag), erscheint
-                 zusätzlich zum Dokument ein Formular zum Anpassen – gespeicherte
-                 Änderungen fließen in die erzeugten Dokumente. -->
-            <template v-if="showPhaseForm && phase">
-              <SchemaForm :definition="definition" :phase="phase" :model-value="values"
-                          :viewer="viewer" :errors="errors" :sources="sources"
-                          :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
-                          @update:model-value="onValues($event)" />
-              <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst. -->
-              <div v-if="generalErrors.length"
-                   class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
-                          px-4 py-3 text-sm text-red-800 dark:text-red-200">
-                <ul class="list-disc list-inside">
-                  <li v-for="(e, i) in generalErrors" :key="i">
-                    <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
-                  </li>
-                </ul>
-              </div>
-            </template>
-
             <!-- Export-Phase: druckbare Zusammenfassung. Sonst die vollständige
                  Leseansicht – nur, wenn nicht bearbeitet wird (das Formular zeigt die
                  Felder sonst schon; die Dokument-Karten stehen ohnehin davor). -->
@@ -654,6 +631,29 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                                   :sources="sources" :ticket-id="ticket.id" :view="viewParams.view"
                                   :exclude-keys="phaseFormKeys" />
             </div>
+
+            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle). In
+                 normalen Phasen die einzige Arbeitsfläche; in Dokument-Phasen mit
+                 eigenen editierbaren Feldern (z. B. Fuhrpark im Arbeitsvertrag)
+                 steht es BEWUSST UNTER „Alle Angaben" – oben die Dokumente, dann
+                 die Gesamt-Übersicht, dann der bearbeitbare Abschnitt. Gespeicherte
+                 Änderungen fließen in die erzeugten Dokumente. -->
+            <template v-if="showPhaseForm && phase">
+              <SchemaForm :definition="definition" :phase="phase" :model-value="values"
+                          :viewer="viewer" :errors="errors" :sources="sources"
+                          :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
+                          @update:model-value="onValues($event)" />
+              <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst. -->
+              <div v-if="generalErrors.length"
+                   class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
+                          px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                <ul class="list-disc list-inside">
+                  <li v-for="(e, i) in generalErrors" :key="i">
+                    <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
+                  </li>
+                </ul>
+              </div>
+            </template>
 
             <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen
                  Anhänge ausschließlich über konfigurierte Anhang-Felder
