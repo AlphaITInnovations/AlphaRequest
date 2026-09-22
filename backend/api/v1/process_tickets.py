@@ -202,14 +202,14 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
     gids = set(group_ids or ())
     darf_bearbeiten = acc.may_edit(defn, row, user, gids) and not _is_terminal(row)
     ist_owner = bool(user.get("id")) and row.get("owner_id") == user.get("id")
-    # Freigabe-Eingriff (Admin): nur wenn die AKTUELLE Phase eine offene Freigabe
-    # ist. `decide_approval` fällt weg, sobald entschieden wurde (die Phase ist dann
-    # ohnehin schon weiter – doppelte Absicherung gegen ein Rennen mit dem Mail-Link).
+    # Offene Freigabe-Phase? ENTSCHEIDEN darf die zuständige Stelle (may_edit =
+    # darf_bearbeiten) – wie der Mail-Link, nur angemeldet; `decide_approval` fällt
+    # weg, sobald entschieden wurde (doppelte Absicherung gegen ein Rennen mit dem
+    # Mail-Link). Die Freigabe-Mail ERNEUT SENDEN bleibt ein Admin-Betriebswerkzeug.
     rt = row.get("runtime") or {}
     cur_phase = pr.current_phase(defn, rt) if defn else None
-    ist_freigabe = bool(cur_phase is not None and cur_phase.kind == PhaseKind.approval
-                        and cur_phase.approval is not None
-                        and not _is_terminal(row) and acc.is_admin(user))
+    ist_freigabe_phase = bool(cur_phase is not None and cur_phase.kind == PhaseKind.approval
+                              and cur_phase.approval is not None and not _is_terminal(row))
     return TicketAbilities(
         edit=darf_bearbeiten,
         internal_comment=acc.is_process_staff(defn, user, gids),
@@ -225,8 +225,9 @@ def _abilities(row: dict, defn: Optional[ProcessDefinition], user: Optional[dict
         delete=acc.is_admin(user),
         completable_departments=completable_departments or [],
         export_document=can_export_document,
-        decide_approval=ist_freigabe and pr.phase_decision(rt, rt.get("current_index", 0)) is None,
-        resend_approval=ist_freigabe,
+        decide_approval=(ist_freigabe_phase and darf_bearbeiten
+                         and pr.phase_decision(rt, rt.get("current_index", 0)) is None),
+        resend_approval=ist_freigabe_phase and acc.is_admin(user),
     )
 
 
@@ -2167,7 +2168,8 @@ def _apply_approval_decision(row: dict, defn, user: dict, phase, idx: int, *,
     spec = phase.approval
     folge, ziel = pa.follow_up(spec) if act == pa.REJECT else ("advance", None)
 
-    # 1) Entscheidung FESTSCHREIBEN, bevor sie wirkt (Einmaligkeit). by = Admin-ID.
+    # 1) Entscheidung FESTSCHREIBEN, bevor sie wirkt (Einmaligkeit). by = die ID der
+    #    handelnden Person (zuständige Stelle ODER Admin).
     runtime, values = pa.apply_decision(row, spec, idx, act=act, reason=reason,
                                         now_iso=utcnow_iso(),
                                         by=user.get("id"), by_name=_actor_name(user))
@@ -2177,19 +2179,20 @@ def _apply_approval_decision(row: dict, defn, user: dict, phase, idx: int, *,
         raise api_error(409, "TICKET_CONFLICT", str(exc))
 
     # 2) Protokoll: Verlauf (best-effort) + eigene Audit-Zeile mit der handelnden
-    #    Person. Die Begründung steht nur dann im Verlaufs-Text, wenn sie NICHT in
-    #    ein Feld geht (§5.1: sonst Zweitkanal an der Feld-Sicht vorbei).
+    #    Person. via="in_app" trennt den angemeldeten Weg vom Mail-Link; WER
+    #    entschied (zuständige Stelle/Admin) sagt die actor-Angabe. Die Begründung
+    #    steht nur im Verlaufs-Text, wenn sie NICHT in ein Feld geht (§5.1).
     events.record(row, events.APPROVAL_DECIDED, actor_id=user.get("id"),
                   actor_name=_actor_name(user), phase_key=phase.key,
                   body=(None if spec.reasonField else reason),
-                  details={"act": act, "via": "admin", "follow_up": folge,
+                  details={"act": act, "via": "in_app", "follow_up": folge,
                            "reason_in_field": bool(spec.reasonField and reason)})
     record_audit(action="process_approval_decided", actor_id=user.get("id"),
                  actor_name=_actor_name(user), actor_type="user",
                  entity_type="process_ticket", entity_id=str(row["id"]),
-                 summary=f"Freigabe „{phase.label or phase.key}“ (Admin): {act}",
+                 summary=f"Freigabe „{phase.label or phase.key}“ (im System): {act}",
                  details={"phase": phase.key, "act": act, "follow_up": folge,
-                          "target_phase": ziel, "via": "admin",
+                          "target_phase": ziel, "via": "in_app",
                           "epoch": (row.get("runtime") or {}).get("epoch")})
 
     # 3) Wirkung – dieselben Wege wie der Mail-Link. NIE pr.advance direkt: nur die
@@ -2217,17 +2220,22 @@ class DecideApprovalRequest(BaseModel):
 @router.post("/process-tickets/{ticket_id}:decide", response_model=DataResponse[ProcessTicketOut])
 def decide_approval(ticket_id: int, body: DecideApprovalRequest,
                     user: dict = Depends(get_current_user)):
-    """Admin entscheidet über die Freigabe der AKTUELLEN Phase (genehmigen/ablehnen).
+    """Über die Freigabe der AKTUELLEN Phase entscheiden (genehmigen/ablehnen).
 
-    Nimmt exakt denselben Weg wie der Mail-Link (Entscheidung festschreiben →
-    Verlauf/Audit → Wirkung), nur angemeldet und admin-only. 409, wenn der Auftrag
-    nicht in einer offenen Freigabe steht oder bereits entschieden wurde; eine
-    Ablehnung folgt `approval.onReject` (Ablehnen oder Rücksprung)."""
-    row = _admin_row_or_error(ticket_id, user, "über eine Freigabe entscheiden")
+    Der authentifizierte Zwilling des Mail-Links: dieselbe zuständige Stelle, die
+    die Entscheidungs-Mail bekäme, kann hier direkt im Web entscheiden – Admins
+    dürfen ebenso (may_edit = zuständig ODER Admin). Nimmt exakt denselben Weg
+    (festschreiben → Verlauf/Audit → Wirkung). 409, wenn der Auftrag nicht in einer
+    offenen Freigabe steht oder bereits entschieden wurde; eine Ablehnung folgt
+    `approval.onReject` (Ablehnen oder Rücksprung)."""
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    defn = _load_pinned_defn(row)
+    _assert_edit(row, defn, user)   # zuständige Stelle ODER Admin (sonst 404/403)
     if _is_terminal(row):
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
                         "Der Auftrag ist abgeschlossen/abgelehnt")
-    defn = _load_pinned_defn(row)
     runtime = row.get("runtime") or {}
     idx = int(runtime.get("current_index", 0))
     phase = pr.current_phase(defn, runtime)

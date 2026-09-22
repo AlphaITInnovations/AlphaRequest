@@ -134,8 +134,9 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
     case 'approval_decided': {
       const act = str(ev.details?.act)
       const wie = act === 'approve' ? 'freigegeben' : act === 'reject' ? 'abgelehnt' : 'entschieden'
-      const via = str(ev.details?.via)
-      const viaTxt = via === 'mail_link' ? ' (per Mail-Link)' : via === 'admin' ? ' (Admin)' : ''
+      // WER entschied, zeigt die actor-Angabe der Zeile; hier nur der Kanal, wenn
+      // es der (anonyme) Mail-Link war.
+      const viaTxt = str(ev.details?.via) === 'mail_link' ? ' (per Mail-Link)' : ''
       return `Freigabe: ${wie}${viaTxt}`
     }
     case 'approval_sent_back':

@@ -207,20 +207,42 @@ def test_decide_approve_advances_and_audits(env):
     # Verlauf: die Entscheidung mit der handelnden Person (nicht der Mail-Kanal).
     dec = _events(evstore, "approval_decided")
     assert dec and dec[0]["actor_id"] == "u_admin"
-    assert dec[0]["details"] == {"act": "approve", "via": "admin",
+    assert dec[0]["details"] == {"act": "approve", "via": "in_app",
                                  "follow_up": "advance", "reason_in_field": False}
-    # Eigene Audit-Zeile (via=admin), zusätzlich zur Verlaufs-Audit-Zeile.
+    # Eigene Audit-Zeile (via=in_app), zusätzlich zur Verlaufs-Audit-Zeile.
     a = [x for x in audits if x["action"] == "process_approval_decided"]
     assert a and a[0]["actor_id"] == "u_admin" and a[0]["details"]["act"] == "approve"
 
 
-def test_decide_requires_admin(env):
-    client, state, store, *_ = env
+def test_decide_allows_responsible(env):
+    # Die ZUSTÄNDIGE Stelle (hier der Owner der Freigabe-Phase) darf im Web direkt
+    # entscheiden – kein Admin nötig; die Person steht im Verlauf.
+    client, state, store, evstore, *_ = env
     tid = _seed(store)
     state["user"] = dict(OWNER)
     r = client.post(f"/process-tickets/{tid}:decide", json={"act": "approve"})
+    assert r.status_code == 200
+    assert r.json()["data"]["current_phase"] == "ende"
+    dec = _events(evstore, "approval_decided")
+    assert dec and dec[0]["actor_id"] == "u_owner"
+
+
+def test_decide_denies_view_only(env):
+    # Reine Aufsicht (view) darf lesen, aber nicht entscheiden → 403.
+    client, state, store, *_ = env
+    tid = _seed(store)
+    state["user"] = {"id": "u_view", "displayName": "Aufsicht", "permissions": ["view"]}
+    r = client.post(f"/process-tickets/{tid}:decide", json={"act": "approve"})
     assert r.status_code == 403
-    assert r.json()["error"]["code"] == "ADMIN_REQUIRED"
+
+
+def test_decide_denies_stranger(env):
+    # Wer den Auftrag gar nicht sehen darf, bekommt 404 (nicht verraten, dass es ihn gibt).
+    client, state, store, *_ = env
+    tid = _seed(store)
+    state["user"] = {"id": "u_fremd", "displayName": "Fremd", "permissions": []}
+    r = client.post(f"/process-tickets/{tid}:decide", json={"act": "approve"})
+    assert r.status_code == 404
 
 
 # ── Ablehnen (terminal) ─────────────────────────────────────────────────────
@@ -345,11 +367,15 @@ def test_abilities_expose_decide_and_resend(env):
     client, state, store, *_ = env
     tid = _seed(store)
     a = client.get(f"/process-tickets/{tid}").json()["data"]["abilities"]
-    assert a["decide_approval"] is True and a["resend_approval"] is True
-    # Nicht-Admin sieht die Freigabe-Aktionen nicht.
+    assert a["decide_approval"] is True and a["resend_approval"] is True   # Admin: beides
+    # Zuständige Stelle (Owner): entscheiden JA, erneut senden (Admin-Werkzeug) NEIN.
     state["user"] = dict(OWNER)
     b = client.get(f"/process-tickets/{tid}").json()["data"]["abilities"]
-    assert b["decide_approval"] is False and b["resend_approval"] is False
+    assert b["decide_approval"] is True and b["resend_approval"] is False
+    # Reine Aufsicht (view): weder noch – nur lesen.
+    state["user"] = {"id": "u_view", "displayName": "Aufsicht", "permissions": ["view"]}
+    c = client.get(f"/process-tickets/{tid}").json()["data"]["abilities"]
+    assert c["decide_approval"] is False and c["resend_approval"] is False
 
 
 def test_abilities_false_outside_approval_phase(env):

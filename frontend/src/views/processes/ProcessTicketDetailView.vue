@@ -30,6 +30,7 @@ import BasisTicketDetail from '@/components/process/BasisTicketDetail.vue'
 import { isBasisTicket } from '@/lib/basisTicket'
 import SchemaExportView from '@/components/process/form/SchemaExportView.vue'
 import DocumentView from '@/components/process/form/DocumentView.vue'
+import ProcessApprovalPanel from '@/components/process/ProcessApprovalPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -195,6 +196,13 @@ const timeline = ref<{ reload: () => void } | null>(null)
 const isExportPhase = computed(() => phase.value?.view === 'export')
 /** Dokument-Phase (view=document): Vertrag/Dokument aus Vorlage, Inline-Editor + Word-Export. */
 const isDocumentPhase = computed(() => phase.value?.view === 'document')
+/** Freigabe-Phase (kind=approval): kein Formular, sondern oben genehmigen/ablehnen,
+ *  darunter alles schreibgeschützt. Erkennung am Freigabe-Block der Phase. */
+const isFreigabePhase = computed(() => !!phase.value?.approval)
+/** Darf ICH hier (im Web) entscheiden? Server-Flag, nur im Bearbeiten-Modus – die
+ *  Leseansicht bleibt reines Lesen. Zuständige Stelle ODER Admin. */
+const kannEntscheiden = computed(() =>
+  !leseModus.value && !!ticket.value?.abilities?.decide_approval)
 
 /** Ist ein Phasen-Feld für die aktuelle Sicht sichtbar? Der Server liefert die
  *  Sicht-Allowlist (visible_fields); ohne sie (alte Antwort) nicht ausblenden. */
@@ -224,7 +232,7 @@ const phaseHasEditableFields = computed(() =>
 /** Wird das Phasen-Formular gezeigt? In normalen Phasen wie bisher; in
  *  Dokument-Phasen nur, wenn sie eigene (sichtbare) editierbare Felder haben. */
 const showPhaseForm = computed(() =>
-  abilities.value.edit && !!phase.value && !isExportPhase.value
+  abilities.value.edit && !!phase.value && !isExportPhase.value && !isFreigabePhase.value
   && (!isDocumentPhase.value || phaseHasEditableFields.value))
 
 /** Feld-Keys, die das Phasen-Formular rendert – in der Gesamt-Leseansicht
@@ -594,6 +602,13 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
 
           <!-- Rechte Spalte: Arbeitsbereich -->
           <div class="min-w-0 space-y-4">
+            <!-- Freigabe-Phase: GANZ OBEN genehmigen/ablehnen direkt im Web (die
+                 zuständige Stelle braucht den Mail-Link nicht). Darunter stehen –
+                 wie in der Leseansicht – alle Angaben schreibgeschützt. -->
+            <ProcessApprovalPanel v-if="isFreigabePhase && kannEntscheiden && phase"
+                                  :ticket="ticket" :phase="phase"
+                                  @reload="reloadAll" @error="showViewError" />
+
             <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen
                  blockiert `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst
                  AUSSERHALB von abilities.edit: quittieren muss auch, wer den
@@ -625,7 +640,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
                  auch für die Bearbeitenden. Felder, die oben schon im Phasen-
                  Formular stehen (z. B. Fuhrpark), werden hier ausgeblendet, damit
                  sie nicht doppelt erscheinen. -->
-            <div v-else-if="!abilities.edit || isDocumentPhase" class="card-section">
+            <div v-else-if="!abilities.edit || isDocumentPhase || isFreigabePhase" class="card-section">
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
                                   :sources="sources" :ticket-id="ticket.id" :view="viewParams.view"
@@ -668,7 +683,9 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
         <div class="card-section sticky bottom-4 z-20 shadow-lg mt-4
                     flex items-center justify-end gap-2 flex-wrap">
           <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
-          <template v-if="abilities.edit">
+          <!-- In einer Freigabe-Phase gibt es kein Speichern/Weitergeben: die
+               Entscheidung (genehmigen/ablehnen) steht oben in ProcessApprovalPanel. -->
+          <template v-if="abilities.edit && !isFreigabePhase">
             <button @click="saveValues" :disabled="busy || !dirty"
                     class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
                            disabled:opacity-40 transition">
