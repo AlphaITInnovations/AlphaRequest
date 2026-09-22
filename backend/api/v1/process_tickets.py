@@ -834,6 +834,154 @@ def list_archive(user: dict = Depends(get_current_user), q: Optional[str] = Quer
                                          limit=limit, offset=offset, truncated=truncated))
 
 
+# ── CSV-Export / -Import des globalen Archivs (Admin) ─────────────────────────
+
+_ARCHIVE_CSV_HEADER = ["id", "process_key", "process_version", "title", "status", "priority",
+                       "owner_id", "owner_name", "current_phase", "created_at", "updated_at",
+                       "values_json", "runtime_json"]
+
+
+def _phase_key_from_runtime(rt: dict) -> str:
+    """Aktuellen Phasen-Schlüssel direkt aus der Runtime lesen (ohne Definition)."""
+    phases = (rt or {}).get("phases") or []
+    idx = (rt or {}).get("current_index", 0)
+    return phases[idx].get("key") if 0 <= idx < len(phases) else ""
+
+
+@router.get("/process-tickets/archive.csv")
+def export_archive_csv(user: dict = Depends(get_current_user), q: Optional[str] = Query(None),
+                       status: Optional[str] = Query(None), process_key: Optional[str] = Query(None),
+                       created_by: Optional[str] = Query(None),
+                       date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                       date_field: str = Query("updated"), sort: str = Query("updated_desc")):
+    """CSV-Export des globalen Archivs mit den GLEICHEN Filtern wie die Liste.
+
+    Enthält die VOLLDATEN (values_json + runtime_json) – nur so ist ein späterer
+    Restore möglich. Deshalb NUR Admin: die Datei umgeht die normale Feld-Sicht
+    (auch vertrauliche Felder stehen roh drin). Zeichen-BOM, damit Excel UTF-8
+    (Umlaute) korrekt öffnet; Trennzeichen „;" (deutsches Excel)."""
+    if not acc.is_admin(user):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED,
+                        "Der Voll-Export ist Admins vorbehalten (enthält alle Feldwerte)")
+    import csv
+    import io
+    rows = store.export_global_archive(
+        status=[s.strip() for s in status.split(",") if s.strip()] if status else None,
+        process_key=process_key or None, created_by=created_by or None, q=q or None,
+        date_from=date_from or None, date_to=date_to or None, date_field=date_field, sort=sort)
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+    w.writerow(_ARCHIVE_CSV_HEADER)
+    for r in rows:
+        rt = r.get("runtime") or {}
+        w.writerow([
+            r.get("id"), r.get("process_key"), r.get("process_version"),
+            r.get("title") or "", r.get("status") or "", r.get("priority") or "normal",
+            r.get("owner_id") or "", r.get("owner_name") or "",
+            _phase_key_from_runtime(rt),
+            r.get("created_at") or "", r.get("updated_at") or "",
+            json.dumps(r.get("values") or {}, ensure_ascii=False),
+            json.dumps(rt, ensure_ascii=False),
+        ])
+    record_audit(action="process_archive_exported", actor_id=user.get("id"),
+                 actor_name=_actor_name(user), entity_type="process_ticket", entity_id="archive",
+                 summary=f"Globales Archiv exportiert ({len(rows)} Aufträge)")
+    body = ("﻿" + buf.getvalue()).encode("utf-8")
+    return Response(content=body, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": _content_disposition("archiv_export.csv")})
+
+
+class CsvImportRequest(BaseModel):
+    csv: str
+    commit: bool = False
+
+
+@router.post("/process-tickets/archive:import-csv")
+def import_archive_csv(body: CsvImportRequest, user: dict = Depends(get_current_user)):
+    """CSV-Restore ins globale Archiv. NUR Admin (legt Aufträge an).
+
+    Additiv, NIE überschreibend: jede Zeile wird mit ihrer ORIGINAL-Nummer
+    angelegt; existiert die Nummer bereits, wird die Zeile ÜBERSPRUNGEN.
+    `commit=false` (Default) ist eine VORSCHAU – es wird nichts geschrieben, nur
+    der Bericht (neu/übersprungen/fehlerhaft) zurückgegeben. Fehlt die (gepinnte)
+    Prozess-Definition oder ist das JSON kaputt, wird die Zeile als „fehlerhaft"
+    gemeldet statt einen kaputten Auftrag anzulegen."""
+    if not acc.is_admin(user):
+        raise api_error(403, ErrorCode.ADMIN_REQUIRED, "Nur Admins können Aufträge importieren")
+    import csv
+    import io
+    reader = csv.DictReader(io.StringIO((body.csv or "").lstrip("﻿")), delimiter=";")
+    created: list = []
+    skipped: list = []
+    failed: list = []
+    defn_ok: dict = {}
+    seen: set = set()   # in DIESER Datei schon eingeplante Nummern (siehe unten)
+
+    def _fail(line, tid, reason):
+        failed.append({"line": line, "id": tid, "reason": reason})
+
+    for line, row in enumerate(reader, start=2):   # Zeile 1 = Kopf
+        raw_id = (row.get("id") or "").strip()
+        try:
+            tid = int(raw_id)
+        except (TypeError, ValueError):
+            _fail(line, None, f"ungültige Nummer „{raw_id}“"); continue
+        pk = (row.get("process_key") or "").strip()
+        try:
+            ver = int((row.get("process_version") or "").strip())
+        except (TypeError, ValueError):
+            _fail(line, tid, "ungültige Prozess-Version"); continue
+        pin = (pk, ver)
+        if pin not in defn_ok:
+            defn_ok[pin] = defstore.get_definition(pk, ver) is not None
+        if not defn_ok[pin]:
+            _fail(line, tid, f"Prozess „{pk}“ v{ver} ist hier nicht vorhanden"); continue
+        try:
+            values = json.loads(row.get("values_json") or "{}")
+            runtime = json.loads(row.get("runtime_json") or "{}")
+            if not isinstance(values, dict) or not isinstance(runtime, dict):
+                raise ValueError
+        except (ValueError, TypeError):
+            _fail(line, tid, "values_json/runtime_json ist kein gültiges JSON-Objekt"); continue
+        # Übersprungen, wenn die Nummer schon in der DB liegt ODER in dieser Datei
+        # bereits eingeplant ist. Der zweite Fall hält die Vorschau (commit=false,
+        # es wird nichts geschrieben) mit dem tatsächlichen Commit im Gleichlauf:
+        # ohne ihn zählte die Vorschau zwei gleiche neue Nummern beide als „neu",
+        # während der Commit die zweite verwirft.
+        if store.get(tid) is not None:
+            skipped.append({"line": line, "id": tid, "reason": "Nummer existiert bereits"}); continue
+        if tid in seen:
+            skipped.append({"line": line, "id": tid, "reason": "Nummer in dieser Datei doppelt"}); continue
+        if body.commit:
+            try:
+                store.create_with_id(
+                    id=tid, process_key=pk, process_version=ver,
+                    title=row.get("title") or "", status=row.get("status") or "in_progress",
+                    priority=row.get("priority") or "normal",
+                    owner_id=(row.get("owner_id") or "").strip() or None,
+                    owner_name=(row.get("owner_name") or "").strip() or None,
+                    values_json=json.dumps(values, ensure_ascii=False),
+                    runtime_json=json.dumps(runtime, ensure_ascii=False),
+                    created_at=(row.get("created_at") or "").strip() or None,
+                    updated_at=(row.get("updated_at") or "").strip() or None)
+            except Exception as exc:
+                _fail(line, tid, f"Anlegen fehlgeschlagen: {str(exc)[:150]}"); continue
+        seen.add(tid)
+        created.append({"line": line, "id": tid})
+
+    if body.commit and created:
+        record_audit(action="process_archive_imported", actor_id=user.get("id"),
+                     actor_name=_actor_name(user), entity_type="process_ticket", entity_id="archive",
+                     summary=f"CSV-Import: {len(created)} Aufträge angelegt "
+                             f"({len(skipped)} übersprungen, {len(failed)} fehlerhaft)",
+                     details={"created": [c["id"] for c in created],
+                              "skipped": len(skipped), "failed": len(failed)})
+    return DataResponse(data={
+        "committed": body.commit,
+        "counts": {"created": len(created), "skipped": len(skipped), "failed": len(failed)},
+        "created": created, "skipped": skipped, "failed": failed})
+
+
 @router.get("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
 def get_process_ticket(ticket_id: int, user: dict = Depends(get_current_user),
                        view: Optional[str] = Query(None),

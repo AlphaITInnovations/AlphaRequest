@@ -132,19 +132,11 @@ _ARCHIVE_SORTS = {
 }
 
 
-def list_global_archive(*, status: Optional[list] = None, process_key: Optional[str] = None,
-                        created_by: Optional[str] = None, q: Optional[str] = None,
-                        date_from: Optional[str] = None, date_to: Optional[str] = None,
-                        date_field: str = "updated", sort: str = "updated_desc",
-                        limit: int = 25, offset: int = 0) -> tuple[list[dict], int]:
-    """Globales Archiv (Aufsicht): serverseitig gefiltert, sortiert und gepaged.
-
-    ANDERS als das persönliche Archiv (das je Zeile in Python auf Beteiligung
-    prüft und deshalb einen 2000er-Scan deckelt) hat das globale Archiv KEINE
-    Zeilen-Prüfung – deshalb kann es direkt in SQL filtern/sortieren/pagen und
-    skaliert auf beliebig viele Aufträge (kein Kürzen). Suche trifft Titel,
-    Ersteller-Name und die ID; Datumsbereich tagesgenau (inklusive) auf Erstell-
-    oder Änderungsdatum."""
+def _archive_where(*, status, process_key, created_by, q, date_from, date_to,
+                   date_field) -> tuple[str, list]:
+    """WHERE-Klausel + Parameter des globalen Archivs (geteilt von Liste + Export).
+    Suche trifft Titel, Ersteller-Name und die ID; Datumsbereich tagesgenau
+    (inklusive) auf Erstell- ODER Änderungsdatum."""
     where: list = []
     params: list = []
     if status:
@@ -162,7 +154,22 @@ def list_global_archive(*, status: Optional[list] = None, process_key: Optional[
         where.append(f"{date_col} >= %s"); params.append(f"{date_from[:10]} 00:00:00")
     if date_to:
         where.append(f"{date_col} <= %s"); params.append(f"{date_to[:10]} 23:59:59")
-    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    return (" WHERE " + " AND ".join(where)) if where else "", params
+
+
+def list_global_archive(*, status: Optional[list] = None, process_key: Optional[str] = None,
+                        created_by: Optional[str] = None, q: Optional[str] = None,
+                        date_from: Optional[str] = None, date_to: Optional[str] = None,
+                        date_field: str = "updated", sort: str = "updated_desc",
+                        limit: int = 25, offset: int = 0) -> tuple[list[dict], int]:
+    """Globales Archiv (Aufsicht): serverseitig gefiltert, sortiert und gepaged.
+
+    ANDERS als das persönliche Archiv (das je Zeile in Python auf Beteiligung
+    prüft und deshalb einen 2000er-Scan deckelt) hat das globale Archiv KEINE
+    Zeilen-Prüfung – deshalb kann es direkt in SQL filtern/sortieren/pagen und
+    skaliert auf beliebig viele Aufträge (kein Kürzen)."""
+    clause, params = _archive_where(status=status, process_key=process_key, created_by=created_by,
+                                    q=q, date_from=date_from, date_to=date_to, date_field=date_field)
     order = _ARCHIVE_SORTS.get(sort, _ARCHIVE_SORTS["updated_desc"])
     conn = get_connection()
     try:
@@ -177,6 +184,29 @@ def list_global_archive(*, status: Optional[list] = None, process_key: Optional[
     finally:
         conn.close()
     return [_row_to_list_dict(r) for r in rows], total
+
+
+def export_global_archive(*, status: Optional[list] = None, process_key: Optional[str] = None,
+                          created_by: Optional[str] = None, q: Optional[str] = None,
+                          date_from: Optional[str] = None, date_to: Optional[str] = None,
+                          date_field: str = "updated", sort: str = "updated_desc",
+                          limit: int = 100000) -> list[dict]:
+    """Wie list_global_archive, aber die VOLLSTÄNDIGEN Zeilen (inkl. values/runtime)
+    und ohne Paging – Grundlage des CSV-Exports (Restore muss alles enthalten).
+    `limit` ist nur eine harte Sicherung gegen Ausreißer."""
+    clause, params = _archive_where(status=status, process_key=process_key, created_by=created_by,
+                                    q=q, date_from=date_from, date_to=date_to, date_field=date_field)
+    order = _ARCHIVE_SORTS.get(sort, _ARCHIVE_SORTS["updated_desc"])
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            f"SELECT {_COLS} FROM process_tickets{clause} ORDER BY {order} LIMIT %s",
+            tuple(params) + (limit,),
+        )
+    finally:
+        conn.close()
+    return [_row_to_dict(r) for r in rows]
 
 
 # ── Write ───────────────────────────────────────────────────────────────────
@@ -199,6 +229,35 @@ def create(*, process_key: str, process_version: int, title: str, status: str,
     finally:
         conn.close()
     return get(new_id)
+
+
+def create_with_id(*, id: int, process_key: str, process_version: int, title: str, status: str,
+                   priority: str, owner_id: Optional[str], owner_name: Optional[str],
+                   values_json: str, runtime_json: str,
+                   created_at: Optional[str] = None, updated_at: Optional[str] = None) -> dict:
+    """Auftrag mit EXPLIZITER Nummer anlegen (CSV-Restore). Der Aufrufer stellt
+    sicher, dass die Nummer noch nicht existiert (sonst IntegrityError). MariaDB
+    zieht den AUTO_INCREMENT-Zähler bei einer größeren expliziten id nach, sodass
+    künftige Neuanlagen NICHT kollidieren. created_at/updated_at werden für einen
+    originalgetreuen Restore mitgeschrieben, sonst per Default gesetzt."""
+    cols = ["id", "process_key", "process_version", "title", "status", "priority",
+            "owner_id", "owner_name", "values_json", "runtime_json"]
+    vals: list = [id, process_key, process_version, title, status, priority,
+                  owner_id, owner_name, values_json, runtime_json]
+    if created_at:
+        cols.append("created_at"); vals.append(created_at)
+    if updated_at:
+        cols.append("updated_at"); vals.append(updated_at)
+    conn = get_connection()
+    try:
+        _exec(conn,
+              f"INSERT INTO process_tickets ({', '.join(cols)}) "
+              f"VALUES ({', '.join(['%s'] * len(vals))})",
+              tuple(vals))
+        conn.commit()
+    finally:
+        conn.close()
+    return get(id)
 
 
 def _run_guarded(conn, set_sql: str, params: list, ticket_id: int, expected_rev: Optional[int]):

@@ -14,7 +14,10 @@ import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
-import { listArchive, type ArchiveRow, type ArchiveSort } from '@/api/archive'
+import {
+  listArchive, exportArchiveCsv, importArchiveCsv,
+  type ArchiveRow, type ArchiveSort, type ImportReport,
+} from '@/api/archive'
 import { archiveTicket, deleteTicket } from '@/api/processTickets'
 import { listProcesses } from '@/api/processes'
 import { STATUS_LABEL } from '@/lib/processSchema'
@@ -142,6 +145,95 @@ async function runBulk() {
   showToast(parts.join(' · '), failed === 0)
   await load()   // lädt neu und leert die Auswahl
 }
+
+// ── CSV Export / Import (NUR globales Archiv, Admin) ─────────────────────────
+// Export: der GANZE aktuell gefilterte Satz (nicht nur die Seite) inkl. Rohwerten
+// – deshalb Admin-only. Import: Restore aus so einer Datei; behält die Nummern und
+// überspringt bereits vorhandene (nie überschreiben). Immer erst Vorschau (dry-run).
+const csvBusy = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const importReport = ref<ImportReport | null>(null)
+const importCsvText = ref('')
+
+function currentFilterParams() {
+  return {
+    q: q.value.trim() || undefined,
+    status: statuses.value.length ? statuses.value : undefined,
+    process_key: processKey.value || undefined,
+    created_by: createdBy.value.trim() || undefined,
+    date_from: dateFrom.value || undefined,
+    date_to: dateTo.value || undefined,
+    date_field: dateField.value,
+    sort: sort.value,
+  }
+}
+
+function triggerDownload(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+async function exportCsv() {
+  csvBusy.value = true
+  try {
+    const blob = await exportArchiveCsv(currentFilterParams())
+    const p = (n: number) => String(n).padStart(2, '0')
+    const d = new Date()
+    triggerDownload(blob, `archiv_export_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.csv`)
+  } catch (e) {
+    showToast(errorMessage(e, 'Export fehlgeschlagen'), false)
+  } finally {
+    csvBusy.value = false
+  }
+}
+
+function pickImport() { fileInput.value?.click() }
+
+async function onImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''   // gleiche Datei erneut wählbar machen
+  if (!file) return
+  csvBusy.value = true
+  try {
+    importCsvText.value = await file.text()
+    importReport.value = await importArchiveCsv(importCsvText.value, false)   // Vorschau
+  } catch (err) {
+    showToast(errorMessage(err, 'Import-Vorschau fehlgeschlagen'), false)
+    importCsvText.value = ''
+  } finally {
+    csvBusy.value = false
+  }
+}
+
+async function confirmImport() {
+  if (!importReport.value) return
+  csvBusy.value = true
+  try {
+    const rep = await importArchiveCsv(importCsvText.value, true)
+    const c = rep.counts
+    const parts = [`${c.created} angelegt`]
+    if (c.skipped) parts.push(`${c.skipped} übersprungen`)
+    if (c.failed) parts.push(`${c.failed} fehlerhaft`)
+    showToast(`Import: ${parts.join(' · ')}`, c.failed === 0)
+    importReport.value = null
+    importCsvText.value = ''
+    offset.value = 0
+    await load()
+  } catch (e) {
+    showToast(errorMessage(e, 'Import fehlgeschlagen'), false)
+  } finally {
+    csvBusy.value = false
+  }
+}
+
+function cancelImport() { importReport.value = null; importCsvText.value = '' }
 
 const von = computed(() => (total.value === 0 ? 0 : offset.value + 1))
 const bis = computed(() => Math.min(offset.value + PAGE, total.value))
@@ -307,6 +399,26 @@ onMounted(async () => {
         </select>
       </div>
 
+      <!-- CSV-Werkzeuge der Aufsicht (nur globales Archiv, Admin). Export = der ganze
+           gefilterte Satz inkl. Rohwerten; Import legt fehlende Nummern an und
+           überspringt vorhandene (nie überschreiben), immer mit Vorschau. -->
+      <div v-if="canBulk" class="flex items-center gap-2 flex-wrap mb-4">
+        <button type="button" @click="exportCsv" :disabled="csvBusy"
+                class="text-xs font-medium px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/15
+                       text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 disabled:opacity-40">
+          CSV exportieren
+        </button>
+        <button type="button" @click="pickImport" :disabled="csvBusy"
+                class="text-xs font-medium px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/15
+                       text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 disabled:opacity-40">
+          CSV importieren
+        </button>
+        <input ref="fileInput" type="file" accept=".csv,text/csv" class="hidden" @change="onImportFile" />
+        <span class="text-[11px] text-gray-400">
+          Export = aktuelle Filter · Import behält Nummern, überspringt vorhandene
+        </span>
+      </div>
+
       <div v-if="truncated"
            class="mb-3 rounded-xl border border-amber-200 dark:border-amber-500/30
                   bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
@@ -413,6 +525,46 @@ onMounted(async () => {
                     class="text-sm font-medium px-4 py-2 rounded-xl text-white disabled:opacity-50"
                     :class="confirmAction === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#3EAAB8] hover:bg-[#369aa7]'">
               {{ confirmAction === 'delete' ? 'Endgültig löschen' : 'Archivieren' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CSV-Import: Vorschau (dry-run) vor dem Schreiben. Zeigt, was neu angelegt,
+           übersprungen (Nummer existiert) und fehlerhaft ist – bestätigen schreibt. -->
+      <div v-if="importReport" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+           @click.self="cancelImport">
+        <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-[#212B3A] shadow-xl p-5 max-h-[85vh] overflow-auto">
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-2">CSV-Import – Vorschau</h3>
+          <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">
+            <strong class="text-green-600 dark:text-green-400">{{ importReport.counts.created }}</strong> neu anlegen ·
+            <strong>{{ importReport.counts.skipped }}</strong> überspringen (Nummer existiert) ·
+            <strong :class="importReport.counts.failed ? 'text-red-600 dark:text-red-400' : ''">{{ importReport.counts.failed }}</strong> fehlerhaft
+          </p>
+
+          <div v-if="importReport.failed.length" class="mb-3">
+            <p class="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">Fehlerhafte Zeilen</p>
+            <ul class="text-xs text-gray-600 dark:text-gray-300 space-y-0.5 max-h-40 overflow-auto">
+              <li v-for="f in importReport.failed.slice(0, 50)" :key="'f' + f.line">
+                Zeile {{ f.line }}<span v-if="f.id">, #{{ f.id }}</span>: {{ f.reason }}
+              </li>
+            </ul>
+            <p v-if="importReport.failed.length > 50" class="text-[11px] text-gray-400 mt-1">
+              … und {{ importReport.failed.length - 50 }} weitere
+            </p>
+          </div>
+
+          <p v-if="importReport.skipped.length" class="text-[11px] text-gray-400 mb-3">
+            Übersprungen (bereits vorhanden):
+            {{ importReport.skipped.slice(0, 25).map((s) => '#' + s.id).join(', ') }}<span
+              v-if="importReport.skipped.length > 25"> … (+{{ importReport.skipped.length - 25 }})</span>
+          </p>
+
+          <div class="flex justify-end gap-2 mt-1">
+            <button type="button" @click="cancelImport" class="btn-secondary text-sm">Abbrechen</button>
+            <button type="button" @click="confirmImport" :disabled="csvBusy || importReport.counts.created === 0"
+                    class="text-sm font-medium px-4 py-2 rounded-xl text-white bg-[#3EAAB8] hover:bg-[#369aa7] disabled:opacity-50">
+              {{ csvBusy ? 'Importiert…' : (importReport.counts.created ? `${importReport.counts.created} anlegen` : 'Nichts anzulegen') }}
             </button>
           </div>
         </div>

@@ -36,6 +36,49 @@ export interface ArchivePage {
 
 export type ArchiveSort = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc'
 
+export interface ImportReportRow { line: number; id: number | null; reason?: string }
+export interface ImportReport {
+  committed: boolean
+  counts: { created: number; skipped: number; failed: number }
+  created: ImportReportRow[]
+  skipped: ImportReportRow[]
+  failed: ImportReportRow[]
+}
+
+/** Die gleichen Filter wie die Liste – der Export umfasst den GANZEN gefilterten
+ *  Satz (nicht nur die Seite). Antwort ist ein CSV-Blob (Download). Admin-only. */
+export async function exportArchiveCsv(params: {
+  q?: string; status?: string[]; process_key?: string
+  created_by?: string; date_from?: string; date_to?: string
+  date_field?: 'created' | 'updated'; sort?: ArchiveSort
+} = {}): Promise<Blob> {
+  const { status, ...rest } = params
+  const query: Record<string, unknown> = { ...rest }
+  if (status && status.length) query.status = status.join(',')
+  try {
+    const { data } = await client.get('/process-tickets/archive.csv',
+      { params: query, responseType: 'blob' })
+    return data as Blob
+  } catch (e) {
+    // Bei responseType:'blob' kommt AUCH der Fehler-Body als Blob an – den
+    // JSON-Umschlag {error:{message}} zurückwandeln, damit errorMessage() die
+    // Server-Meldung zeigt (z. B. 403 „Admins vorbehalten") statt der generischen
+    // englischen axios-Meldung. Gleiche Konvention wie exportTicketDocument().
+    const resp = (e as { response?: { data?: unknown } })?.response
+    if (resp?.data instanceof Blob) {
+      try { resp.data = JSON.parse(await resp.data.text()) } catch { /* kein JSON */ }
+    }
+    throw e
+  }
+}
+
+/** CSV-Restore. `commit=false` = VORSCHAU (schreibt nichts, liefert nur den
+ *  Bericht). Admin-only; legt fehlende Nummern an, vorhandene werden übersprungen. */
+export async function importArchiveCsv(csv: string, commit: boolean): Promise<ImportReport> {
+  const { data } = await client.post('/process-tickets/archive:import-csv', { csv, commit })
+  return data.data
+}
+
 export async function listArchive(
   params: {
     q?: string; status?: string[]; process_key?: string
