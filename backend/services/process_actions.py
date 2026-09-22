@@ -301,7 +301,8 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
                 _report_recipient_gap(row, phase, recips)
                 if recips:
                     title = str(row.get("title") or f"Auftrag #{row.get('id')}")
-                    subject, body = _approval_message(row, phase, title, n_attachments=0)
+                    subject, body = _approval_message(row, phase, title, n_attachments=0,
+                                                      reminder=True)
                     sender(recips, subject, body, kind="approval_link")
             else:
                 # `recipients` (Liste, z. B. Eskalationsstufe) hat Vorrang vor dem
@@ -420,7 +421,7 @@ def _attachment_note_html(n: int) -> str:
 
 
 def _approval_message(row: dict, phase: PhaseDef, title: str,
-                      *, n_attachments: int = 0) -> tuple[str, str]:
+                      *, n_attachments: int = 0, reminder: bool = False) -> tuple[str, str]:
     from backend.services import mail_template as mt
     from backend.services.iso_duration import parse_duration
     spec = phase.approval
@@ -429,7 +430,10 @@ def _approval_message(row: dict, phase: PhaseDef, title: str,
         gueltig = _duration_text(parse_duration(spec.linkMaxAge))
     except Exception:
         gueltig = spec.linkMaxAge
-    subject = _subject(f"[AlphaRequest] Freigabe erforderlich: {title}")
+    # Eine ERINNERUNG (Timer bzw. erneut gesendet) ist im Betreff klar als solche
+    # gekennzeichnet – sonst sieht sie aus wie die erste Freigabe-Anfrage.
+    label = "Erinnerung – Freigabe erforderlich" if reminder else "Freigabe erforderlich"
+    subject = _subject(f"[AlphaRequest] {label}: {title}")
 
     # Vorlagentext `approval.emailBody` mit Auftragswerten füllen (reiner Text –
     # das Template escaped ihn als `content`). {{title}}/{{id}} zusätzlich.
@@ -458,12 +462,15 @@ def _approval_message(row: dict, phase: PhaseDef, title: str,
                                             spec.approveLabel, spec.rejectLabel)
                    + validity_html)
 
+    intro = (f"Erinnerung: Für diesen Auftrag (#{row.get('id')}) steht Ihre Entscheidung "
+             f"noch aus." if reminder else
+             f"Für diesen Auftrag (#{row.get('id')}) wird Ihre Entscheidung gebraucht.")
     body = render_corporate_email(
         subject=subject,
-        header_subtitle="Freigabe erforderlich",
+        header_subtitle=label,
         headline=title,
         info_box_url=None,        # externe Empfänger:innen haben keinen Zugang → nicht klickbar
-        intro=f"Für diesen Auftrag (#{row.get('id')}) wird Ihre Entscheidung gebraucht.",
+        intro=intro,
         info_rows=[("Auftrag", f"#{row.get('id')}")],
         content=info_text,
         action_html=action_html,
@@ -559,7 +566,7 @@ def _report_recipient_gap(row: dict, phase: PhaseDef, recips: list[str]) -> None
 
 def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],
                        *, sender: Callable = _default_sender,
-                       groups: Optional[list] = None) -> list[str]:
+                       groups: Optional[list] = None, reminder: bool = False) -> list[str]:
     """Beim Betreten einer Phase automatisch die zuständige Stelle informieren.
 
     Das Alt-System hat das an sechs Stellen gemacht; ohne dieses Verhalten würde
@@ -600,17 +607,20 @@ def notify_phase_entry(row: dict, defn: ProcessDefinition, phase: Optional[Phase
                 # freigebende Person hat sonst keinen Zugang zum Auftrag.
                 atts = _ticket_attachments(row)
                 subject, body = _approval_message(row, phase, title,
-                                                  n_attachments=len(atts))
+                                                  n_attachments=len(atts), reminder=reminder)
                 extra = {"attachments": atts} if atts else {}
                 sender(recips, subject, body, kind="approval_link", **extra)
         elif recips:
-            subject = _subject(f"[AlphaRequest] Neue Aufgabe: {title}")
+            # Erinnerung (erneut senden) statt Erst-Zuweisung im Betreff kennzeichnen.
+            label = "Erinnerung" if reminder else "Neue Aufgabe"
+            subject = _subject(f"[AlphaRequest] {label}: {title}")
             body = render_corporate_email(
                 subject=subject,
-                header_subtitle="Neue Aufgabe",
+                header_subtitle=label,
                 headline=title,
                 info_box_url=link,
-                intro="Dieser Auftrag liegt jetzt bei Ihnen zur Bearbeitung.",
+                intro=("Dieser Auftrag wartet weiterhin auf Ihre Bearbeitung." if reminder
+                       else "Dieser Auftrag liegt jetzt bei Ihnen zur Bearbeitung."),
                 info_rows=[("Auftrag", f"#{row.get('id')}"), ("Phase", phase_lbl)],
                 action_html=_primary_button_html(link),
                 content="",

@@ -354,7 +354,8 @@ def test_reminder_in_approval_phase_resends_fresh_links():
     assert m["kind"] == "approval_link"                        # Entscheidungs-Mail, nicht Plain
     assert m["body"].count("/api/v1/process-freigabe?token=") == 2   # JA + NEIN
     assert "Freigeben?" in m["body"]                           # die Freigabe-Frage
-    assert "Freigabe erforderlich" in m["subject"]
+    # Betreff klar als Erinnerung gekennzeichnet (nicht wie die erste Anfrage).
+    assert "Erinnerung" in m["subject"] and "Freigabe erforderlich" in m["subject"]
     # Anhänge werden NICHT alle 7 Tage erneut gestreut (die kamen mit der Eintritts-Mail).
     assert m["attachments"] in (None, [])
 

@@ -2048,7 +2048,7 @@ def remind_responsible(ticket_id: int, user: dict = Depends(get_current_user)):
     defn = _load_pinned_defn(row)
     phase = pr.current_phase(defn, row.get("runtime") or {})
     try:
-        recips = pactions.notify_phase_entry(row, defn, phase) or []
+        recips = pactions.notify_phase_entry(row, defn, phase, reminder=True) or []
     except Exception:
         logger.exception("Erinnerung für #%s fehlgeschlagen", ticket_id)
         recips = []
@@ -2277,7 +2277,7 @@ def resend_approval_mail(ticket_id: int, user: dict = Depends(get_current_user))
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
                         "Der Auftrag steht nicht in einer Freigabe-Phase")
     try:
-        recips = pactions.notify_phase_entry(row, defn, phase) or []
+        recips = pactions.notify_phase_entry(row, defn, phase, reminder=True) or []
     except Exception:
         logger.exception("Freigabemail-Resend für #%s fehlgeschlagen", ticket_id)
         recips = []
