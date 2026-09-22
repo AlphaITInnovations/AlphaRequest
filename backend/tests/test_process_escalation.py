@@ -312,3 +312,78 @@ def test_run_action_notify_stage_does_not_bump_priority(monkeypatch):
         sender=lambda recips, subject, body, kind=None: sent.append(recips), groups=GROUPS)
     assert "priority" not in changes                # reine Erinnerung
     assert sent[0] == ["it@example.org"]
+
+
+# ── Erinnerung in einer FREIGABE-Phase: Entscheidungs-Mail MIT frischen Links ─
+
+def _approval_defn(escalation, external=True):
+    """Prozess mit einer Freigabe-Phase (externer Link), die den escalation-Block trägt."""
+    return ProcessDefinition.model_validate({
+        "key": "demo", "name": "Demo",
+        "fields": [{"key": "a", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}]},
+            {"key": "freigabe", "kind": "approval", "view": "approval",
+             "responsibility": {"kind": "group", "group": "g_it"},
+             "approval": {"question": "Freigeben?", "externalLink": external, "emailBody": "x"},
+             "escalation": escalation,
+             "fields": [{"ref": "a", "mode": "readonly"}]},
+            {"key": "ende", "kind": "end", "responsibility": {"kind": "owner"}},
+        ],
+    })
+
+
+def test_reminder_in_approval_phase_resends_fresh_links():
+    """Eine Erinnerung in einer Freigabe-Phase schickt DIESELBE Entscheidungs-Mail
+    wie beim Eintritt – mit frisch signierten JA/NEIN-Links – an die zuständige
+    Stelle, NICHT die wertlose Plain-Erinnerung ohne Knöpfe."""
+    d = _approval_defn({"enabled": True, "stages": [
+        {"afterDays": 7, "repeatDays": 7, "recipients": ["responsible"]}]})
+    auto = escalation_automations(d.phases[1])[0]
+    sent = []
+
+    def sender(recips, subject, body, kind=None, attachments=None):
+        sent.append({"to": recips, "kind": kind, "subject": subject, "body": body,
+                     "attachments": attachments})
+
+    pactions.run_action(auto.action, _ticket(d), d, d.phases[1], sender=sender, groups=GROUPS)
+    assert len(sent) == 1
+    m = sent[0]
+    assert m["to"] == ["it@example.org"]                       # an die zuständige Gruppe
+    assert m["kind"] == "approval_link"                        # Entscheidungs-Mail, nicht Plain
+    assert m["body"].count("/api/v1/process-freigabe?token=") == 2   # JA + NEIN
+    assert "Freigeben?" in m["body"]                           # die Freigabe-Frage
+    assert "Freigabe erforderlich" in m["subject"]
+    # Anhänge werden NICHT alle 7 Tage erneut gestreut (die kamen mit der Eintritts-Mail).
+    assert m["attachments"] in (None, [])
+
+
+def test_reminder_approval_only_to_responsible_never_watchers(monkeypatch):
+    """Auch wenn eine Stufe Beobachter:innen als Ziel hätte: die Freigabe-LINKS
+    gehen NUR an die zuständige Stelle (Invariante – Links nie an Beobachtende)."""
+    monkeypatch.setattr(pactions, "watcher_emails", lambda tid: ["beobachter@example.org"])
+    d = _approval_defn({"enabled": True, "stages": [
+        {"afterDays": 7, "recipients": ["responsible", "watchers"]}]})
+    auto = escalation_automations(d.phases[1])[0]
+    sent = []
+    pactions.run_action(
+        auto.action, _ticket(d), d, d.phases[1],
+        sender=lambda recips, subject, body, kind=None, attachments=None:
+            sent.append({"to": recips, "kind": kind}), groups=GROUPS)
+    assert sent[0]["kind"] == "approval_link"
+    assert "beobachter@example.org" not in sent[0]["to"]       # niemals an Beobachtende
+    assert sent[0]["to"] == ["it@example.org"]
+
+
+def test_reminder_approval_without_externallink_is_plain():
+    """Freigabe NUR in der App (externalLink=false) → normale Erinnerung, keine
+    Mail-Links (die gäbe es dort gar nicht)."""
+    d = _approval_defn({"enabled": True, "stages": [
+        {"afterDays": 7, "recipients": ["responsible"]}]}, external=False)
+    auto = escalation_automations(d.phases[1])[0]
+    sent = []
+    pactions.run_action(
+        auto.action, _ticket(d), d, d.phases[1],
+        sender=lambda recips, subject, body, kind=None: sent.append(kind), groups=GROUPS)
+    assert sent == ["notify"]                                  # Plain-Erinnerung

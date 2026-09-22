@@ -284,13 +284,33 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
     t = action.type
     changes: dict = {}
     if t in (ActionType.notify, ActionType.escalate):
-        # `recipients` (Liste, z. B. Eskalationsstufe) hat Vorrang vor dem
-        # Einzel-Ziel `to`.
-        tokens = list(action.recipients) if action.recipients else ([action.to] if action.to else [])
-        recips = resolve_recipients_multi(tokens, row, phase, groups)
-        subject, body = _build_message(action, row, phase)
+        # Steht der Auftrag in einer Freigabe-Phase mit Mail-Link, wäre eine
+        # „Erinnerung" ohne die JA/NEIN-Knöpfe wertlos – und die Links der
+        # ursprünglichen Mail sind nach `approval.linkMaxAge` (~7 Tage) ohnehin
+        # abgelaufen. Deshalb dieselbe Entscheidungs-Mail wie beim Phaseneintritt,
+        # mit für den AKTUELLEN Epoch FRISCH signierten Links. Ziel ist bewusst die
+        # ZUSTÄNDIGE Stelle (nicht beliebige Tokens): die Links dürfen nie an
+        # Beobachter:innen gehen. Die Anhänge (u. U. vertrauliche Bewerbungs-
+        # unterlagen) reisten schon mit der Eintritts-Mail – sie werden NICHT alle
+        # 7 Tage erneut an den Verteiler gestreut (Datensparsamkeit).
+        freigabe = bool(phase is not None and phase.kind == PhaseKind.approval
+                        and phase.approval is not None and phase.approval.externalLink)
         try:
-            sender(recips, subject, body, kind=t.value)
+            if freigabe:
+                recips = resolve_recipients("responsible", row, phase, groups)
+                _report_recipient_gap(row, phase, recips)
+                if recips:
+                    title = str(row.get("title") or f"Auftrag #{row.get('id')}")
+                    subject, body = _approval_message(row, phase, title, n_attachments=0)
+                    sender(recips, subject, body, kind="approval_link")
+            else:
+                # `recipients` (Liste, z. B. Eskalationsstufe) hat Vorrang vor dem
+                # Einzel-Ziel `to`.
+                tokens = (list(action.recipients) if action.recipients
+                          else ([action.to] if action.to else []))
+                recips = resolve_recipients_multi(tokens, row, phase, groups)
+                subject, body = _build_message(action, row, phase)
+                sender(recips, subject, body, kind=t.value)
         except Exception:
             logger.exception("Automation-Mail (%s) fehlgeschlagen für Ticket #%s", t.value, row.get("id"))
         if t == ActionType.escalate:
