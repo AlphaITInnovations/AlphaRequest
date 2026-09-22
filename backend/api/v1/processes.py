@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from backend.core.dependencies import get_current_user
 from backend.database import process_definitions as db
 from backend.database import process_templates as tpl_db
+from backend.database.settings import get_process_order
 from backend.database.audit_log import record_audit
 from backend.database.groups import get_group_ids_for_user
 from backend.database.users import PERM_ADMIN, PERM_MANAGE
@@ -199,6 +200,19 @@ def list_processes(user: dict = Depends(get_current_user)):
             logger.exception("Definition %s v%s nicht lesbar", r.get("key"), r.get("version"))
             item.may_create = False
         out.append(item)
+
+    # In den Einstellungen gepflegte Anzeigereihenfolge anwenden (nur eine
+    # Sortierung – WELCHE Prozesse jemand sieht, entscheidet may_create oben).
+    # Gelistete Schlüssel zuerst in ihrer Reihenfolge, der Rest stabil dahinter.
+    # Fail-soft: eine nicht lesbare Sortier-Präferenz darf den Katalog nicht kippen.
+    try:
+        order = get_process_order()
+    except Exception:
+        logger.warning("Prozess-Reihenfolge nicht lesbar – Katalog in Standard-Reihenfolge")
+        order = []
+    if order:
+        rank = {k: i for i, k in enumerate(order)}
+        out.sort(key=lambda it: rank.get(it.key, len(order)))
     return DataResponse(data=out)
 
 

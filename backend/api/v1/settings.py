@@ -8,6 +8,7 @@ from backend.core.dependencies import get_current_user
 from backend.database.groups import get_groups, save_groups
 from backend.database.settings import (
     get_companies_full, set_companies_full,
+    get_process_order, set_process_order,
 )
 from backend.database.users import (
     list_users, set_user_role, get_user,
@@ -425,6 +426,63 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                details={"created": created, "deleted": deleted, "modified": modified})
 
     return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
+
+
+# ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────
+#
+# Der Admin ordnet ALLE veröffentlichten Prozesse; die Reihenfolge gilt global im
+# Katalog. WELCHE Prozesse jemand dort sieht, entscheidet weiterhin `may_create`
+# – die Reihenfolge ändert daran nichts. Das Basis-Ticket ist ausgenommen (eigener
+# Einstieg, taucht im Prozess-Katalog nicht auf).
+
+class ProcessOrderItem(BaseModel):
+    key: str
+    name: str
+    icon: Optional[str] = None
+
+
+class ProcessOrderOut(BaseModel):
+    items: list[ProcessOrderItem]
+
+
+class ProcessOrderIn(BaseModel):
+    order: list[str]
+
+
+def _process_order_items() -> list[ProcessOrderItem]:
+    """Alle veröffentlichten Prozesse (ohne Basis-Ticket) in gespeicherter
+    Reihenfolge; nicht Gelistetes stabil dahinter (nach Name)."""
+    from backend.database import process_definitions as _pdefs
+    from backend.services.seed_definitions import SYSTEM_PROCESS_KEYS
+
+    items: list[ProcessOrderItem] = []
+    for r in _pdefs.list_published_catalog(include_definition=True):
+        key = r.get("key")
+        if not key or key in SYSTEM_PROCESS_KEYS:   # Basis-Ticket: eigener Einstieg
+            continue
+        raw = r.get("definition") or {}
+        items.append(ProcessOrderItem(key=key, name=r.get("name") or key, icon=raw.get("icon")))
+
+    order = get_process_order()
+    rank = {k: i for i, k in enumerate(order)}
+    items.sort(key=lambda it: (rank.get(it.key, len(order)), it.name.lower()))
+    return items
+
+
+@router.get("/settings/process-order", response_model=DataResponse[ProcessOrderOut])
+def get_process_order_endpoint(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    return DataResponse(data=ProcessOrderOut(items=_process_order_items()))
+
+
+@router.put("/settings/process-order", response_model=DataResponse[ProcessOrderOut])
+def set_process_order_endpoint(payload: ProcessOrderIn, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    saved = set_process_order(payload.order)
+    _audit(user, "process_order_changed", entity_type="settings", entity_id="process-order",
+           summary=f"Prozess-Reihenfolge geändert ({len(saved)} Einträge)",
+           details={"order": saved})
+    return DataResponse(data=ProcessOrderOut(items=_process_order_items()))
 
 
 # ── AD Groups (Cache) ────────────────────────────────────────────────────────

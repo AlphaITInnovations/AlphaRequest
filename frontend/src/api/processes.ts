@@ -20,6 +20,25 @@ export async function listProcesses(): Promise<ProcessOut[]> {
   return data.data
 }
 
+/** Ein Prozess für die Reihenfolge-Verwaltung (Katalog „Neues Prozess-Ticket"). */
+export interface ProcessOrderItem {
+  key: string
+  name: string
+  icon: string | null
+}
+
+/** Aktuelle Anzeigereihenfolge ALLER veröffentlichten Prozesse (Admin). */
+export async function getProcessOrder(): Promise<ProcessOrderItem[]> {
+  const { data } = await client.get('/settings/process-order')
+  return data.data.items
+}
+
+/** Reihenfolge speichern (Liste der Schlüssel). Liefert die neue Reihenfolge. */
+export async function saveProcessOrder(order: string[]): Promise<ProcessOrderItem[]> {
+  const { data } = await client.put('/settings/process-order', { order })
+  return data.data.items
+}
+
 /** Alle Versionen eines Prozesses (Manage/Admin). Ohne `definition`. */
 export async function listVersions(key: string): Promise<ProcessOut[]> {
   const { data } = await client.get(`/processes/${encodeURIComponent(key)}/versions`)

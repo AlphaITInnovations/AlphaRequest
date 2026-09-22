@@ -203,3 +203,39 @@ def set_companies_full(companies: List[dict]) -> None:
 def set_companies(companies: List[str]) -> None:
     """Nur Namen setzen (Altpfad) – bestehende Bereiche/Zähler bleiben erhalten."""
     set_companies_full([{"name": n} for n in companies])
+
+
+# ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────
+#
+# Liste von Prozess-Schlüsseln in gewünschter Reihenfolge. NUR eine Sortier-
+# Präferenz für die Kachel-Reihenfolge – WELCHE Prozesse jemand sieht/anlegen
+# darf, entscheidet weiterhin `createPermissions`/`may_create`. Nicht gelistete
+# Schlüssel (neue oder entfernte Prozesse) schaden nicht: sie landen stabil
+# hinter den gelisteten.
+
+def get_process_order() -> List[str]:
+    """Gespeicherte Reihenfolge der Prozess-Schlüssel (dedupliziert, leere raus)."""
+    val = settings_get("PROCESS_ORDER", [])
+    if not isinstance(val, list):
+        return []
+    out: List[str] = []
+    seen = set()
+    for k in val:
+        s = str(k).strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def set_process_order(keys: List[str]) -> List[str]:
+    """Reihenfolge speichern (dedupliziert, leere raus). Gibt die kanonische Liste zurück."""
+    cleaned: List[str] = []
+    seen = set()
+    for k in keys or []:
+        s = str(k).strip()
+        if s and s not in seen:
+            seen.add(s)
+            cleaned.append(s)
+    settings_set("PROCESS_ORDER", cleaned)
+    return cleaned

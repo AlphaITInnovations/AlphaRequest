@@ -13,6 +13,7 @@ import AuditLogPanel from '@/components/AuditLogPanel.vue'
 import ActiveSessionsPanel from '@/components/settings/ActiveSessionsPanel.vue'
 import AttachmentsPanel from '@/components/settings/AttachmentsPanel.vue'
 import ProcessesPanel from '@/components/settings/ProcessesPanel.vue'
+import ProcessOrderPanel from '@/components/settings/ProcessOrderPanel.vue'
 import DirectusSourcesPanel from '@/components/settings/DirectusSourcesPanel.vue'
 
 // „permissions" (Erstellrechte je Auftragstyp) ist entfallen: wer einen Auftrag
@@ -20,7 +21,7 @@ import DirectusSourcesPanel from '@/components/settings/DirectusSourcesPanel.vue
 // wird im Prozess-Editor gepflegt. Ein zweiter Rechte-Bildschirm hier hätte auf
 // nichts mehr gewirkt. Ein Deep-Link ?section=permissions landet über die
 // Whitelist-Prüfung unten auf „general".
-const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'app-users', 'testmail', 'audit', 'attachments', 'processes', 'directus-sources'] as const
+const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'app-users', 'testmail', 'audit', 'attachments', 'processes', 'process-order', 'directus-sources'] as const
 type Section = typeof SECTIONS[number]
 
 const route  = useRoute()
@@ -47,6 +48,7 @@ const nav = [
   { key: 'companies',   label: 'Firmen',             group: 'Organisation' },
   { key: 'groups',      label: 'Fachabteilungen',    group: 'Organisation' },
   { key: 'processes',   label: 'Prozesse',           group: 'Organisation' },
+  { key: 'process-order', label: 'Reihenfolge Prozesse', group: 'Organisation' },
   { key: 'directus-sources', label: 'Directus-Quellen', group: 'Organisation' },
   { key: 'app-users',   label: 'Nutzende & Rollen',  group: 'Berechtigungen' },
   { key: 'testmail',    label: 'Testmail',           group: 'Kommunikation' },
@@ -134,6 +136,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
           <AuditLogPanel           v-else-if="active === 'audit'" />
           <AttachmentsPanel        v-else-if="active === 'attachments'" />
           <ProcessesPanel          v-else-if="active === 'processes'" />
+          <ProcessOrderPanel       v-else-if="active === 'process-order'" />
           <DirectusSourcesPanel    v-else-if="active === 'directus-sources'" />
           <TestMailPanel           v-else-if="active === 'testmail'" />
         </div>
