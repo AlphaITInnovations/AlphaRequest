@@ -152,6 +152,20 @@ def test_erledigte_abteilung_wird_nicht_mehr_angeschrieben():
     assert out == ["fuhrpark@example.org"]
 
 
+def test_erinnerung_in_abteilungsphase_nur_an_offene():
+    """Phasen-Erinnerung (escalation → notify recipients=['responsible']) geht in
+    einer Fachabteilungs-Phase NUR an die noch offenen Abteilungen – exakt der Pfad,
+    den der Escalation-Timer nutzt (run_action → resolve_recipients_multi)."""
+    t = ticket({"verantwortlich": "u_chef"}, phase_index=2)
+    # Beide offen → beide erinnern.
+    assert set(pactions.resolve_recipients_multi(["responsible"], t, DEFN.phases[2], GROUPS)) \
+        == {"it@example.org", "fuhrpark@example.org"}
+    # g_it erledigt → nur die noch offene g_fp bekommt die Erinnerung.
+    pr.set_department_status(t["runtime"], "g_it", "done", by="u", by_name="X", at="t2")
+    assert pactions.resolve_recipients_multi(["responsible"], t, DEFN.phases[2], GROUPS) \
+        == ["fuhrpark@example.org"]
+
+
 def test_notify_kann_je_phase_abgeschaltet_werden():
     sent, sender = _capture()
     t = ticket({"verantwortlich": "u_chef"}, phase_index=3)
