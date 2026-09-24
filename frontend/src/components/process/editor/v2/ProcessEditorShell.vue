@@ -53,6 +53,7 @@ const PH_ERSTELLT = '{{erstellt}}'
 const TITEL_PLATZHALTER = 'z. B. Onboarding Mitarbeiter:innen – {{base.first_name}} {{base.last_name}}'
 const jsonText = ref('')
 const jsonError = ref<string | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const key = computed(() => String(route.params.key || ''))
 const version = computed(() => Number(route.params.version || 0))
@@ -153,6 +154,45 @@ function applyJson() {
     showToast('JSON übernommen')
   } catch (e: any) {
     jsonError.value = e?.message || 'Ungültiges JSON'
+  }
+}
+
+async function copyJson() {
+  try {
+    await navigator.clipboard.writeText(jsonText.value)
+    showToast('JSON in die Zwischenablage kopiert')
+  } catch {
+    showToast('Kopieren nicht möglich', false)
+  }
+}
+
+function downloadJson() {
+  const blob = new Blob([jsonText.value], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${ed.draft.value?.key || key.value || 'prozess'}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+}
+
+function pickFile() { fileInput.value?.click() }
+
+async function importFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''            // erneutes Wählen derselben Datei ermöglichen
+  if (!file) return
+  try {
+    jsonText.value = await file.text()
+    applyJson()               // parst + übernimmt; Fehler landen in jsonError
+  } catch {
+    jsonError.value = 'Datei konnte nicht gelesen werden.'
   }
 }
 
@@ -436,14 +476,36 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
 
         <!-- JSON -->
         <div v-else class="card-section">
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">
-            Rohform der Definition. Änderungen werden erst mit „JSON übernehmen" wirksam.
-          </p>
+          <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+            <div class="min-w-0">
+              <h2 class="section-title mb-0">JSON</h2>
+              <p class="text-xs text-gray-400 mt-0.5">
+                Rohform der Definition – zum Sichern, Teilen oder Übertragen. Änderungen im Feld
+                werden erst mit „Übernehmen" wirksam.
+              </p>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap shrink-0">
+              <button type="button" @click="copyJson" class="btn-secondary text-xs py-1">Kopieren</button>
+              <button type="button" @click="downloadJson" class="btn-secondary text-xs py-1">
+                Herunterladen
+              </button>
+              <button v-if="!ed.readonly.value" type="button" @click="pickFile"
+                      class="btn-secondary text-xs py-1">Datei importieren</button>
+              <input ref="fileInput" type="file" accept="application/json,.json" class="hidden"
+                     @change="importFile" />
+            </div>
+          </div>
           <textarea v-model="jsonText" rows="24" spellcheck="false"
                     class="afi w-full font-mono text-xs" :disabled="ed.readonly.value" />
-          <p v-if="jsonError" class="text-sm text-red-600 mt-2">{{ jsonError }}</p>
+          <p v-if="jsonError"
+             class="mt-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50
+                    dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+            {{ jsonError }}
+          </p>
           <div class="flex justify-end mt-2">
-            <button @click="applyJson" :disabled="ed.readonly.value" class="btn-secondary text-sm">
+            <button @click="applyJson" :disabled="ed.readonly.value"
+                    class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
+                           disabled:opacity-40 transition">
               JSON übernehmen
             </button>
           </div>
