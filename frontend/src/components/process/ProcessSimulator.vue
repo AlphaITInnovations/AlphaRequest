@@ -16,6 +16,7 @@ import {
 import { STATUS_LABEL } from '@/lib/processSchema'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
+import DocumentEditorModal from '@/components/process/form/DocumentEditorModal.vue'
 
 const props = defineProps<{
   definition: ProcessDefinition
@@ -46,6 +47,14 @@ const viewer = computed<SimViewer>(() => {
 
 const phase = computed(() => currentPhase(props.definition, state.value.runtime))
 const done = computed(() => isTerminal(props.definition, state.value.runtime))
+
+/** Offenes Dokument-Editor-Modal (document.key) im Vorschau-Modus, null = keins. */
+const openDoc = ref<string | null>(null)
+/** Quelle für den ticket-losen Dokument-Export: Entwurf + aktuelle Sim-Werte. */
+const previewSource = computed(() => (phase.value ? {
+  key: props.definition.key, phase: phase.value.key,
+  definition: props.definition, values: state.value.values,
+} : null))
 const responsibility = computed(() =>
   phase.value ? resolveResponsibility(phase.value, state.value.values) : null)
 const approval = computed(() => currentApproval(props.definition, state.value))
@@ -160,6 +169,27 @@ function reject() { state.value = simReject(state.value) }
 
         <!-- Formular der aktuellen Phase -->
         <div v-if="!done && phase">
+          <!-- Dokument-Phase: Vorlagen ausfüllen & als Word/PDF exportieren (Vorschau) -->
+          <section v-if="phase.documents?.length" class="card-section mb-4 space-y-3">
+            <h3 class="section-title mb-0">Dokumente</h3>
+            <p class="text-xs text-gray-400">
+              Vorschau-Export aus den erfassten Werten – im Betrieb erzeugt die zuständige Stelle
+              das Dokument. Word/PDF wie im echten Ticket.
+            </p>
+            <div v-for="doc in phase.documents" :key="doc.key"
+                 class="rounded-xl border border-gray-200 dark:border-white/10 px-4 py-3
+                        flex items-center justify-between gap-3 flex-wrap">
+              <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+                {{ doc.title || 'Dokument' }}
+              </p>
+              <button type="button" @click="openDoc = doc.key"
+                      class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
+                             transition shrink-0">
+                Ausfüllen &amp; exportieren
+              </button>
+            </div>
+          </section>
+
           <SchemaForm :definition="definition" :phase="phase" :model-value="state.values"
                       :viewer="viewer" :errors="errors" :sources="sources"
                       @update:model-value="onValues" />
@@ -245,5 +275,9 @@ function reject() { state.value = simReject(state.value) }
         </ol>
       </div>
     </div>
+
+    <!-- Dokument-Editor im Vorschau-Modus (Live-PDF + Word/PDF-Download, kein Ticket) -->
+    <DocumentEditorModal v-if="openDoc && previewSource" :preview="previewSource"
+                         :document-key="openDoc" @close="openDoc = null" />
   </div>
 </template>

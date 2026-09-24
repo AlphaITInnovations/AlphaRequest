@@ -1388,6 +1388,140 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
                              _content_disposition(_safe_filename(body.filename) + ".docx")})
 
 
+class DocumentPreviewRequest(BaseModel):
+    """Dokument-Vorschau im Editor – OHNE Ticket. Der (evtl. ungespeicherte)
+    Entwurf reist mit, damit bindings/sections/Feldwerte dem aktuellen Editorstand
+    entsprechen; die Vorlage wird ticket-los per (Prozess, Phase, Dokument) geladen."""
+    definition: dict
+    phase: str
+    document: Optional[str] = None
+    values: dict = {}
+    overrides: Optional[dict[str, str]] = None
+    filename: Optional[str] = None
+    highlight: bool = False
+    format: str = "docx"
+
+
+def _preview_defn_doc(body: "DocumentPreviewRequest"):
+    """Entwurf validieren + gewünschte Dokument-Phase/Dokument bestimmen."""
+    try:
+        defn = ProcessDefinition.model_validate(body.definition)
+    except Exception:
+        raise api_error(422, "DRAFT_INVALID",
+                        "Der Entwurf ist noch nicht gültig – bitte zuerst die Fehler in der "
+                        "Liste beheben, dann steht die Dokument-Vorschau bereit.")
+    docphase = next((p for p in defn.phases if p.key == body.phase), None)
+    doc = _pick_document(docphase, body.document or "")
+    if docphase is None or doc is None:
+        raise api_error(409, "TEMPLATE_MISSING", "Diese Phase hat kein solches Dokument.")
+    return defn, docphase, doc
+
+
+def _preview_template_bytes(key: str, docphase, doc) -> bytes:
+    from backend.database import process_templates as tpl_db
+    tpl = tpl_db.get_template(key, docphase.key, doc.key)
+    if tpl is None:
+        raise api_error(409, "TEMPLATE_MISSING",
+                        "Für dieses Dokument ist keine Vorlage hinterlegt. "
+                        "Bitte im Prozess-Editor eine .docx- oder PDF-Vorlage hochladen.")
+    return _read_template_bytes(tpl)
+
+
+@router.post("/processes/{key}/document:preview-fields")
+def preview_document_fields(key: str, body: DocumentPreviewRequest,
+                            user: dict = Depends(get_current_user)):
+    """Marker der Vorlage + aus den Simulations-Werten vorbefüllte Werte – Grundlage
+    für das Editor-Modal in der VORSCHAU (kein Ticket). Nur Admins (Editor-Kontext)."""
+    _require_admin(user)
+    defn, docphase, doc = _preview_defn_doc(body)
+    catalog = {f.key: f for f in defn.fields}
+    bindings = dict(doc.bindings)
+    values = body.values or {}
+    from backend.services import docx_fill, pdf_fill, template_format
+    from backend.services import mail_template as mt
+    tpl_bytes = _preview_template_bytes(key, docphase, doc)
+    tpl_format = template_format.detect(tpl_bytes)
+    markers = (pdf_fill.find_placeholders(tpl_bytes) if tpl_format == template_format.PDF
+               else docx_fill.find_placeholders(tpl_bytes))
+    out = []
+    for m in markers:
+        b = bindings.get(m)
+        if b is not None:
+            if b.field == TODAY_BINDING:
+                label = "Aktuelles Datum"
+            else:
+                f = catalog.get(b.field)
+                label = (f.label if (f and f.label) else b.field)
+                if b.offset:
+                    label += f" ({b.offset:+d})"
+            out.append({"name": m, "label": label, "bound": True,
+                        "value": _binding_text(b, catalog, values)})
+        else:
+            out.append({"name": m, "label": m, "bound": False, "value": ""})
+
+    def _resolve(token: str) -> str:
+        if token == "title":
+            return ""                 # kein Ticket-Titel in der Vorschau
+        if token == "id":
+            return "0"
+        return mt.format_value(values.get(token))
+
+    filename = _safe_filename(mt.substitute((doc.filename or "") or "Dokument", _resolve))
+    return DataResponse(data={"filename": filename, "phase": docphase.key, "document": doc.key,
+                              "format": ("pdf" if tpl_format == template_format.PDF else "docx"),
+                              "title": doc.title, "markers": out})
+
+
+@router.post("/processes/{key}/document:preview-export")
+def preview_document_export(key: str, body: DocumentPreviewRequest,
+                            user: dict = Depends(get_current_user)):
+    """Die Dokument-Vorlage mit den Simulations-Werten füllen und als Word/PDF
+    zurückgeben – identische Fill-Logik wie der echte Export, nur ticket-los.
+    Nur Admins (Editor-Kontext)."""
+    _require_admin(user)
+    defn, docphase, doc = _preview_defn_doc(body)
+    catalog = {f.key: f for f in defn.fields}
+    bindings = dict(doc.bindings)
+    values = body.values or {}
+    from backend.services import docx_fill, pdf_fill, template_format, condition_dsl
+    from backend.services import mail_template as mt
+    # Editor-Werte (overrides) haben Vorrang; leere Marker bleiben Lücke.
+    if body.overrides is not None:
+        fill_values = {m: v for m, v in body.overrides.items() if v}
+    else:
+        fill_values = _auto_fill_values(bindings, catalog, values)
+    conditions = {name: condition_dsl.evaluate(cond, values)
+                  for name, cond in (doc.sections or {}).items()}
+
+    def _resolve(token: str) -> str:
+        if token == "title":
+            return ""
+        if token == "id":
+            return "0"
+        return mt.format_value(values.get(token))
+
+    name = _safe_filename(body.filename or mt.substitute((doc.filename or "") or "Dokument", _resolve))
+    tpl_bytes = _preview_template_bytes(key, docphase, doc)
+
+    if template_format.detect(tpl_bytes) == template_format.PDF:
+        pdf = pdf_fill.fill_pdf(tpl_bytes, fill_values)
+        return Response(content=pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": _content_disposition(name + ".pdf")})
+
+    data = docx_fill.fill_docx(tpl_bytes, fill_values, mark=body.highlight, conditions=conditions)
+    if body.format == "pdf":
+        from backend.services import docx_to_pdf
+        try:
+            pdf = docx_to_pdf.convert(data)
+        except docx_to_pdf.ConversionError as exc:
+            raise api_error(500, "PDF_CONVERSION_FAILED",
+                            f"Das PDF konnte nicht erzeugt werden: {exc}")
+        return Response(content=pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": _content_disposition(name + ".pdf")})
+    return Response(content=data, media_type=_MIME_DOCX,
+                    headers={"Content-Disposition": _content_disposition(name + ".docx")})
+
+
 @router.patch("/process-tickets/{ticket_id}", response_model=DataResponse[ProcessTicketOut])
 def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = Depends(get_current_user)):
     row = store.get(ticket_id)

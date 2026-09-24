@@ -108,6 +108,52 @@ export async function exportTicketDocument(
   }
 }
 
+/** Vorschau-Quelle (Editor, kein Ticket): Prozess/Phase/Dokument + Entwurf + Sim-Werte. */
+export interface DocumentPreviewSource {
+  key: string
+  phase: string
+  definition: unknown
+  values: Record<string, unknown>
+}
+
+/** Wie getDocumentFields, aber ticket-los aus dem Editor-Entwurf (Vorschau). */
+export async function previewDocumentFields(
+  src: DocumentPreviewSource, documentKey = '',
+): Promise<DocumentFields> {
+  const { data } = await client.post(
+    `/processes/${encodeURIComponent(src.key)}/document:preview-fields`,
+    { phase: src.phase, document: documentKey || undefined,
+      definition: src.definition, values: src.values })
+  return data.data
+}
+
+/** Wie exportTicketDocument, aber ticket-los aus dem Editor-Entwurf (Vorschau). */
+export async function previewDocumentExport(
+  src: DocumentPreviewSource,
+  opts: {
+    document?: string; filename?: string
+    overrides?: Record<string, string>
+    highlight?: boolean
+    format?: 'docx' | 'pdf'
+  } = {},
+): Promise<Blob> {
+  try {
+    const { data } = await client.post(
+      `/processes/${encodeURIComponent(src.key)}/document:preview-export`,
+      { phase: src.phase, document: opts.document, definition: src.definition, values: src.values,
+        overrides: opts.overrides, filename: opts.filename,
+        highlight: opts.highlight, format: opts.format },
+      { responseType: 'blob' })
+    return data as Blob
+  } catch (e) {
+    const resp = (e as { response?: { data?: unknown } })?.response
+    if (resp?.data instanceof Blob) {
+      try { resp.data = JSON.parse(await resp.data.text()) } catch { /* kein JSON */ }
+    }
+    throw e
+  }
+}
+
 export async function createTicket(body: {
   processKey: string
   title?: string | null

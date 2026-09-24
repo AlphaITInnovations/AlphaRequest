@@ -451,6 +451,56 @@ def test_document_export_fuellt_docx_vorlage(client, monkeypatch, tmp_path):
     assert "—" not in doc
 
 
+def _mock_vertrag_template(monkeypatch, tmp_path, body_html="<p>Name {{name}} in {{stadt}}.</p>"):
+    from backend.services.html_to_docx import html_to_docx
+    from backend.database import process_templates as tpl_db
+    from backend.services import attachment_storage as storage
+    tplfile = tmp_path / "vertrag.docx"
+    tplfile.write_bytes(html_to_docx(body_html))
+    monkeypatch.setattr(
+        tpl_db, "get_template",
+        lambda key, phase, doc=None: ({"process_key": key, "phase_key": phase, "stored_path": "v.docx"}
+                            if key == "doc" and phase == "vertrag" else None))
+    monkeypatch.setattr(storage, "full_path", lambda sp: str(tplfile))
+
+
+def test_preview_export_fuellt_vorlage_ohne_ticket(client, monkeypatch, tmp_path):
+    """Vorschau-Export (Editor, kein Ticket): füllt die Vorlage aus dem mitgesendeten
+    Entwurf + den Simulations-Werten – gleiche Fill-Logik wie der echte Export."""
+    _mock_vertrag_template(monkeypatch, tmp_path)
+    r = client.post("/processes/doc/document:preview-export",
+                    json={"definition": DEFN_DOC, "phase": "vertrag",
+                          "values": {"base.name": "Erika Musterfrau", "base.city": "Berlin"}})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    import io
+    import zipfile
+    doc = zipfile.ZipFile(io.BytesIO(r.content)).read("word/document.xml").decode("utf-8")
+    assert "Erika Musterfrau" in doc        # name -> base.name
+    assert "Berlin" in doc                  # stadt -> base.city
+    assert "{{" not in doc                  # keine rohen Marker mehr
+
+
+def test_preview_fields_liefert_marker_mit_werten(client, monkeypatch, tmp_path):
+    _mock_vertrag_template(monkeypatch, tmp_path)
+    r = client.post("/processes/doc/document:preview-fields",
+                    json={"definition": DEFN_DOC, "phase": "vertrag",
+                          "values": {"base.name": "Erika", "base.city": "Berlin"}})
+    assert r.status_code == 200
+    markers = {m["name"]: m for m in r.json()["data"]["markers"]}
+    assert markers["name"]["bound"] is True and markers["name"]["value"] == "Erika"
+    assert markers["stadt"]["value"] == "Berlin"
+
+
+def test_preview_export_ungueltiger_entwurf_422(client):
+    """Ein noch nicht gültiger Entwurf liefert eine klare 422 statt eines Serverfehlers."""
+    r = client.post("/processes/doc/document:preview-export",
+                    json={"definition": {"key": "x"}, "phase": "vertrag", "values": {}})
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "DRAFT_INVALID"
+
+
 def test_document_export_respektiert_confidential(client, monkeypatch, tmp_path):
     """Der gefüllte Vertrag darf ein vertrauliches Feld (Gehalt) NICHT enthalten,
     wenn der Exportierende zwar Vollsicht hat (Owner), aber nicht in der Gruppe des

@@ -14,15 +14,20 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
-  getDocumentFields, exportTicketDocument, type DocumentField,
+  getDocumentFields, exportTicketDocument, previewDocumentFields, previewDocumentExport,
+  type DocumentField, type DocumentPreviewSource,
 } from '@/api/processTickets'
 import { errorMessage } from '@/lib/processErrors'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
-  ticketId: number
+  /** Echtes Ticket – Standardfall. Im Vorschau-Modus (preview gesetzt) ungenutzt. */
+  ticketId?: number
   /** Welches Dokument der Phase (leer = erstes/Standard-Dokument). */
   documentKey?: string
+  /** Vorschau-Modus aus dem Editor: Marker + Export kommen ticket-los aus dem
+   *  Entwurf + den Simulations-Werten statt aus einem Ticket. */
+  preview?: DocumentPreviewSource
 }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -59,13 +64,23 @@ function overrides(): Record<string, string> {
   return out
 }
 
+/** Export/Vorschau-Render – im Vorschau-Modus ticket-los aus dem Entwurf. */
+function doExport(format: 'docx' | 'pdf'): Promise<Blob> {
+  const opts = { document: props.documentKey, overrides: overrides(), filename: filename.value, format }
+  return props.preview
+    ? previewDocumentExport(props.preview, opts)
+    : exportTicketDocument(props.ticketId as number, opts)
+}
+
 // ── Laden + Vorschau ─────────────────────────────────────────────────────────
 
 async function load() {
   loading.value = true
   loadError.value = null
   try {
-    const data = await getDocumentFields(props.ticketId, props.documentKey)
+    const data = props.preview
+      ? await previewDocumentFields(props.preview, props.documentKey)
+      : await getDocumentFields(props.ticketId as number, props.documentKey)
     fields.value = data.markers.map((m) => ({ ...m }))
     filename.value = data.filename || 'Dokument'
     docTitle.value = data.title
@@ -88,8 +103,7 @@ async function refreshPreview(): Promise<boolean> {
   const seq = ++renderSeq
   previewBusy.value = true
   try {
-    const blob = await exportTicketDocument(props.ticketId,
-      { document: props.documentKey, overrides: overrides(), filename: filename.value, format: 'pdf' })
+    const blob = await doExport('pdf')
     if (seq !== renderSeq) return false          // ein neuerer Lauf hat übernommen
     pdfBlob = blob
     const next = URL.createObjectURL(blob)
@@ -146,8 +160,7 @@ async function exportPdf() {
 async function exportDocx() {
   exporting.value = true
   try {
-    const blob = await exportTicketDocument(props.ticketId,
-      { document: props.documentKey, overrides: overrides(), filename: filename.value, format: 'docx' })
+    const blob = await doExport('docx')
     triggerDownload(blob, `${filename.value}.docx`)
   } catch (e) {
     showToast(errorMessage(e, 'Word-Export fehlgeschlagen.'), false)
