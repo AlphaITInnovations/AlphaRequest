@@ -13,7 +13,7 @@ import {
   currentApproval, currentPhase, isTerminal, resolveResponsibility, responsibilityText,
   simAdvance, simDecide, simJumpTo, simReject, simSetValues, startSim,
 } from '@/lib/processSim'
-import { STATUS_LABEL } from '@/lib/processSchema'
+import { PHASE_KIND_LABEL, PHASE_KIND_META, STATUS_LABEL } from '@/lib/processSchema'
 import SchemaForm from '@/components/process/form/SchemaForm.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
 import DocumentEditorModal from '@/components/process/form/DocumentEditorModal.vue'
@@ -47,6 +47,14 @@ const viewer = computed<SimViewer>(() => {
 
 const phase = computed(() => currentPhase(props.definition, state.value.runtime))
 const done = computed(() => isTerminal(props.definition, state.value.runtime))
+
+/** Farbton der Status-Badge – rot bei Ablehnung, grün bei Abschluss, sonst neutral. */
+const statusChipClass = computed(() => {
+  const s = state.value.status
+  if (s === 'rejected') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (s === 'archived' || s === 'done') return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+  return 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'
+})
 
 /** Offenes Dokument-Editor-Modal (document.key) im Vorschau-Modus, null = keins. */
 const openDoc = ref<string | null>(null)
@@ -118,40 +126,48 @@ function reject() { state.value = simReject(state.value) }
 
 <template>
   <div class="space-y-4">
-    <div class="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-900/20
-                px-4 py-3 text-sm text-blue-800 dark:text-blue-200 flex items-start justify-between gap-3">
-      <span>
-        Vorschau ohne echtes Ticket: nichts wird gespeichert, keine Mail versendet.
-        Die Regeln entsprechen dem Server – der Server bleibt aber maßgeblich.
-      </span>
-      <button @click="reset" class="btn-secondary text-xs py-1 shrink-0">Zurücksetzen</button>
-    </div>
-
-    <div class="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
-      <div class="space-y-4">
-        <!-- Statuszeile -->
-        <div class="card-section flex items-center gap-3 flex-wrap">
+    <!-- Kopf: aktueller Zustand (links) + Steuerung (rechts) -->
+    <div class="card-section">
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <!-- Zustand -->
+        <div class="flex items-center gap-3 min-w-0">
+          <span v-if="phase && !done"
+                class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-lg"
+                :class="PHASE_KIND_META[phase.kind].badge">{{ PHASE_KIND_META[phase.kind].icon }}</span>
+          <span v-else class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-lg
+                              bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-300">
+            {{ state.status === 'rejected' ? '✕' : '✓' }}
+          </span>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+              {{ done ? 'Abgeschlossen' : (phase?.label || phase?.key || '—') }}
+            </div>
+            <div class="mt-0.5 flex items-center gap-1.5 flex-wrap text-[11px] text-gray-400">
+              <span v-if="phase && !done">Schritt {{ phaseIndexNow + 1 }} von {{ definition.phases.length }}</span>
+              <span class="px-1.5 py-0.5 rounded-full font-medium" :class="statusChipClass">
+                {{ STATUS_LABEL[state.status] || state.status }}
+              </span>
+              <span v-if="phase && !done"
+                    class="px-1.5 py-0.5 rounded-full font-medium" :class="PHASE_KIND_META[phase.kind].chip">
+                {{ PHASE_KIND_LABEL[phase.kind] }}
+              </span>
+              <span v-if="responsibility"
+                    :class="offeneZustaendigkeit ? 'text-red-500 font-medium' : ''">
+                · Zuständig: {{ responsibilityText(responsibility, groupName) }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <!-- Steuerung -->
+        <div class="flex items-end gap-2 flex-wrap">
           <div>
-            <div class="text-xs text-gray-400">Aktuelle Phase</div>
-            <div class="text-sm font-medium text-gray-800 dark:text-gray-100">
-              {{ done ? '— abgeschlossen —' : (phase?.label || phase?.key || '—') }}
-            </div>
+            <label class="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Ansicht als</label>
+            <select v-model="roleKey" class="afi text-sm">
+              <option v-for="r in roles" :key="r.key" :value="r.key">{{ r.label }}</option>
+            </select>
           </div>
           <div>
-            <div class="text-xs text-gray-400">Status</div>
-            <div class="text-sm text-gray-700 dark:text-gray-200">
-              {{ STATUS_LABEL[state.status] || state.status }}
-            </div>
-          </div>
-          <div v-if="responsibility">
-            <div class="text-xs text-gray-400">Zuständig</div>
-            <div class="text-sm"
-                 :class="offeneZustaendigkeit ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'">
-              {{ responsibilityText(responsibility, groupName) }}
-            </div>
-          </div>
-          <div class="ml-auto">
-            <label class="block text-xs text-gray-400 mb-1">Phase (Vorschau)</label>
+            <label class="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Phase springen</label>
             <select :value="phaseIndexNow" class="afi text-sm"
                     @change="jumpTo(Number(($event.target as HTMLSelectElement).value))">
               <option v-for="(p, i) in definition.phases" :key="p.key" :value="i">
@@ -159,13 +175,17 @@ function reject() { state.value = simReject(state.value) }
               </option>
             </select>
           </div>
-          <div>
-            <label class="block text-xs text-gray-400 mb-1">Ansicht als</label>
-            <select v-model="roleKey" class="afi text-sm">
-              <option v-for="r in roles" :key="r.key" :value="r.key">{{ r.label }}</option>
-            </select>
-          </div>
+          <button @click="reset" class="btn-secondary text-sm">Zurücksetzen</button>
         </div>
+      </div>
+      <p class="mt-3 pt-3 border-t border-gray-100 dark:border-white/[0.06] text-[11px] text-gray-400">
+        Reine Vorschau – nichts wird gespeichert, keine Mail versendet. Die Regeln entsprechen dem
+        Server, maßgeblich bleibt aber der Server.
+      </p>
+    </div>
+
+    <div class="grid lg:grid-cols-[1fr_300px] gap-4 items-start">
+      <div class="space-y-4">
 
         <!-- Formular der aktuellen Phase -->
         <div v-if="!done && phase">
@@ -179,9 +199,13 @@ function reject() { state.value = simReject(state.value) }
             <div v-for="doc in phase.documents" :key="doc.key"
                  class="rounded-xl border border-gray-200 dark:border-white/10 px-4 py-3
                         flex items-center justify-between gap-3 flex-wrap">
-              <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
-                {{ doc.title || 'Dokument' }}
-              </p>
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-base
+                             bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-300">📄</span>
+                <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+                  {{ doc.title || 'Dokument' }}
+                </p>
+              </div>
               <button type="button" @click="openDoc = doc.key"
                       class="px-3 py-1.5 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#2B7D89]
                              transition shrink-0">
@@ -249,11 +273,17 @@ function reject() { state.value = simReject(state.value) }
           </div>
         </div>
 
-        <div v-else class="card-section text-center py-8">
-          <div class="text-sm text-gray-500 dark:text-gray-400">
+        <div v-else class="card-section text-center py-10">
+          <div class="mx-auto mb-3 w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
+               :class="state.status === 'rejected'
+                 ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300'
+                 : 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-300'">
+            {{ state.status === 'rejected' ? '✕' : '✓' }}
+          </div>
+          <div class="text-sm text-gray-600 dark:text-gray-300">
             {{ state.status === 'rejected' ? 'Auftrag abgelehnt.' : 'Prozess durchlaufen – Auftrag archiviert.' }}
           </div>
-          <button @click="reset" class="btn-secondary text-sm mt-3">Erneut simulieren</button>
+          <button @click="reset" class="btn-secondary text-sm mt-4">Erneut simulieren</button>
         </div>
 
         <!-- Gesammelte Werte aus Sicht der gewählten Rolle -->
@@ -267,9 +297,13 @@ function reject() { state.value = simReject(state.value) }
       <!-- Verlauf -->
       <div class="card-section lg:sticky lg:top-4">
         <h3 class="section-title">Verlauf</h3>
-        <ol class="space-y-2">
-          <li v-for="(e, i) in state.events" :key="i" class="text-xs text-gray-600 dark:text-gray-300">
-            <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#3EAAB8] mr-1.5 align-middle" />
+        <p v-if="!state.events.length" class="text-xs text-gray-400 italic">
+          Noch keine Schritte – oben ausfüllen und weiterschalten.
+        </p>
+        <ol v-else class="relative space-y-3 border-l border-gray-200 dark:border-white/10 pl-4">
+          <li v-for="(e, i) in state.events" :key="i" class="relative text-xs text-gray-600 dark:text-gray-300">
+            <span class="absolute -left-[21px] top-0.5 w-2 h-2 rounded-full bg-[#3EAAB8]
+                         ring-4 ring-white dark:ring-[#212B3A]" />
             {{ e.text }}
           </li>
         </ol>
