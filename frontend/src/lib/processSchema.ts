@@ -51,13 +51,11 @@ export const ACTION_TYPES: readonly ActionType[] = [
 /**
  * Aktionen, die als AUTOMATION wählbar sind. `assign_sequence` fehlt bewusst: die
  * Nummernvergabe lehnt der Server als Automation immer ab (sie wird als Feld mit
- * Feldtyp „Vom System vergeben" eingerichtet). `company_email` fehlt ebenfalls: es
- * hat (noch) keine Klick-Oberfläche und wird nur über importiertes JSON konfiguriert
- * – ACTION_TYPES kennt es aber, damit ein Import gültig bleibt. Nur zum Anbieten im
- * Editor gedacht – ACTION_TYPES bleibt die vollständige Liste (Labels, Normalisierung).
+ * Feldtyp „Vom System vergeben" eingerichtet). Alle übrigen – inkl. company_email –
+ * sind im Editor konfigurierbar.
  */
 export const AUTOMATION_ACTION_TYPES: readonly ActionType[] =
-  ACTION_TYPES.filter((t) => t !== 'assign_sequence' && t !== 'company_email')
+  ACTION_TYPES.filter((t) => t !== 'assign_sequence')
 
 /**
  * Nummernkreise, die die Laufzeit kennt (Spiegel von KNOWN_COUNTERS in

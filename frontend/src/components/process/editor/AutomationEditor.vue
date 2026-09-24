@@ -15,11 +15,11 @@
 import { computed, ref, watch } from 'vue'
 import type {
   Action, ActionType, Automation, DirectusOperation, DirectusWriteBinding, DirectusWriteSpec,
-  HttpHeader, HttpMethod, HttpRequestSpec, Trigger, TriggerType,
+  EmailSpec, HttpHeader, HttpMethod, HttpRequestSpec, Trigger, TriggerType,
 } from '@/types/process'
 import {
   ACTION_LABEL, AUTOMATION_ACTION_TYPES, COUNTER_LABEL, ENTER_STATUS, PRIORITIES, RECIPIENTS,
-  RECIPIENT_LABEL, SEQUENCE_COUNTERS, STATUS_LABEL, TRIGGER_LABEL, TRIGGER_TYPES,
+  SEQUENCE_COUNTERS, STATUS_LABEL, TRIGGER_LABEL, TRIGGER_TYPES,
 } from '@/lib/processSchema'
 import { listCollections, listFields } from '@/api/directus'
 import type { DirectusCollection, DirectusField } from '@/api/directus'
@@ -28,6 +28,7 @@ import { mailFieldRefs } from '@/lib/mailTemplate'
 import { useToast } from '@/composables/useToast'
 import ConditionEditor from './ConditionEditor.vue'
 import DurationInput from './DurationInput.vue'
+import RecipientPicker from './RecipientPicker.vue'
 
 const props = defineProps<{
   modelValue: Automation
@@ -37,6 +38,8 @@ const props = defineProps<{
    *  anzubieten. */
   fieldWidgets?: Record<string, string>
   groups?: { id: string; name: string }[]
+  /** Personen (für Einzel-Empfänger user:<id> in notify/escalate). */
+  users?: { id: string; displayName: string }[]
   /** Fachabteilungen DIESER Phase (für den Trigger „Fachabteilung abgeschlossen“).
    *  Fehlt sie, wird auf alle `groups` ausgewichen. */
   departmentGroups?: { id: string; name: string }[]
@@ -124,6 +127,25 @@ const blankHttp = (): HttpRequestSpec => ({
   method: 'POST', url: '', headers: [], body: null, contentType: null,
   timeoutSeconds: 10, onError: 'continue',
 })
+const blankEmail = (): EmailSpec => ({
+  targetField: '', firstNameField: '', lastNameField: '', companyField: '',
+  collection: '', emailField: '', conflictField: '',
+})
+
+/** Effektive Empfänger-Tokens: bevorzugt `recipients`, sonst der Alt-Wert `to`
+ *  (damit ältere Einzel-Empfänger im Multi-Picker erscheinen). */
+const effectiveRecipients = computed<string[]>(() => {
+  const ac = a.value.action
+  return ac.recipients && ac.recipients.length ? ac.recipients : (ac.to ? [ac.to] : [])
+})
+/** Auswahl schreiben – vereinheitlicht auf `recipients`, `to` wird geleert
+ *  (Laufzeit nutzt recipients-vor-to; so kein Doppel-Ziel-Footgun). */
+function setRecipients(list: string[]) {
+  patchAction({ recipients: list.length ? list : null, to: null })
+}
+function patchEmail(part: Partial<EmailSpec>) {
+  patchAction({ email: { ...(a.value.action.email ?? blankEmail()), ...part } })
+}
 
 const a = computed<Automation>(() => {
   const m = props.modelValue
@@ -142,12 +164,6 @@ function fieldText(k: string): string {
   const l = props.fieldLabels?.[k]
   return l ? `${l} · ${k}` : k
 }
-
-/** Feste Ziele plus je Fachabteilung ein 'group:<id>'-Eintrag. */
-const recipients = computed(() => [
-  ...RECIPIENTS.map((r) => ({ value: r, label: RECIPIENT_LABEL[r] ?? r })),
-  ...(props.groups ?? []).map((g) => ({ value: `group:${g.id}`, label: `Fachabteilung: ${g.name}` })),
-])
 
 // ── Schreiben ─────────────────────────────────────────────────────────────────
 
@@ -308,6 +324,9 @@ function onActionType(t: ActionType) {
   }
   if (t === 'http_request') {
     next.http = cur.http ?? blankHttp()
+  }
+  if (t === 'company_email') {
+    next.email = cur.email ?? blankEmail()
   }
   if (t === 'notify' || t === 'escalate') {
     next.to = cur.to ?? 'responsible'
@@ -497,15 +516,13 @@ watch(dwCollection, (c) => {
       <!-- Benachrichtigen / Eskalieren -->
       <template v-if="a.action.type === 'notify' || a.action.type === 'escalate'">
         <div>
-          <label class="lbl">Empfänger:in</label>
-          <select class="afi w-full" :value="a.action.to ?? ''" @change="patchAction({ to: val($event) || null })">
-            <option value="">Empfänger:in wählen…</option>
-            <option v-for="r in recipients" :key="r.value" :value="r.value">{{ r.label }}</option>
-            <option
-              v-if="a.action.to && !recipients.some((r) => r.value === a.action.to)"
-              :value="a.action.to"
-            >{{ a.action.to }} (unbekannt)</option>
-          </select>
+          <label class="lbl">Empfänger:innen</label>
+          <RecipientPicker :model-value="effectiveRecipients" :roles="RECIPIENTS"
+                           :groups="groups ?? []" :users="users ?? []"
+                           @update:model-value="setRecipients" />
+          <p class="mt-1 text-xs text-gray-400">
+            Rollen, einzelne Personen und/oder Fachabteilungen – mehrere möglich.
+          </p>
         </div>
         <div>
           <label class="lbl">Betreff-Zusatz <span class="text-gray-400 font-normal">(optional)</span></label>
@@ -889,6 +906,70 @@ watch(dwCollection, (c) => {
             nutzen: <code class="text-[11px]">{{ placeholderHint }}</code> … In der URL werden
             die Werte automatisch URL-sicher kodiert.
           </p>
+        </div>
+      </template>
+
+      <!-- Firmenmail bilden & prüfen (company_email) -->
+      <template v-else-if="a.action.type === 'company_email'">
+        <p class="text-xs text-gray-400">
+          Bildet aus Vor-/Nachname und der Domain der gewählten Firma eine Adresse
+          (vorname.nachname@…), schreibt sie ins Zielfeld und prüft in Directus auf
+          Eindeutigkeit. Bei Konflikt/ungültigem Format wird das Konflikt-Feld gesetzt und der
+          Phasenabschluss blockiert (das Zielfeld lässt sich dann per „editableWhen" freischalten).
+        </p>
+        <div class="grid md:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl">Zielfeld (Mailadresse)</label>
+            <select class="afi w-full" :value="a.action.email?.targetField ?? ''"
+                    @change="patchEmail({ targetField: val($event) })">
+              <option value="">— wählen —</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Konflikt-Feld (bool)</label>
+            <select class="afi w-full" :value="a.action.email?.conflictField ?? ''"
+                    @change="patchEmail({ conflictField: val($event) })">
+              <option value="">— wählen —</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Vorname-Feld</label>
+            <select class="afi w-full" :value="a.action.email?.firstNameField ?? ''"
+                    @change="patchEmail({ firstNameField: val($event) })">
+              <option value="">— wählen —</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Nachname-Feld</label>
+            <select class="afi w-full" :value="a.action.email?.lastNameField ?? ''"
+                    @change="patchEmail({ lastNameField: val($event) })">
+              <option value="">— wählen —</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Firmen-Feld (Domain-Lookup)</label>
+            <select class="afi w-full" :value="a.action.email?.companyField ?? ''"
+                    @change="patchEmail({ companyField: val($event) })">
+              <option value="">— wählen —</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Directus-Collection</label>
+            <input type="text" class="afi w-full font-mono text-sm" placeholder="z. B. mitarbeitende"
+                   :value="a.action.email?.collection ?? ''"
+                   @input="patchEmail({ collection: val($event) })" />
+          </div>
+          <div>
+            <label class="lbl">E-Mail-Feld in der Collection</label>
+            <input type="text" class="afi w-full font-mono text-sm" placeholder="z. B. email"
+                   :value="a.action.email?.emailField ?? ''"
+                   @input="patchEmail({ emailField: val($event) })" />
+          </div>
         </div>
       </template>
     </div>

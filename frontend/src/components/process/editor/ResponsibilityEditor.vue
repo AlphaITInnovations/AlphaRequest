@@ -167,5 +167,20 @@ function removeRule(i: number) { patch({ rule: props.modelValue.rule.filter((_, 
         </span>
       </span>
     </label>
+
+    <label v-if="modelValue.kind === 'departments'"
+           class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 pt-3
+                  border-t border-gray-100 dark:border-white/[0.06]">
+      <input type="checkbox" :checked="modelValue.resetOnDescriptionChange" :disabled="readonly"
+             class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]"
+             @change="patch({ resetOnDescriptionChange: ($event.target as HTMLInputElement).checked })" />
+      <span>
+        Quittierungen bei Beschreibungsänderung zurücksetzen
+        <span class="block text-[11px] text-gray-400">
+          Ändert sich die Auftragsbeschreibung, müssen bereits fertige Fachabteilungen
+          erneut quittieren.
+        </span>
+      </span>
+    </label>
   </div>
 </template>

@@ -290,7 +290,7 @@ function removeConstraint(i: number) {
                    :badge="modelValue.automations.length || null" :default-open="false">
       <AutomationList :model-value="modelValue.automations" :field-keys="fieldKeys"
                       :field-labels="fieldLabels" :field-widgets="fieldWidgets"
-                      :groups="groups"
+                      :groups="groups" :users="users"
                       :process-name="processName" :phase-label="modelValue.label || modelValue.key"
                       :taken-ids="takenIds" :readonly="readonly"
                       @update:model-value="patch({ automations: $event })" />

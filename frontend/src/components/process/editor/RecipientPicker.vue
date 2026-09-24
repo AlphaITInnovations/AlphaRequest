@@ -11,18 +11,21 @@
 import { computed } from 'vue'
 import { ESCALATION_ROLES, RECIPIENT_LABEL } from '@/lib/processSchema'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: string[]
   groups: { id: string; name: string }[]
   users: { id: string; displayName: string }[]
+  /** Wählbare Rollen-Tokens. Default = Eskalationsrollen (ohne watchers);
+   *  Automationen reichen hier RECIPIENTS (inkl. watchers) durch. */
+  roles?: readonly string[]
   readonly?: boolean
-}>()
+}>(), { roles: () => ESCALATION_ROLES })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string[]] }>()
 
 const selected = computed<string[]>(() => props.modelValue ?? [])
 
-const roleTokens = computed(() => selected.value.filter((t) => ESCALATION_ROLES.includes(t)))
+const roleTokens = computed(() => selected.value.filter((t) => props.roles.includes(t)))
 const userTokens = computed(() => selected.value.filter((t) => t.startsWith('user:')))
 const groupTokens = computed(() => selected.value.filter((t) => t.startsWith('group:')))
 
@@ -62,7 +65,7 @@ function onAddGroup(e: Event) {
   <div class="space-y-2.5">
     <!-- Rollen -->
     <div class="flex flex-wrap gap-2">
-      <button v-for="role in ESCALATION_ROLES" :key="role" type="button" :disabled="readonly"
+      <button v-for="role in roles" :key="role" type="button" :disabled="readonly"
               @click="toggleRole(role)"
               class="rounded-full px-3 py-1 text-xs font-medium border transition select-none"
               :class="roleTokens.includes(role)

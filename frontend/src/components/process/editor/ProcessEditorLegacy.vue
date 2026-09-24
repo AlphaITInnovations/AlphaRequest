@@ -352,7 +352,8 @@ onUnmounted(() => {
             <fieldset :disabled="ed.readonly.value" class="contents">
               <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
                               :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
-                              :groups="ed.sources.groups" :process-name="ed.draft.value.name"
+                              :groups="ed.sources.groups" :users="ed.sources.users"
+                              :process-name="ed.draft.value.name"
                               title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
                               @update:model-value="setDefinition({ automations: $event })" />
             </fieldset>

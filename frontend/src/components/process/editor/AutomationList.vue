@@ -17,6 +17,8 @@ const props = defineProps<{
   fieldLabels?: Record<string, string>
   fieldWidgets?: Record<string, string>
   groups?: { id: string; name: string }[]
+  /** Personen (für Einzel-Empfänger in notify/escalate). */
+  users?: { id: string; displayName: string }[]
   /** Nur für die Testmail (Betreff/Kopf) – an AutomationEditor durchgereicht. */
   processName?: string | null
   phaseLabel?: string | null
@@ -129,6 +131,7 @@ function add() {
           :field-labels="fieldLabels"
           :field-widgets="fieldWidgets"
           :groups="groups"
+          :users="users"
           :process-name="processName"
           :phase-label="phaseLabel"
           @update:model-value="(v) => update(i, v)"
