@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * Neuer Prozess-Editor (v2) – Shell / Grundgerüst (M0).
+ * Neuer Prozess-Editor (v2) – Shell / Grundgerüst.
  *
- * Ersetzt die vier Reiter durch ein linkes Navigationsraster (Prozess-Bereiche
- * oben, Phasenliste darunter) und einen Arbeitsbereich rechts – so ist immer
- * sichtbar, wo man ist, ohne lange Scroll-Strecken. Der Zustandskern
- * (useProcessEditor) und ALLE bestehenden Unter-Editoren werden unverändert
- * weiterverwendet; nur die Anordnung ist neu. Weitere Ausbaustufen (Phasen-
- * Pipeline, Inspector, Drawer, Registry) setzen darauf auf.
+ * Navigation über HORIZONTALE Tabs (Ablauf & Formulare · Prozess · Vorschau ·
+ * JSON) – wie im klassischen Editor, aber klarer abgegrenzt: eigene Tab-Leiste
+ * mit Fehler-Badges je Tab und sauber getrennte Karten im Arbeitsbereich. Der
+ * Zustandskern (useProcessEditor) und ALLE bestehenden Unter-Editoren werden
+ * unverändert weiterverwendet; hier entsteht nur die Struktur, auf der die
+ * modernisierten Flächen (Phasen-Pipeline, Feld-Drawer …) aufsetzen.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
@@ -28,7 +28,14 @@ import IssueList from '@/components/process/editor/IssueList.vue'
 import CreatePermissionsEditor from '@/components/process/editor/CreatePermissionsEditor.vue'
 import ProcessSimulator from '@/components/process/ProcessSimulator.vue'
 
-type Section = 'stammdaten' | 'permissions' | 'automations' | 'phase' | 'preview' | 'json'
+type Tab = 'flow' | 'prozess' | 'preview' | 'json'
+
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'flow', label: 'Ablauf & Formulare', icon: '🔀' },
+  { id: 'prozess', label: 'Prozess', icon: '⚙️' },
+  { id: 'preview', label: 'Vorschau', icon: '👁' },
+  { id: 'json', label: 'JSON', icon: '{ }' },
+]
 
 const route = useRoute()
 const router = useRouter()
@@ -36,7 +43,7 @@ const { showToast } = useToast()
 const ed = useProcessEditor()
 const editorFlag = useProcessEditorFlag()
 
-const section = ref<Section>('phase')
+const tab = ref<Tab>('flow')
 const selectedPhase = ref(0)
 
 const PH_FELD = '{{feld.key}}'
@@ -64,6 +71,15 @@ const phaseErrorIndexes = computed(() => {
   return set
 })
 
+/** Fehler je Tab – als kleine Badge in der Tab-Leiste (bessere Abgrenzung). */
+const flowErrorCount = computed(() =>
+  ed.issues.value.filter((i) => i.severity === 'error' && /^phases\./.test(i.path)).length)
+const prozessErrorCount = computed(() =>
+  ed.issues.value.filter((i) => i.severity === 'error' && !/^phases\./.test(i.path)).length)
+function tabBadge(id: Tab): number {
+  return id === 'flow' ? flowErrorCount.value : id === 'prozess' ? prozessErrorCount.value : 0
+}
+
 const currentPhase = computed<PhaseDef | null>(() => {
   const d = ed.draft.value
   if (!d || !d.phases.length) return null
@@ -89,7 +105,7 @@ function setPhase(next: PhaseDef) {
 
 function selectPhase(i: number) {
   selectedPhase.value = i
-  section.value = 'phase'
+  tab.value = 'flow'
 }
 
 function onFieldRenamed(p: { from: string; to: string }) { ed.renameFieldKey(p.from, p.to) }
@@ -120,8 +136,8 @@ function revert() {
 }
 
 // ── JSON ──────────────────────────────────────────────────────────────────
-watch([section, ed.draft], () => {
-  if (section.value === 'json' && ed.draft.value) {
+watch([tab, ed.draft], () => {
+  if (tab.value === 'json' && ed.draft.value) {
     jsonText.value = JSON.stringify(ed.draft.value, null, 2)
     jsonError.value = null
   }
@@ -165,13 +181,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
 })
 
-// Ein Navigationseintrag im linken Raster.
-const railBtn = (active: boolean) =>
-  active
-    ? 'bg-[#3EAAB8]/12 text-[#3EAAB8] font-medium'
-    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5'
-const RAIL_BASE = 'w-full text-left px-3 py-2 rounded-lg text-sm transition'
-const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 pt-1 pb-1.5'
+const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-1 pb-2'
 </script>
 
 <template>
@@ -255,43 +265,68 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
       </div>
 
       <template v-else-if="ed.draft.value">
-        <div class="grid lg:grid-cols-[240px_1fr] gap-5 items-start">
-          <!-- Linkes Navigationsraster -->
-          <aside class="lg:sticky lg:top-4 space-y-3">
-            <nav class="card-section !p-2 space-y-0.5">
-              <p :class="RAIL_LABEL">Prozess</p>
-              <button type="button" @click="section = 'stammdaten'"
-                      :class="[RAIL_BASE, railBtn(section === 'stammdaten')]">Stammdaten</button>
-              <button type="button" @click="section = 'permissions'"
-                      :class="[RAIL_BASE, railBtn(section === 'permissions')]">Erstellrechte</button>
-              <button type="button" @click="section = 'automations'"
-                      :class="[RAIL_BASE, railBtn(section === 'automations')]">Prozessweite Automationen</button>
-            </nav>
+        <!-- Tab-Leiste: horizontal, klar abgegrenzt, mit Fehler-Badge je Tab -->
+        <div class="border-b border-gray-200 dark:border-white/10 mb-5">
+          <nav class="flex gap-1 -mb-px overflow-x-auto" role="tablist">
+            <button v-for="t in TABS" :key="t.id" type="button" role="tab"
+                    :aria-selected="tab === t.id" @click="tab = t.id"
+                    class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2
+                           whitespace-nowrap transition"
+                    :class="tab === t.id
+                      ? 'border-[#3EAAB8] text-[#3EAAB8]'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 '
+                        + 'dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/20'">
+              <span class="text-[13px] leading-none opacity-80">{{ t.icon }}</span>
+              <span>{{ t.label }}</span>
+              <span v-if="tabBadge(t.id)"
+                    class="ml-0.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center
+                           rounded-full text-[11px] font-semibold
+                           bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                {{ tabBadge(t.id) }}
+              </span>
+            </button>
+          </nav>
+        </div>
 
-            <div class="card-section !p-3">
-              <p :class="RAIL_LABEL" class="!px-1">Phasen</p>
-              <PhaseChain :model-value="ed.draft.value.phases"
-                          :selected="section === 'phase' ? selectedPhase : -1"
-                          :readonly="ed.readonly.value" :error-phases="phaseErrorIndexes"
-                          @update:model-value="setDefinition({ phases: $event })"
-                          @select="selectPhase" />
+        <IssueList :issues="ed.issues.value" class="mb-4" />
+
+        <!-- Bearbeitbare Tabs im Schreibschutz-Rahmen; Vorschau/JSON stehen bewusst
+             außerhalb, damit sie auch in einer veröffentlichten Version nutzbar bleiben. -->
+        <template v-if="tab === 'flow' || tab === 'prozess'">
+          <fieldset :disabled="ed.readonly.value" class="contents">
+            <!-- Ablauf & Formulare -->
+            <div v-if="tab === 'flow'" class="grid lg:grid-cols-[280px_1fr] gap-5 items-start">
+              <div class="card-section lg:sticky lg:top-4 !p-3">
+                <p :class="RAIL_LABEL">Phasen</p>
+                <PhaseChain :model-value="ed.draft.value.phases" :selected="selectedPhase"
+                            :readonly="ed.readonly.value" :error-phases="phaseErrorIndexes"
+                            @update:model-value="setDefinition({ phases: $event })"
+                            @select="selectPhase" />
+              </div>
+              <div class="min-w-0 space-y-5">
+                <template v-if="currentPhase">
+                  <FormBuilder :definition="ed.draft.value" :phase-index="selectedPhase"
+                               :groups="ed.sources.groups" :field-keys="ed.fieldKeys.value"
+                               :field-labels="ed.fieldLabels.value" :readonly="ed.readonly.value"
+                               @update:definition="ed.update" @renamed="onFieldRenamed" />
+                  <PhaseInspector :model-value="currentPhase" :index="selectedPhase"
+                                  :catalog="ed.draft.value.fields" :groups="ed.sources.groups"
+                                  :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
+                                  :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
+                                  :taken-ids="ed.automationIds.value" :phases="ed.draft.value.phases"
+                                  :process-key="ed.draft.value.key" :process-name="ed.draft.value.name"
+                                  :readonly="ed.readonly.value"
+                                  @update:model-value="setPhase" />
+                </template>
+                <p v-else class="card-section text-sm text-gray-400 italic">
+                  Noch keine Phase vorhanden – links unter „Phasen" eine anlegen.
+                </p>
+              </div>
             </div>
 
-            <nav class="card-section !p-2 space-y-0.5">
-              <button type="button" @click="section = 'preview'"
-                      :class="[RAIL_BASE, railBtn(section === 'preview')]">Vorschau</button>
-              <button type="button" @click="section = 'json'"
-                      :class="[RAIL_BASE, railBtn(section === 'json')]">JSON</button>
-            </nav>
-          </aside>
-
-          <!-- Arbeitsbereich -->
-          <div class="min-w-0 space-y-4">
-            <IssueList :issues="ed.issues.value" />
-
-            <fieldset :disabled="ed.readonly.value" class="contents">
-              <!-- Stammdaten -->
-              <section v-if="section === 'stammdaten'" class="card-section">
+            <!-- Prozess: Stammdaten · Erstellrechte · Automationen (getrennte Karten) -->
+            <div v-else class="space-y-4">
+              <section class="card-section">
                 <h2 class="section-title">Stammdaten</h2>
                 <div class="grid md:grid-cols-3 gap-3">
                   <div class="md:col-span-2">
@@ -340,16 +375,15 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
                 </div>
               </section>
 
-              <!-- Erstellrechte -->
-              <section v-else-if="section === 'permissions'" class="card-section">
+              <section class="card-section">
                 <h2 class="section-title">Wer darf diesen Prozess starten?</h2>
                 <CreatePermissionsEditor :model-value="ed.draft.value.createPermissions"
                                          :groups="ed.sources.groups" :users="ed.sources.users"
                                          @update:model-value="setDefinition({ createPermissions: $event })" />
               </section>
 
-              <!-- Prozessweite Automationen -->
-              <section v-else-if="section === 'automations'" class="card-section">
+              <section class="card-section">
+                <h2 class="section-title">Prozessweite Automationen</h2>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
                   Diese Automationen gelten in <b>jeder</b> Phase des Prozesses – z. B. eine Erinnerung,
                   die überall greift.
@@ -360,48 +394,27 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
                                 title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
                                 @update:model-value="setDefinition({ automations: $event })" />
               </section>
+            </div>
+          </fieldset>
+        </template>
 
-              <!-- Phase (Formular + Einstellungen) -->
-              <template v-else-if="section === 'phase'">
-                <template v-if="currentPhase">
-                  <FormBuilder :definition="ed.draft.value" :phase-index="selectedPhase"
-                               :groups="ed.sources.groups" :field-keys="ed.fieldKeys.value"
-                               :field-labels="ed.fieldLabels.value" :readonly="ed.readonly.value"
-                               @update:definition="ed.update" @renamed="onFieldRenamed" />
-                  <PhaseInspector :model-value="currentPhase" :index="selectedPhase"
-                                  :catalog="ed.draft.value.fields" :groups="ed.sources.groups"
-                                  :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
-                                  :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
-                                  :taken-ids="ed.automationIds.value" :phases="ed.draft.value.phases"
-                                  :process-key="ed.draft.value.key" :process-name="ed.draft.value.name"
-                                  :readonly="ed.readonly.value"
-                                  @update:model-value="setPhase" />
-                </template>
-                <p v-else class="text-sm text-gray-400 italic card-section">
-                  Noch keine Phase vorhanden – links unter „Phasen" eine anlegen.
-                </p>
-              </template>
+        <!-- Vorschau -->
+        <div v-else-if="tab === 'preview'">
+          <ProcessSimulator :definition="ed.draft.value" :sources="ed.sources" />
+        </div>
 
-              <!-- Vorschau -->
-              <div v-else-if="section === 'preview'">
-                <ProcessSimulator :definition="ed.draft.value" :sources="ed.sources" />
-              </div>
-
-              <!-- JSON -->
-              <div v-else class="card-section">
-                <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                  Rohform der Definition. Änderungen werden erst mit „JSON übernehmen" wirksam.
-                </p>
-                <textarea v-model="jsonText" rows="24" spellcheck="false"
-                          class="afi w-full font-mono text-xs" :disabled="ed.readonly.value" />
-                <p v-if="jsonError" class="text-sm text-red-600 mt-2">{{ jsonError }}</p>
-                <div class="flex justify-end mt-2">
-                  <button @click="applyJson" :disabled="ed.readonly.value" class="btn-secondary text-sm">
-                    JSON übernehmen
-                  </button>
-                </div>
-              </div>
-            </fieldset>
+        <!-- JSON -->
+        <div v-else class="card-section">
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+            Rohform der Definition. Änderungen werden erst mit „JSON übernehmen" wirksam.
+          </p>
+          <textarea v-model="jsonText" rows="24" spellcheck="false"
+                    class="afi w-full font-mono text-xs" :disabled="ed.readonly.value" />
+          <p v-if="jsonError" class="text-sm text-red-600 mt-2">{{ jsonError }}</p>
+          <div class="flex justify-end mt-2">
+            <button @click="applyJson" :disabled="ed.readonly.value" class="btn-secondary text-sm">
+              JSON übernehmen
+            </button>
           </div>
         </div>
       </template>
