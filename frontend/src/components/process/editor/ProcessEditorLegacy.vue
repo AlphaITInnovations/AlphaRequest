@@ -327,6 +327,7 @@ onUnmounted(() => {
                                 :taken-ids="ed.automationIds.value"
                                 :phases="ed.draft.value.phases"
                                 :process-key="ed.draft.value.key"
+                                :process-name="ed.draft.value.name"
                                 :readonly="ed.readonly.value"
                                 @update:model-value="setPhase" />
               </template>
@@ -351,7 +352,7 @@ onUnmounted(() => {
             <fieldset :disabled="ed.readonly.value" class="contents">
               <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
                               :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
-                              :groups="ed.sources.groups"
+                              :groups="ed.sources.groups" :process-name="ed.draft.value.name"
                               title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
                               @update:model-value="setDefinition({ automations: $event })" />
             </fieldset>

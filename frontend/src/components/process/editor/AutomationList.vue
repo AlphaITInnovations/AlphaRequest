@@ -17,6 +17,9 @@ const props = defineProps<{
   fieldLabels?: Record<string, string>
   fieldWidgets?: Record<string, string>
   groups?: { id: string; name: string }[]
+  /** Nur für die Testmail (Betreff/Kopf) – an AutomationEditor durchgereicht. */
+  processName?: string | null
+  phaseLabel?: string | null
   title?: string
   /** ALLE Automations-IDs des Prozesses – IDs müssen prozessweit eindeutig sein,
    *  nicht nur innerhalb dieser Liste (sonst hieße die erste Automation jeder
@@ -126,6 +129,8 @@ function add() {
           :field-labels="fieldLabels"
           :field-widgets="fieldWidgets"
           :groups="groups"
+          :process-name="processName"
+          :phase-label="phaseLabel"
           @update:model-value="(v) => update(i, v)"
           @remove="remove(i)"
         />

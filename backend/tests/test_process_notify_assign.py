@@ -249,6 +249,50 @@ def test_notify_ohne_emailbody_bleibt_generisch():
     assert "Dieser Auftrag wartet auf Ihre Bearbeitung." in body
 
 
+def test_automation_testmail_ist_gekennzeichnet_und_fuellt_beispiele():
+    """Die Automations-Testmail trägt [TEST] + den Betreff-Zusatz, den Prozessnamen
+    und setzt Beispiel-Anzeigen für die {{feld}}-Platzhalter ein."""
+    subject, body = pactions.build_automation_test_message(
+        template="Sofort-Sperrung",
+        email_body="Bitte {{base.x}} sperren (#{{id}}) – Auftrag {{title}}.",
+        sample_values={"base.x": "‹Nachname›"},
+        process_name="Offboarding Max", phase_label="Kündigung")
+    assert "[TEST]" in subject and "Sofort-Sperrung" in subject and "Offboarding Max" in subject
+    assert "‹Nachname›" in body            # Platzhalter → Beispiel-Anzeige
+    assert "Offboarding Max" in body        # {{title}} → Prozessname
+    assert "Testnachricht" in body
+
+
+def test_automation_testmail_ohne_body_ist_leer_aber_gekennzeichnet():
+    subject, body = pactions.build_automation_test_message(
+        template=None, email_body=None, sample_values={}, process_name=None, phase_label=None)
+    assert "[TEST]" in subject and "Erinnerung" in subject   # Fallback-Verb
+    assert "Testnachricht" in body
+
+
+def test_automation_testmail_verb_folgt_dem_aktionstyp():
+    """Ohne eigenen Betreff-Zusatz heißt es bei escalate „Eskalation" (wie im
+    Echtbetrieb), nicht „Erinnerung"."""
+    subj_esc, _ = pactions.build_automation_test_message(
+        template=None, email_body=None, action_type="escalate")
+    assert "Eskalation" in subj_esc and "Erinnerung" not in subj_esc
+    subj_not, _ = pactions.build_automation_test_message(
+        template=None, email_body=None, action_type="notify")
+    assert "Erinnerung" in subj_not
+
+
+def test_testmail_aufloesung_ohne_zentral_fallback():
+    """fallback=False (Testmail): ein nicht auflösbares Ziel bleibt LEER (kein
+    stiller Griff zur Zentraladresse), ein echtes Gruppen-Ziel löst normal auf."""
+    row = {"id": 1, "title": "T"}
+    # responsible ohne Phase + owner ohne owner_id → nicht auflösbar → leer
+    assert pactions.resolve_recipients_multi(["responsible"], row, None, GROUPS, fallback=False) == []
+    assert pactions.resolve_recipients_multi(["owner"], row, None, GROUPS, fallback=False) == []
+    # konkrete Fachabteilung mit Verteiler löst weiterhin auf
+    assert pactions.resolve_recipients_multi(
+        ["group:g_it"], row, None, GROUPS, fallback=False) == ["it@example.org"]
+
+
 def test_freigabe_mail_ohne_anhaenge_uebergibt_kein_kwarg(monkeypatch):
     """Ohne Dateien wird `attachments` NICHT übergeben – alte Sender-Signaturen
     (ohne den Parameter) müssen weiter funktionieren."""

@@ -214,3 +214,17 @@ export async function testEscalationMail(payload: {
   const { data } = await client.post('/processes:test-escalation-mail', payload)
   return data.data
 }
+
+/** Testmail einer notify/escalate-Automation an die TATSÄCHLICH konfigurierten
+ *  Empfänger (Fachabteilungs-Verteiler) schicken – zur Vorschau im Editor.
+ *  Anders als die Eskalations-Testmail bewusst an die echten Adressen. */
+export async function testAutomationMail(payload: {
+  to?: string | null; recipients?: string[] | null
+  type?: string | null
+  template?: string | null; emailBody?: string | null
+  sampleValues?: Record<string, string>
+  processName?: string | null; phaseLabel?: string | null
+}): Promise<{ ok: boolean; message: string }> {
+  const { data } = await client.post('/processes:test-automation-mail', payload)
+  return data.data
+}

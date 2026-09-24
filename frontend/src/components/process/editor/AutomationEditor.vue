@@ -23,6 +23,9 @@ import {
 } from '@/lib/processSchema'
 import { listCollections, listFields } from '@/api/directus'
 import type { DirectusCollection, DirectusField } from '@/api/directus'
+import { testAutomationMail } from '@/api/processes'
+import { mailFieldRefs } from '@/lib/mailTemplate'
+import { useToast } from '@/composables/useToast'
 import ConditionEditor from './ConditionEditor.vue'
 import DurationInput from './DurationInput.vue'
 
@@ -37,6 +40,9 @@ const props = defineProps<{
   /** Fachabteilungen DIESER Phase (für den Trigger „Fachabteilung abgeschlossen“).
    *  Fehlt sie, wird auf alle `groups` ausgewichen. */
   departmentGroups?: { id: string; name: string }[]
+  /** Nur kosmetisch für die Testmail (Betreff/Kopf). Fehlt → generischer Text. */
+  processName?: string | null
+  phaseLabel?: string | null
 }>()
 
 const DIRECTUS_OPS: { value: DirectusOperation; label: string }[] = [
@@ -76,6 +82,40 @@ const blankAction = (): Action => ({
 // Mustaches sonst als (verbotene) Attribut-Interpolation deuten.
 const bodyPlaceholder = 'Freitext an die Empfänger:innen. Platzhalter: {{feld.key}}, {{title}}, {{id}}.'
 const bodyExample = '{{base.mitarbeiter_nachname}}'
+
+const { showToast } = useToast()
+const sendingTest = ref(false)
+
+/** Diese Automations-Mail als Test an die KONFIGURIERTEN Empfänger senden.
+ *  Bewusst an die echten Adressen (Verteiler) – daher vorher bestätigen lassen. */
+async function sendTest() {
+  const ac = a.value.action
+  const tokens = (ac.recipients && ac.recipients.length ? ac.recipients : (ac.to ? [ac.to] : []))
+  if (!tokens.length) {
+    showToast('Bitte zuerst eine Empfänger-Fachabteilung wählen.', false)
+    return
+  }
+  if (!window.confirm('Die Testmail geht an die echten hinterlegten Empfänger:innen '
+      + '(Fachabteilungs-Verteiler). Jetzt senden?')) return
+  // {{feld}}-Platzhalter mit Beispiel-Anzeigen (Feld-Label in ‹…›) füllen.
+  const sampleValues: Record<string, string> = {}
+  for (const ref of mailFieldRefs(ac.emailBody)) {
+    sampleValues[ref] = `‹${props.fieldLabels?.[ref] || ref}›`
+  }
+  sendingTest.value = true
+  try {
+    const res = await testAutomationMail({
+      to: ac.to, recipients: ac.recipients, type: ac.type,
+      template: ac.template, emailBody: ac.emailBody,
+      sampleValues, processName: props.processName ?? null, phaseLabel: props.phaseLabel ?? null,
+    })
+    showToast(res.message || 'Testmail gesendet', true)
+  } catch (e: any) {
+    showToast(e?.response?.data?.error?.message || 'Testmail konnte nicht gesendet werden.', false)
+  } finally {
+    sendingTest.value = false
+  }
+}
 const blankDirectus = (): DirectusWriteSpec => ({
   operation: 'create', collection: '', fieldMap: [], idField: '',
   onError: 'continue', matchField: null,
@@ -494,6 +534,13 @@ watch(dwCollection, (c) => {
             Erscheint als Fließtext in der Mail. Platzhalter wie <code>{{ bodyExample }}</code>
             werden mit den Auftragswerten gefüllt (wie in der Freigabe-Mail).
           </p>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" class="btn-secondary text-xs py-1" :disabled="sendingTest"
+                  title="Diese Mail als Test an die konfigurierten Empfänger:innen senden"
+                  @click="sendTest">
+            {{ sendingTest ? 'Sende …' : 'Testmail an Empfänger' }}
+          </button>
         </div>
       </template>
 

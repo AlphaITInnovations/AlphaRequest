@@ -150,10 +150,14 @@ def resolve_recipients(to: Optional[str], row: dict, phase: Optional[PhaseDef],
 
 
 def resolve_recipients_multi(tokens: list, row: dict, phase: Optional[PhaseDef],
-                             groups: Optional[list] = None) -> list[str]:
+                             groups: Optional[list] = None, *, fallback: bool = True) -> list[str]:
     """Wie resolve_recipients, aber für MEHRERE Ziele (Eskalationsstufe mit einer
     Empfänger-Liste). Vereinigt die Adressen aller Tokens und wendet den
-    TICKET_MAIL-Fallback GENAU EINMAL an, wenn insgesamt niemand herauskommt."""
+    TICKET_MAIL-Fallback GENAU EINMAL an, wenn insgesamt niemand herauskommt.
+
+    `fallback=False` schaltet die Zentral-Adresse ab und liefert das rohe Ergebnis
+    (u. U. leer). Das braucht die Testmail: dort SOLL ein nicht auflösbarer
+    Empfänger sichtbar scheitern, statt still an der Zentraladresse zu landen."""
     toks = [t for t in tokens if t]
     dist = _dist_fn(groups)
     emails: set[str] = set()
@@ -163,7 +167,7 @@ def resolve_recipients_multi(tokens: list, row: dict, phase: Optional[PhaseDef],
     # „Nur Beobachter:innen und keine da" ist ein gültiges Leerergebnis.
     if not emails and toks and all(t == "watchers" for t in toks):
         return []
-    if not emails:
+    if not emails and fallback:
         fb = getattr(config, "TICKET_MAIL", "") or ""
         if fb:
             emails.add(fb)
@@ -291,6 +295,64 @@ def send_escalation_test(to: str, *, message: Optional[str] = None, raise_priori
     Person selbst – bewusst NICHT an die konfigurierten Empfänger/Verteiler)."""
     subject, body = build_escalation_test_message(message, raise_priority, process_name, phase_label)
     sender([to], subject, body, kind="escalation_test")
+
+
+def build_automation_test_message(template: Optional[str], email_body: Optional[str],
+                                  sample_values: Optional[dict] = None,
+                                  process_name: Optional[str] = None,
+                                  phase_label: Optional[str] = None,
+                                  action_type: Optional[str] = None) -> tuple[str, str]:
+    """Betreff + Body einer notify/escalate-TESTMAIL – wie die echte Automations-
+    Mail (_build_message), aber klar als Test gekennzeichnet und mit BEISPIEL-Werten
+    für die {{feld}}-Platzhalter (im Editor gibt es kein echtes Ticket)."""
+    from backend.services import mail_template as mt
+    # Anlass-Wort wie im Echtbetrieb: ohne eigenen Betreff-Zusatz „Eskalation" bei
+    # escalate, sonst „Erinnerung" (siehe _build_message).
+    verb = (template or "").strip() or (
+        "Eskalation" if action_type == ActionType.escalate.value else "Erinnerung")
+    title = (process_name or "").strip() or "Test-Auftrag"
+    base = (getattr(config, "FRONTEND_URL", "") or "").rstrip("/")
+    link = f"{base}/dashboard" if base else ""
+    subject = (f"[AlphaRequest] [TEST] {verb}: {title}"
+               .replace("\r", " ").replace("\n", " ")[:200])
+    content = ""
+    if email_body:
+        samples = sample_values or {}
+
+        def resolve(token: str) -> str:
+            if token == "title":
+                return title
+            if token == "id":
+                return "0"
+            return samples.get(token) or "—"
+
+        content = mt.substitute(email_body, resolve).strip()
+    body = render_corporate_email(
+        subject=subject,
+        header_subtitle=f"Testnachricht · {verb}",
+        headline=title,
+        info_box_url=link or None,
+        intro="Dies ist eine TESTNACHRICHT einer Automation. So sieht die Mail aus, die "
+              "die konfigurierten Empfänger:innen erhalten würden (Feldwerte sind Beispiele).",
+        info_rows=[("Phase", phase_label or "—")],
+        action_html=_primary_button_html(link) if link else "",
+        content=content,
+    )
+    return subject, body
+
+
+def send_automation_test(recipients: list[str], *, template: Optional[str] = None,
+                         email_body: Optional[str] = None, sample_values: Optional[dict] = None,
+                         process_name: Optional[str] = None, phase_label: Optional[str] = None,
+                         action_type: Optional[str] = None,
+                         sender: Callable = _default_sender) -> None:
+    """Verschickt eine Automations-Testmail an die AUFGELÖSTEN echten Empfänger
+    (bewusst, anders als bei der Eskalations-Testmail: hier will die anfragende
+    Stelle prüfen, ob die konfigurierte Verteiler-Adresse tatsächlich erreichbar
+    ist)."""
+    subject, body = build_automation_test_message(template, email_body, sample_values,
+                                                  process_name, phase_label, action_type)
+    sender(recipients, subject, body, kind="automation_test")
 
 
 def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Optional[PhaseDef],

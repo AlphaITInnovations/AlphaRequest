@@ -356,7 +356,7 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
                 </p>
                 <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
                                 :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
-                                :groups="ed.sources.groups"
+                                :groups="ed.sources.groups" :process-name="ed.draft.value.name"
                                 title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
                                 @update:model-value="setDefinition({ automations: $event })" />
               </section>
@@ -373,7 +373,8 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
                                   :users="ed.sources.users" :field-keys="ed.fieldKeys.value"
                                   :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
                                   :taken-ids="ed.automationIds.value" :phases="ed.draft.value.phases"
-                                  :process-key="ed.draft.value.key" :readonly="ed.readonly.value"
+                                  :process-key="ed.draft.value.key" :process-name="ed.draft.value.name"
+                                  :readonly="ed.readonly.value"
                                   @update:model-value="setPhase" />
                 </template>
                 <p v-else class="text-sm text-gray-400 italic card-section">

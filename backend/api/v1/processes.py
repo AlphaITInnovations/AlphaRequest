@@ -806,6 +806,57 @@ def test_escalation_mail(payload: EscalationTestIn, user: dict = Depends(get_cur
     return DataResponse(data=EscalationTestOut(ok=True, message=f"Testmail an {to} gesendet"))
 
 
+class AutomationTestIn(BaseModel):
+    to: Optional[str] = None
+    recipients: Optional[list[str]] = None
+    type: Optional[str] = None            # notify|escalate – nur fürs Anlass-Wort
+    template: Optional[str] = None
+    emailBody: Optional[str] = None
+    #: {Feld-Key: Anzeige-Beispiel} – füllt die {{feld}}-Platzhalter für die Vorschau.
+    sampleValues: dict[str, str] = {}
+    processName: Optional[str] = None
+    phaseLabel: Optional[str] = None
+
+
+@router.post("/processes:test-automation-mail",
+             response_model=DataResponse[EscalationTestOut])
+def test_automation_mail(payload: AutomationTestIn, user: dict = Depends(get_current_user)):
+    """Verschickt die Testmail einer notify/escalate-Automation an die TATSÄCHLICH
+    konfigurierten Empfänger (Fachabteilungs-Verteiler). Bewusst an die echten
+    Adressen – die anfragende Stelle will prüfen, ob der hinterlegte Verteiler
+    erreichbar ist. Nur Admins."""
+    _require_admin(user)
+    # Empfänger-Auswahl wie im Echtbetrieb: `recipients` hat Vorrang, sonst `to`
+    # (run_action macht es genauso – sonst testete man ein anderes Ziel als real).
+    tokens = list(payload.recipients) if payload.recipients else (
+        [payload.to] if payload.to else [])
+    if not tokens:
+        raise api_error(400, ErrorCode.VALIDATION_FAILED,
+                        "Für diese Automation ist noch kein Empfänger konfiguriert.")
+    # Ziele zu Adressen auflösen – OHNE Zentral-Fallback: eine Testmail soll sichtbar
+    # scheitern, wenn der konfigurierte Empfänger (noch) keine Adresse hat, statt
+    # still an der Zentraladresse zu landen. „responsible"/„owner" lassen sich ohne
+    # echten Auftrag ohnehin nicht auflösen.
+    recips = pactions.resolve_recipients_multi(
+        tokens, {"id": 0, "title": payload.processName or "Test-Auftrag"}, None, fallback=False)
+    if not recips:
+        raise api_error(400, ErrorCode.VALIDATION_FAILED,
+                        "Für diesen Empfänger ließ sich keine Adresse ermitteln. Rollen wie "
+                        "„Zuständige Stelle“ oder „Ersteller:in“ gibt es nur an einem echten "
+                        "Auftrag – für die Testmail bitte eine Fachabteilung/Gruppe mit "
+                        "hinterlegtem Verteiler (oder eine konkrete Person) wählen.")
+    try:
+        pactions.send_automation_test(
+            recips, template=payload.template, email_body=payload.emailBody,
+            sample_values=payload.sampleValues, process_name=payload.processName,
+            phase_label=payload.phaseLabel, action_type=payload.type)
+    except Exception as exc:
+        logger.exception("Automations-Testmail an %s fehlgeschlagen: %s", recips, exc)
+        raise api_error(502, "MAIL_FAILED", "Die Testmail konnte nicht gesendet werden.")
+    return DataResponse(data=EscalationTestOut(
+        ok=True, message=f"Testmail an {', '.join(recips)} gesendet"))
+
+
 @router.get("/processes/{key}/phases/{phase}/document-template")
 def get_document_template(key: str, phase: str, document: str = tpl_db.DEFAULT_DOCUMENT_KEY,
                           user: dict = Depends(get_current_user)):

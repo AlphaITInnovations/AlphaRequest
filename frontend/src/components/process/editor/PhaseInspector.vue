@@ -34,6 +34,8 @@ const props = defineProps<{
   phases?: { key: string; label: string | null }[]
   /** Prozess-Schlüssel – nötig, um die .docx-Vorlage hoch-/runterzuladen. */
   processKey?: string
+  /** Prozess-Name – nur kosmetisch für die Automations-Testmail. */
+  processName?: string | null
   readonly?: boolean
 }>()
 
@@ -288,6 +290,7 @@ function removeConstraint(i: number) {
       <AutomationList :model-value="modelValue.automations" :field-keys="fieldKeys"
                       :field-labels="fieldLabels" :field-widgets="fieldWidgets"
                       :groups="groups" title="Automationen dieser Phase"
+                      :process-name="processName" :phase-label="modelValue.label || modelValue.key"
                       :taken-ids="takenIds" :readonly="readonly"
                       @update:model-value="patch({ automations: $event })" />
     </section>
