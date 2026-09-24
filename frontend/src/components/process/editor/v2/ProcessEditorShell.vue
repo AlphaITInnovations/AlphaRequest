@@ -14,7 +14,6 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import { useProcessEditor } from '@/composables/useProcessEditor'
-import { useProcessEditorFlag } from '@/composables/useProcessEditorFlag'
 import type { PhaseDef, ProcessDefinition } from '@/types/process'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { PHASE_KIND_LABEL, PHASE_KIND_META, PHASE_VIEW_LABEL } from '@/lib/processSchema'
@@ -43,7 +42,6 @@ const route = useRoute()
 const router = useRouter()
 const { showToast } = useToast()
 const ed = useProcessEditor()
-const editorFlag = useProcessEditorFlag()
 
 const tab = ref<Tab>('flow')
 const selectedPhase = ref(0)
@@ -57,12 +55,6 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const key = computed(() => String(route.params.key || ''))
 const version = computed(() => Number(route.params.version || 0))
-
-function switchToLegacy() {
-  if (ed.dirty.value
-      && !confirm('Zum klassischen Editor wechseln? Nicht gespeicherte Änderungen gehen verloren.')) return
-  editorFlag.set(false)
-}
 
 const phaseErrorIndexes = computed(() => {
   const set = new Set<number>()
@@ -261,12 +253,6 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
         </div>
 
         <div class="flex items-center gap-2">
-          <button type="button" @click="switchToLegacy"
-                  class="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/15
-                         text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition"
-                  title="Zur klassischen Ansicht wechseln">
-            Klassischer Editor
-          </button>
           <button v-if="ed.dirty.value" @click="revert" class="btn-secondary text-sm">Verwerfen</button>
           <button @click="save" :disabled="!ed.canSave.value || systemReadonly"
                   class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
