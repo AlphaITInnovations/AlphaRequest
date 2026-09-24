@@ -258,6 +258,7 @@ function normAction(v: any): Action {
     directus: normDirectusWrite(v?.directus),
     http: normHttpRequest(v?.http),
     email: normEmailSpec(v?.email),
+    emailBody: str(v?.emailBody),
   }
 }
 

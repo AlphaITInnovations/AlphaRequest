@@ -89,7 +89,7 @@ describe('normalizeDefinition', () => {
       automations: [{ id: 'a', trigger: { type: 'on_enter' },
         action: { type: 'notify', to: 'owner', process: 'alt' } }] })
     expect(Object.keys(d.automations[0].action).sort())
-      .toEqual(['counter', 'directus', 'email', 'field', 'http', 'recipients', 'template', 'to', 'type', 'value'])
+      .toEqual(['counter', 'directus', 'email', 'emailBody', 'field', 'http', 'recipients', 'template', 'to', 'type', 'value'])
   })
 
   it('normalisiert einen API-Aufruf (http_request) mit Defaults', () => {

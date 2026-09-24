@@ -252,6 +252,9 @@ export interface Action {
   http: HttpRequestSpec | null
   /** Bei type='company_email': Auto-Firmenmail + Directus-Eindeutigkeits-Config. */
   email: EmailSpec | null
+  /** Bei type='notify'/'escalate': Freitext-Mailkörper mit `{{feld.key}}`-Platzhaltern
+   *  (wie approval.emailBody). `null` → generischer Standardtext. */
+  emailBody?: string | null
 }
 
 /** company_email: automatische Firmenmail + blockierende Directus-Prüfung. */

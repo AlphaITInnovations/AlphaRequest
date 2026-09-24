@@ -213,6 +213,21 @@ def _build_message(action: Action, row: dict, phase: Optional[PhaseDef]) -> tupl
     link = _ticket_link(row)
     # Betreff: keine Zeilenumbrüche (Header-Injection).
     subject = f"[AlphaRequest] {verb}: {title}".replace("\r", " ").replace("\n", " ")[:200]
+    # Optionaler Freitext-Körper mit {{feld}}-Platzhaltern (wie approval.emailBody).
+    # Reiner Text – `render_corporate_email` escaped ihn als `content`.
+    content = ""
+    if action.emailBody:
+        from backend.services import mail_template as mt
+        values = row.get("values") or {}
+
+        def resolve(token: str) -> str:
+            if token == "title":
+                return title
+            if token == "id":
+                return str(row.get("id") or "")
+            return mt.format_value(values.get(token))
+
+        content = mt.substitute(action.emailBody, resolve).strip()
     body = render_corporate_email(
         subject=subject,
         header_subtitle=verb,
@@ -221,7 +236,7 @@ def _build_message(action: Action, row: dict, phase: Optional[PhaseDef]) -> tupl
         intro="Dieser Auftrag wartet auf Ihre Bearbeitung.",
         info_rows=[("Auftrag", f"#{row.get('id')}"), ("Phase", phase_lbl)],
         action_html=_primary_button_html(link),
-        content="",
+        content=content,
     )
     return subject, body
 

@@ -30,6 +30,48 @@ def test_onerror_block_nur_bei_department_done():
             {"id": "x", "trigger": {"type": "timer", "after": "P1D"}, "action": http_block})
 
 
+def test_emailbody_nur_bei_notify_escalate():
+    """Ein eigener Mailkörper ergibt nur bei notify/escalate Sinn – jede andere
+    Aktion lehnt ihn ab (sonst stünde stiller, wirkungsloser Text in der Definition)."""
+    from backend.schemas.process_definition import Action
+    Action.model_validate({"type": "notify", "to": "owner", "emailBody": "Hallo {{a}}"})
+    Action.model_validate({"type": "escalate", "to": "owner", "emailBody": "Hallo"})
+    with pytest.raises(ValidationError):
+        Action.model_validate({"type": "set_field", "field": "a", "value": "1",
+                               "emailBody": "Hallo"})
+
+
+def _defn_notify_body(body, extra_fields=None):
+    return {
+        "key": "d", "name": "D",
+        "fields": [{"key": "a", "widget": "text"}] + (extra_fields or []),
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}],
+             "automations": [{"id": "m", "trigger": {"type": "on_enter"},
+                              "action": {"type": "notify", "to": "owner", "emailBody": body}}]},
+        ],
+    }
+
+
+def test_emailbody_platzhalter_muss_katalogfeld_sein():
+    ProcessDefinition.model_validate(_defn_notify_body("Feld {{a}} in Auftrag #{{id}}"))
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(_defn_notify_body("Feld {{gibtsnicht}}"))
+
+
+def test_emailbody_nicht_skalares_feld_verboten():
+    liste = {"key": "liste", "widget": "collection", "item": [{"key": "t", "widget": "text"}]}
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(_defn_notify_body("{{liste}}", extra_fields=[liste]))
+
+
+def test_emailbody_spezialvariable_kollision_verboten():
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(
+            _defn_notify_body("{{title}}", extra_fields=[{"key": "title", "widget": "text"}]))
+
+
 VALID = {
     "schemaVersion": 1,
     "key": "demo-prozess",

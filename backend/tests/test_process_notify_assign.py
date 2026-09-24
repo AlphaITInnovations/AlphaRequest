@@ -8,7 +8,7 @@ Beides schließt echte Lücken gegenüber dem Alt-System:
 import pytest
 from pydantic import ValidationError
 
-from backend.schemas.process_definition import ProcessDefinition
+from backend.schemas.process_definition import Action, ActionType, ProcessDefinition
 from backend.services import process_access as acc
 from backend.services import process_actions as pactions
 from backend.services import process_runtime as pr
@@ -211,6 +211,42 @@ def test_freigabe_mail_haengt_hochgeladene_dateien_an(monkeypatch):
     assert cap["kind"] == "approval_link"
     assert cap["attachments"] == ["ANHANG1", "ANHANG2"]
     assert "beigefügt" in cap["body"]           # der kleine Hinweis im Mailtext
+
+
+# ── notify/escalate mit eigenem Mailkörper (emailBody) ─────────────────────────
+
+def _notify_phase():
+    return DEFN.phases[0]
+
+
+def test_notify_emailbody_fuellt_platzhalter_ein():
+    """emailBody einer notify-Action wird mit Auftragswerten + Spezial-Variablen
+    (title/id) gefüllt und landet im Mail-Text."""
+    action = Action(type=ActionType.notify, to="owner",
+                    emailBody="Bitte {{a}} sofort sperren – Auftrag «{{title}}» (#{{id}}).")
+    row = {"id": 42, "title": "Offboarding Max", "values": {"a": "die Konten"}}
+    subject, body = pactions._build_message(action, row, _notify_phase())
+    assert "Offboarding Max" in subject
+    assert "Bitte die Konten sofort sperren" in body
+    assert "«Offboarding Max»" in body and "#42" in body
+
+
+def test_notify_emailbody_boolean_und_leer_lesbar():
+    """format_value greift auch hier: bool → Ja/Nein, leeres Feld → «—»."""
+    action = Action(type=ActionType.notify, to="owner",
+                    emailBody="Firmenwagen: {{fw}} · Notiz: {{leer}}")
+    row = {"id": 1, "title": "T", "values": {"fw": True}}
+    _subject, body = pactions._build_message(action, row, _notify_phase())
+    assert "Firmenwagen: Ja" in body
+    assert "Notiz: —" in body
+
+
+def test_notify_ohne_emailbody_bleibt_generisch():
+    """Ohne emailBody bleibt es beim Standardtext – keine Regression."""
+    action = Action(type=ActionType.notify, to="owner")
+    row = {"id": 1, "title": "T", "values": {}}
+    _subject, body = pactions._build_message(action, row, _notify_phase())
+    assert "Dieser Auftrag wartet auf Ihre Bearbeitung." in body
 
 
 def test_freigabe_mail_ohne_anhaenge_uebergibt_kein_kwarg(monkeypatch):

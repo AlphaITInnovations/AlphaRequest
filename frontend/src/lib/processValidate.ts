@@ -681,6 +681,29 @@ export function validateDefinition(
         : (ac.to ? [ac.to] : [])
       if (!toks.length) out.push(err(`${path}.action.to`, anchor, 'REQUIRED', 'Empfänger:in fehlt.'))
       else toks.forEach((tok) => checkRecipientToken(tok, `${path}.action.to`, anchor))
+      // Mail-Vorlage: jede {{variable}} muss ein einsetzbares Katalog-Feld sein
+      // (analog approval.emailBody) – sonst bliebe in der Mail eine leere Stelle.
+      for (const ref of mailFieldRefs(ac.emailBody)) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${path}.action.emailBody`, anchor, 'UNKNOWN_REF',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
+          continue
+        }
+        const wf = d.fields.find((f) => f.key === ref)?.widget
+        if (wf === 'collection' || wf === 'attachment') {
+          out.push(err(`${path}.action.emailBody`, anchor, 'INVALID',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld vom Typ `
+            + `„${WIDGET_LABEL[wf] ?? wf}", das sich nicht als Text einsetzen lässt.`))
+        }
+      }
+      for (const sv of mailVariables(ac.emailBody)) {
+        if ((SPECIAL_MAIL_VARS as readonly string[]).includes(sv) && catalog.has(sv)) {
+          out.push(err(`${path}.action.emailBody`, anchor, 'INVALID',
+            `„{{${sv}}}" ist als Mail-Variable reserviert `
+            + `(${sv === 'title' ? 'Auftragstitel' : 'Auftragsnummer'}), es gibt aber ein Feld `
+            + `mit diesem Schlüssel. Bitte das Feld umbenennen.`))
+        }
+      }
     }
     if (ac.type === 'set_field') {
       if (!ac.field) out.push(err(`${path}.action.field`, anchor, 'REQUIRED', 'Feld fehlt.'))

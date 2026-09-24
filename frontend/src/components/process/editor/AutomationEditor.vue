@@ -70,8 +70,12 @@ const PRIORITY_LABEL: Record<string, string> = {
 const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null, group: null })
 const blankAction = (): Action => ({
   type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
-  value: null, counter: null, directus: null, http: null, email: null,
+  value: null, counter: null, directus: null, http: null, email: null, emailBody: null,
 })
+// Platzhalter mit {{…}} als gebundener String – im Template-Attribut würde Vue die
+// Mustaches sonst als (verbotene) Attribut-Interpolation deuten.
+const bodyPlaceholder = 'Freitext an die Empfänger:innen. Platzhalter: {{feld.key}}, {{title}}, {{id}}.'
+const bodyExample = '{{base.mitarbeiter_nachname}}'
 const blankDirectus = (): DirectusWriteSpec => ({
   operation: 'create', collection: '', fieldMap: [], idField: '',
   onError: 'continue', matchField: null,
@@ -257,7 +261,7 @@ function onActionType(t: ActionType) {
   // nach einem Typwechsel und der Dirty-Vergleich schlägt dauerhaft an.
   const next: Action = {
     type: t, to: null, recipients: null, template: null, field: null,
-    value: null, counter: null, directus: null, http: null, email: null,
+    value: null, counter: null, directus: null, http: null, email: null, emailBody: null,
   }
   if (t === 'directus_write') {
     next.directus = cur.directus ?? blankDirectus()
@@ -269,6 +273,7 @@ function onActionType(t: ActionType) {
     next.to = cur.to ?? 'responsible'
     next.recipients = cur.recipients ?? null
     next.template = cur.template
+    next.emailBody = cur.emailBody ?? null
   } else if (t === 'set_field') {
     next.field = cur.field
     next.value = cur.value ?? ''
@@ -463,14 +468,32 @@ watch(dwCollection, (c) => {
           </select>
         </div>
         <div>
-          <label class="lbl">Text <span class="text-gray-400 font-normal">(optional)</span></label>
-          <textarea
-            rows="3"
-            class="afi w-full resize-none"
-            placeholder="Kurzer Hinweis für die Empfänger:innen…"
+          <label class="lbl">Betreff-Zusatz <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input
+            type="text"
+            class="afi w-full"
+            placeholder="z. B. Sofort-Sperrung – erscheint im Betreff"
             :value="a.action.template ?? ''"
             @input="patchAction({ template: val($event) || null })"
           />
+          <p class="mt-1 text-xs text-gray-400">
+            Betreff der Mail: „[AlphaRequest] &lt;Zusatz&gt;: &lt;Auftragstitel&gt;".
+            Ohne Angabe „Erinnerung" bzw. „Eskalation".
+          </p>
+        </div>
+        <div>
+          <label class="lbl">Nachricht <span class="text-gray-400 font-normal">(optional)</span></label>
+          <textarea
+            rows="4"
+            class="afi w-full resize-y"
+            :placeholder="bodyPlaceholder"
+            :value="a.action.emailBody ?? ''"
+            @input="patchAction({ emailBody: val($event) || null })"
+          />
+          <p class="mt-1 text-xs text-gray-400">
+            Erscheint als Fließtext in der Mail. Platzhalter wie <code>{{ bodyExample }}</code>
+            werden mit den Auftragswerten gefüllt (wie in der Freigabe-Mail).
+          </p>
         </div>
       </template>
 

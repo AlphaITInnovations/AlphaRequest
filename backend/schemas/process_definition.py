@@ -746,6 +746,10 @@ class Action(_Base):
     directus: Optional[DirectusWriteSpec] = None   # bei directus_write
     http: Optional[HttpRequestSpec] = None         # bei http_request
     email: Optional[EmailSpec] = None              # bei company_email
+    #: Freitext-Mailkörper für notify/escalate – mit `{{feld.key}}`-Platzhaltern
+    #: (wie `approval.emailBody`). Fehlt er, bleibt die Mail beim generischen
+    #: Standardtext. `template` setzt weiterhin nur das Betreff-Verb.
+    emailBody: Optional[str] = None
 
     @model_validator(mode="after")
     def _action_rules(self) -> "Action":
@@ -756,6 +760,8 @@ class Action(_Base):
             raise ValueError("`http` ist nur bei action http_request erlaubt")
         if t != ActionType.company_email and self.email is not None:
             raise ValueError("`email` ist nur bei action company_email erlaubt")
+        if t not in (ActionType.notify, ActionType.escalate) and self.emailBody is not None:
+            raise ValueError("`emailBody` ist nur bei action notify/escalate erlaubt")
         if t == ActionType.company_email and self.email is None:
             raise ValueError("action company_email erfordert `email` (Ziel-/Namens-/"
                              "Firmen-/Directus-Felder)")
@@ -1505,6 +1511,27 @@ class ProcessDefinition(_Base):
                 _need(a.trigger.field, f"automation[{a.id}].trigger.field")
             if a.action.field:
                 _need(a.action.field, f"automation[{a.id}].action.field")
+            # Mail-Vorlage einer notify/escalate-Automation: jede {{variable}} muss
+            # ein einsetzbares Katalog-Feld sein (analog approval.emailBody), sonst
+            # stünde in der Mail eine leere Stelle, ohne dass es auffällt.
+            if (a.action.type in (ActionType.notify, ActionType.escalate)
+                    and a.action.emailBody):
+                from backend.services import mail_template as _mt
+                for ref in _mt.field_refs(a.action.emailBody):
+                    _need(ref, f"automation[{a.id}].action.emailBody (Variable «{ref}»)")
+                    f = fld_by_key.get(ref)
+                    if f and f.widget in (Widget.collection, Widget.attachment):
+                        raise ValueError(
+                            f"automation[{a.id}].action.emailBody: Variable «{ref}» verweist auf "
+                            f"ein Feld vom Typ „{f.widget.value}“ – das lässt sich nicht als Text "
+                            f"in die Mail einsetzen. Bitte ein einfaches Feld verwenden.")
+                for sv in _mt.variables(a.action.emailBody):
+                    if sv in _mt.SPECIAL_VARS and sv in fld_by_key:
+                        gemeint = "den Auftragstitel" if sv == "title" else "die Auftragsnummer"
+                        raise ValueError(
+                            f"automation[{a.id}].action.emailBody: «{sv}» ist als Mail-Variable für "
+                            f"{gemeint} reserviert, es gibt aber ein Feld mit diesem Schlüssel. "
+                            f"Bitte das Feld umbenennen.")
             if a.action.type == ActionType.directus_write and a.action.directus:
                 d = a.action.directus
                 _need(d.idField, f"automation[{a.id}].directus.idField")
