@@ -111,6 +111,8 @@ function refPatch(key: string, part: Record<string, unknown>) {
 
 /** Abschnitt, dessen „+ Feld"-Menü offen ist (REST_SECTION = Rest-Abschnitt). */
 const menueOffen = ref<number | null>(null)
+/** Welcher Abschnitt hat die Einstellungen (Badge/Beschreibung/collapsed) offen. */
+const secSettings = ref<number | null>(null)
 
 function neuesFeld(section: number, widget: Widget) {
   const { defn, key } = addNewField(props.definition, props.phaseIndex, section, widget)
@@ -253,6 +255,10 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
                   @change="abschnittPatch(si, { variant: ($event.target as HTMLSelectElement).value as LayoutSection['variant'] })">
             <option v-for="(v, k) in VARIANT_STYLE" :key="k" :value="k">{{ v.label }}</option>
           </select>
+          <button @click="secSettings = secSettings === si ? null : si" aria-label="Abschnitts-Einstellungen"
+                  title="Badge, Beschreibung, eingeklappt starten"
+                  class="px-1.5 text-gray-400 hover:text-[#3EAAB8]"
+                  :class="secSettings === si ? 'text-[#3EAAB8]' : ''">⚙</button>
           <button @click="abschnittSchieben(si, -1)" :disabled="si === 0" aria-label="Abschnitt nach oben"
                   class="px-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30">▲</button>
           <button @click="abschnittSchieben(si, 1)" :disabled="si === layout.length - 1"
@@ -261,6 +267,30 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
           <button @click="abschnittWeg(si)" aria-label="Abschnitt löschen"
                   class="px-1.5 text-gray-400 hover:text-red-500">✕</button>
         </template>
+      </div>
+
+      <!-- Abschnitts-Einstellungen: Badge / Beschreibung / eingeklappt -->
+      <div v-if="!readonly && secSettings === si"
+           class="px-3 py-2.5 border-b border-gray-100 dark:border-white/[0.06]
+                  bg-gray-50/40 dark:bg-white/[0.02] grid md:grid-cols-2 gap-2.5">
+        <div>
+          <label class="text-[11px] text-gray-500 dark:text-gray-400">Badge <span class="text-gray-400">(optional)</span></label>
+          <input :value="sec.badge ?? ''" class="afi !py-1 !px-2 text-xs w-full" placeholder="z. B. Pflicht"
+                 @input="abschnittPatch(si, { badge: ($event.target as HTMLInputElement).value || null })" />
+        </div>
+        <div>
+          <label class="text-[11px] text-gray-500 dark:text-gray-400">Beschreibung <span class="text-gray-400">(optional)</span></label>
+          <input :value="sec.description ?? ''" class="afi !py-1 !px-2 text-xs w-full"
+                 placeholder="kurzer Hinweis unter dem Titel"
+                 @input="abschnittPatch(si, { description: ($event.target as HTMLInputElement).value || null })" />
+        </div>
+        <label class="md:col-span-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300
+                      cursor-pointer select-none w-fit">
+          <input type="checkbox" :checked="sec.collapsed"
+                 class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8] focus:ring-[#3EAAB8]/30"
+                 @change="abschnittPatch(si, { collapsed: ($event.target as HTMLInputElement).checked })" />
+          <span>Eingeklappt starten</span>
+        </label>
       </div>
 
       <!-- Elemente -->
@@ -340,6 +370,8 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
                     <ConditionSummary :condition="refOf(phase, it.ref)!.visibleWhen" :field-labels="fieldLabels" />
                     · Pflicht wenn:
                     <ConditionSummary :condition="refOf(phase, it.ref)!.requiredWhen" :field-labels="fieldLabels" />
+                    · bearbeitbar wenn:
+                    <ConditionSummary :condition="refOf(phase, it.ref)!.editableWhen" :field-labels="fieldLabels" />
                   </summary>
                   <div class="mt-2 space-y-3 pl-1">
                     <div>
@@ -351,6 +383,13 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
                       <div class="text-[11px] text-gray-500 mb-1">Nur Pflicht, wenn</div>
                       <ConditionEditor :model-value="refOf(phase, it.ref)!.requiredWhen" :field-keys="fieldKeys"
                                        @update:model-value="refPatch(it.ref, { requiredWhen: $event as Condition | null })" />
+                    </div>
+                    <div>
+                      <div class="text-[11px] text-gray-500 mb-1">
+                        Nur bearbeitbar, wenn <span class="text-gray-400">(schaltet ein sonst nur-lesbares Feld bedingt frei)</span>
+                      </div>
+                      <ConditionEditor :model-value="refOf(phase, it.ref)!.editableWhen" :field-keys="fieldKeys"
+                                       @update:model-value="refPatch(it.ref, { editableWhen: $event as Condition | null })" />
                     </div>
                   </div>
                 </details>
@@ -392,18 +431,32 @@ function marke(section: number, item: number | 'end') { return `${section}:${ite
                :draggable="!readonly" @dragstart="dragStart({ section: si, item: ii }, $event)"
                @dragend="dragEnd" @dragover.prevent="over = marke(si, ii)"
                @drop.prevent="dropAt({ section: si, item: ii })">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <span v-if="!readonly" class="cursor-grab opacity-50 select-none">⠿</span>
               <span class="text-[11px] whitespace-nowrap">{{ NOTE_STYLE[it.tone as NoteTone].icon }} Hinweisbox</span>
-              <select :value="it.tone" :disabled="readonly" class="afi !py-0.5 !px-1.5 text-xs w-auto ml-auto"
-                      @change="itemPatch(si, ii, { tone: ($event.target as HTMLSelectElement).value })">
-                <option v-for="t in NOTE_TONES" :key="t" :value="t">{{ NOTE_STYLE[t].label }}</option>
-              </select>
-              <button v-if="!readonly" @click="itemWeg(si, ii)" class="px-1 opacity-60 hover:opacity-100">✕</button>
+              <div class="ml-auto flex items-center gap-1.5">
+                <WidthPicker :model-value="it.width" :disabled="readonly"
+                             @update:model-value="itemPatch(si, ii, { width: $event })" />
+                <select :value="it.tone" :disabled="readonly" class="afi !py-0.5 !px-1.5 text-xs w-auto"
+                        @change="itemPatch(si, ii, { tone: ($event.target as HTMLSelectElement).value })">
+                  <option v-for="t in NOTE_TONES" :key="t" :value="t">{{ NOTE_STYLE[t].label }}</option>
+                </select>
+                <button v-if="!readonly" @click="itemWeg(si, ii)" class="px-1 opacity-60 hover:opacity-100">✕</button>
+              </div>
             </div>
             <textarea :value="it.text" :disabled="readonly" rows="2" class="afi w-full text-sm"
                       placeholder="Text des Hinweises…"
                       @input="itemPatch(si, ii, { text: ($event.target as HTMLTextAreaElement).value })" />
+            <details v-if="!readonly" class="text-sm">
+              <summary class="cursor-pointer text-[11px] text-gray-500 dark:text-gray-400 select-none">
+                Nur anzeigen, wenn:
+                <ConditionSummary :condition="it.visibleWhen ?? null" :field-labels="fieldLabels" />
+              </summary>
+              <div class="mt-2 pl-1">
+                <ConditionEditor :model-value="it.visibleWhen ?? null" :field-keys="fieldKeys"
+                                 @update:model-value="itemPatch(si, ii, { visibleWhen: $event as Condition | null })" />
+              </div>
+            </details>
           </div>
 
           <!-- Trenner / Abstand -->
