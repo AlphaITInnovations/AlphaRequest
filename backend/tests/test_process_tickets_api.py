@@ -57,6 +57,35 @@ DEFN_SKIP = {
 }
 
 
+#: Start-Phase mit einem BEDINGTEN Pflichtfeld, dessen Bedingung an einem
+#: Directus-SNAPSHOT-Ziel hängt (dienstwagen). Prüft, dass die frisch ausgefüllten
+#: bedingten Felder beim Anlegen NICHT vom Schreibschutz verworfen werden, bevor der
+#: Snapshot das Ziel setzt (Regression: „Pflichtfeld" trotz Eingabe → 422).
+DEFN_COND = {
+    "schemaVersion": 1, "key": "cond", "name": "Cond-Flow",
+    "fields": [
+        {"key": "mitarbeiter", "widget": "directus", "directusSource": "ma",
+         "directusFieldMap": [{"source": "has_car", "target": "dienstwagen"}]},
+        {"key": "dienstwagen", "widget": "text"},
+        {"key": "ret", "widget": "text"},
+    ],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [
+             {"ref": "mitarbeiter", "mode": "editable", "required": True},
+             {"ref": "dienstwagen", "mode": "readonly"},
+             {"ref": "ret", "mode": "editable",
+              "requiredWhen": {"==": ["dienstwagen", "Ja"]},
+              "visibleWhen": {"==": ["dienstwagen", "Ja"]}},
+         ],
+         "automations": [{"id": "go", "trigger": {"type": "on_enter"},
+                          "action": {"type": "auto_advance"}}]},
+        {"key": "ende", "kind": "task", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "ret", "mode": "readonly"}]},
+    ],
+}
+
+
 #: Prozess mit Dokument-Phase + bindings – für den .docx-Export (Fill-Engine).
 #: `stadt` ist einem LEEREN Feld zugeordnet → muss als Lücke landen, nicht „—".
 DEFN_DOC = {
@@ -275,6 +304,8 @@ class FakeDefs:
             return {"version": 1, "definition": DEFN_FLOW}
         if key == "skip":
             return {"version": 1, "definition": DEFN_SKIP}
+        if key == "cond":
+            return {"version": 1, "definition": DEFN_COND}
         if key == "doc":
             return {"version": 1, "definition": DEFN_DOC}
         if key == "conf":
@@ -295,6 +326,8 @@ class FakeDefs:
             return {"version": ver, "definition": DEFN_FLOW}
         if key == "skip":
             return {"version": ver, "definition": DEFN_SKIP}
+        if key == "cond":
+            return {"version": ver, "definition": DEFN_COND}
         if key == "doc":
             return {"version": ver, "definition": DEFN_DOC}
         if key == "conf":
@@ -654,6 +687,41 @@ def test_ohne_haken_haelt_in_der_freigabe(client):
                     "values": {"base.name": "Max"}})
     assert r.status_code == 200
     assert r.json()["data"]["current_phase"] == "frei"
+
+
+def test_create_bedingtes_pflichtfeld_an_snapshot_wird_nicht_verworfen(client, monkeypatch):
+    """Regression: ein AUSGEFÜLLTES bedingtes Pflichtfeld, dessen visibleWhen/
+    requiredWhen an einem Directus-Snapshot-Ziel (dienstwagen) hängt, darf beim
+    Anlegen NICHT vom Schreibschutz verworfen werden (→ fälschlich „Pflichtfeld"/422).
+    Der Snapshot (hier gefälscht: mitarbeiter gewählt → dienstwagen=Ja) muss VOR dem
+    Schreibschutz greifen."""
+    monkeypatch.setattr(pt.directus_snapshot, "apply_snapshots",
+                        lambda defn, values, stored, **kw:
+                        ({**values, "dienstwagen": "Ja"} if values.get("mitarbeiter")
+                         else dict(values)))
+    r = client.post("/process-tickets", json={"processKey": "cond",
+                    "values": {"mitarbeiter": "123", "ret": "Nürnberg", "dienstwagen": "Ja"}})
+    assert r.status_code == 200, r.text
+    d = r.json()["data"]
+    assert d["values"].get("ret") == "Nürnberg"          # nicht verworfen
+    assert d["values"].get("dienstwagen") == "Ja"        # autoritativer Snapshot
+    assert d["current_phase"] == "ende"                  # auto_advance ging durch
+
+
+def test_create_bedingtes_feld_ohne_auto_nicht_pflicht(client, monkeypatch):
+    """Kehrseite (kein Über-Fix): ist kein Fahrzeug da (dienstwagen=Nein), ist das
+    bedingte Feld weder sichtbar noch Pflicht – Anlegen ohne es klappt."""
+    monkeypatch.setattr(pt.directus_snapshot, "apply_snapshots",
+                        lambda defn, values, stored, **kw:
+                        ({**values, "dienstwagen": "Nein"} if values.get("mitarbeiter")
+                         else dict(values)))
+    r = client.post("/process-tickets", json={"processKey": "cond",
+                    "values": {"mitarbeiter": "123"}})
+    assert r.status_code == 200, r.text
+    d = r.json()["data"]
+    assert d["values"].get("dienstwagen") == "Nein"
+    assert not d["values"].get("ret")                    # nicht erfasst, nicht verlangt
+    assert d["current_phase"] == "ende"
 
 
 def test_create_defer_start_bleibt_in_startphase(client):

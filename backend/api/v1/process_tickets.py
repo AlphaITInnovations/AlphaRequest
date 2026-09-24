@@ -612,11 +612,32 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     provisional = {"owner_id": user.get("id"), "status": "in_progress",
                    "runtime": pr.initial_runtime(defn, now), "values": {}}
     ctx = _read_ctx(user, provisional, defn)
+    # Snapshot-Ziele (z. B. base.dienstwagen aus has_car) VOR dem Schreibschutz
+    # auflösen und NUR als Auswertungs-Kontext mitgeben: visibleWhen/requiredWhen
+    # bedingter Start-Felder hängen an ihnen. Ohne diesen Seed prüfte der
+    # Schreibschutz gegen einen LEEREN Kontext (stored={}), verwürfe frisch
+    # ausgefüllte bedingte Felder – und die spätere Pflichtprüfung (die den Snapshot
+    # dann schon kennt) meldete sie fälschlich als „Pflichtfeld leer". Best-effort:
+    # scheitert die Auflösung (Directus/Stammdaten nicht erreichbar), bleibt der Seed
+    # leer und das Anlegen läuft weiter – kein 500 vor der Wert-Prüfung.
     try:
-        values = vis.apply_writes(defn, start_phase, {}, submitted, ctx)
+        snap_seed = {k: v for k, v in
+                     directus_snapshot.apply_snapshots(defn, submitted, {}).items()
+                     if k in directus_snapshot.snapshot_target_keys(defn)}
+    except Exception:
+        logger.warning("Snapshot-Seed beim Anlegen von %s fehlgeschlagen – ohne Seed", defn.key)
+        snap_seed = {}
+    try:
+        values = vis.apply_writes(defn, start_phase, snap_seed, submitted, ctx)
     except vis.AppendOnlyViolation as exc:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Eingaben ungültig",
                         fields=[{"path": exc.field_key, "code": "APPEND_ONLY", "message": str(exc)}])
+    # Der Seed war NUR Auswertungs-Kontext: es sind read-only Snapshot-Ziele, die
+    # unten per apply_snapshots ohnehin autoritativ gesetzt werden. Hier wieder
+    # entfernen, sonst liefen authoritative Stammdaten als vermeintliche
+    # Nutzereingabe durch validate_values (Options-/Constraint-Regeln).
+    for _seed_key in snap_seed:
+        values.pop(_seed_key, None)
 
     # Antragsteller-Felder aus den Daten der angemeldeten Person vorbelegen
     # (read-only prefill – autoritativ, überschreibt evtl. mitgeschickte Werte).
