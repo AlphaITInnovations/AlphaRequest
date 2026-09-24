@@ -9,7 +9,7 @@
  * `@update` in den Entwurf gehoben.
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import type { DocumentBinding, DocumentSpec, FieldDef } from '@/types/process'
+import type { Condition, DocumentBinding, DocumentSpec, FieldDef } from '@/types/process'
 import { TODAY_BINDING } from '@/types/process'
 import {
   deleteDocumentTemplate, getDocumentTemplate, uploadDocumentTemplate,
@@ -17,6 +17,7 @@ import {
 } from '@/api/processes'
 import { errorMessage } from '@/lib/processErrors'
 import { useToast } from '@/composables/useToast'
+import ConditionEditor from './ConditionEditor.vue'
 
 const props = withDefaults(defineProps<{
   processKey: string | null
@@ -136,8 +137,40 @@ const bindableFields = computed(() =>
       && f.optionsSource !== 'users' && f.optionsSource !== 'groups')
     .map((f) => ({ key: f.key, label: f.label || f.key })))
 
+// ── Bedingte Passagen (sections): {{#if:NAME}} … {{/if}} in der .docx ──────────
+const sectionEntries = computed<Array<[string, Condition]>>(() =>
+  Object.entries(props.doc.sections ?? {}))
+function freshSectionName(): string {
+  const used = new Set(Object.keys(props.doc.sections ?? {}))
+  if (!used.has('passus')) return 'passus'
+  let i = 2
+  while (used.has(`passus_${i}`)) i += 1
+  return `passus_${i}`
+}
+function addSection() {
+  emit('update', { sections: { ...(props.doc.sections ?? {}), [freshSectionName()]: { truthy: '' } } })
+}
+function removeSection(name: string) {
+  const next = { ...(props.doc.sections ?? {}) }
+  delete next[name]
+  emit('update', { sections: next })
+}
+function renameSection(oldName: string, raw: string) {
+  const nn = raw.trim()
+  const src = props.doc.sections ?? {}
+  if (!nn || nn === oldName) return
+  if (src[nn] !== undefined) { showToast('Dieser Passus-Name ist schon vergeben.', false); return }
+  const next: Record<string, Condition> = {}       // Reihenfolge erhalten
+  for (const [k, v] of Object.entries(src)) next[k === oldName ? nn : k] = v
+  emit('update', { sections: next })
+}
+function setSectionCond(name: string, cond: Condition | null) {
+  emit('update', { sections: { ...(props.doc.sections ?? {}), [name]: cond ?? {} } })
+}
+
 const PH_HINT = '{{…}}'
 function markerLabel(m: string): string { return '{{' + m + '}}' }
+const ifHint = '{{#if:passus}} … {{/if}}'
 const mappedCount = computed(() => placeholders.value.filter((m) => !!bindingFor(m)).length)
 const uploadedAtLabel = computed(() => {
   const raw = template.value?.uploaded_at
@@ -148,7 +181,7 @@ const uploadedAtLabel = computed(() => {
 <template>
   <div class="rounded-xl border border-gray-200 dark:border-white/10 p-4 space-y-3">
     <div class="flex items-start justify-between gap-2">
-      <div class="grid md:grid-cols-2 gap-3 flex-1 min-w-0">
+      <div class="grid md:grid-cols-3 gap-3 flex-1 min-w-0">
         <div>
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titel (Überschrift)</label>
           <input :value="doc.title" :disabled="readonly" class="afi w-full"
@@ -160,6 +193,15 @@ const uploadedAtLabel = computed(() => {
           <input :value="doc.filename" :disabled="readonly" class="afi w-full font-mono text-sm"
                  placeholder="z. B. Arbeitsvertrag_Nachname"
                  @input="emit('update', { filename: ($event.target as HTMLInputElement).value })" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Schlüssel</label>
+          <input :value="doc.key" :disabled="readonly || template?.exists" class="afi w-full font-mono text-sm"
+                 placeholder="z. B. dokument"
+                 @change="emit('update', { key: ($event.target as HTMLInputElement).value })" />
+          <p v-if="template?.exists" class="text-[11px] text-gray-400 mt-1">
+            Bei hochgeladener Vorlage gesperrt (die Verknüpfung hängt am Schlüssel).
+          </p>
         </div>
       </div>
       <button v-if="!readonly && canRemove" class="text-gray-400 hover:text-red-500 px-1 shrink-0"
@@ -234,6 +276,35 @@ const uploadedAtLabel = computed(() => {
         <p v-else class="text-sm text-gray-400 italic">
           In dieser Vorlage wurden keine {{ PH_HINT }}-Platzhalter gefunden.
         </p>
+
+        <!-- Bedingte Passagen: {{#if:NAME}} … {{/if}} -->
+        <div class="pt-1 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <label class="block text-xs text-gray-500 dark:text-gray-400">
+              Bedingte Passagen <span class="font-mono">{{ ifHint }}</span>
+            </label>
+            <button v-if="!readonly" type="button" class="text-xs text-[#3EAAB8] hover:underline"
+                    @click="addSection">+ Passus</button>
+          </div>
+          <p v-if="!sectionEntries.length" class="text-[11px] text-gray-400">
+            Ein Passus mit passendem Namen bleibt nur im Dokument, wenn seine Bedingung erfüllt ist
+            (sonst wird der Block entfernt).
+          </p>
+          <div v-for="[name, cond] in sectionEntries" :key="name"
+               class="rounded-xl border border-gray-200 dark:border-white/10 p-3 space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] text-gray-400 whitespace-nowrap">Name</span>
+              <input :value="name" :disabled="readonly" class="afi !py-1 !px-2 text-sm font-mono flex-1"
+                     placeholder="z. B. firmenwagen"
+                     @change="renameSection(name, ($event.target as HTMLInputElement).value)" />
+              <button v-if="!readonly" type="button" class="text-gray-400 hover:text-red-500 px-1"
+                      title="Passus entfernen" @click="removeSection(name)">✕</button>
+            </div>
+            <div class="text-[11px] text-gray-500">Passus einblenden, wenn:</div>
+            <ConditionEditor :model-value="cond" :field-keys="(catalog ?? []).map((f) => f.key)"
+                             @update:model-value="setSectionCond(name, $event as Condition | null)" />
+          </div>
+        </div>
       </div>
     </template>
   </div>
