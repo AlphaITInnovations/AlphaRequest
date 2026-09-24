@@ -19,6 +19,7 @@ import ConditionEditor from './ConditionEditor.vue'
 import AutomationList from './AutomationList.vue'
 import EscalationEditor from './EscalationEditor.vue'
 import DocumentTemplateEditor from './DocumentTemplateEditor.vue'
+import EditorSection from './EditorSection.vue'
 
 const props = defineProps<{
   modelValue: PhaseDef
@@ -111,10 +112,9 @@ function removeConstraint(i: number) {
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div class="space-y-4">
     <!-- Stammdaten -->
-    <section class="card-section">
-      <h3 class="section-title">Phase</h3>
+    <EditorSection title="Phase" icon="⚙️">
       <div class="grid md:grid-cols-2 gap-3">
         <div>
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Bezeichnung</label>
@@ -187,11 +187,10 @@ function removeConstraint(i: number) {
           </label>
         </div>
       </div>
-    </section>
+    </EditorSection>
 
     <!-- Freigabe (nur bei der Phasen-Art „Freigabe") -->
-    <section v-if="modelValue.kind === 'approval'" class="card-section">
-      <h3 class="section-title">Freigabe</h3>
+    <EditorSection v-if="modelValue.kind === 'approval'" title="Freigabe" icon="✅">
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Eine Frage, zwei Antworten. Wer entscheidet, steht unten unter „Wer bearbeitet".
       </p>
@@ -206,14 +205,11 @@ function removeConstraint(i: number) {
         <button v-if="!readonly" class="btn-secondary text-xs py-1 shrink-0"
                 @click="patch({ approval: blankApproval() })">Freigabe einrichten</button>
       </div>
-    </section>
+    </EditorSection>
 
     <!-- Dokumente (nur bei der Ansicht „Dokument") -->
-    <section v-if="modelValue.view === 'document'" class="card-section">
-      <div class="flex items-center justify-between gap-3 mb-1">
-        <h3 class="section-title mb-0">Dokumente</h3>
-        <button v-if="!readonly" class="btn-secondary text-xs" @click="addDocument">+ Dokument</button>
-      </div>
+    <EditorSection v-if="modelValue.view === 'document'" title="Dokumente" icon="📄"
+                   :badge="modelValue.documents?.length || null">
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Eine oder mehrere Vorlagen (Word <span class="font-mono text-xs">.docx</span> oder
         PDF-Formular) hochladen und die Platzhalter (Marker in doppelten geschweiften
@@ -228,24 +224,28 @@ function removeConstraint(i: number) {
           :can-remove="modelValue.documents.length > 1"
           @update="patchDocumentAt(i, $event)" @remove="removeDocument(i)" />
       </div>
-    </section>
+      <button v-if="!readonly" class="btn-secondary text-xs mt-3" @click="addDocument">
+        + Dokument
+      </button>
+    </EditorSection>
 
     <!-- Zuständigkeit -->
-    <section class="card-section">
-      <h3 class="section-title">Wer bearbeitet</h3>
+    <EditorSection title="Wer bearbeitet" icon="👤">
       <ResponsibilityEditor :model-value="modelValue.responsibility" :groups="groups" :users="users"
                             :catalog="catalog"
                             :field-keys="fieldKeys" :field-labels="fieldLabels" :readonly="readonly"
                             @update:model-value="patch({ responsibility: $event })" />
-    </section>
+    </EditorSection>
+
+    <!-- Trenner: alles darunter sind seltener genutzte Feineinstellungen -->
+    <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 pt-2 pl-1">
+      Erweitert
+    </p>
 
     <!-- Regeln -->
-    <section class="card-section">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="section-title mb-0">Regeln zum Abschluss</h3>
-        <button v-if="!readonly" @click="addConstraint" class="btn-secondary text-xs py-1">+ Regel</button>
-      </div>
-      <p v-if="!modelValue.constraints.length" class="text-sm text-gray-400 italic">
+    <EditorSection title="Regeln zum Abschluss" icon="📏"
+                   :badge="modelValue.constraints.length || null" :default-open="false">
+      <p v-if="!modelValue.constraints.length" class="text-sm text-gray-400 italic mb-2">
         Keine zusätzlichen Regeln. (Feldübergreifend, z. B. „mindestens eine Auswahl".)
       </p>
       <div v-for="(c, i) in modelValue.constraints" :key="i"
@@ -261,16 +261,12 @@ function removeConstraint(i: number) {
         <ConditionEditor :model-value="c.when" :field-keys="fieldKeys"
                          @update:model-value="patchConstraint(i, { when: ($event ?? {}) as Condition })" />
       </div>
-    </section>
+      <button v-if="!readonly" @click="addConstraint" class="btn-secondary text-xs py-1">+ Regel</button>
+    </EditorSection>
 
     <!-- Erinnerungen / Eskalation (nicht in einer Abschluss-Phase) -->
-    <section v-if="modelValue.kind !== 'end'" class="card-section">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="section-title mb-0">Erinnerungen / Eskalation</h3>
-        <button v-if="!readonly && modelValue.escalation"
-                @click="patch({ escalation: null })"
-                class="text-gray-400 hover:text-red-500 text-xs">Entfernen</button>
-      </div>
+    <EditorSection v-if="modelValue.kind !== 'end'" title="Erinnerungen / Eskalation" icon="⏰"
+                   :badge="modelValue.escalation ? 'aktiv' : null" :default-open="false">
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Liegt der Auftrag zu lange in dieser Phase, geht eine Erinnerungsmail an die
         gewählten Empfänger – gestaffelt (z. B. nach 7 Tagen, dann alle 7 Tage).
@@ -283,16 +279,21 @@ function removeConstraint(i: number) {
               @click="patch({ escalation: blankEscalation() })">
         Erinnerungen einrichten
       </button>
-    </section>
+      <div v-if="!readonly && modelValue.escalation" class="mt-3">
+        <button @click="patch({ escalation: null })"
+                class="text-gray-400 hover:text-red-500 text-xs">Erinnerungen entfernen</button>
+      </div>
+    </EditorSection>
 
     <!-- Automationen -->
-    <section class="card-section">
+    <EditorSection title="Automationen dieser Phase" icon="⚡"
+                   :badge="modelValue.automations.length || null" :default-open="false">
       <AutomationList :model-value="modelValue.automations" :field-keys="fieldKeys"
                       :field-labels="fieldLabels" :field-widgets="fieldWidgets"
-                      :groups="groups" title="Automationen dieser Phase"
+                      :groups="groups"
                       :process-name="processName" :phase-label="modelValue.label || modelValue.key"
                       :taken-ids="takenIds" :readonly="readonly"
                       @update:model-value="patch({ automations: $event })" />
-    </section>
+    </EditorSection>
   </div>
 </template>
