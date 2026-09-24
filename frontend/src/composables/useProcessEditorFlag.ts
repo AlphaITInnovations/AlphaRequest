@@ -1,11 +1,12 @@
 /**
- * Umschalter „klassischer" ↔ „neuer" Prozess-Editor (Beta).
+ * Umschalter „neuer" (v2, Standard) ↔ „klassischer" Prozess-Editor.
  *
- * Während des Umbaus (v2) laufen beide Editoren parallel; welcher greift, hängt
- * an einem pro-Browser gemerkten Flag. Modulweit EIN reaktiver Wert, damit die
- * Umschalter in beiden Editoren und der Wrapper denselben Stand teilen. Der
- * Zugriff auf localStorage ist überall in try/catch (privates Fenster, gesperrter
- * Storage) – Fehlschlag heißt schlicht „klassischer Editor".
+ * Seit dem Cutover ist v2 der STANDARD: ohne gemerkte Wahl greift v2. Der
+ * klassische Editor bleibt als Rückfallebene über den Umschalter erreichbar; nur
+ * eine ausdrücklich dort getroffene Wahl („0") hält ihn. Modulweit EIN reaktiver
+ * Wert, damit Umschalter in beiden Editoren und der Wrapper denselben Stand
+ * teilen. localStorage-Zugriff überall in try/catch (privates Fenster, gesperrter
+ * Storage) – Fehlschlag heißt schlicht „neuer Editor".
  */
 import { ref } from 'vue'
 
@@ -13,9 +14,10 @@ const STORAGE_KEY = 'processEditorV2'
 
 function read(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === '1'
+    // Standard = v2; nur die ausdrückliche Wahl „klassisch" ("0") schaltet zurück.
+    return localStorage.getItem(STORAGE_KEY) !== '0'
   } catch {
-    return false
+    return true
   }
 }
 
