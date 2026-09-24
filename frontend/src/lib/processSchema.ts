@@ -162,6 +162,39 @@ export const PHASE_KIND_LABEL: Record<PhaseKind, string> = {
   review: 'Fachabteilungen', end: 'Abschluss',
 }
 
+/**
+ * Optik je Phasenart – EIN Ort, damit Phasen-Pipeline und Kontext-Kopf im Editor
+ * dieselben Farben/Symbole zeigen. Die Klassennamen stehen als Literale hier, damit
+ * Tailwind sie beim Scannen findet (keine dynamische Zusammensetzung).
+ */
+export const PHASE_KIND_META: Record<PhaseKind, { icon: string; badge: string; chip: string }> = {
+  start: {
+    icon: '▶',
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    chip: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  },
+  task: {
+    icon: '✎',
+    badge: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+    chip: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  },
+  approval: {
+    icon: '✔',
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    chip: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  },
+  review: {
+    icon: '👥',
+    badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+    chip: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+  },
+  end: {
+    icon: '⏹',
+    badge: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
+    chip: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
+  },
+}
+
 export const PHASE_VIEW_LABEL: Record<PhaseView, string> = {
   form: 'Formular', readonly: 'Nur lesen', approval: 'Freigabe',
   review: 'Prüfung', export: 'Export', document: 'Dokument',

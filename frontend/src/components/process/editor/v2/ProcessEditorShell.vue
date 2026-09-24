@@ -17,6 +17,7 @@ import { useProcessEditor } from '@/composables/useProcessEditor'
 import { useProcessEditorFlag } from '@/composables/useProcessEditorFlag'
 import type { PhaseDef, ProcessDefinition } from '@/types/process'
 import { normalizeDefinition } from '@/lib/processNormalize'
+import { PHASE_KIND_LABEL, PHASE_KIND_META, PHASE_VIEW_LABEL } from '@/lib/processSchema'
 import {
   SYSTEM_PROCESS_BLOCKED, SYSTEM_PROCESS_HINT, hasSystemReadonlyIssue, isSystemProcess,
 } from '@/lib/processSystem'
@@ -305,6 +306,37 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
               </div>
               <div class="min-w-0 space-y-5">
                 <template v-if="currentPhase">
+                  <!-- Kontext-Kopf: welche Phase wird gerade bearbeitet -->
+                  <div class="card-section !py-3 flex items-center gap-3 flex-wrap">
+                    <span class="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-base"
+                          :class="PHASE_KIND_META[currentPhase.kind].badge">
+                      {{ PHASE_KIND_META[currentPhase.kind].icon }}
+                    </span>
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+                        {{ currentPhase.label || currentPhase.key }}
+                      </div>
+                      <div class="text-[11px] text-gray-400">
+                        Schritt {{ selectedPhase + 1 }} von {{ ed.draft.value.phases.length }}
+                        <span class="font-mono">· {{ currentPhase.key }}</span>
+                      </div>
+                    </div>
+                    <div class="ml-auto flex items-center gap-1.5 flex-wrap">
+                      <span class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                            :class="PHASE_KIND_META[currentPhase.kind].chip">
+                        {{ PHASE_KIND_LABEL[currentPhase.kind] }}
+                      </span>
+                      <span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500
+                                   dark:bg-white/10 dark:text-gray-300">
+                        {{ PHASE_VIEW_LABEL[currentPhase.view] }}
+                      </span>
+                      <span v-if="phaseErrorIndexes.has(selectedPhase)"
+                            class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700
+                                   dark:bg-red-900/40 dark:text-red-300">
+                        Fehler
+                      </span>
+                    </div>
+                  </div>
                   <FormBuilder :definition="ed.draft.value" :phase-index="selectedPhase"
                                :groups="ed.sources.groups" :field-keys="ed.fieldKeys.value"
                                :field-labels="ed.fieldLabels.value" :readonly="ed.readonly.value"
