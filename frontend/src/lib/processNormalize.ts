@@ -306,12 +306,20 @@ function normDocument(v: any): DocumentSpec | null {
       }
     }
   }
+  const sections: Record<string, any> = {}
+  if (v.sections && typeof v.sections === 'object' && !Array.isArray(v.sections)) {
+    for (const [k, val] of Object.entries(v.sections)) {
+      const c = cond(val)
+      if (c) sections[String(k)] = c
+    }
+  }
   return {
     key: String(v.key ?? ''),
     templateHtml: String(v.templateHtml ?? ''),
     filename: String(v.filename ?? 'Dokument'),
     title: String(v.title ?? 'Dokument'),
     bindings,
+    sections,
   }
 }
 

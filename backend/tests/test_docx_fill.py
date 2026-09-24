@@ -124,6 +124,72 @@ def test_marker_in_fussnote_wird_erkannt_und_gefuellt():
     assert "Ref 42" in footnote and "{{" not in footnote
 
 
+# ── Bedingte Passagen ({{#if:NAME}} … {{/if}}) ───────────────────────────────
+
+def _cond_template() -> bytes:
+    return html_to_docx(
+        "<p>Kündigung zum {{austrittsdatum}}.</p>"
+        "<p>{{#if:freistellung}}Sie werden ab sofort freigestellt bis "
+        "{{austrittsdatum}}.{{/if}}</p>"
+        "<p>{{#if:firmenwagen}}Firmenwagen bitte abgeben in {{niederlassung}}.{{/if}}</p>"
+        "<p>Mit freundlichen Grüßen.</p>")
+
+
+def test_find_placeholders_ignoriert_if_steuermarken():
+    """#if/​/if sind KEINE bindbaren Marker – sonst tauchten sie im Editor auf
+    bzw. würden zur Lücke."""
+    assert find_placeholders(_cond_template()) == ["austrittsdatum", "niederlassung"]
+
+
+def test_bedingter_abschnitt_wahr_behaelt_text_und_fuellt():
+    filled = fill_docx(_cond_template(),
+                       {"austrittsdatum": "31.12.2026", "niederlassung": "Nürnberg"},
+                       conditions={"freistellung": True, "firmenwagen": True})
+    txt = _doc_text(filled)
+    assert "freigestellt" in txt and "Firmenwagen" in txt      # beide Passagen da
+    assert "31.12.2026" in txt and "Nürnberg" in txt           # innere Marker gefüllt
+    assert "#if" not in txt and "/if" not in txt and "{{" not in txt   # Steuer-Marken weg
+
+
+def test_bedingter_abschnitt_falsch_entfernt_ganzen_absatz():
+    filled = fill_docx(_cond_template(),
+                       {"austrittsdatum": "31.12.2026", "niederlassung": "Nürnberg"},
+                       conditions={"freistellung": False, "firmenwagen": True})
+    txt = _doc_text(filled)
+    assert "freigestellt" not in txt          # ganzer Freistellungs-Passus entfernt …
+    assert "Firmenwagen" in txt               # … der andere bleibt
+    assert GAP not in txt                     # keine zurückgebliebene „…"-Lücke
+    assert "Kündigung zum" in txt and "freundlichen Grüßen" in txt   # Rest unberührt
+    # weiterhin gültiges OOXML
+    import xml.dom.minidom as minidom
+    minidom.parseString(
+        zipfile.ZipFile(io.BytesIO(filled)).read("word/document.xml").decode("utf-8"))
+
+
+def test_bedingter_abschnitt_fehlende_condition_behaelt_text():
+    """`#if` vorhanden, aber KEINE conditions übergeben → Text bleibt (nur die
+    Steuer-Marken fallen weg). So bricht eine Vorlage nie, wenn die Config fehlt."""
+    txt = _doc_text(fill_docx(_cond_template(), {"austrittsdatum": "X", "niederlassung": "Y"}))
+    assert "freigestellt" in txt and "Firmenwagen" in txt
+    assert "#if" not in txt and "/if" not in txt
+
+
+def test_bedingter_abschnitt_ueber_mehrere_absaetze():
+    """Öffnet der Marker in Absatz 1 und schließt in Absatz 2, wird der GESAMTE
+    Bereich (beide Absätze) entfernt."""
+    tpl = html_to_docx("<p>{{#if:blk}}Zeile eins.</p><p>Zeile zwei.{{/if}}</p><p>Danach.</p>")
+    txt = _doc_text(fill_docx(tpl, {}, conditions={"blk": False}))
+    assert "Zeile eins" not in txt and "Zeile zwei" not in txt
+    assert "Danach" in txt
+
+
+def test_ohne_if_ist_conditions_ein_noop():
+    """Bestehende Vorlagen ohne #if bleiben mit und ohne conditions identisch."""
+    a = fill_docx(_template(), {"arbeitsbeginn": "X"})
+    b = fill_docx(_template(), {"arbeitsbeginn": "X"}, conditions={"egal": False})
+    assert _doc_text(a) == _doc_text(b)
+
+
 def test_desplit_zerstoert_keine_struktur_bei_verwaistem_marker():
     """Ein verwaistes `{{` VOR einem echten Marker über eine Block-Grenze (Tabelle)
     darf keine Struktur-Tags löschen – sonst entstünde kaputtes OOXML, das Word

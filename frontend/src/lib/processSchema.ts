@@ -285,6 +285,7 @@ export function blankDocument(key = 'dokument'): DocumentSpec {
     filename: 'Dokument',
     title: 'Dokument',
     bindings: {},
+    sections: {},
   }
 }
 

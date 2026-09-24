@@ -1305,12 +1305,18 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
     if tpl is not None and docphase is not None and doc is not None:
         values, catalog, bindings = _docx_fill_prep(row, defn, doc, user)
         from backend.services import docx_fill, pdf_fill, template_format
+        from backend.services import condition_dsl
         from backend.services import mail_template as mt
         # Editor-Werte (overrides) haben Vorrang; leere Marker bleiben Lücke.
         if body.overrides is not None:
             fill_values = {m: v for m, v in body.overrides.items() if v}
         else:
             fill_values = _auto_fill_values(bindings, catalog, values)
+        # Bedingte Passagen ({{#if:NAME}} …): NAME→wahr/falsch aus den
+        # Auftragswerten (nicht aus overrides – der Passus hängt an den Daten, nicht
+        # an Editor-Korrekturen). Ohne `sections` bleibt es leer → alle Passagen an.
+        conditions = {name: condition_dsl.evaluate(cond, values)
+                      for name, cond in (doc.sections or {}).items()}
 
         def _resolve(token: str) -> str:
             if token == "title":
@@ -1330,7 +1336,8 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
             return Response(content=pdf, media_type="application/pdf",
                             headers={"Content-Disposition": _content_disposition(name + ".pdf")})
 
-        data = docx_fill.fill_docx(tpl_bytes, fill_values, mark=body.highlight)
+        data = docx_fill.fill_docx(tpl_bytes, fill_values, mark=body.highlight,
+                                   conditions=conditions)
         if body.format == "pdf":
             # .docx originalgetreu über LibreOffice rendern (Vorschau + PDF-Export).
             from backend.services import docx_to_pdf

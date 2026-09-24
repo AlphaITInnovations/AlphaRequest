@@ -360,6 +360,9 @@ export interface DocumentSpec {
    *  beim Export durch den Wert des Felds ersetzt; nicht zugeordnete Marker
    *  bleiben als Lücke. */
   bindings: Record<string, DocumentBinding>
+  /** Bedingte Passagen: `name → Bedingung` (Condition-DSL). In der .docx umschließt
+   *  `{{#if:name}} … {{/if}}` den Absatz; ist die Bedingung falsch, entfällt er. */
+  sections: Record<string, Condition>
 }
 
 /** Eine Marker-Zuordnung: `field` ist ein Katalog-Feldschlüssel oder die

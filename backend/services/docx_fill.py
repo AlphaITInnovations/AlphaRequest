@@ -29,6 +29,16 @@ from typing import Optional
 #: Ein Marker-Name: Wortzeichen (inkl. Umlaute/ß dank Unicode-`\w`) plus ._-,
 #: optional Leerraum in den Klammern.
 _TOKEN = re.compile(r"\{\{\s*([\w.\-]+)\s*\}\}", re.UNICODE)
+#: Bedingte Abschnitte: `{{#if:NAME}} … {{/if}}`. `#`/`:`/`/` sind KEINE
+#: `_TOKEN`-Zeichen → diese Steuer-Marken tauchen weder in der Zuordnungs-
+#: Oberfläche auf noch werden sie versehentlich zur „Lücke". NAME entscheidet über
+#: Anzeige/Ausblenden eines ganzen Absatzes (siehe `_apply_conditions`).
+_IF_OPEN = re.compile(r"\{\{\s*#if:([\w.\-]+)\s*\}\}", re.UNICODE)
+_IF_CLOSE = re.compile(r"\{\{\s*/if\s*\}\}")
+#: Absatz-Grenzen (für das Entfernen eines ganzen Passus). `<w:p ...>` bzw.
+#: `<w:p>` – NICHT `<w:pPr>`/`<w:pStyle>` (danach folgt „P", kein `>`/Leerraum).
+_P_OPEN = re.compile(r"<w:p(?:\s[^>]*)?>")
+_P_CLOSE = re.compile(r"</w:p>")
 #: `{{ … }}` inkl. etwaiger Run-/Tag-Grenzen dazwischen – bewusst längenbegrenzt,
 #: damit ein verwaistes `{{` nicht über das halbe Dokument „frisst".
 _SPLIT = re.compile(r"\{\{(?:(?!\}\})[\s\S]){0,800}?\}\}")
@@ -76,6 +86,52 @@ def _xml_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _apply_conditions(xml: str, conditions: dict) -> str:
+    """`{{#if:NAME}} … {{/if}}`-Blöcke auflösen.
+
+    `NAME → bool` aus `conditions`: fehlt NAME oder ist er WAHR, bleibt der Text –
+    nur die beiden Steuer-Marken fallen weg. Ist NAME FALSCH, wird der GESAMTE
+    umschließende Absatzbereich `<w:p …>…</w:p>` entfernt (der Passus verschwindet
+    inkl. seiner inneren `{{marker}}`, es bleibt keine „…"-Lücke).
+
+    Verträge/Vorlagen OHNE `#if:` bleiben unberührt (früher Ausstieg). Blöcke sind
+    NICHT verschachtelt; sie werden von links nach rechts aufgelöst. Der Aufrufer
+    setzt den Marker an den Anfang des ersten und `{{/if}}` an das Ende des letzten
+    Absatzes des Passus.
+    """
+    if "#if:" not in xml:
+        return xml
+    guard = 0
+    while True:
+        guard += 1
+        if guard > 2000:            # Sicherung gegen einen pathologischen Endlos-Fall
+            break
+        mo = _IF_OPEN.search(xml)
+        if not mo:
+            break
+        mc = _IF_CLOSE.search(xml, mo.end())
+        if not mc:
+            # Verwaistes `{{#if:…}}` ohne Abschluss: nur die Marke entfernen.
+            xml = xml[:mo.start()] + xml[mo.end():]
+            continue
+        if bool(conditions.get(mo.group(1), True)):
+            # Behalten: nur die beiden Steuer-Marken entfernen (hinten zuerst, damit
+            # die vorderen Indizes gültig bleiben) – der Text bleibt.
+            xml = xml[:mc.start()] + xml[mc.end():]
+            xml = xml[:mo.start()] + xml[mo.end():]
+            continue
+        # Ausblenden: den umschließenden Absatzbereich löschen.
+        opens = list(_P_OPEN.finditer(xml, 0, mo.start()))
+        p_close = _P_CLOSE.search(xml, mc.end())
+        if opens and p_close:
+            xml = xml[:opens[-1].start()] + xml[p_close.end():]
+        else:
+            # Kein umschließender Absatz gefunden (untypische Platzierung) → nur den
+            # Block-Text zwischen den Marken entfernen, statt Struktur zu zerstören.
+            xml = xml[:mo.start()] + xml[mc.end():]
+    return xml
+
+
 def find_placeholders(template_bytes: bytes) -> list[str]:
     """Alle Marker-Namen der Vorlage (in Reihenfolge, ohne Dopplungen) – für die
     Zuordnungs-Oberfläche im Editor."""
@@ -95,10 +151,15 @@ def find_placeholders(template_bytes: bytes) -> list[str]:
 
 
 def fill_docx(template_bytes: bytes, values: dict[str, Optional[str]],
-              *, gap: str = GAP, mark: bool = False) -> bytes:
+              *, gap: str = GAP, mark: bool = False,
+              conditions: Optional[dict] = None) -> bytes:
     """Die Vorlage füllen: `{{token}}` → values[token] (XML-escaped), fehlt der
     Token in `values`, kommt `gap` (Word-Lücke). Alle Nicht-Text-Teile werden
     unverändert übernommen.
+
+    `conditions` (NAME→bool) steuert `{{#if:NAME}} … {{/if}}`-Passagen: ein
+    falscher Abschnitt wird als ganzer Absatz entfernt, ein wahrer/fehlender behält
+    den Text (ohne Steuer-Marken). Ohne `#if:` in der Vorlage ein No-Op.
 
     `mark=True` klammert jeden EINGESETZTEN Wert in unsichtbare Marken
     (MARK_OPEN/MARK_CLOSE) – nur für die Frontend-Vorschau (Hervorhebung), NICHT
@@ -111,6 +172,9 @@ def fill_docx(template_bytes: bytes, values: dict[str, Optional[str]],
             data = zin.read(item.filename)
             if _TEXT_PART.match(item.filename):
                 xml = _desplit(data.decode("utf-8"))
+                # Bedingte Passagen VOR dem Ersetzen auflösen – ein ausgeblendeter
+                # Absatz nimmt seine inneren {{marker}} mit (keine Lücke bleibt).
+                xml = _apply_conditions(xml, conditions or {})
 
                 def _repl(m: "re.Match[str]") -> str:
                     name = m.group(1)

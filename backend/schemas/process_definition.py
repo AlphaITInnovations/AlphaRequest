@@ -1032,6 +1032,11 @@ class DocumentSpec(_Base):
     #: `@today` ersetzt; Marker OHNE Zuordnung bleiben als Lücke (in Word
     #: auszufüllen). Die .docx selbst liegt als Blob je Prozess.
     bindings: dict[str, DocumentBinding] = Field(default_factory=dict)
+    #: Bedingte Passagen: `name → Bedingung` (dieselbe Condition-DSL wie
+    #: `visibleWhen`). In der .docx umschließt `{{#if:name}} … {{/if}}` den Absatz;
+    #: ist die Bedingung falsch, entfällt der ganze Passus. Leer = keine
+    #: Bedingungen (die Vorlage füllt wie bisher).
+    sections: dict[str, dict] = Field(default_factory=dict)
 
     @field_validator("bindings", mode="before")
     @classmethod
@@ -1041,6 +1046,12 @@ class DocumentSpec(_Base):
         if not isinstance(v, dict):
             return v
         return {k: ({"field": b} if isinstance(b, str) else b) for k, b in v.items()}
+
+    @model_validator(mode="after")
+    def _check_sections(self) -> "DocumentSpec":
+        for name, cond in (self.sections or {}).items():
+            validate_condition(cond, f"documents.{self.key or '?'}.sections.{name}")
+        return self
 
 
 # ── Eskalation / Erinnerungen (§6.1) ─────────────────────────────────────────
