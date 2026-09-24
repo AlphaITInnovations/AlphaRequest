@@ -27,6 +27,7 @@ import FormBuilder from '@/components/process/editor/FormBuilder.vue'
 import AutomationList from '@/components/process/editor/AutomationList.vue'
 import IssueList from '@/components/process/editor/IssueList.vue'
 import CreatePermissionsEditor from '@/components/process/editor/CreatePermissionsEditor.vue'
+import EditorSection from '@/components/process/editor/EditorSection.vue'
 import ProcessSimulator from '@/components/process/ProcessSimulator.vue'
 
 type Tab = 'flow' | 'prozess' | 'preview' | 'json'
@@ -358,8 +359,7 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
 
             <!-- Prozess: Stammdaten · Erstellrechte · Automationen (getrennte Karten) -->
             <div v-else class="space-y-4">
-              <section class="card-section">
-                <h2 class="section-title">Stammdaten</h2>
+              <EditorSection title="Stammdaten" icon="🏷️">
                 <div class="grid md:grid-cols-3 gap-3">
                   <div class="md:col-span-2">
                     <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Name</label>
@@ -405,17 +405,16 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
                     </p>
                   </div>
                 </div>
-              </section>
+              </EditorSection>
 
-              <section class="card-section">
-                <h2 class="section-title">Wer darf diesen Prozess starten?</h2>
+              <EditorSection title="Wer darf diesen Prozess starten?" icon="🔑">
                 <CreatePermissionsEditor :model-value="ed.draft.value.createPermissions"
                                          :groups="ed.sources.groups" :users="ed.sources.users"
                                          @update:model-value="setDefinition({ createPermissions: $event })" />
-              </section>
+              </EditorSection>
 
-              <section class="card-section">
-                <h2 class="section-title">Prozessweite Automationen</h2>
+              <EditorSection title="Prozessweite Automationen" icon="⚡"
+                             :badge="ed.draft.value.automations.length || null">
                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
                   Diese Automationen gelten in <b>jeder</b> Phase des Prozesses – z. B. eine Erinnerung,
                   die überall greift.
@@ -423,9 +422,9 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
                 <AutomationList :model-value="ed.draft.value.automations" :field-keys="ed.fieldKeys.value"
                                 :field-labels="ed.fieldLabels.value" :field-widgets="ed.fieldWidgets.value"
                                 :groups="ed.sources.groups" :process-name="ed.draft.value.name"
-                                title="Prozessweite Automationen" :taken-ids="ed.automationIds.value"
+                                :taken-ids="ed.automationIds.value"
                                 @update:model-value="setDefinition({ automations: $event })" />
-              </section>
+              </EditorSection>
             </div>
           </fieldset>
         </template>
