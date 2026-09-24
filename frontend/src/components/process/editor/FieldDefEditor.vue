@@ -12,7 +12,8 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import type {
-  AssignSpec, DirectusBinding, FieldConstraints, FieldDef, FieldVisibility, OptionsSource, Widget,
+  AssignSpec, ComputedSpec, DirectusBinding, FieldConstraints, FieldDef, FieldMode, FieldVisibility,
+  OptionsSource, PrefillSpec, Widget,
 } from '@/types/process'
 import {
   COUNTER_LABEL, OPTIONS_SOURCES, SEQUENCE_COUNTERS, WIDGETS_TOP, WIDGET_LABEL,
@@ -61,8 +62,9 @@ const allKeys = computed(() => props.fieldKeys ?? [])
 
 // ── Aufklappbare Abschnitte: offen, wenn es dort schon etwas zu sehen gibt ────
 
-type SectionKey = 'options' | 'sub' | 'assign' | 'rules' | 'visibility' | 'computed' | 'directus'
+type SectionKey = 'options' | 'sub' | 'assign' | 'rules' | 'visibility' | 'computed' | 'directus' | 'prefill'
 const open = ref<Record<SectionKey, boolean>>({
+  prefill: props.modelValue.prefill !== null,
   options: opts.value.length > 0 || props.modelValue.optionsSource !== null,
   sub: items.value.length > 0,
   assign: props.modelValue.widget === 'server_generated',
@@ -178,13 +180,53 @@ function setVis(p: Partial<FieldVisibility>) {
   patch({ visibility: !next.confidential && next.visibleToGroups.length === 0 ? null : next })
 }
 
-function setComputedFrom(v: string) {
-  // Ohne Quelle ergibt „überschreibbar" keinen Sinn und wird mit zurückgesetzt.
-  patch({ computed: v ? { from: v } : null, overridable: v ? props.modelValue.overridable : false })
+/** Aktuelle Berechnungs-Art: '' = keine, sonst copy/days_between/template. */
+const computedOp = computed(() => {
+  const c = props.modelValue.computed
+  return c ? (c.op || 'copy') : ''
+})
+
+/** Art umstellen – baut ein zur Art passendes computed-Objekt (kombiniert die
+ *  Felder korrekt) statt es (wie früher) auf { from } zu reduzieren. */
+function setComputedOp(op: string) {
+  const c = props.modelValue.computed || {}
+  if (!op) { patch({ computed: null, overridable: false }); return }
+  if (op === 'copy') patch({ computed: { from: c.from ?? '', op: null, map: c.map ?? null } })
+  else if (op === 'days_between') patch({ computed: { op: 'days_between', from: c.from ?? '', to: c.to ?? '' } })
+  else if (op === 'template') patch({ computed: { op: 'template', template: c.template ?? '' } })
 }
+function patchComputed(part: Partial<ComputedSpec>) {
+  patch({ computed: { ...(props.modelValue.computed || {}), ...part } })
+}
+
+// Lookup-Tabelle (op=copy · Quellwert → abgeleiteter Wert) als Zeilen-Editor.
+const mapRows = computed<Array<[string, string]>>(() =>
+  Object.entries(props.modelValue.computed?.map ?? {}).map(([k, v]) => [k, String(v ?? '')]))
+function setMapRows(rows: Array<[string, string]>) {
+  const m: Record<string, string> = {}
+  for (const [k, v] of rows) if (k.trim()) m[k] = v
+  patchComputed({ map: Object.keys(m).length ? m : null })
+}
+function addMapRow() { setMapRows([...mapRows.value, ['', '']]) }
+function updMapRow(i: number, which: 0 | 1, val: string) {
+  setMapRows(mapRows.value.map((r, j): [string, string] =>
+    (j === i ? (which === 0 ? [val, r[1]] : [r[0], val]) : r)))
+}
+function rmMapRow(i: number) { setMapRows(mapRows.value.filter((_, j) => j !== i)) }
 
 function setAppendOnly(on: boolean) {
   patch({ mode: on ? 'append_only' : null })
+}
+
+// ── Standard-Modus (Katalog-Default; die Phase kann ihn je Feld übersteuern) ──
+function setMode(v: string) { patch({ mode: (v || null) as FieldMode | null }) }
+
+// ── Vorbelegung beim Anlegen (prefill) ────────────────────────────────────────
+function setPrefill(on: boolean) {
+  patch({ prefill: on ? (props.modelValue.prefill ?? { source: 'employee', field: '' }) : null })
+}
+function patchPrefill(part: Partial<PrefillSpec>) {
+  patch({ prefill: { ...(props.modelValue.prefill ?? { source: 'employee', field: '' }), ...part } })
 }
 
 // ── Anzeige-Logik ─────────────────────────────────────────────────────────────
@@ -282,8 +324,21 @@ const visibilitySummary = computed(() => {
   const n = vis.value.visibleToGroups.length
   return `${vis.value.confidential ? 'vertraulich' : 'eingeschränkt'} · ${n} Fachabteilungen`
 })
-const computedSummary = computed(() =>
-  props.modelValue.computed ? `aus ${props.modelValue.computed.from}` : 'nicht berechnet')
+const computedSummary = computed(() => {
+  const c = props.modelValue.computed
+  if (!c) return 'nicht berechnet'
+  const op = c.op || 'copy'
+  if (op === 'template') return 'aus Textvorlage'
+  if (op === 'days_between') return `Tage ${c.from || '?'} → ${c.to || '?'}`
+  return `aus ${c.from || '?'}${c.map ? ' · Lookup' : ''}`
+})
+const prefillSummary = computed(() => {
+  const p = props.modelValue.prefill
+  return p ? `${p.source === 'user' ? 'Konto' : 'Mitarbeiter'} · ${p.field || '?'}` : 'keine'
+})
+// {{…}} als gebundene Strings – im Template würde Vue sie sonst interpolieren.
+const tplExample = '{{feld.key}}'
+const tplPlaceholder = 'z. B. {{base.vorname}} {{base.nachname}}'
 </script>
 
 <template>
@@ -317,6 +372,18 @@ const computedSummary = computed(() =>
             Nicht verfügbar: {{ modelValue.widget }}
           </option>
         </select>
+      </div>
+      <div v-if="modelValue.widget !== 'collection'">
+        <label class="lbl">Standard-Modus <span class="text-gray-400 font-normal">(Vorgabe je Phase)</span></label>
+        <select :value="modelValue.mode ?? ''" @change="setMode(($event.target as HTMLSelectElement).value)"
+                class="pfi">
+          <option value="">Bearbeitbar (Standard)</option>
+          <option value="readonly">Nur lesen</option>
+          <option value="hidden">Ausgeblendet</option>
+        </select>
+        <p class="text-xs text-gray-400 mt-1">
+          Vorbelegung, sobald das Feld einer Phase hinzugefügt wird – je Phase übersteuerbar.
+        </p>
       </div>
       <div>
         <label class="lbl">Platzhalter <span class="text-gray-400 font-normal">(optional)</span></label>
@@ -705,14 +772,25 @@ const computedSummary = computed(() =>
       </button>
       <div v-if="open.computed"
            class="px-3 pb-3 pt-3 space-y-3 border-t border-gray-200 dark:border-white/10">
-        <div class="grid md:grid-cols-2 gap-3">
+        <div>
+          <label class="lbl">Art der Berechnung</label>
+          <select :value="computedOp" @change="setComputedOp(($event.target as HTMLSelectElement).value)"
+                  class="pfi">
+            <option value="">— nicht berechnet —</option>
+            <option value="copy">Wert aus Feld übernehmen</option>
+            <option value="days_between">Tagesdifferenz zweier Datumsfelder</option>
+            <option value="template">Textvorlage mit Platzhaltern</option>
+          </select>
+        </div>
+
+        <!-- copy: Quellfeld + optionale Wert-Übersetzung -->
+        <template v-if="computedOp === 'copy'">
           <div>
-            <label class="lbl">Wert übernehmen aus</label>
+            <label class="lbl">Quellfeld</label>
             <select :value="modelValue.computed?.from ?? ''"
-                    @change="setComputedFrom(($event.target as HTMLSelectElement).value)"
-                    class="pfi"
-                    :class="computedUnknown ? 'border-red-400 bg-red-50 dark:bg-red-900/20' : ''">
-              <option value="">— nicht berechnet —</option>
+                    @change="patchComputed({ from: ($event.target as HTMLSelectElement).value })"
+                    class="pfi" :class="computedUnknown ? 'border-red-400 bg-red-50 dark:bg-red-900/20' : ''">
+              <option value="">— wählen —</option>
               <option v-for="k in sourceKeys" :key="k" :value="k">{{ k }}</option>
               <option v-if="computedUnknown" :value="modelValue.computed?.from" class="text-red-600">
                 Unbekannt: {{ modelValue.computed?.from }}
@@ -722,20 +800,111 @@ const computedSummary = computed(() =>
               Dieses Feld gibt es im Katalog nicht (mehr).
             </p>
           </div>
-          <label v-if="modelValue.computed"
-                 class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300
-                        cursor-pointer select-none md:mt-6 w-fit">
-            <input type="checkbox" :checked="modelValue.overridable"
-                   @change="patch({ overridable: ($event.target as HTMLInputElement).checked })"
-                   class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]
-                          focus:ring-[#3EAAB8]/30 cursor-pointer" />
-            <span>Überschreibbar</span>
-          </label>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="lbl mb-0">Wert-Übersetzung (optional)</label>
+              <button type="button" class="text-xs text-[#3EAAB8] hover:underline" @click="addMapRow">+ Zeile</button>
+            </div>
+            <p v-if="!mapRows.length" class="text-xs text-gray-400">
+              Ohne Einträge wird der Quellwert 1:1 übernommen; mit Einträgen übersetzt (z. B. Position → Gruppe).
+            </p>
+            <div v-for="(r, i) in mapRows" :key="i" class="flex items-center gap-2 mb-1.5">
+              <input :value="r[0]" @input="updMapRow(i, 0, ($event.target as HTMLInputElement).value)"
+                     class="pfi flex-1" placeholder="Quellwert" />
+              <span class="text-gray-400">→</span>
+              <input :value="r[1]" @input="updMapRow(i, 1, ($event.target as HTMLInputElement).value)"
+                     class="pfi flex-1" placeholder="ergibt" />
+              <button type="button" class="text-gray-400 hover:text-red-500 px-1"
+                      @click="rmMapRow(i)" aria-label="Zeile entfernen">✕</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- days_between: zwei Datumsfelder -->
+        <div v-else-if="computedOp === 'days_between'" class="grid md:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl">Von (Datumsfeld)</label>
+            <select :value="modelValue.computed?.from ?? ''"
+                    @change="patchComputed({ from: ($event.target as HTMLSelectElement).value })" class="pfi">
+              <option value="">— wählen —</option>
+              <option v-for="k in sourceKeys" :key="k" :value="k">{{ k }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Bis (Datumsfeld)</label>
+            <select :value="modelValue.computed?.to ?? ''"
+                    @change="patchComputed({ to: ($event.target as HTMLSelectElement).value })" class="pfi">
+              <option value="">— wählen —</option>
+              <option v-for="k in sourceKeys" :key="k" :value="k">{{ k }}</option>
+            </select>
+          </div>
+          <p class="md:col-span-2 text-xs text-gray-400">Ergebnis: Anzahl Tage (Bis − Von) als Ganzzahl.</p>
         </div>
-        <p class="text-xs text-gray-500 dark:text-gray-400">
+
+        <!-- template: Textvorlage -->
+        <div v-else-if="computedOp === 'template'">
+          <label class="lbl">Textvorlage</label>
+          <textarea :value="modelValue.computed?.template ?? ''"
+                    @input="patchComputed({ template: ($event.target as HTMLTextAreaElement).value })"
+                    rows="3" class="pfi w-full font-mono text-xs" :placeholder="tplPlaceholder" />
+          <p class="text-xs text-gray-400 mt-1">
+            Platzhalter wie <code>{{ tplExample }}</code> werden durch andere Feldwerte ersetzt.
+          </p>
+        </div>
+
+        <label v-if="modelValue.computed"
+               class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300
+                      cursor-pointer select-none w-fit">
+          <input type="checkbox" :checked="modelValue.overridable"
+                 @change="patch({ overridable: ($event.target as HTMLInputElement).checked })"
+                 class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]
+                        focus:ring-[#3EAAB8]/30 cursor-pointer" />
+          <span>Überschreibbar</span>
+        </label>
+        <p v-if="modelValue.computed" class="text-xs text-gray-500 dark:text-gray-400">
           Ein berechnetes Feld ohne „Überschreibbar" darf in keiner Phase bearbeitbar sein –
           dort ist nur „Nur lesen" oder „Ausgeblendet" möglich.
         </p>
+      </div>
+    </div>
+
+    <!-- ── Vorbelegung beim Anlegen ───────────────────────────────────────── -->
+    <div class="rounded-xl border border-gray-200 dark:border-white/10">
+      <button type="button" @click="toggle('prefill')"
+              class="w-full flex items-center gap-2 px-3 py-2 text-left rounded-xl
+                     hover:bg-gray-50 dark:hover:bg-[#263040] transition">
+        <span class="w-3 text-xs text-gray-400">{{ open.prefill ? '▾' : '▸' }}</span>
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Vorbelegung</span>
+        <span class="text-xs text-gray-400 truncate">{{ prefillSummary }}</span>
+      </button>
+      <div v-if="open.prefill" class="px-3 pb-3 pt-3 space-y-3 border-t border-gray-200 dark:border-white/10">
+        <label class="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-300 cursor-pointer select-none w-fit">
+          <input type="checkbox" :checked="modelValue.prefill !== null"
+                 @change="setPrefill(($event.target as HTMLInputElement).checked)"
+                 class="h-4 w-4 rounded border-gray-300 dark:border-white/20 text-[#3EAAB8]
+                        focus:ring-[#3EAAB8]/30 cursor-pointer" />
+          <span>Beim Anlegen aus den Daten der anlegenden Person vorbelegen</span>
+        </label>
+        <div v-if="modelValue.prefill" class="grid md:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl">Quelle</label>
+            <select :value="modelValue.prefill.source"
+                    @change="patchPrefill({ source: ($event.target as HTMLSelectElement).value })" class="pfi">
+              <option value="employee">Mitarbeiter-Datensatz (Directus)</option>
+              <option value="user">Konto (E-Mail, Name, Telefon …)</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Attribut</label>
+            <input :value="modelValue.prefill.field"
+                   @input="patchPrefill({ field: ($event.target as HTMLInputElement).value })"
+                   class="pfi font-mono" placeholder="z. B. location.name" />
+          </div>
+          <p class="md:col-span-2 text-xs text-gray-400">
+            Punkt-Pfad löst Relationen auf. Mit einem read-only-Feld in der Start-Phase ergibt das ein
+            fest vorbelegtes, serverseitig gesetztes Antragsteller-Feld.
+          </p>
+        </div>
       </div>
     </div>
 
