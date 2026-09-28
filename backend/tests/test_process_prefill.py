@@ -111,6 +111,17 @@ def test_prefill_directus_widget_nimmt_rohe_id():
                                  "employee": {"location": {"id": "42", "name": "Berlin"}}})["b.x"] == "42"
 
 
+def test_prefill_directus_id_wird_string():
+    """Directus liefert den Fremdschlüssel evtl. als Zahl – ein directus-Feld
+    braucht aber eine Text-ID (validate_values: „Text erwartet"), also normalisieren."""
+    d = _rel_defn("directus", "location", "niederlassung")
+    out_num = apply_prefill(d, {}, {"id": "a@b", "email": "a@b", "employee": {"location": 8080}})
+    assert out_num["b.x"] == "8080" and isinstance(out_num["b.x"], str)
+    out_obj = apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                    "employee": {"location": {"id": 42, "name": "Berlin"}}})
+    assert out_obj["b.x"] == "42" and isinstance(out_obj["b.x"], str)
+
+
 def test_prefill_company_id_wird_zu_firmenname(monkeypatch):
     """company-Widget: Directus-Firmen-ID → System-Firmenname (Umkehr von
     company_directus_id über die je Firma hinterlegte directus_firma_id)."""

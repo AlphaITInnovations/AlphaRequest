@@ -55,4 +55,13 @@ describe('applyPrefill (Client-Spiegel)', () => {
     expect(out['b.id']).toBe('42')
     expect(out['b.plz']).toBe('90402')
   })
+
+  it('nimmt für ein directus-Feld die Roh-ID als String (Zahl oder Objekt)', () => {
+    const f = normalizeField({
+      key: 'b.nl', widget: 'directus', directusSource: 'niederlassung',
+      prefill: { source: 'employee', field: 'location' } })
+    expect(applyPrefill([f], { employee: { location: 8080 } }, {})['b.nl']).toBe('8080')
+    expect(applyPrefill([f], { employee: { location: { id: 42, name: 'Berlin' } } }, {})['b.nl'])
+      .toBe('42')
+  })
 })

@@ -63,14 +63,22 @@ export function applyPrefill(
   for (const f of fields) {
     if (!f.prefill?.field) continue
     const src = f.prefill.source === 'user' ? (profile ?? {}) : employee
-    let val = displayValue(resolvePath(src, f.prefill.field))
-    if (f.widget === 'select') val = matchOption(val, f)
-    if (val !== undefined && val !== null && val !== '') {
+    const raw = resolvePath(src, f.prefill.field)
+    let val: unknown
+    if (f.widget === 'directus') {
+      // Directus-Fremdschlüssel: die ROH-ID (nicht den Anzeigenamen) und als
+      // String – die Wert-Prüfung erwartet für directus eine Text-ID.
+      const rid = raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>).id : raw
+      val = (rid === null || rid === undefined || rid === '') ? rid : String(rid)
+    } else {
+      val = displayValue(raw)
+      if (f.widget === 'select') val = matchOption(val, f)
       // Text-Widgets brauchen einen String – eine Directus-Zahl (id, PLZ,
       // Personalnummer) würde sonst als „Text erwartet" verworfen.
       if (typeof val === 'number' && STRING_WIDGETS.includes(f.widget)) val = String(val)
-      out[f.key] = val
     }
+    if (val !== undefined && val !== null && val !== '') out[f.key] = val
   }
   return out
 }

@@ -142,7 +142,11 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
         src = employee if pf.source == "employee" else user
         raw = _resolve_path(src, pf.field)
         if f.widget == Widget.directus:
-            val: Any = _rel_id(raw)
+            # Directus-Fremdschlüssel als STRING: die Wert-Prüfung erwartet für ein
+            # directus-Feld eine Text-ID (wie directus_multi Listen von Text-IDs);
+            # eine rohe Zahl-ID würde als „Text erwartet" verworfen.
+            rid = _rel_id(raw)
+            val: Any = str(rid) if rid not in (None, "") else rid
         elif f.widget == Widget.company and pf.source == "employee":
             val = _company_name_for_directus_id(_rel_id(raw), _companies())
         else:

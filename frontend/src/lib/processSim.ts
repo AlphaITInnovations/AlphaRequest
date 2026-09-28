@@ -148,7 +148,10 @@ export function renderFields(
 // ── Validierung (Spiegel process_validation) ──────────────────────────────────
 
 const LIST_WIDGETS = ['multiselect', 'checkbox-group', 'collection', 'directus_multi']
-const TEXTY = ['text', 'textarea', 'date', 'select', 'user', 'company', 'group']
+// Muss backend _SCALAR_TEXT spiegeln: ein directus-Feld speichert seine ID als
+// TEXT (wie directus_multi Text-IDs), sonst weichen Client- und Server-Prüfung ab.
+const TEXTY = ['text', 'textarea', 'date', 'select', 'user', 'company', 'group',
+  'directus', 'server_generated']
 
 /** Pass 1: Wert-Form der gesendeten Felder. */
 export function validateValues(
