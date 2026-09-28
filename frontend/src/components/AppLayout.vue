@@ -33,6 +33,14 @@ const isProzessTicketActive = computed(
   () => route.path.startsWith('/prozess-auftraege/neu') && !isBasisTicketActive.value,
 )
 
+// „Neues Ticket" (Basis-Ticket) temporär ausblenden – NUR der Menüpunkt. Route und
+// Funktion bleiben erhalten (direkt über BASIS_TICKET_PATH weiter erreichbar).
+// Steuerbar per Umgebungsvariable VITE_HIDE_NEUES_TICKET (Vite bettet sie zur
+// Build-Zeit ein; „true"/„1" blendet aus, Standard: sichtbar).
+const neuesTicketAusgeblendet = ['true', '1'].includes(
+  String(import.meta.env.VITE_HIDE_NEUES_TICKET ?? '').trim().toLowerCase(),
+)
+
 // Zwei getrennte Ansichten, zwei Menüpunkte: „Übersicht" (die Startseite)
 // beantwortet „was liegt bei MIR an?" – Arbeitslisten, keine Filterleiste.
 // „Alle Aufträge" ist die durchsuchbare Liste über ALLE Aufträge. Beides in EINE
@@ -188,7 +196,7 @@ defineProps<{ title?: string }>()
           </svg>
           <span v-if="sidebarOpen" class="text-sm truncate">Neues Prozess-Ticket</span>
         </button>
-        <button @click="navigate(BASIS_TICKET_PATH)"
+        <button v-if="!neuesTicketAusgeblendet" @click="navigate(BASIS_TICKET_PATH)"
                 class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
                 :class="[
                   sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
