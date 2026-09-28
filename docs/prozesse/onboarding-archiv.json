@@ -1,0 +1,2513 @@
+{
+  "schemaVersion": 1,
+  "key": "onboarding-archiv",
+  "name": "Alt-Onboarding (Archiv)",
+  "description": "Aus dem Alt-System importierte Onboarding-Aufträge – reine Ansicht/Historie. Hier lassen sich keine neuen Aufträge anlegen; die Fachabteilungen sehen ihre damaligen Fälle im persönlichen Archiv.",
+  "icon": "📦",
+  "titleEditable": false,
+  "titleTemplate": null,
+  "createButtonLabel": null,
+  "createPermissions": {
+    "everyone": false,
+    "groups": [],
+    "users": [],
+    "executives": false
+  },
+  "fields": [
+    {
+      "key": "personal.first_name",
+      "label": "Vorname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.last_name",
+      "label": "Nachname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.title",
+      "label": "Titel/Jobbezeichnung",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.private_street",
+      "label": "Straße (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.private_zip",
+      "label": "PLZ (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.private_city",
+      "label": "Ort (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.private_address",
+      "label": "Adresse (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.start_date",
+      "label": "Eintrittsdatum",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.homeoffice",
+      "label": "Homeoffice",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.weekly_hours",
+      "label": "Wochenstunden",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.federal_state",
+      "label": "Bundesland",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.department",
+      "label": "Abteilung",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.department_other",
+      "label": "Abteilung (Freitext)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.cost_center",
+      "label": "Kostenstelle",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.location",
+      "label": "Niederlassung",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.contract_company",
+      "label": "Gesellschaft (Vertrag)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.personal_number",
+      "label": "Personalnummer",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.supervisor_hr_id",
+      "label": "Vorgesetzte:r (ID)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.supervisor_hr_name",
+      "label": "Vorgesetzte:r",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.contact_person_id",
+      "label": "Ansprechpartner:in (ID)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "personal.contact_person_name",
+      "label": "Ansprechpartner:in",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.appearance_company",
+      "label": "Auftritt/Signatur-Gesellschaft",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.other_systems",
+      "label": "Weitere Systeme",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.additional_cost_centers",
+      "label": "Weitere Kostenstellen",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.signature.title",
+      "label": "Signatur: Titel",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.signature.street",
+      "label": "Signatur: Straße",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.signature.zip",
+      "label": "Signatur: PLZ",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.signature.city",
+      "label": "Signatur: Ort",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.signature.phone",
+      "label": "Signatur: Telefon",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.signature.mobile",
+      "label": "Signatur: Mobil",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.timebutler.vacation_year",
+      "label": "TimeButler: Urlaubsjahr",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.timebutler.supervisor_id",
+      "label": "TimeButler: Vorgesetzte:r (ID)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.timebutler.supervisor_name",
+      "label": "TimeButler: Vorgesetzte:r",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.datev",
+      "label": "DATEV",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.datev_rights",
+      "label": "DATEV: Rechte",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.persopro",
+      "label": "PersoPro",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.persopro_rights",
+      "label": "PersoPro: Rechte",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.timejob",
+      "label": "TimeJob",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.timejob_rights",
+      "label": "TimeJob: Rechte",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.zvoove",
+      "label": "zvoove",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.zvoove_rights",
+      "label": "zvoove: Rechte",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.software.swoof",
+      "label": "swoof",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.phone_order.enabled",
+      "label": "Telefon bestellen",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.phone_order.location",
+      "label": "Telefon: Standort",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.mailboxes.info_mailbox",
+      "label": "Info-Postfach",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.mailboxes.additional",
+      "label": "Weitere Postfächer",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.mailboxes.notes",
+      "label": "Postfächer: Notizen",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "fuhrpark.car",
+      "label": "Dienstwagen",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "fuhrpark.car_class",
+      "label": "Fahrzeugklasse",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "fuhrpark.car_from",
+      "label": "Fahrzeug ab",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Alt-Auftrag (Ansicht)",
+      "kind": "start",
+      "view": "readonly",
+      "enterStatus": null,
+      "advanceLabel": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": false
+      },
+      "approval": null,
+      "document": null,
+      "documents": [],
+      "escalation": null,
+      "fields": [
+        {
+          "ref": "personal.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_street",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_zip",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_city",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.homeoffice",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.weekly_hours",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.federal_state",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.department",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.department_other",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.contract_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.personal_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.supervisor_hr_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.supervisor_hr_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.contact_person_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.contact_person_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.appearance_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.other_systems",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.additional_cost_centers",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.street",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.zip",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.city",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.phone",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.mobile",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.timebutler.vacation_year",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.timebutler.supervisor_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.timebutler.supervisor_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.datev",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.datev_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.persopro",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.persopro_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.timejob",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.timejob_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.zvoove",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.zvoove_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.swoof",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.phone_order.enabled",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.phone_order.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.mailboxes.info_mailbox",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.mailboxes.additional",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.mailboxes.notes",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "fuhrpark.car",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "fuhrpark.car_class",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "fuhrpark.car_from",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Personal & Vertrag",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "personal.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_address",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.start_date",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.homeoffice",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.weekly_hours",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.federal_state",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department_other",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contract_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.personal_number",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contact_person_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contact_person_name",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Software",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.appearance_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.other_systems",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.mobile",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.vacation_year",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.supervisor_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.supervisor_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.swoof",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.phone_order.enabled",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.phone_order.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.info_mailbox",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.additional",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.notes",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "fuhrpark.car",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_from",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "beteiligte",
+      "label": "Beteiligte Fachabteilungen",
+      "kind": "review",
+      "view": "readonly",
+      "enterStatus": null,
+      "advanceLabel": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "fromField": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
+            "required": true,
+            "when": null
+          }
+        ],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": false
+      },
+      "approval": null,
+      "document": null,
+      "documents": [],
+      "escalation": null,
+      "fields": [
+        {
+          "ref": "personal.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_street",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_zip",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_city",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.start_date",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.homeoffice",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.weekly_hours",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.federal_state",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.department",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.department_other",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.contract_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.personal_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.supervisor_hr_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.supervisor_hr_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.contact_person_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.contact_person_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.appearance_company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.other_systems",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.additional_cost_centers",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.street",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.zip",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.city",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.phone",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.signature.mobile",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.timebutler.vacation_year",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.timebutler.supervisor_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.timebutler.supervisor_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.datev",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.datev_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.persopro",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.persopro_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.timejob",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.timejob_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.zvoove",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.zvoove_rights",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.software.swoof",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.phone_order.enabled",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.phone_order.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.mailboxes.info_mailbox",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.mailboxes.additional",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.mailboxes.notes",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "fuhrpark.car",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "fuhrpark.car_class",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "fuhrpark.car_from",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Personal & Vertrag",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "personal.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_address",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.start_date",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.homeoffice",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.weekly_hours",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.federal_state",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.department_other",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contract_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.personal_number",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.supervisor_hr_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contact_person_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.contact_person_name",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Software",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.appearance_company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.other_systems",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.city",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.signature.mobile",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.vacation_year",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.supervisor_id",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.timebutler.supervisor_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.datev_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.persopro_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.timejob_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.zvoove_rights",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.software.swoof",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.phone_order.enabled",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.phone_order.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.info_mailbox",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.additional",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.notes",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "fuhrpark.car",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_class",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "fuhrpark.car_from",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    }
+  ],
+  "automations": []
+}
