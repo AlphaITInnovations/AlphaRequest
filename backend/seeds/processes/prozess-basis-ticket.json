@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "key": "basis-ticket",
+  "name": "Basis-Ticket",
+  "description": "Ein einfaches Ticket für alles, was in keinen der anderen Prozesse passt: Titel, Anliegen als Freitext, zuständige Fachabteilung – fertig. Die Abteilung antwortet mit weiteren Einträgen; jeder bleibt mit Name und Zeitpunkt stehen, nichts wird überschrieben. Passt der Auftrag nicht zu ihr, wählt sie einfach eine andere Abteilung aus – er wandert samt Verlauf weiter.",
+  "icon": "🎫",
+  "titleEditable": false,
+  "createPermissions": {
+    "everyone": true,
+    "groups": [],
+    "users": []
+  },
+  "fields": [
+    {
+      "key": "ticket.fachabteilung",
+      "label": "Zuständige Fachabteilung",
+      "widget": "group",
+      "help": "Wer soll den Auftrag bearbeiten? Die Abteilung, die hier steht, ist zuständig – sie kann den Auftrag später an eine andere weitergeben.",
+      "placeholder": "Fachabteilung auswählen…",
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": "id",
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": []
+    },
+    {
+      "key": "ticket.eintraege",
+      "label": "Verlauf",
+      "widget": "collection",
+      "help": "Beim Anlegen beschreiben Sie hier Ihr Anliegen. Danach hängen beide Seiten weitere Einträge an – Rückfragen, Zwischenstände, Ergebnisse. Bestehende Einträge lassen sich nicht mehr ändern oder löschen; Name und Zeitpunkt setzt das System.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": "append_only",
+      "item": [
+        {
+          "key": "text",
+          "label": "Eintrag",
+          "widget": "textarea",
+          "value": null
+        },
+        {
+          "key": "author_name",
+          "label": "Autor:in",
+          "widget": "server_stamped",
+          "value": "actor"
+        },
+        {
+          "key": "timestamp",
+          "label": "Zeitpunkt",
+          "widget": "server_stamped",
+          "value": "now"
+        }
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "key": "erstellung",
+      "label": "Erstellung",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "ticket.fachabteilung",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "ticket.eintraege",
+          "mode": "append_only",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": [
+        {
+          "id": "direkt_zur_fachabteilung",
+          "trigger": {
+            "type": "on_enter"
+          },
+          "action": {
+            "type": "auto_advance"
+          }
+        }
+      ]
+    },
+    {
+      "key": "bearbeitung",
+      "label": "Bearbeitung",
+      "kind": "task",
+      "view": "form",
+      "enterStatus": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "group_from_field",
+        "group": null,
+        "user": null,
+        "fromField": "ticket.fachabteilung",
+        "rule": [],
+        "resetOnDescriptionChange": false
+      },
+      "fields": [
+        {
+          "ref": "ticket.fachabteilung",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null
+        },
+        {
+          "ref": "ticket.eintraege",
+          "mode": "append_only",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null
+        }
+      ],
+      "constraints": [],
+      "automations": [
+        {
+          "id": "weitergabe_melden",
+          "trigger": {
+            "type": "on_field_change",
+            "after": null,
+            "repeat": null,
+            "field": "ticket.fachabteilung"
+          },
+          "guard": null,
+          "action": {
+            "type": "notify",
+            "to": "responsible",
+            "template": "Neue Aufgabe für Ihre Fachabteilung",
+            "field": null,
+            "value": null,
+            "counter": null
+          }
+        }
+      ]
+    }
+  ],
+  "automations": []
+}

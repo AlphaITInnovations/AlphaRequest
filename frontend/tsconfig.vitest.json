@@ -1,0 +1,15 @@
+{
+  // Typprüfung der TESTS. Bewusst getrennt vom Produktions-Build:
+  // Tests dürfen Fixtures von außerhalb von frontend/ lesen (die echten
+  // Prozess-Definitionen), im Docker-Image liegt aber nur frontend/. Deshalb
+  // schließt tsconfig.app.json Tests aus und diese Datei nimmt sie wieder auf.
+  // Läuft über `npm run typecheck` (lokal und in der CI, wo das ganze Repo da ist).
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo",
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "exclude": []
+}

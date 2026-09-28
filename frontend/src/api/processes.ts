@@ -1,0 +1,237 @@
+/**
+ * API-Client für Prozess-Definitionen (/api/v1/processes).
+ *
+ * Fallstricke, die hier gekapselt sind:
+ *  - Listen-Routen liefern `definition: null` → der Editor lädt immer getVersion().
+ *  - `:export` liefert die ROHE Definition, keinen ProcessOut.
+ *  - DELETE liefert `{ok:true}` ohne data-Envelope.
+ *  - If-Match ist der unquoted Integer-String aus ProcessOut.etag (Body!).
+ *  - Der Doppelpunkt in `:publish`/`:export` darf NICHT URL-encodiert werden.
+ */
+import { client } from '@/api/client'
+import type {
+  FieldAccess, ProcessDefinition, ProcessDeletePreview,
+  ProcessDeleteRequestOut, ProcessOut,
+} from '@/types/process'
+
+/** Veröffentlichter Katalog (jede:r Angemeldete). Ohne `definition`. */
+export async function listProcesses(): Promise<ProcessOut[]> {
+  const { data } = await client.get('/processes')
+  return data.data
+}
+
+/** Ein Prozess für die Reihenfolge-Verwaltung (Katalog „Neues Prozess-Ticket"). */
+export interface ProcessOrderItem {
+  key: string
+  name: string
+  icon: string | null
+}
+
+/** Aktuelle Anzeigereihenfolge ALLER veröffentlichten Prozesse (Admin). */
+export async function getProcessOrder(): Promise<ProcessOrderItem[]> {
+  const { data } = await client.get('/settings/process-order')
+  return data.data.items
+}
+
+/** Reihenfolge speichern (Liste der Schlüssel). Liefert die neue Reihenfolge. */
+export async function saveProcessOrder(order: string[]): Promise<ProcessOrderItem[]> {
+  const { data } = await client.put('/settings/process-order', { order })
+  return data.data.items
+}
+
+/** Alle Versionen eines Prozesses (Manage/Admin). Ohne `definition`. */
+export async function listVersions(key: string): Promise<ProcessOut[]> {
+  const { data } = await client.get(`/processes/${encodeURIComponent(key)}/versions`)
+  return data.data
+}
+
+/** Eine Version inkl. `definition` (Manage/Admin). */
+export async function getVersion(key: string, version: number): Promise<ProcessOut> {
+  const { data } = await client.get(`/processes/${encodeURIComponent(key)}/versions/${version}`)
+  return data.data
+}
+
+/** Aktuell veröffentlichte Version inkl. `definition`. */
+export async function getPublished(key: string): Promise<ProcessOut> {
+  const { data } = await client.get(`/processes/${encodeURIComponent(key)}`)
+  return data.data
+}
+
+/** Serverseitig berechnete Vorbelegung für den Anlege-Dialog (eigene Stammdaten).
+ *  Deckt Relationen (directus-ID) und das Firmen-Dropdown (ID→Name) korrekt ab. */
+export async function getCreatePrefill(key: string): Promise<Record<string, unknown>> {
+  const { data } = await client.get(`/processes/${encodeURIComponent(key)}/create-prefill`)
+  return (data.data?.values as Record<string, unknown>) ?? {}
+}
+
+// ── Dokument-Vorlage (.docx) je Prozess ───────────────────────────────────────
+
+export interface DocumentTemplateInfo {
+  exists: boolean
+  /** Format der hinterlegten Vorlage. */
+  format?: 'docx' | 'pdf'
+  documentKey?: string
+  filename?: string
+  size?: number
+  /** Alle in der Vorlage gefundenen {{marker}} (zum Zuordnen). */
+  placeholders?: string[]
+  uploaded_at?: string
+  uploaded_by?: string | null
+}
+
+/** URL der Vorlage je (Prozess, Phase). Das Dokument wählt der `document`-Query. */
+function templateUrl(key: string, phaseKey: string): string {
+  return `/processes/${encodeURIComponent(key)}/phases/${encodeURIComponent(phaseKey)}`
+    + '/document-template'
+}
+
+export async function getDocumentTemplate(
+  key: string, phaseKey: string, documentKey = 'dokument',
+): Promise<DocumentTemplateInfo> {
+  const { data } = await client.get(templateUrl(key, phaseKey), { params: { document: documentKey } })
+  return data.data
+}
+
+export async function uploadDocumentTemplate(
+  key: string, phaseKey: string, file: File, documentKey = 'dokument',
+): Promise<DocumentTemplateInfo> {
+  const form = new FormData()
+  form.append('file', file)
+  // Content-Type NICHT setzen: der Browser ergänzt die multipart-Boundary
+  // (der Axios-Client setzt global JSON – hier mit undefined überschreiben).
+  const { data } = await client.post(templateUrl(key, phaseKey), form,
+    { headers: { 'Content-Type': undefined }, params: { document: documentKey } })
+  return data.data
+}
+
+export async function deleteDocumentTemplate(
+  key: string, phaseKey: string, documentKey = 'dokument',
+): Promise<void> {
+  await client.delete(templateUrl(key, phaseKey), { params: { document: documentKey } })
+}
+
+/** Rohe Definition einer Version (Export-Datei). */
+/**
+ * Feld-Auskunft für den Anlege-Dialog. Beim Anlegen gibt es noch kein Ticket und
+ * damit keine Antwort mit `visible_fields` – ohne diese Auskunft müsste das
+ * Formular die Sichtbarkeit raten (es kennt die Gruppen-Mitgliedschaft nicht).
+ */
+export async function getFieldAccess(key: string): Promise<FieldAccess> {
+  const { data } = await client.get(`/processes/${key}/field-access`)
+  return data.data
+}
+
+export async function exportVersion(key: string, version: number): Promise<ProcessDefinition> {
+  const { data } = await client.get(
+    `/processes/${encodeURIComponent(key)}/versions/${version}:export`)
+  return data.data
+}
+
+/** Neuen Prozess anlegen – Body ist die Definition selbst (nicht gewrappt). */
+export async function createProcess(defn: ProcessDefinition): Promise<ProcessOut> {
+  const { data } = await client.post('/processes', defn)
+  return data.data
+}
+
+/** Bearbeitungs-Entwurf holen/anlegen (klont die veröffentlichte Version). */
+export async function createDraft(key: string): Promise<ProcessOut> {
+  const { data } = await client.post(`/processes/${encodeURIComponent(key)}/versions`, {})
+  return data.data
+}
+
+/** Entwurf speichern. `etag` (aus ProcessOut.etag) schützt vor Lost-Update. */
+export async function saveDraft(
+  key: string, version: number, defn: ProcessDefinition, etag?: string | null,
+): Promise<ProcessOut> {
+  const { data } = await client.put(
+    `/processes/${encodeURIComponent(key)}/versions/${version}`, defn,
+    etag ? { headers: { 'If-Match': etag } } : undefined)
+  return data.data
+}
+
+/** Veröffentlichen (idempotent). */
+export async function publishVersion(key: string, version: number): Promise<ProcessOut> {
+  const { data } = await client.post(
+    `/processes/${encodeURIComponent(key)}/versions/${version}:publish`)
+  return data.data
+}
+
+/**
+ * Prozess global (de)aktivieren. Deaktiviert = niemand kann neue Aufträge
+ * anlegen, bis er wieder freigegeben wird. Laufende Aufträge bleiben unberührt.
+ */
+export async function setProcessActive(key: string, disabled: boolean): Promise<ProcessOut> {
+  const { data } = await client.post(
+    `/processes/${encodeURIComponent(key)}:set-active`, { disabled })
+  return data.data
+}
+
+/** Unter neuem Key kopieren (Quelle: veröffentlichte Version, sonst höchste). */
+export async function duplicateProcess(key: string, newKey: string): Promise<ProcessOut> {
+  const { data } = await client.post(
+    `/processes/${encodeURIComponent(key)}:duplicate`, { newKey })
+  return data.data
+}
+
+/** Import: Ziel-Key muss explizit bestätigt werden (nie allein aus dem JSON). */
+export async function importProcess(
+  targetKey: string, definition: ProcessDefinition,
+): Promise<ProcessOut> {
+  const { data } = await client.post('/processes:import', { targetKey, definition })
+  return data.data
+}
+
+/** Entwurfs-Version löschen. Antwort ist {ok:true} ohne data-Envelope. */
+/**
+ * Löschung eines GANZEN Prozesses anfordern. Löscht noch nichts – der Server
+ * verschickt einen Bestätigungs-Link an die hinterlegte Admin-Adresse (ADMIN_MAIL).
+ * `includeTickets` muss gesetzt sein, wenn es Aufträge gibt; sonst 409.
+ */
+export async function requestProcessDelete(
+  key: string, includeTickets: boolean,
+): Promise<ProcessDeleteRequestOut> {
+  const { data } = await client.post(`/processes/${key}:request-delete`, { includeTickets })
+  return data.data
+}
+
+/** Was der Bestätigungs-Link löschen würde – reine Auskunft. */
+export async function previewProcessDelete(token: string): Promise<ProcessDeletePreview> {
+  const { data } = await client.get('/processes:delete-preview', { params: { token } })
+  return data.data
+}
+
+/** Bestätigte Löschung ausführen. Nicht umkehrbar. */
+export async function confirmProcessDelete(
+  token: string,
+): Promise<{ key: string; versions_deleted: number; tickets_deleted: number }> {
+  const { data } = await client.post('/processes:confirm-delete', { token })
+  return data.data
+}
+
+export async function deleteVersion(key: string, version: number): Promise<void> {
+  await client.delete(`/processes/${encodeURIComponent(key)}/versions/${version}`)
+}
+
+/** Eskalations-Testmail an die eigene Adresse schicken (Vorschau im Editor).
+ *  Geht bewusst NUR an die anfragende Person, nie an konfigurierte Empfänger. */
+export async function testEscalationMail(payload: {
+  message: string | null; raisePriority: boolean
+  processName?: string | null; phaseLabel?: string | null
+}): Promise<{ ok: boolean; message: string }> {
+  const { data } = await client.post('/processes:test-escalation-mail', payload)
+  return data.data
+}
+
+/** Testmail einer notify/escalate-Automation an die TATSÄCHLICH konfigurierten
+ *  Empfänger (Fachabteilungs-Verteiler) schicken – zur Vorschau im Editor.
+ *  Anders als die Eskalations-Testmail bewusst an die echten Adressen. */
+export async function testAutomationMail(payload: {
+  to?: string | null; recipients?: string[] | null
+  type?: string | null
+  template?: string | null; emailBody?: string | null
+  sampleValues?: Record<string, string>
+  processName?: string | null; phaseLabel?: string | null
+}): Promise<{ ok: boolean; message: string }> {
+  const { data } = await client.post('/processes:test-automation-mail', payload)
+  return data.data
+}

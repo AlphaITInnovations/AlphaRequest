@@ -16,7 +16,7 @@ from backend.metrics.auth_metrics import (
     record_login_attempt, record_login_success, record_login_failed,
 )
 from backend.schemas.responses import DataResponse
-from backend.schemas.ticket import UserOut
+from backend.schemas.user import UserOut, ProfileOut
 from backend.services.microsoft_auth import (
     initiate_auth_flow, acquire_token_by_auth_code,
 )
@@ -35,7 +35,6 @@ def _client_ip(request: Request) -> str | None:
 
 router = APIRouter()
 
-
 # ── /auth/refresh-session ─────────────────────────────────────────────────────
 
 @router.post("/auth/refresh-session", response_model=DataResponse[UserOut])
@@ -51,18 +50,7 @@ def refresh_session(
     if not db_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    from backend.services.ticket_permissions import get_allowed_ticket_types_for_user
-
     permissions = list(db_user.permissions)
-    user_groups = user.get("groups", []) or []
-
-    if user_groups:
-        group_types = get_allowed_ticket_types_for_user(user["id"], user_groups)
-        for tt in group_types:
-            perm = f"create_{tt}"
-            if perm not in permissions:
-                permissions.append(perm)
-
     request.session["user"]["permissions"] = permissions
     request.session["last_activity"] = int(time.time())
 
@@ -78,24 +66,40 @@ def refresh_session(
 
 @router.get("/auth/me", response_model=DataResponse[UserOut])
 def me(request: Request, user: dict = Depends(get_current_user)):
-    from backend.services.ticket_permissions import get_allowed_ticket_types_for_user
-
+    # `permissions` trägt nur noch die Rollen-/Extra-Rechte (view/manage/admin).
+    # Die frühere Anreicherung um `create_<tickettyp>` ist mit dem Alt-System
+    # entfallen: welcher Prozess anlegbar ist, entscheidet die DEFINITION
+    # (createPermissions) und steht je Prozess in GET /processes als `may_create`.
     permissions = get_user_permissions(user["id"])
-    user_groups = user.get("groups", []) or []
-
-    # Gruppen-basierte create_* Permissions hinzufügen
-    if user_groups:
-        group_types = get_allowed_ticket_types_for_user(user["id"], user_groups)
-        for tt in group_types:
-            perm = f"create_{tt}"
-            if perm not in permissions:
-                permissions.append(perm)
 
     return DataResponse(data=UserOut(
         id=user["id"],
         displayName=user["displayName"],
         mail=user.get("mail") or user.get("email"),
         permissions=permissions,
+    ))
+
+
+# ── /auth/profile (volle Profil-Anzeige inkl. Directus-Stammdaten) ────────────
+
+@router.get("/auth/profile", response_model=DataResponse[ProfileOut])
+def profile(request: Request, user: dict = Depends(get_current_user)):
+    """Alle Infos des angemeldeten Nutzers für die Profil-Ansicht: Konto + das,
+    was Azure über die Session mitgibt, plus der per E-Mail verknüpfte
+    Directus-Mitarbeiter-Datensatz (`employee`). `permissions` und `employee`
+    sind von get_current_user bereits frisch gesetzt."""
+    return DataResponse(data=ProfileOut(
+        id=user["id"],
+        displayName=user["displayName"],
+        mail=user.get("mail") or user.get("email"),
+        permissions=list(user.get("permissions") or []),
+        phone=user.get("phone"),
+        mobile=user.get("mobile"),
+        company=user.get("company"),
+        position=user.get("position"),
+        address=user.get("address"),
+        groups=list(user.get("groups") or []),
+        employee=user.get("employee"),
     ))
 
 
@@ -166,12 +170,22 @@ async def auth_callback(request: Request):
         # Gruppen-GUIDs nur im DEBUG-Log (verraten Org-Struktur, nicht ins INFO-Log).
         logger.debug("Login groups for user %s: %s", id_claims.get("name"), user_groups)
 
+        # Personen-Identität = kleingeschriebene dienstliche E-Mail. Das ist der
+        # stabile, in Azure UND Directus vorhandene Schlüssel; das Directus-Gate
+        # (enforce_employee_link) garantiert, dass zu dieser E-Mail ein Mitarbeiter-
+        # Datensatz existiert. Von hier fließt sie als user["id"] in owner_id,
+        # Beobachter, Zuständigkeit, Gruppen-Mitglieder, app_users usw. Die Azure
+        # Object-ID (oid) bleibt nur informativ als user["oid"].
+        email = (id_claims.get("preferred_username")
+                 or id_claims.get("email")
+                 or infos.get("mail") or "").strip().lower()
+        oid = id_claims.get("oid") or id_claims.get("sub")
+
         user_payload = {
-            "id":          id_claims.get("oid") or id_claims.get("sub"),
+            "id":          email or oid,   # Identität = E-Mail (Fallback oid, falls leer)
+            "oid":         oid,            # Azure Object-ID – nur noch informativ
             "displayName": id_claims.get("name") or infos.get("displayName"),
-            "email":       id_claims.get("preferred_username")
-                           or id_claims.get("email")
-                           or infos.get("mail"),
+            "email":       email,
             "phone":       infos.get("phone"),
             "mobile":      infos.get("mobile"),
             "company":     infos.get("company"),
@@ -182,7 +196,7 @@ async def auth_callback(request: Request):
 
         # User anlegen / last_login aktualisieren (Rolle wird separat synchronisiert)
         db_user = upsert_user(
-            microsoft_id=user_payload["id"],
+            user_id=user_payload["id"],
             display_name=user_payload["displayName"] or "",
             email=user_payload["email"] or "",
         )

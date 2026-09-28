@@ -1,0 +1,290 @@
+"""Anbindung an Directus (internes Stammdaten-System) als LESE-Quelle für
+Auswahl-Felder in Prozessen (Kostenstelle, Niederlassung …).
+
+Bewusst dünn und synchron (requests): URL bauen, Bearer-Token, Timeout, den
+Directus-`{"data": …}`-Envelope auspacken, Fehler in `DirectusError` übersetzen.
+Nur Lesen – der Token ist ein statischer Directus-Service-Token mit Leserechten
+(config.DIRECTUS_URL / config.DIRECTUS_TOKEN).
+
+`is_configured()` trägt die fail-soft-Politik: ist Directus nicht eingerichtet,
+sollen die Aufrufer (Options-/Introspektions-Endpunkte) eine leere Auswahl
+zeigen statt abzustürzen. Die reinen Datenpfade werfen `DirectusError`; das
+Übersetzen in HTTP-Antworten bzw. leere Listen ist Sache der API-Schicht.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any, Optional
+from urllib.parse import quote
+
+import requests
+
+from backend.utils.config import config
+from backend.utils.logger import logger
+
+#: System-Collections/-Präfix, die in der Auswahl nichts zu suchen haben.
+_SYSTEM_PREFIX = "directus_"
+
+
+class DirectusError(RuntimeError):
+    """Directus nicht erreichbar oder Fehlerantwort.
+
+    Trägt – wenn vorhanden – den HTTP-Statuscode, damit die API-Schicht z. B.
+    ein 502 (Directus down) von einem 404 (Collection gibt es nicht) trennen kann.
+    """
+
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
+
+
+def is_configured() -> bool:
+    """True, wenn URL UND Token gesetzt sind – sonst ist die Anbindung inaktiv."""
+    return bool(config.DIRECTUS_URL and config.DIRECTUS_TOKEN)
+
+
+def _headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {config.DIRECTUS_TOKEN}", "Accept": "application/json"}
+
+
+def _verify():
+    """requests-`verify`: eine CA-Bundle-Datei, falls gesetzt (prüft weiter gegen
+    diese CA), sonst der Bool DIRECTUS_VERIFY_SSL. False = Prüfung aus (self-signed).
+    Bei ausgeschalteter Prüfung die urllib3-Warnung einmalig unterdrücken (kein
+    Log-Rauschen bei jeder Abfrage)."""
+    if config.DIRECTUS_CA_BUNDLE:
+        return config.DIRECTUS_CA_BUNDLE
+    if not config.DIRECTUS_VERIFY_SSL:
+        try:
+            from urllib3.exceptions import InsecureRequestWarning
+            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+        except Exception:
+            pass
+        return False
+    return True
+
+
+def _error_message(resp: "requests.Response") -> str:
+    """Directus meldet Fehler als {"errors":[{"message": …}]} – die erste Meldung
+    herausziehen, sonst den (gekürzten) Rohtext."""
+    try:
+        errs = resp.json().get("errors") or []
+        if errs:
+            first = errs[0]
+            return str(first.get("message") if isinstance(first, dict) else first)
+    except Exception:
+        pass
+    return (resp.text or f"HTTP {resp.status_code}")[:200]
+
+
+def _request(path: str, params: Optional[dict] = None) -> Any:
+    """GET auf {DIRECTUS_URL}{path} und den `data`-Teil zurückgeben.
+
+    Wirft `DirectusError` bei fehlender Konfiguration, Netz-/Timeout-Fehler,
+    HTTP-Fehlerstatus oder nicht-JSON-Antwort.
+    """
+    if not is_configured():
+        raise DirectusError("Directus ist nicht konfiguriert (DIRECTUS_URL/DIRECTUS_TOKEN fehlen)")
+    url = f"{config.DIRECTUS_URL}{path}"
+    try:
+        resp = requests.get(url, headers=_headers(), params=params or {},
+                            timeout=config.DIRECTUS_TIMEOUT, verify=_verify())
+    except requests.RequestException as exc:
+        raise DirectusError(f"Directus nicht erreichbar: {exc}") from exc
+    if resp.status_code >= 400:
+        raise DirectusError(f"Directus {resp.status_code}: {_error_message(resp)}",
+                            status=resp.status_code)
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        raise DirectusError(f"Directus-Antwort ist kein JSON: {exc}") from exc
+    return body.get("data") if isinstance(body, dict) else body
+
+
+# ── Introspektion (für die Verwaltungs-Oberfläche) ────────────────────────────
+
+def list_collections() -> list[dict]:
+    """Auswählbare Collections: ohne System-Collections (`directus_*`) und ohne
+    reine Ordner (in Directus ist `schema == null` ein Präsentations-Ordner, keine
+    echte Tabelle). Liefert [{collection, note, icon, hidden}]."""
+    data = _request("/collections") or []
+    out: list[dict] = []
+    for c in data:
+        name = c.get("collection")
+        if not name or str(name).startswith(_SYSTEM_PREFIX):
+            continue
+        # `schema is None` NICHT herausfiltern: eingeschränkte Tokens bekommen für
+        # echte Tabellen oft kein Schema geliefert – ein zu strenger Filter ließe
+        # die Liste dann leer. Reine Ordner sind selten und stören kaum.
+        meta = c.get("meta") or {}
+        out.append({
+            "collection": name,
+            "note": meta.get("note"),
+            "icon": meta.get("icon"),
+            "hidden": bool(meta.get("hidden")),
+        })
+    out.sort(key=lambda x: x["collection"])
+    return out
+
+
+def sample_fields(collection: str) -> list[dict]:
+    """Feld-Kandidaten aus EINEM Beispiel-Datensatz ableiten – Fallback, wenn die
+    Schema-Introspektion (`/fields`) für das Token nicht verfügbar ist (nur
+    Datenlese-Rechte). Liefert die Top-Level-Schlüssel; Relationen erscheinen als
+    ihr Roh-Schlüssel (dot-Pfade fügt man bei Bedarf manuell hinzu)."""
+    recs = query_items(collection, limit=1)
+    if not recs or not isinstance(recs[0], dict):
+        return []
+    return [{"field": k, "type": None, "note": None, "primaryKey": False,
+             "relatedCollection": None} for k in recs[0].keys()]
+
+
+def list_fields(collection: str) -> list[dict]:
+    """Felder einer Collection: [{field, type, note, primaryKey, relatedCollection}].
+
+    `relatedCollection` (aus `schema.foreign_key_table`) benennt bei einer
+    Many-to-One-Beziehung die Ziel-Collection – so lassen sich dot-Pfade wie
+    `firma.name` in der Oberfläche anbieten.
+    """
+    data = _request(f"/fields/{collection}") or []
+    out: list[dict] = []
+    for f in data:
+        field = f.get("field")
+        if not field:
+            continue
+        schema = f.get("schema") or {}
+        meta = f.get("meta") or {}
+        out.append({
+            "field": field,
+            "type": f.get("type"),
+            "note": meta.get("note"),
+            "primaryKey": bool(schema.get("is_primary_key")),
+            "relatedCollection": schema.get("foreign_key_table"),
+        })
+    return out
+
+
+# ── Datenabfrage (für Optionslisten + Snapshot) ───────────────────────────────
+
+def query_items(collection: str, *, fields: Optional[list[str]] = None,
+                filter: Optional[dict] = None, sort: Optional[list[str]] = None,
+                limit: int = 100, search: Optional[str] = None) -> list[dict]:
+    """Items einer Collection lesen.
+
+    `fields` ist die Directus-Feldliste (dot-Pfade wie `firma.name` erlaubt und
+    erwünscht – so kommen relationale Werte gleich mit), `filter` ein
+    Directus-Filter-dict, `sort` z. B. ["nummer"], `search` Volltextsuche.
+    """
+    params: dict[str, Any] = {"limit": limit}
+    if fields:
+        params["fields"] = ",".join(fields)
+    if sort:
+        params["sort"] = ",".join(sort)
+    if search:
+        params["search"] = search
+    if filter:
+        params["filter"] = json.dumps(filter, ensure_ascii=False)
+    data = _request(f"/items/{collection}", params=params)
+    return data if isinstance(data, list) else []
+
+
+# ── Schreiben (für Automations-Aktion directus_write) ────────────────────────
+
+def _write_token() -> str:
+    return config.DIRECTUS_WRITE_TOKEN or config.DIRECTUS_TOKEN
+
+
+def _write(method: str, path: str, json_body: Optional[dict] = None) -> Any:
+    """POST/PATCH/DELETE gegen Directus. Gibt den `data`-Teil zurück (None bei
+    204/leer). Wirft DirectusError bei Konfig-/Netz-/HTTP-Fehler."""
+    if not config.DIRECTUS_URL or not _write_token():
+        raise DirectusError("Directus ist nicht konfiguriert (DIRECTUS_URL/Token fehlen)")
+    url = f"{config.DIRECTUS_URL}{path}"
+    headers = {"Authorization": f"Bearer {_write_token()}", "Accept": "application/json",
+               "Content-Type": "application/json"}
+    try:
+        resp = requests.request(method, url, headers=headers, json=json_body,
+                                timeout=config.DIRECTUS_TIMEOUT, verify=_verify())
+    except requests.RequestException as exc:
+        raise DirectusError(f"Directus nicht erreichbar: {exc}") from exc
+    if resp.status_code == 204:
+        return None
+    if resp.status_code >= 400:
+        raise DirectusError(f"Directus {resp.status_code}: {_error_message(resp)}",
+                            status=resp.status_code)
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    return body.get("data") if isinstance(body, dict) else body
+
+
+def _seg(v: Any) -> str:
+    """Ein Pfad-Segment sicher kodieren – Sonderzeichen (/, ?, #, …) dürfen das
+    Request-Ziel NICHT verändern (item_id kann aus einem Nutzerfeld stammen)."""
+    return quote(str(v), safe="")
+
+
+def create_item(collection: str, payload: dict) -> dict:
+    """Neuen Datensatz anlegen; gibt den angelegten Datensatz (inkl. id) zurück."""
+    data = _write("POST", f"/items/{_seg(collection)}", json_body=payload)
+    return data if isinstance(data, dict) else {}
+
+
+def update_item(collection: str, item_id: Any, payload: dict) -> dict:
+    """Datensatz aktualisieren; gibt den aktualisierten Datensatz zurück."""
+    data = _write("PATCH", f"/items/{_seg(collection)}/{_seg(item_id)}", json_body=payload)
+    return data if isinstance(data, dict) else {}
+
+
+def delete_item(collection: str, item_id: Any) -> None:
+    """Datensatz löschen."""
+    _write("DELETE", f"/items/{_seg(collection)}/{_seg(item_id)}")
+
+
+def find_one_id(collection: str, field: str, value: Any) -> Optional[str]:
+    """Sucht einen Datensatz per Gleichheit auf `field` und gibt dessen id zurück
+    (oder None). Für get-or-create beim Anlegen; läuft im SCHREIB-Kontext, nutzt
+    also den Schreib-Token (der auf die Ziel-Collection Zugriff hat)."""
+    if value in (None, ""):
+        return None
+    if not config.DIRECTUS_URL or not _write_token():
+        raise DirectusError("Directus ist nicht konfiguriert (DIRECTUS_URL/Token fehlen)")
+    url = f"{config.DIRECTUS_URL}/items/{_seg(collection)}"
+    headers = {"Authorization": f"Bearer {_write_token()}", "Accept": "application/json"}
+    params = {"filter": json.dumps({field: {"_eq": value}}, ensure_ascii=False),
+              "fields": "id", "limit": 1}
+    try:
+        resp = requests.get(url, headers=headers, params=params,
+                            timeout=config.DIRECTUS_TIMEOUT, verify=_verify())
+    except requests.RequestException as exc:
+        raise DirectusError(f"Directus nicht erreichbar: {exc}") from exc
+    if resp.status_code >= 400:
+        raise DirectusError(f"Directus {resp.status_code}: {_error_message(resp)}",
+                            status=resp.status_code)
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    data = body.get("data") if isinstance(body, dict) else body
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        rid = data[0].get("id")
+        return str(rid) if rid not in (None, "") else None
+    return None
+
+
+def status() -> dict:
+    """Verbindungs-Status für die Verwaltungs-Oberfläche.
+
+    {configured, ok, error}: `configured` sagt, ob URL+Token gesetzt sind; `ok`
+    ist erst True, wenn Directus auch antwortet. Wirft nie – die Oberfläche soll
+    den Zustand anzeigen können, ohne einen Fehler zu behandeln.
+    """
+    if not is_configured():
+        return {"configured": False, "ok": False, "error": None}
+    try:
+        _request("/server/info")
+        return {"configured": True, "ok": True, "error": None}
+    except DirectusError as exc:
+        logger.warning("Directus-Status: %s", exc)
+        return {"configured": True, "ok": False, "error": str(exc)}

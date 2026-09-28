@@ -113,7 +113,7 @@ def normalize_company(item) -> dict:
     if isinstance(item, str):
         return {"name": item.strip(), "pnr_from": None, "pnr_to": None,
                 "pnr_current": None, "pnr_warned": False, "mandant": None,
-                "pnr_shared_with": None}
+                "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
     if isinstance(item, dict):
         return {
             "name": str(item.get("name", "")).strip(),
@@ -123,10 +123,16 @@ def normalize_company(item) -> dict:
             "pnr_warned": bool(item.get("pnr_warned", False)),
             "mandant": _str_or_none(item.get("mandant")),
             "pnr_shared_with": _str_or_none(item.get("pnr_shared_with")),
+            # alphacore-Firmen-ID (Directus-Fremdschlüssel) – vom directus_write
+            # per resolve=company_directus_id genutzt.
+            "directus_firma_id": _str_or_none(item.get("directus_firma_id")),
+            # E-Mail-Domain der Firma – Basis für die automatische Firmenmail
+            # (vorname.nachname@domain). Ohne führendes @, klein.
+            "domain": (_str_or_none(item.get("domain")) or "").lower().lstrip("@") or None,
         }
     return {"name": "", "pnr_from": None, "pnr_to": None,
             "pnr_current": None, "pnr_warned": False, "mandant": None,
-            "pnr_shared_with": None}
+            "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
 
 
 def get_companies_full() -> List[dict]:
@@ -197,3 +203,39 @@ def set_companies_full(companies: List[dict]) -> None:
 def set_companies(companies: List[str]) -> None:
     """Nur Namen setzen (Altpfad) – bestehende Bereiche/Zähler bleiben erhalten."""
     set_companies_full([{"name": n} for n in companies])
+
+
+# ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────
+#
+# Liste von Prozess-Schlüsseln in gewünschter Reihenfolge. NUR eine Sortier-
+# Präferenz für die Kachel-Reihenfolge – WELCHE Prozesse jemand sieht/anlegen
+# darf, entscheidet weiterhin `createPermissions`/`may_create`. Nicht gelistete
+# Schlüssel (neue oder entfernte Prozesse) schaden nicht: sie landen stabil
+# hinter den gelisteten.
+
+def get_process_order() -> List[str]:
+    """Gespeicherte Reihenfolge der Prozess-Schlüssel (dedupliziert, leere raus)."""
+    val = settings_get("PROCESS_ORDER", [])
+    if not isinstance(val, list):
+        return []
+    out: List[str] = []
+    seen = set()
+    for k in val:
+        s = str(k).strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def set_process_order(keys: List[str]) -> List[str]:
+    """Reihenfolge speichern (dedupliziert, leere raus). Gibt die kanonische Liste zurück."""
+    cleaned: List[str] = []
+    seen = set()
+    for k in keys or []:
+        s = str(k).strip()
+        if s and s not in seen:
+            seen.add(s)
+            cleaned.append(s)
+    settings_set("PROCESS_ORDER", cleaned)
+    return cleaned

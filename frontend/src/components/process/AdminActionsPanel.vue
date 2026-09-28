@@ -1,0 +1,634 @@
+<script setup lang="ts">
+/**
+ * Admin-Aktionen-Leiste (Formation des Alt-Systems): die prominente orange
+ * Leiste mit den Notfall-Werkzeugen. Sie legt sich in der Admin-Ansicht ÜBER
+ * die normale Leseansicht – die bleibt die Basis, damit alle Aufträge überall
+ * dieselbe Struktur haben.
+ *
+ * NUR ANZEIGE-Gate: eingehängt wird die Leiste ausschließlich für Admins
+ * (?ansicht=admin) – verbindlich prüft aber JEDER Endpunkt selbst
+ * (ADMIN_REQUIRED), die Oberfläche kann keine Rechte vergeben.
+ */
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import UserSelect from '@/components/UserSelect.vue'
+import { useToast } from '@/composables/useToast'
+import { errorMessage } from '@/lib/processErrors'
+import {
+  departmentStatusLabel, departmentTone, isDepartmentPending,
+  requiredLabel, type DepartmentState,
+} from '@/lib/processDepartments'
+import * as ticketsApi from '@/api/processTickets'
+import { reopenTicket } from '@/api/processEvents'
+import type { OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
+
+const props = defineProps<{
+  ticket: ProcessTicketOut
+  definition: ProcessDefinition
+  sources: OptionSources
+}>()
+
+const emit = defineEmits<{ reload: []; error: [message: string] }>()
+
+const router = useRouter()
+const { showToast } = useToast()
+
+const busy = ref(false)
+
+const terminal = computed(() => {
+  const t = props.ticket
+  return t.status === 'archived' || t.status === 'rejected' || !!t.runtime?.rejected
+})
+
+/** Zuständigkeits-Feld der aktuellen Phase (nur wenn sie aus einem FELD kommt –
+ *  feste Gruppen stehen in der Definition und sind nicht pro Auftrag umstellbar). */
+const zustFeld = computed(() => {
+  const r = props.ticket.responsibility as
+    { kind?: string; from_field?: string | null } | null
+  if (!r?.from_field) return null
+  if (r.kind !== 'group' && r.kind !== 'user') return null
+  return { feld: r.from_field, art: r.kind as 'group' | 'user' }
+})
+
+// Fehler an die Detailansicht melden: sie zeigt sie im standardisierten roten
+// Balken GANZ OBEN (bleibt stehen bis zum nächsten Betreten), statt in einer
+// flüchtigen Toast-Meldung, die man im Moment des Fehlers leicht übersieht.
+function fehler(e: unknown, fallback: string) {
+  emit('error', errorMessage(e, fallback))
+}
+
+// ── Zuständigkeit ändern ──────────────────────────────────────────────────────
+
+const showZust = ref(false)
+const zustSel = ref<{ id: string; name: string } | null>(null)
+const zustGrund = ref('')
+
+async function zustSpeichern() {
+  const ziel = zustFeld.value
+  if (!ziel || !zustSel.value) return
+  if (!zustGrund.value.trim()) { showToast('Bitte eine Begründung angeben', false); return }
+  busy.value = true
+  try {
+    // Über den Roh-Endpunkt: das Feld ist in der aktuellen Phase nicht zwingend
+    // editierbar – der normale PATCH würde die Änderung still verwerfen.
+    const roh = await ticketsApi.getRawValues(props.ticket.id)
+    await ticketsApi.setRawValues(props.ticket.id,
+      { ...roh, [ziel.feld]: zustSel.value.id }, zustGrund.value.trim())
+    showZust.value = false
+    zustSel.value = null
+    zustGrund.value = ''
+    showToast('Zuständigkeit umgestellt')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Zuständigkeit konnte nicht umgestellt werden')
+  } finally { busy.value = false }
+}
+
+// ── Phase wechseln (aktiv) / Wiedereröffnen (terminal) ───────────────────────
+
+const showPhase = ref(false)
+const phaseZiel = ref('')
+const phaseGrund = ref('')
+
+function phaseOeffnen() {
+  showPhase.value = !showPhase.value
+  phaseZiel.value = props.ticket.current_phase ?? props.definition.phases[0]?.key ?? ''
+  phaseGrund.value = ''
+}
+
+async function phaseSpeichern() {
+  if (!phaseZiel.value) return
+  if (!phaseGrund.value.trim()) { showToast('Bitte eine Begründung angeben', false); return }
+  busy.value = true
+  try {
+    if (terminal.value) {
+      await reopenTicket(props.ticket.id, phaseGrund.value.trim(), phaseZiel.value)
+      showToast('Auftrag wieder aufgenommen')
+    } else {
+      await ticketsApi.setTicketPhase(props.ticket.id, phaseZiel.value, phaseGrund.value.trim())
+      showToast('Phase umgestellt')
+    }
+    showPhase.value = false
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Phase konnte nicht umgestellt werden')
+  } finally { busy.value = false }
+}
+
+// ── Fachabteilung abschließen (Admin-Override) ───────────────────────────────
+// Füllt die Lücke der normalen Ansicht: dort kann nur ein MITGLIED die eigene
+// Abteilung abschließen. Hier darf der Admin auch für eine andere Abteilung
+// quittieren (z. B. wenn sie keine erreichbaren Mitglieder hat). Der Endpunkt
+// erlaubt das per may_complete_department (Admin-Override).
+const showDept = ref(false)
+const deptGrund = ref('')
+
+const abteilungen = computed<DepartmentState[]>(() => {
+  const r = props.ticket.responsibility as { kind?: string; departments?: DepartmentState[] } | null
+  return r?.kind === 'departments' ? (r.departments ?? []) : []
+})
+
+const gruppenName = (gid: string) =>
+  props.sources.groups?.find((g) => g.id === gid)?.name || gid
+
+const DEPT_TONE: Record<string, string> = {
+  open: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  done: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  skipped: 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  unknown: 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+}
+const deptToneClass = (d: DepartmentState) => DEPT_TONE[departmentTone(d.status)]
+
+async function abteilungAbschliessen(gid: string) {
+  if (!deptGrund.value.trim()) { showToast('Bitte eine Begründung angeben', false); return }
+  busy.value = true
+  try {
+    await ticketsApi.completeDepartment(props.ticket.id, gid, deptGrund.value.trim())
+    showToast(`${gruppenName(gid)}: abgeschlossen`)
+    deptGrund.value = ''
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Fachabteilung konnte nicht abgeschlossen werden')
+  } finally { busy.value = false }
+}
+
+// ── Raw-JSON (Modal) ──────────────────────────────────────────────────────────
+
+const showRaw = ref(false)
+const rawText = ref('')
+const rawGrund = ref('')
+const rawError = ref('')
+
+async function rawOeffnen() {
+  rawError.value = ''
+  rawGrund.value = ''
+  busy.value = true
+  try {
+    // UNGEFILTERT laden – ein Editor auf der gefilterten Sicht würde unsichtbare
+    // Alt-Schlüssel beim nächsten Speichern zerstören.
+    rawText.value = JSON.stringify(await ticketsApi.getRawValues(props.ticket.id), null, 2)
+    showRaw.value = true
+  } catch (e) {
+    fehler(e, 'Roh-Werte konnten nicht geladen werden')
+  } finally { busy.value = false }
+}
+
+async function rawSpeichern() {
+  let parsed: unknown
+  try { parsed = JSON.parse(rawText.value || '{}') } catch {
+    rawError.value = 'Kein gültiges JSON.'; return
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    rawError.value = 'Die Roh-Werte müssen ein JSON-Objekt sein.'; return
+  }
+  if (!rawGrund.value.trim()) { rawError.value = 'Bitte eine Begründung angeben.'; return }
+  busy.value = true
+  rawError.value = ''
+  try {
+    await ticketsApi.setRawValues(props.ticket.id,
+      parsed as Record<string, unknown>, rawGrund.value.trim())
+    showRaw.value = false
+    showToast('Roh-Werte gespeichert')
+    emit('reload')
+  } catch (e) {
+    rawError.value = errorMessage(e, 'Speichern fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+// ── Ablehnen / Archivieren / Löschen ──────────────────────────────────────────
+
+async function ablehnen() {
+  // Begründung ist Pflicht: sie geht per Mail an die Ersteller:in und steht im
+  // Verlauf – ohne sie ist die Ablehnung nicht nachvollziehbar.
+  const grund = prompt('Auftrag ablehnen – warum? '
+    + '(Pflicht; geht per Mail an die Ersteller:in und steht im Verlauf)')
+  if (grund === null) return
+  if (!grund.trim()) { showToast('Ohne Begründung keine Ablehnung', false); return }
+  busy.value = true
+  try {
+    await ticketsApi.rejectTicket(props.ticket.id, grund.trim())
+    showToast('Auftrag abgelehnt')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Ablehnen fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+async function archivieren() {
+  const grund = prompt('Auftrag zwangsweise abschließen – warum? (Pflicht, steht im Verlauf)')
+  if (grund === null) return
+  if (!grund.trim()) { showToast('Ohne Begründung kein Zwangsabschluss', false); return }
+  busy.value = true
+  try {
+    await ticketsApi.archiveTicket(props.ticket.id, grund.trim())
+    showToast('Auftrag archiviert')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Archivieren fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+async function loeschen() {
+  if (!confirm(`Auftrag #${props.ticket.id} endgültig löschen?\n\n`
+    + 'Das kann NICHT rückgängig gemacht werden. Der Audit-Eintrag bleibt erhalten.')) return
+  busy.value = true
+  try {
+    await ticketsApi.deleteTicket(props.ticket.id)
+    showToast('Auftrag gelöscht')
+    router.push('/auftraege')
+  } catch (e) {
+    fehler(e, 'Löschen fehlgeschlagen')
+    busy.value = false
+  }
+}
+
+// ── Erinnerung an die zuständige Stelle (Nudge) ──────────────────────────────
+
+async function erinnern() {
+  if (!confirm('Erinnerung senden?\n\nDie Zuständigkeits-Mail der aktuellen Phase wird '
+    + 'erneut ausgelöst (bei Freigabe-Phasen die Entscheidungs-Mail). Kein Zustandswechsel.')) return
+  busy.value = true
+  try {
+    await ticketsApi.remindResponsible(props.ticket.id)
+    showToast('Erinnerung gesendet')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Erinnerung konnte nicht gesendet werden')
+  } finally { busy.value = false }
+}
+
+// ── Freigabe entscheiden / Freigabe-Mail erneut senden ───────────────────────
+// Nur wenn die AKTUELLE Phase eine offene Freigabe ist – der Server liefert die
+// Flags (Admin + Freigabe-Phase + noch nicht entschieden). Der Weg ist derselbe
+// wie beim Mail-Link (Entscheidung + onReject-Folge), nur angemeldet.
+
+const kannEntscheiden = computed(() => !!props.ticket.abilities?.decide_approval)
+const kannFreigabeMail = computed(() => !!props.ticket.abilities?.resend_approval)
+/** Steht der Auftrag (für mich als Admin) in einer OFFENEN Freigabe-Phase?
+ *  `resend_approval` gilt für die ganze offene Freigabe-Phase; `decide_approval`
+ *  fällt schon weg, sobald eine Entscheidung PERSISTIERT ist (auch im seltenen
+ *  „entschieden, aber nicht weitergeschaltet"-Zustand, wenn engine.transition nach
+ *  dem Festschreiben scheitert). Für das Ausblenden des generischen Ablehnens
+ *  brauchen wir „ist Freigabe-Phase", nicht „darf noch entscheiden". */
+const inFreigabe = computed(() => kannEntscheiden.value || kannFreigabeMail.value)
+
+/** Freigabe-Block der AKTUELLEN Phase (für Frage/Beschriftungen/Pflichtgrund). */
+const freigabeSpec = computed(() => {
+  const p = props.definition.phases.find((ph) => ph.key === props.ticket.current_phase)
+  return p?.approval ?? null
+})
+/** Ablehnung = Rücksprung statt endgültig (approval.onReject = back_to:<phase>). */
+const istRuecksprung = computed(() =>
+  (freigabeSpec.value?.onReject ?? '').startsWith('back_to:'))
+
+async function genehmigen() {
+  const frage = freigabeSpec.value?.question || 'Freigabe erteilen?'
+  if (!confirm(`Freigabe GENEHMIGEN?\n\n„${frage}"\n\n`
+    + 'Der Auftrag wird weitergeschaltet. Steht im Verlauf.')) return
+  busy.value = true
+  try {
+    await ticketsApi.decideApproval(props.ticket.id, 'approve')
+    showToast('Freigabe genehmigt')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Genehmigen fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+async function freigabeAblehnen() {
+  const pflicht = !!freigabeSpec.value?.requireReason
+  const grund = prompt(istRuecksprung.value
+    ? 'Freigabe ablehnen – zurück zur Nachbesserung.\nBegründung'
+      + (pflicht ? ' (Pflicht):' : ' (optional):')
+    : 'Freigabe ABLEHNEN.\nBegründung'
+      + (pflicht ? ' (Pflicht' : ' (optional')
+      + ', geht per Mail an die Ersteller:in und steht im Verlauf):')
+  if (grund === null) return
+  if (pflicht && !grund.trim()) {
+    showToast('Für die Ablehnung ist eine Begründung nötig', false); return
+  }
+  busy.value = true
+  try {
+    await ticketsApi.decideApproval(props.ticket.id, 'reject', grund.trim())
+    showToast(istRuecksprung.value ? 'Zur Nachbesserung zurückgegeben' : 'Freigabe abgelehnt')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Ablehnen fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+async function freigabeMailErneut() {
+  if (!confirm('Freigabe-Mail erneut senden?\n\nDie Entscheidungs-Mail (JA/NEIN-Links + '
+    + 'Anhänge) geht erneut an die zuständige Stelle. Ältere Links verlieren ihre '
+    + 'Gültigkeit. Kein Zustandswechsel.')) return
+  busy.value = true
+  try {
+    await ticketsApi.resendApprovalMail(props.ticket.id)
+    showToast('Freigabe-Mail erneut gesendet')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Freigabe-Mail konnte nicht gesendet werden')
+  } finally { busy.value = false }
+}
+
+// ── Titel bearbeiten ──────────────────────────────────────────────────────────
+
+const showTitle = ref(false)
+const titleText = ref('')
+function titelOeffnen() { titleText.value = props.ticket.title || ''; showTitle.value = true }
+
+async function titelSpeichern() {
+  const t = titleText.value.trim()
+  if (!t) { showToast('Der Titel darf nicht leer sein', false); return }
+  busy.value = true
+  try {
+    await ticketsApi.setTicketTitle(props.ticket.id, t)
+    showTitle.value = false
+    showToast('Titel geändert')
+    emit('reload')
+  } catch (e) {
+    fehler(e, 'Titel konnte nicht geändert werden')
+  } finally { busy.value = false }
+}
+
+// ── Fälligkeit / Timing (nur Anzeige) ─────────────────────────────────────────
+
+function fmtDateTime(ts: string | null | undefined): string {
+  if (!ts) return '—'
+  const s = ts.endsWith('Z') || /[+-]\d\d:\d\d$/.test(ts) ? ts : `${ts}Z`
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? ts : d.toLocaleString('de-DE',
+    { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+/** „In dieser Phase seit": Eintrittszeitpunkt der aktuellen Phase aus der Runtime. */
+const phaseEnteredAt = computed(() => {
+  const rt = props.ticket.runtime
+  const i = rt?.current_index ?? 0
+  return rt?.phases?.[i]?.entered_at ?? null
+})
+/** Nächster Timer (Erinnerung/Eskalation), den der Scheduler feuern wird. */
+const nextDueAt = computed(() => props.ticket.next_timer_due_at ?? null)
+</script>
+
+<template>
+  <div class="rounded-2xl border border-orange-300/60 dark:border-orange-400/25
+              bg-orange-50/70 dark:bg-orange-400/[0.07] shadow-sm p-5 space-y-4">
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-lg leading-none">🛠️</span>
+      <h2 class="font-semibold text-gray-900 dark:text-white">Admin-Aktionen</h2>
+      <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full
+                   bg-orange-100 text-orange-700 dark:bg-orange-400/15 dark:text-orange-300">
+        Admin
+      </span>
+      <span class="text-xs text-gray-500 dark:text-gray-400">
+        — Notfall-Werkzeuge, alle Änderungen werden protokolliert
+      </span>
+    </div>
+
+    <!-- Timing (nur Anzeige): wie lange schon in dieser Phase + nächster Timer. -->
+    <div class="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+      <span>🕒 In dieser Phase seit:
+        <span class="text-gray-700 dark:text-gray-200">{{ fmtDateTime(phaseEnteredAt) }}</span></span>
+      <span>⏰ Nächste Erinnerung/Eskalation:
+        <span class="text-gray-700 dark:text-gray-200">{{ fmtDateTime(nextDueAt) }}</span></span>
+    </div>
+
+    <!-- Freigabe entscheiden (nur in einer OFFENEN Freigabe-Phase). Prominent, weil
+         das hier die eigentliche Aktion ist – nicht ein Notfall-Werkzeug. -->
+    <div v-if="inFreigabe"
+         class="rounded-xl border border-[#3EAAB8]/50 bg-[#3EAAB8]/[0.07] p-4 space-y-2.5">
+      <p class="text-sm font-medium text-gray-800 dark:text-gray-100">
+        📋 Freigabe dieser Phase
+        <span v-if="freigabeSpec?.question"
+              class="font-normal text-gray-500 dark:text-gray-400">— „{{ freigabeSpec.question }}"</span>
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <button v-if="kannEntscheiden" @click="genehmigen" :disabled="busy"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                       bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition">
+          ✅ {{ freigabeSpec?.approveLabel || 'Genehmigen' }}
+        </button>
+        <button v-if="kannEntscheiden" @click="freigabeAblehnen" :disabled="busy"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                       border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-300
+                       hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition">
+          {{ istRuecksprung ? '↩️ Zurück zur Nachbesserung'
+             : ('🚫 ' + (freigabeSpec?.rejectLabel || 'Ablehnen')) }}
+        </button>
+        <button v-if="kannFreigabeMail" @click="freigabeMailErneut" :disabled="busy"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                       border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                       hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+          ✉️ Freigabe-Mail erneut senden
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      <button v-if="zustFeld && !terminal" @click="showZust = !showZust" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     bg-[#3EAAB8] hover:bg-[#2B7D89] text-white disabled:opacity-50 transition">
+        👤 Zuständigkeit ändern
+      </button>
+      <button @click="phaseOeffnen" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition">
+        {{ terminal ? '🔓 Wiedereröffnen' : '🔀 Phase wechseln' }}
+      </button>
+      <button v-if="!terminal" @click="erinnern" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                     hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+        🔔 Erinnerung senden
+      </button>
+      <button v-if="abteilungen.length && !terminal" @click="showDept = !showDept" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     bg-[#3EAAB8] hover:bg-[#2B7D89] text-white disabled:opacity-50 transition">
+        🏳️ Fachabteilung abschließen
+      </button>
+      <button @click="rawOeffnen" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                     hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+        🧬 Raw-JSON bearbeiten
+      </button>
+      <button @click="titelOeffnen" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                     hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+        ✏️ Titel bearbeiten
+      </button>
+      <!-- In einer offenen Freigabe-Phase führt die Ablehnung über die Freigabe-
+           Aktion oben (die die Entscheidung protokolliert und onReject/Rücksprung
+           beachtet) – der generische Reject bliebe daran vorbei. Deshalb an
+           `inFreigabe` (ganze offene Freigabe-Phase) gehängt, NICHT an
+           `kannEntscheiden`: sonst käme der Knopf im seltenen „entschieden, aber
+           nicht weitergeschaltet"-Zustand zurück und umginge onReject. -->
+      <button v-if="!terminal && !inFreigabe" @click="ablehnen" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-300
+                     hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition">
+        🚫 Ablehnen
+      </button>
+      <button v-if="!terminal" @click="archivieren" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     border border-gray-300 dark:border-white/15 text-gray-700 dark:text-gray-200
+                     hover:bg-white dark:hover:bg-white/5 disabled:opacity-50 transition">
+        🗄️ Archivieren
+      </button>
+      <button @click="loeschen" :disabled="busy"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium
+                     bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition ml-auto">
+        🗑️ Löschen
+      </button>
+    </div>
+
+    <!-- Zuständigkeit ändern (ausklappbar) -->
+    <div v-if="showZust && zustFeld"
+         class="rounded-xl border border-gray-200 dark:border-white/10
+                bg-white dark:bg-[#212B3A] p-4 space-y-3">
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        Schreibt direkt in das Zuständigkeits-Feld der aktuellen Phase
+        (<span class="font-mono">{{ zustFeld.feld }}</span>) – auch wenn die Phase es
+        nicht zur Bearbeitung freigibt.
+      </p>
+      <UserSelect v-model="zustSel" label=""
+                  :placeholder="zustFeld.art === 'group'
+                    ? 'Fachabteilung auswählen…' : 'Person auswählen…'"
+                  :show-groups="zustFeld.art === 'group'"
+                  :show-users="zustFeld.art === 'user'"
+                  :groups="sources.groups" :users="sources.users" />
+      <input v-model="zustGrund" class="afi w-full" maxlength="500"
+             placeholder="Begründung (Pflicht – steht im Verlauf)" />
+      <div class="flex justify-end gap-2">
+        <button @click="showZust = false; zustSel = null" class="btn-secondary text-sm">
+          Abbrechen
+        </button>
+        <button @click="zustSpeichern" :disabled="!zustSel || busy" class="btn-primary text-sm">
+          Zuständigkeit setzen
+        </button>
+      </div>
+    </div>
+
+    <!-- Phase wechseln / Wiedereröffnen (ausklappbar) -->
+    <div v-if="showPhase"
+         class="rounded-xl border border-gray-200 dark:border-white/10
+                bg-white dark:bg-[#212B3A] p-4 space-y-3">
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        <template v-if="terminal">
+          Abgeschlossenen/abgelehnten Auftrag in der gewählten Phase wieder aufnehmen.
+        </template>
+        <template v-else>
+          Stellt den Auftrag auf die gewählte Phase (vor oder zurück). Die Zielphase
+          wird neu betreten: Zuständigkeits-Mail und Automationen laufen erneut.
+        </template>
+      </p>
+      <label class="block">
+        <span class="text-xs text-gray-400 uppercase tracking-wider">Zielphase</span>
+        <select v-model="phaseZiel" class="afi w-full mt-1">
+          <option v-for="(p, i) in definition.phases" :key="p.key" :value="p.key">
+            {{ i + 1 }}. {{ p.label || p.key }}
+          </option>
+        </select>
+      </label>
+      <input v-model="phaseGrund" class="afi w-full" maxlength="500"
+             placeholder="Begründung (Pflicht – steht im Verlauf)" />
+      <div class="flex justify-end gap-2">
+        <button @click="showPhase = false" class="btn-secondary text-sm">Abbrechen</button>
+        <button @click="phaseSpeichern" :disabled="busy || !phaseZiel"
+                class="btn-primary text-sm">
+          {{ terminal ? 'Wiedereröffnen' : 'Phase setzen' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Fachabteilung abschließen (ausklappbar) -->
+    <div v-if="showDept && abteilungen.length"
+         class="rounded-xl border border-gray-200 dark:border-white/10
+                bg-white dark:bg-[#212B3A] p-4 space-y-3">
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        Schließt eine Fachabteilung der aktuellen Phase in ihrem Namen ab
+        (Admin-Override – z. B. wenn die Abteilung keine erreichbaren Mitglieder hat).
+        Steht anschließend im Verlauf.
+      </p>
+      <ul class="divide-y divide-gray-100 dark:divide-white/[0.06] rounded-xl
+                 border border-gray-200 dark:border-white/10 overflow-hidden">
+        <li v-for="d in abteilungen" :key="d.group"
+            class="px-3 py-2 flex items-center gap-2 flex-wrap">
+          <span class="text-sm text-gray-800 dark:text-gray-100 flex-1 min-w-0 truncate">
+            {{ gruppenName(d.group) }}
+          </span>
+          <span class="text-[11px] px-1.5 py-0.5 rounded-full whitespace-nowrap
+                       bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400">
+            {{ requiredLabel(d.required) }}
+          </span>
+          <span class="text-[11px] px-1.5 py-0.5 rounded-full whitespace-nowrap"
+                :class="deptToneClass(d)">{{ departmentStatusLabel(d.status) }}</span>
+          <button v-if="isDepartmentPending(d)" @click="abteilungAbschliessen(d.group)"
+                  :disabled="busy"
+                  class="px-2.5 py-1 rounded-lg text-xs text-white bg-[#3EAAB8] hover:bg-[#369aa7]
+                         disabled:opacity-40 transition">
+            Abschließen
+          </button>
+        </li>
+      </ul>
+      <input v-model="deptGrund" class="afi w-full" maxlength="500"
+             placeholder="Begründung (Pflicht – steht im Verlauf)" />
+      <div class="flex justify-end">
+        <button @click="showDept = false" class="btn-secondary text-sm">Schließen</button>
+      </div>
+    </div>
+
+    <!-- Raw-JSON-Editor (Modal) -->
+    <div v-if="showRaw" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/50" @click="showRaw = false" />
+      <div class="relative w-full max-w-2xl max-h-[90vh] overflow-auto rounded-2xl
+                  bg-white dark:bg-[#212B3A] border border-gray-200 dark:border-white/10
+                  shadow-xl p-6 space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🧬</span>
+          <h3 class="font-semibold text-gray-900 dark:text-white">Raw-Bearbeitung (Notfall)</h3>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Direkte Bearbeitung der UNGEFILTERTEN Feldwerte – Speichern ersetzt den
+          gesamten Bestand. Nur mit Bedacht verwenden; es muss gültiges JSON bleiben.
+        </p>
+        <textarea v-model="rawText" rows="16" spellcheck="false"
+                  class="afi w-full font-mono text-xs resize-y" />
+        <input v-model="rawGrund" class="afi w-full" maxlength="500"
+               placeholder="Begründung (Pflicht – steht im Verlauf)" />
+        <p v-if="rawError" class="text-sm text-red-600 dark:text-red-400">{{ rawError }}</p>
+        <div class="flex justify-end gap-2">
+          <button @click="showRaw = false" class="btn-secondary text-sm">Abbrechen</button>
+          <button @click="rawSpeichern" :disabled="busy" class="btn-primary text-sm">
+            {{ busy ? 'Wird gespeichert…' : 'Speichern' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Titel bearbeiten (Modal) -->
+    <div v-if="showTitle" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/50" @click="showTitle = false" />
+      <div class="relative w-full max-w-lg rounded-2xl bg-white dark:bg-[#212B3A]
+                  border border-gray-200 dark:border-white/10 shadow-xl p-6 space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">✏️</span>
+          <h3 class="font-semibold text-gray-900 dark:text-white">Titel bearbeiten</h3>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Korrigiert den Auftragstitel (z. B. falsch generiert). Die Änderung steht im Verlauf.
+        </p>
+        <input v-model="titleText" class="afi w-full" maxlength="300"
+               placeholder="Auftragstitel" @keyup.enter="titelSpeichern" />
+        <div class="flex justify-end gap-2">
+          <button @click="showTitle = false" class="btn-secondary text-sm">Abbrechen</button>
+          <button @click="titelSpeichern" :disabled="busy" class="btn-primary text-sm">
+            {{ busy ? 'Wird gespeichert…' : 'Speichern' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

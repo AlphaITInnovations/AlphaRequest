@@ -1,0 +1,83 @@
+# Alarmregeln für AlphaRequest (Prometheus). Für die Zustellung braucht es einen
+# Alertmanager (oder Grafana-Alerting kann dieselben Ausdrücke direkt nutzen).
+# Die Schwellen spiegeln die im Dashboard hinterlegten Grenzen.
+groups:
+  - name: alpharequest.verfuegbarkeit
+    rules:
+      - alert: BackendDown
+        expr: up{job="alpharequest-backend"} == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "AlphaRequest-Backend nicht erreichbar"
+          description: "Prometheus scrapt backend:5000 seit >5min nicht (Container/Prozess prüfen)."
+
+      - alert: MetrikenEingefroren
+        expr: increase(metrics_collect_failures_total[10m]) > 0
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Metrik-Erhebung schlägt fehl ({{ $labels.part }})"
+          description: "Ein Teil-Durchlauf der Metrik-Erhebung schlägt fehl – die betroffenen Gauges sind eingefroren und zeigen veraltete Werte."
+
+  - name: alpharequest.motor
+    rules:
+      - alert: SchedulerSteht
+        expr: process_tickets_timers_due > 0 and rate(process_scheduler_sweeps_total[10m]) == 0
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "Timer-Scheduler arbeitet nicht ab"
+          description: "Es liegen überfällige Timer an ({{ $value }}), aber es laufen keine Sweeps – Erinnerungen/Eskalationen/auto_advance bleiben liegen."
+
+      - alert: AutomationenFehlerhaft
+        expr: increase(process_automation_failed_total[15m]) > 0
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Automationen schlagen fehl (Aktion {{ $labels.action }})"
+          description: "Im Prozess {{ $labels.process }} sind in den letzten 15min Automationen fehlgeschlagen."
+
+      - alert: DirectusSchreibfehler
+        expr: increase(process_directus_write_total{outcome="error"}[15m]) > 0
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Directus-Schreiben schlägt fehl ({{ $labels.operation }})"
+          description: "Integrations-Schreibvorgänge nach Directus scheitern – ggf. blockieren Fachabteilungs-Abschlüsse."
+
+  - name: alpharequest.sla
+    rules:
+      - alert: VieleUeberfaelligeTimer
+        expr: process_tickets_timers_due > 10
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "Viele überfällige Timer ({{ $value }})"
+          description: "Anhaltend viele fällige Timer – entweder Lastspitze oder der Scheduler kommt nicht hinterher."
+
+      - alert: AuftraegeLiegenZuLange
+        expr: max(process_tickets_oldest_open_age_seconds) > 3 * 86400
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "Auftrag älter als 3 Tage offen"
+          description: "Der älteste offene Auftrag liegt seit >3 Tagen – möglicher Engpass (siehe Phasen-Durchlaufzeiten)."
+
+  - name: alpharequest.http_mail
+    rules:
+      - alert: Http5xxErhoeht
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) > 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Erhöhte 5xx-Fehlerrate"
+          description: "Der Anteil serverseitiger Fehler ist erhöht (>0.1/s über 10min)."
+
+      - alert: MailZustellungFehlerhaft
+        expr: increase(mail_sent_total{status="error"}[15m]) > 2
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Mailversand schlägt fehl (Typ {{ $labels.type }})"
+          description: "Mehrere Mails konnten in den letzten 15min nicht zugestellt werden (Microsoft Graph)."

@@ -2,11 +2,10 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from backend.utils.config import config
-from backend.services.microsoft_graph import list_all_users_with_e3_license, list_all_groups
+from backend.services.microsoft_graph import list_all_groups
 from backend.services.microsoft_auth import acquire_app_token
+from backend.services import directus_employee
 from backend.utils.logger import logger
-from backend.database.ticket_group_permissions import ensure_table as ensure_group_perms_table
-from backend.database.ticket_locks import ensure_table as ensure_ticket_locks_table
 from backend.database.sessions import (
     ensure_table as ensure_sessions_table, clear_all_sessions, prune_stale,
 )
@@ -15,19 +14,29 @@ from backend.database.sessions import (
 EXCLUDED_USERS = {"Administrator AlphaConsult", "CodeTwo Admin"}
 
 async def sync_users_into_cache(app):
-    logger.info("🔄 Syncing AD user list…")
+    """Nutzerliste aus der Directus-Collection „mitarbeitende" (id/mail = E-Mail,
+    displayName = Name). Speist alle Personen-Dropdowns, die Beobachter-/Zuständigen-
+    Auswahl und die Fachabteilungs-Mitglieder-Validierung.
 
-    token = acquire_app_token()
-    access = token["access_token"]
-
-    users = await list_all_users_with_e3_license(access)
+    Fail-soft: schlägt Directus fehl (nicht erreichbar/konfiguriert), bleibt der
+    ZULETZT geladene Cache bestehen – sonst würden alle Personen-Dropdowns und die
+    Mitglieder-Validierung leerlaufen. Nur beim Erststart ohne Directus ist er leer.
+    """
+    logger.info("🔄 Syncing Mitarbeiter list from Directus…")
+    try:
+        users = await asyncio.to_thread(directus_employee.list_employees)
+    except Exception:
+        prev = len(getattr(app.state, "user_cache", []) or [])
+        logger.exception("Directus-Nutzer-Sync fehlgeschlagen – behalte vorherigen "
+                         "Cache (%s Einträge)", prev)
+        return
 
     users = [u for u in users if u.get("displayName") not in EXCLUDED_USERS]
 
     app.state.user_cache = users
     app.state.user_cache_timestamp = time.time()
 
-    logger.info("✅ Loaded %s users into cache", len(users))
+    logger.info("✅ Loaded %s Mitarbeiter into cache", len(users))
 
 
 async def sync_groups_into_cache(app):
@@ -56,9 +65,8 @@ async def lifespan(app):
     app.state.group_cache = []
     app.state.group_cache_timestamp = 0
 
-    # DB-Tabellen anlegen
-    ensure_group_perms_table()
-    ensure_ticket_locks_table()
+    # DB-Tabellen anlegen (die Alt-Tabellen ticket_locks/ticket_group_permissions
+    # sind mit dem Alt-System entfallen und werden nicht mehr angelegt).
     ensure_sessions_table()
     # Neustart invalidiert via SERVER_BOOT_ID ohnehin alle Cookies → Tabelle leeren,
     # damit die Live-Liste nicht mit toten Sessions startet.
@@ -88,4 +96,20 @@ async def lifespan(app):
 
     asyncio.create_task(user_sync_background())
 
+    # Prozess-Automations-Scheduler (Timer/Eskalation) – eigener, gegateter Task,
+    # sweept off-the-event-loop. Fehler beim Start dürfen den App-Start nicht kippen.
+    try:
+        from backend.services import process_scheduler
+        process_scheduler.start(app)
+    except Exception:
+        logger.exception("Prozess-Scheduler-Start fehlgeschlagen")
+
     yield
+
+    # Shutdown: Scheduler sauber beenden (sonst sweept nach einem Reload ein
+    # zweiter Loop parallel weiter).
+    try:
+        from backend.services import process_scheduler
+        await process_scheduler.stop(app)
+    except Exception:
+        logger.exception("Prozess-Scheduler-Stop fehlgeschlagen")

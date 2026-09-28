@@ -14,6 +14,8 @@ interface CompanyItem {
   pnr_to: string | null
   mandant: string | null
   pnr_shared_with: string | null
+  directus_firma_id: string | null
+  domain: string | null
   pnr_current: number | null
   pnr_warned: boolean
 }
@@ -26,6 +28,7 @@ function mapCompany(c: any): CompanyItem {
   return {
     name: c?.name ?? '', pnr_from: c?.pnr_from ?? null, pnr_to: c?.pnr_to ?? null,
     mandant: c?.mandant ?? null, pnr_shared_with: c?.pnr_shared_with ?? null,
+    directus_firma_id: c?.directus_firma_id ?? null, domain: c?.domain ?? null,
     pnr_current: c?.pnr_current ?? null, pnr_warned: !!c?.pnr_warned,
   }
 }
@@ -33,6 +36,7 @@ function serialize(list: CompanyItem[]): string {
   return JSON.stringify(list.map(c => ({
     name: c.name, pnr_from: c.pnr_from, pnr_to: c.pnr_to,
     mandant: c.mandant, pnr_shared_with: c.pnr_shared_with,
+    directus_firma_id: c.directus_firma_id, domain: c.domain,
   })))
 }
 
@@ -49,7 +53,8 @@ async function loadCompanies() {
 
 function addCompany() {
   companies.value.push({ name: '', pnr_from: null, pnr_to: null, mandant: null,
-                         pnr_shared_with: null, pnr_current: null, pnr_warned: false })
+                         pnr_shared_with: null, directus_firma_id: null, domain: null,
+                         pnr_current: null, pnr_warned: false })
   open(companies.value.length - 1)
 }
 function removeCompany(idx: number) {
@@ -110,6 +115,8 @@ async function saveCompanies() {
       pnr_to:   c.pnr_shared_with ? null : ((c.pnr_to   ?? '').trim() || null),
       mandant:  (c.mandant ?? '').trim() || null,
       pnr_shared_with: c.pnr_shared_with || null,
+      directus_firma_id: (c.directus_firma_id ?? '').trim() || null,
+      domain: (c.domain ?? '').trim().toLowerCase().replace(/^@/, '') || null,
     }))
     const { data } = await client.put('/settings/companies', { companies: payload })
     companies.value = (data.data.companies ?? []).map(mapCompany)
@@ -117,7 +124,7 @@ async function saveCompanies() {
     back()
     showToast('Gespeichert', true)
   } catch (e: any) {
-    showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
+    showToast(e?.response?.data?.error?.message || e?.response?.data?.detail || 'Fehler beim Speichern', false)
   } finally {
     setSaving(false)
   }
@@ -190,6 +197,25 @@ onMounted(loadCompanies)
         <div>
           <label class="lbl">Mandantennr. <span class="text-gray-400 font-normal">(optional)</span></label>
           <input v-model="companies[selected].mandant" class="set-input w-full" placeholder="z. B. 100" />
+        </div>
+
+        <div>
+          <label class="lbl">alphacore-Firmen-ID <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input v-model="companies[selected].directus_firma_id" class="set-input w-full"
+                 placeholder="ID aus alphacore/Directus" />
+          <p class="text-xs text-gray-400 mt-1">
+            Wird beim automatischen Anlegen in Directus als Firmen-Fremdschlüssel geschrieben
+            (Zuordnung „als alphacore-Firmen-ID auflösen“ in der Automation).
+          </p>
+        </div>
+
+        <div>
+          <label class="lbl">E-Mail-Domain <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input v-model="companies[selected].domain" class="set-input w-full"
+                 placeholder="z. B. alpha-consult.de" />
+          <p class="text-xs text-gray-400 mt-1">
+            Basis der automatischen Firmenmail: vorname.nachname@domain.
+          </p>
         </div>
 
         <div v-if="companies[selected].pnr_shared_with" class="flex flex-wrap items-center gap-2 text-xs pt-1">

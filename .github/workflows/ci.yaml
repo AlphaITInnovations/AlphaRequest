@@ -38,6 +38,12 @@ jobs:
       - name: Tests (vitest)
         working-directory: frontend
         run: npm run test
-      - name: Build (inkl. vue-tsc Typecheck)
+      # Prüft AUCH die Testdateien. Der Produktions-Build (unten) tut das bewusst
+      # nicht, weil Tests Fixtures von außerhalb frontend/ lesen dürfen – im
+      # Docker-Image liegt nur frontend/. Hier ist das ganze Repo da.
+      - name: Typecheck (inkl. Tests)
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Build (wie im Docker-Image, ohne Repo-Wurzel)
         working-directory: frontend
         run: npm run build

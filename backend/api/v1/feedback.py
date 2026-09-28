@@ -5,7 +5,9 @@ from typing import Optional
 from backend.core.dependencies import get_current_user
 from backend.utils.config import config
 from backend.utils.logger import logger
-from backend.services.microsoft_mail import send_mail_app_only, render_corporate_email
+from backend.services.microsoft_mail import (
+    brand_logo_attachment, render_corporate_email, send_mail_app_only,
+)
 from backend.schemas.responses import DataResponse, ErrorCode, api_error
 
 router = APIRouter()
@@ -24,7 +26,7 @@ def submit_feedback(data: FeedbackRequest, user: dict = Depends(get_current_user
         raise api_error(400, ErrorCode.INVALID_DESCRIPTION, "Bitte eine Beschreibung angeben")
     if not config.BUG_REPORT_MAIL:
         raise api_error(503, "FEEDBACK_NO_RECIPIENT",
-                        "Kein Empfänger für Fehlerberichte konfiguriert (BUG_REPORT_MAIL)")
+                        "Keine Empfänger:in für Fehlerberichte konfiguriert (BUG_REPORT_MAIL)")
 
     reporter      = user.get("displayName") or user.get("id") or "Unbekannt"
     reporter_mail = user.get("mail") or user.get("email")
@@ -51,6 +53,7 @@ def submit_feedback(data: FeedbackRequest, user: dict = Depends(get_current_user
             to_recipients=[config.BUG_REPORT_MAIL],
             reply_to=[reporter_mail] if reporter_mail else None,
             body_type="HTML",
+            attachments=[a for a in [brand_logo_attachment()] if a],
         )
     except Exception as e:
         logger.error(f"Fehlerbericht-Mail fehlgeschlagen: {e}")

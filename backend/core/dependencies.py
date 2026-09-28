@@ -4,8 +4,9 @@ from fastapi import Request, HTTPException, status
 from backend.utils.config import config
 from backend.utils.logger import logger
 from backend.core.session import TOKENS, SERVER_BOOT_ID
-from backend.database.users import get_user_permissions
+from backend.database.users import get_user_permissions, PERM_ADMIN
 from backend.database import sessions as session_store
+from backend.services import directus_employee
 
 SAFE_UPDATE_INTERVAL = 60  # seconds
 # Präsenz-Drossel: `last_seen` höchstens alle 30 s pro Session schreiben.
@@ -34,6 +35,51 @@ def _check_session_store(request, session: dict) -> None:
         raise
     except Exception:
         logger.exception("Session-Store-Check fehlgeschlagen (sid=%s) – fail-open", sid)
+
+
+def _is_admin(user: dict) -> bool:
+    return PERM_ADMIN in (user.get("permissions") or [])
+
+
+def enforce_employee_link(user: dict) -> None:
+    """Hard Gate: ohne zugeordneten Directus-Mitarbeiter-Datensatz kein Arbeiten.
+
+    Die Zuordnung läuft über die E-Mail (Azure `user["email"]`). Zu unterscheiden:
+      1. kein Datensatz zur E-Mail → 403 (Konto ohne Stammdaten; bewusst hart).
+      2. Directus nicht erreichbar/konfiguriert → 503, ABER Break-Glass: Admins und
+         die ENV-Allowlist (`AUTH_BOOTSTRAP_EMAILS`) kommen trotzdem rein, damit ein
+         Directus-Ausfall nicht alle (inkl. der Leute, die ihn beheben) aussperrt.
+
+    Bei Erfolg wird der Datensatz als `user["employee"]` angehängt. Ist das Gate
+    per `AUTH_REQUIRE_DIRECTUS_EMPLOYEE=false` abgeschaltet, wird der Datensatz nur
+    best-effort angehängt, aber nie blockiert.
+    """
+    email = (user.get("email") or "").strip()
+    require = config.AUTH_REQUIRE_DIRECTUS_EMPLOYEE
+    bootstrap = email.lower() in config.AUTH_BOOTSTRAP_EMAILS
+
+    try:
+        rec = directus_employee.lookup_employee(email)
+    except directus_employee.EmployeeLookupError:
+        # Fall 2: Directus down/aus. Ohne Gate ignorieren; mit Gate nur Break-Glass.
+        if not require or bootstrap or _is_admin(user):
+            user["employee"] = None
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "DIRECTUS_UNAVAILABLE",
+                    "message": "Mitarbeiterdaten sind zurzeit nicht erreichbar. "
+                               "Bitte später erneut versuchen."})
+
+    if rec is None and require and not bootstrap:
+        # Fall 1: Konto ohne Directus-Stammdaten – bewusst hart.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "NO_DIRECTUS_RECORD",
+                    "message": "Zu Ihrem Konto wurde kein Mitarbeiter-Datensatz "
+                               "gefunden. Bitte an die Administration wenden."})
+
+    user["employee"] = rec
 
 
 def get_current_user(request: Request) -> Dict:
@@ -73,6 +119,7 @@ def get_current_user(request: Request) -> Dict:
     if last_activity == 0:
         session["last_activity"] = now
         user["permissions"] = get_user_permissions(user["id"])
+        enforce_employee_link(user)
         return user
 
     if now - last_activity > int(config.SESSION_TIMEOUT):
@@ -91,6 +138,7 @@ def get_current_user(request: Request) -> Dict:
 
     # Permissions immer frisch aus der DB – nie aus der Session
     user["permissions"] = get_user_permissions(user["id"])
+    enforce_employee_link(user)
     return user
 
 

@@ -1,0 +1,312 @@
+/**
+ * API-Client für Prozess-Tickets (/api/v1/process-tickets).
+ *
+ * Zugriff regelt der Server: Aufsicht, Ersteller:in, aktuell Zuständige und
+ * Beobachter:innen dürfen lesen; die gelieferten `values` sind bereits nach
+ * Sichtbarkeit gefiltert. Was die angemeldete Person tun darf, steht in
+ * `abilities` der Antwort – Verlauf/Nachträge/Beobachter in `api/processEvents`.
+ */
+import { client } from '@/api/client'
+import type { ProcessTicketOut } from '@/types/process'
+
+export interface TicketListParams {
+  status?: string
+  process_key?: string
+  q?: string
+  limit?: number
+  offset?: number
+}
+
+export async function listTickets(
+  params: TicketListParams = {},
+): Promise<{ items: ProcessTicketOut[]; total: number }> {
+  const { data } = await client.get('/process-tickets', { params })
+  return { items: data.data, total: data.meta?.total ?? data.data.length }
+}
+
+/**
+ * Einen Auftrag laden. `view`/`department` steuern serverseitig die FELD-Sicht
+ * nach Entry-Modus (nicht den Zugriff): `view=admin` (nur Admin) zeigt alles,
+ * `view=department` mit `department`=Gruppe nur Basis + genau diese Fachabteilung
+ * (für alle gleich), sonst die normale Sicht ohne Admin-Gottmodus.
+ */
+export async function getTicket(
+  id: number,
+  opts: { view?: 'admin' | 'department'; department?: string } = {},
+): Promise<ProcessTicketOut> {
+  const params: Record<string, string> = {}
+  if (opts.view) params.view = opts.view
+  if (opts.department) params.department = opts.department
+  const { data } = await client.get(`/process-tickets/${id}`, { params })
+  return data.data
+}
+
+/**
+ * Dokument-Phase: das (im Editor angepasste) HTML als Word-Datei (.docx) holen.
+ * Der Server wandelt reines HTML→docx; Antwort ist ein Blob (Download).
+ */
+/** Ein Marker der .docx-Vorlage samt vorausgefülltem Wert (für den Editor). */
+export interface DocumentField {
+  name: string
+  /** Anzeige-Label (Feldbezeichnung bei zugeordnetem Feld, sonst der Marker). */
+  label: string
+  /** true = automatisch aus einem Ticket-Feld befüllt (korrigierbar). */
+  bound: boolean
+  value: string
+}
+
+export interface DocumentFields {
+  filename: string
+  phase: string
+  /** Dokument-Key innerhalb der Phase. */
+  document?: string
+  /** Vorlagen-Format (bei 'pdf' liefert der Export nativ PDF). */
+  format?: 'docx' | 'pdf'
+  title: string | null
+  markers: DocumentField[]
+}
+
+/** Marker + vorausgefüllte (sichtbarkeitsgefilterte) Werte der Vorlage EINES Dokuments. */
+export async function getDocumentFields(id: number, documentKey = ''): Promise<DocumentFields> {
+  const { data } = await client.get(`/process-tickets/${id}/document:fields`,
+    { params: documentKey ? { document: documentKey } : {} })
+  return data.data
+}
+
+export async function exportTicketDocument(
+  id: number,
+  opts: {
+    document?: string
+    html?: string; filename?: string
+    overrides?: Record<string, string>
+    /** NUR Vorschau: eingesetzte Werte markieren (Hervorhebung). Export = false. */
+    highlight?: boolean
+    /** 'docx' (Standard) oder 'pdf' (Server rendert per LibreOffice). Bei einer
+     *  PDF-Vorlage liefert der Server ohnehin nativ PDF, unabhängig davon. */
+    format?: 'docx' | 'pdf'
+  } = {},
+): Promise<Blob> {
+  // Mit hochgeladener .docx/PDF-Vorlage fuellt der Server selbst (html irrelevant);
+  // `overrides` sind die Editor-Werte (manuelle Felder + Korrekturen). Ohne
+  // Vorlage kommt das im Client gefuellte HTML mit.
+  try {
+    const { data } = await client.post(
+      `/process-tickets/${id}/document:export`,
+      { document: opts.document, html: opts.html, filename: opts.filename,
+        overrides: opts.overrides, highlight: opts.highlight, format: opts.format },
+      { responseType: 'blob' })
+    return data as Blob
+  } catch (e) {
+    // Bei responseType:'blob' kommt AUCH der Fehler-Body als Blob an – den
+    // JSON-Umschlag {error:{message}} zurueckwandeln, damit errorMessage() die
+    // Server-Meldung zeigt (z. B. „keine Vorlage hinterlegt") statt generisch.
+    const resp = (e as { response?: { data?: unknown } })?.response
+    if (resp?.data instanceof Blob) {
+      try { resp.data = JSON.parse(await resp.data.text()) } catch { /* kein JSON */ }
+    }
+    throw e
+  }
+}
+
+/** Vorschau-Quelle (Editor, kein Ticket): Prozess/Phase/Dokument + Entwurf + Sim-Werte. */
+export interface DocumentPreviewSource {
+  key: string
+  phase: string
+  definition: unknown
+  values: Record<string, unknown>
+}
+
+/** Wie getDocumentFields, aber ticket-los aus dem Editor-Entwurf (Vorschau). */
+export async function previewDocumentFields(
+  src: DocumentPreviewSource, documentKey = '',
+): Promise<DocumentFields> {
+  const { data } = await client.post(
+    `/processes/${encodeURIComponent(src.key)}/document:preview-fields`,
+    { phase: src.phase, document: documentKey || undefined,
+      definition: src.definition, values: src.values })
+  return data.data
+}
+
+/** Wie exportTicketDocument, aber ticket-los aus dem Editor-Entwurf (Vorschau). */
+export async function previewDocumentExport(
+  src: DocumentPreviewSource,
+  opts: {
+    document?: string; filename?: string
+    overrides?: Record<string, string>
+    highlight?: boolean
+    format?: 'docx' | 'pdf'
+  } = {},
+): Promise<Blob> {
+  try {
+    const { data } = await client.post(
+      `/processes/${encodeURIComponent(src.key)}/document:preview-export`,
+      { phase: src.phase, document: opts.document, definition: src.definition, values: src.values,
+        overrides: opts.overrides, filename: opts.filename,
+        highlight: opts.highlight, format: opts.format },
+      { responseType: 'blob' })
+    return data as Blob
+  } catch (e) {
+    const resp = (e as { response?: { data?: unknown } })?.response
+    if (resp?.data instanceof Blob) {
+      try { resp.data = JSON.parse(await resp.data.text()) } catch { /* kein JSON */ }
+    }
+    throw e
+  }
+}
+
+export async function createTicket(body: {
+  processKey: string
+  title?: string | null
+  priority?: string | null
+  values?: Record<string, unknown> | null
+  /** false = NICHT sofort weiterschalten: der Client lädt erst Datei-Anhänge
+   *  hoch und ruft danach :advance (damit sie in der Freigabe-Mail landen). */
+  autoStart?: boolean
+}): Promise<ProcessTicketOut> {
+  const { data } = await client.post('/process-tickets', body)
+  return data.data
+}
+
+export async function patchTicket(id: number, body: {
+  title?: string | null
+  values?: Record<string, unknown> | null
+}): Promise<ProcessTicketOut> {
+  const { data } = await client.patch(`/process-tickets/${id}`, body)
+  return data.data
+}
+
+export async function advanceTicket(id: number): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:advance`)
+  return data.data
+}
+
+/** Begründung ist PFLICHT – ohne sie antwortet der Server mit 422. */
+export async function rejectTicket(id: number, reason: string): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:reject`, { reason })
+  return data.data
+}
+
+/**
+ * Die GEPINNTE Definition dieses Auftrags. Bewusst NICHT über
+ * /processes/{key}/versions/{v}: das verlangt Verwaltungsrechte (dort kommt man
+ * auch an unveröffentlichte Entwürfe). Hier entscheidet der Zugriff auf den
+ * AUFTRAG – wer ihn sehen darf, darf auch wissen, wie er aufgebaut ist.
+ */
+/** Admin-Notfalleingriff: hängenden Auftrag zwangsweise abschließen (Grund Pflicht). */
+export async function archiveTicket(id: number, reason: string): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:archive`, { reason })
+  return data.data
+}
+
+/** Admin: Zuständigkeits-Mail der aktuellen Phase erneut auslösen (Nudge). */
+export async function remindResponsible(id: number): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:remind`)
+  return data.data
+}
+
+/** Admin: über die Freigabe der AKTUELLEN Phase entscheiden (genehmigen/ablehnen).
+ *  Grund ist bei Ablehnung Pflicht, wenn der Prozess `requireReason` setzt – der
+ *  Server antwortet sonst mit 422. Eine Ablehnung folgt `approval.onReject`
+ *  (endgültig ablehnen oder Rücksprung). */
+export async function decideApproval(
+  id: number, act: 'approve' | 'reject', reason = '',
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:decide`, { act, reason })
+  return data.data
+}
+
+/** Admin: die Freigabe-Mail (JA/NEIN-Links + Anhänge) der aktuellen Phase erneut
+ *  senden. Die Links werden mit dem aktuellen Stand neu erzeugt. */
+export async function resendApprovalMail(id: number): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:resend-approval`)
+  return data.data
+}
+
+/** Admin: Auftragstitel korrigieren (jeder Status; steht im Verlauf). */
+export async function setTicketTitle(id: number, title: string): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:set-title`, { title })
+  return data.data
+}
+
+/** Admin: Auftrag endgültig löschen. Der Audit-Eintrag überlebt die Löschung. */
+export async function deleteTicket(id: number): Promise<void> {
+  await client.delete(`/process-tickets/${id}`)
+}
+
+export async function getPinnedDefinition(id: number): Promise<unknown> {
+  const { data } = await client.get(`/process-tickets/${id}/definition`)
+  return data.data
+}
+
+// ── Admin-Werkzeuge (Reparatur) ───────────────────────────────────────────────
+// Alle drei sind HART auf Admins beschränkt – der Server antwortet sonst mit
+// 403 ADMIN_REQUIRED, egal was die Oberfläche anzeigt.
+
+/** Aktiven Auftrag auf eine beliebige Phase stellen (vor/zurück; Grund Pflicht). */
+export async function setTicketPhase(
+  id: number, phase: string, reason: string,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(`/process-tickets/${id}:set-phase`, { phase, reason })
+  return data.data
+}
+
+/** UNGEFILTERTE Roh-Werte für den Admin-Editor – die normale Ticket-Antwort
+ *  filtert auf Katalog-Felder, ein Editor darauf würde unsichtbare
+ *  Alt-Schlüssel beim nächsten Speichern zerstören. */
+export async function getRawValues(id: number): Promise<Record<string, unknown>> {
+  const { data } = await client.get(`/process-tickets/${id}/raw-values`)
+  return data.data.values
+}
+
+/** Roh-Werte VERBATIM ersetzen (Grund Pflicht). Liefert den neuen Bestand. */
+export async function setRawValues(
+  id: number, values: Record<string, unknown>, reason: string,
+): Promise<Record<string, unknown>> {
+  const { data } = await client.put(`/process-tickets/${id}/raw-values`, { values, reason })
+  return data.data.values
+}
+
+// ── Fachabteilungen einzeln quittieren ───────────────────────────────────────
+//
+// Eine Fachabteilungs-Phase ist erst fertig, wenn jede PFLICHT-Abteilung
+// quittiert hat; bis dahin lehnt `:advance` mit 409 DEPARTMENT_FORBIDDEN ab.
+// Wer quittieren darf, entscheidet ausschließlich der Server (Mitgliedschaft in
+// genau dieser Abteilung oder Aufsicht) – sonst 403 DEPARTMENT_FORBIDDEN.
+// Alle drei Endpunkte liefern den AKTUALISIERTEN Auftrag zurück.
+
+/**
+ * Gruppen-IDs kommen aus dem Verzeichnisdienst und dürfen Sonderzeichen
+ * enthalten – nur die ID kodieren, das `:aktion`-Suffix gehört zur Route.
+ */
+function departmentUrl(ticketId: number, groupId: string, aktion: string): string {
+  return `/process-tickets/${ticketId}/departments/${encodeURIComponent(groupId)}:${aktion}`
+}
+
+/** Diese Fachabteilung hat ihren Teil erledigt. */
+export async function completeDepartment(
+  ticketId: number, groupId: string, note?: string | null,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(departmentUrl(ticketId, groupId, 'complete'),
+                                     { note: note || null })
+  return data.data
+}
+
+/** Nicht zuständig / nichts zu tun – gilt als erledigt, ohne Bearbeitung. */
+export async function skipDepartment(
+  ticketId: number, groupId: string, note?: string | null,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(departmentUrl(ticketId, groupId, 'skip'),
+                                     { note: note || null })
+  return data.data
+}
+
+/**
+ * Ablehnung durch eine Fachabteilung – beendet den GESAMTEN Auftrag, nicht nur
+ * den Teil dieser Abteilung. Die Begründung ist Pflicht (ohne: 422).
+ */
+export async function rejectDepartment(
+  ticketId: number, groupId: string, note: string,
+): Promise<ProcessTicketOut> {
+  const { data } = await client.post(departmentUrl(ticketId, groupId, 'reject'), { note })
+  return data.data
+}

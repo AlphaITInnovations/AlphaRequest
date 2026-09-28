@@ -148,9 +148,9 @@ onUnmounted(() => {
 
     <div class="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-900/20
                 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 mb-4">
-      Zeigt alle aktuell angemeldeten Nutzer. „Online" bedeutet: in den letzten
+      Zeigt alle aktuell angemeldeten Nutzenden. „Online" bedeutet: in den letzten
       {{ ONLINE_THRESHOLD_S }} Sekunden aktiv (offener Tab zählt via Heartbeat).
-      Über „Abmelden" wird die betreffende Sitzung sofort beendet – der Nutzer landet
+      Über „Abmelden" wird die betreffende Sitzung sofort beendet – die nutzende Person landet
       beim nächsten Seitenaufruf wieder auf der Anmeldung.
     </div>
 
@@ -163,7 +163,7 @@ onUnmounted(() => {
         <thead>
           <tr class="text-left text-xs text-gray-400 uppercase tracking-wider border-b dark:border-white/[0.06]">
             <th class="px-4 py-3">Status</th>
-            <th class="px-4 py-3">Benutzer</th>
+            <th class="px-4 py-3">Nutzende</th>
             <th class="px-4 py-3">IP</th>
             <th class="px-4 py-3">Gerät</th>
             <th class="px-4 py-3">Angemeldet</th>

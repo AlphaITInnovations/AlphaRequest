@@ -1,7 +1,13 @@
-import json
+"""Personalnummern-Vergabe: die reine Rechenlogik.
 
-from backend.database.connection import get_connection, _fetchone, _exec
-from backend.database.settings import normalize_company, pnr_format
+Bewusst OHNE DB-Zugriff. Der atomare Vergabe-Pfad (Sperre auf der
+COMPANIES-Settings-Zeile, Ledger, Kollisionsprüfung) liegt im neuen System in
+`database/process_sequences.py` und ruft `compute_next_personalnummer` von hier
+auf. Die frühere DB-Hülle `db_assign_personalnummer_for_company` gehörte zum
+Alt-System und ist mit ihm entfallen.
+"""
+
+from backend.database.settings import pnr_format
 
 COMPANIES_KEY = "COMPANIES"
 
@@ -75,44 +81,3 @@ def compute_next_personalnummer(companies: list[dict], company_name: str,
         "pnr_to": target["pnr_to"],
     }
     return companies, result
-
-
-def db_assign_personalnummer_for_company(company_name: str, warn_remaining: int) -> dict:
-    """
-    Vergibt atomar die nächste Personalnummer für eine Firma (dünne DB-Hülle um
-    compute_next_personalnummer). Sperrt die COMPANIES-Settings-Zeile (FOR UPDATE),
-    damit keine Nummer doppelt vergeben wird.
-    """
-    conn = get_connection()
-    try:
-        conn.begin()
-        row = _fetchone(
-            conn,
-            "SELECT `value` FROM settings WHERE `key`=%s FOR UPDATE",
-            (COMPANIES_KEY,),
-        )
-        try:
-            raw = json.loads(row["value"]) if row and row["value"] else []
-        except Exception:
-            raw = []
-        if not isinstance(raw, list):
-            raw = []
-
-        companies = [normalize_company(x) for x in raw]
-        companies, result = compute_next_personalnummer(companies, company_name, warn_remaining)
-
-        _exec(
-            conn,
-            "INSERT INTO settings(`key`,`value`) VALUES(%s,%s) "
-            "ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)",
-            (COMPANIES_KEY, json.dumps(companies, ensure_ascii=False)),
-        )
-        conn.commit()
-        return result
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-

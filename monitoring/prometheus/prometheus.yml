@@ -1,0 +1,44 @@
+# Prometheus-Scrape-Konfiguration für AlphaRequest.
+#
+# Versioniert, damit reproduzierbar dokumentiert ist, WIE Prometheus an die
+# Kennzahlen kommt. Das Backend exponiert sie unter GET /metrics (Port 5000, im
+# dokploy-network erreichbar als backend:5000). Ein zentraler Prometheus im
+# selben Netz scrapt dieses Ziel.
+#
+# Absicherung: /metrics ist offen, solange METRICS_USERNAME/METRICS_PASSWORD im
+# Backend NICHT gesetzt sind. Für den Produktivbetrieb beide setzen und unten den
+# basic_auth-Block aktivieren (siehe docs/monitoring/README.md).
+
+global:
+  scrape_interval: 15s        # >= METRICS_COLLECT_INTERVAL (Default 10s im Backend)
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    app: alpharequest
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: alpharequest-backend
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["backend:5000"]
+        labels:
+          service: backend
+          # env: dev | prod  – je Prometheus-Instanz setzen
+    # Sobald METRICS_USERNAME/METRICS_PASSWORD im Backend gesetzt sind, hier
+    # aktivieren (Werte aus einem Secret/File beziehen, nicht im Klartext):
+    # basic_auth:
+    #   username: ${METRICS_USERNAME}
+    #   password: ${METRICS_PASSWORD}
+
+  # Blackbox-/Uptime-Probe über den leichten Health-Endpunkt (kein Auth nötig).
+  - job_name: alpharequest-health
+    metrics_path: /health
+    scheme: http
+    static_configs:
+      - targets: ["backend:5000"]
+        labels:
+          service: backend-health

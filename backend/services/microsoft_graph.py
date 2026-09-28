@@ -5,9 +5,7 @@ from backend.utils.config import config
 GRAPH_API_ME = "https://graph.microsoft.com/v1.0/me"
 GRAPH_API_GROUPS = "https://graph.microsoft.com/v1.0/me/memberOf"
 GRAPH_API_SENDMAIL = "https://graph.microsoft.com/v1.0/me/sendMail"
-GRAPH_API_USERS = "https://graph.microsoft.com/v1.0/users"
 
-E3_SKU_ID = "6fd2c87f-b296-42f0-b197-1e91e994b900"
 
 
 async def get_user_profile(access_token: str) -> dict:
@@ -76,97 +74,6 @@ async def send_mail(
         resp.raise_for_status()
 
 
-async def list_all_users_appcontext(access_token: str) -> list[dict]:
-    """
-    Holt alle Benutzer mit App-Only Graph Token.
-    Braucht Application Permission: User.Read.All.
-    """
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-
-    params = {
-        "$top": "999",
-        "$select": "id,givenName,surname,displayName,mail,userPrincipalName"
-    }
-
-    url = "https://graph.microsoft.com/v1.0/users"
-    users = []
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        while True:
-            resp = await client.get(url, headers=headers, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-
-            for u in data.get("value", []):
-                users.append({
-                    "id": u.get("id"),
-                    "displayName": u.get("displayName") or "",
-                    "mail": u.get("mail") or u.get("userPrincipalName") or "",
-                })
-
-            next_link = data.get("@odata.nextLink")
-            if not next_link:
-                break
-
-            # nextLink enthält Query-Parameters, also params NICHT mehr mitschicken
-            url = next_link
-            params = None
-
-    return users
-
-
-async def list_all_users_with_e3_license(access_token: str) -> List[Dict[str, str]]:
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-
-    # Benutzer MIT E3-Lizenz filtern
-    params = {
-        "$top": "999",
-        "$select": "id,displayName,mail,userPrincipalName",
-        "$filter": f"assignedLicenses/any(x:x/skuId eq {E3_SKU_ID})"
-    }
-
-    url = "https://graph.microsoft.com/v1.0/users"
-    users: List[Dict[str, str]] = []
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        while True:
-            resp = await client.get(url, headers=headers, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-
-            for u in data.get("value", []):
-
-                users.append({
-                    "id": u.get("id"),
-                    "displayName": u.get("displayName") or "",
-                    "mail": u.get("mail") or u.get("userPrincipalName") or "",
-                })
-
-            next_link = data.get("@odata.nextLink")
-            if not next_link:
-                break
-
-            url = next_link
-            params = None  # Nicht nochmal Query-Params mitschicken
-
-    return users
-
-def get_cached_user_mail(app, user_id: str) -> str | None:
-    """
-    Gibt die Mailadresse eines Users aus dem Cache zurück.
-    """
-
-    users = getattr(app.state, "user_cache", [])
-
-    for user in users:
-        if user["id"] == user_id:
-            return user.get("mail")
-
-    return None
 
 
 async def list_all_groups(access_token: str) -> List[Dict[str, str]]:

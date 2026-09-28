@@ -4,6 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useTheme } from '@/composables/useTheme'
 import { client } from '@/api/client'
+import { authApi } from '@/api/auth'
+import type { UserProfile } from '@/types/api'
+import { employeeRows } from '@/lib/profileFields'
+import { BASIS_TICKET_PATH } from '@/lib/basisTicket'
 
 const auth   = useAuthStore()
 const route  = useRoute()
@@ -13,23 +17,43 @@ const { dark, toggleDark } = useTheme()
 const sidebarOpen  = ref(true)
 const mobileOpen   = ref(false)
 
+/** Menüpunkte mit Unterseiten (Einstellungen) – Präfix-Vergleich genügt. */
 function isActive(path: string) {
-  if (path === '/dashboard') return route.path === '/dashboard'
   return route.path.startsWith(path)
 }
 
-// Prozess-Ticket = /tickets/new und alle /tickets/new/:type AUSSER basis-ticket.
-// (Sonst würde /tickets/new/basis-ticket auch hier matchen, weil es mit
-//  /tickets/new beginnt – dann leuchten beide Buttons.)
-const isBasisTicketActive   = computed(() => route.path === '/tickets/new/basis-ticket')
-const isProcessTicketActive = computed(
-  () => route.path.startsWith('/tickets/new') && !isBasisTicketActive.value,
+// Zwei Anlege-Knöpfe wie vor dem Umbau: „Neues Prozess-Ticket" führt in den
+// Katalog, „Neues Ticket" direkt in das Basis-Ticket.
+//
+// Das Basis-Ticket liegt UNTER dem Katalog-Pfad (/prozess-auftraege/neu/
+// basis-ticket). Ohne den Ausschluss würden beide Knöpfe gleichzeitig leuchten,
+// weil der eine Pfad mit dem anderen beginnt.
+const isBasisTicketActive = computed(() => route.path === BASIS_TICKET_PATH)
+const isProzessTicketActive = computed(
+  () => route.path.startsWith('/prozess-auftraege/neu') && !isBasisTicketActive.value,
 )
 
-// „Alle Aufträge" = nur die Liste selbst (/tickets). In der Einzelticket-Ansicht
-// (/tickets/overview/:id) bzw. der Arbeitsansicht (/tickets/view/:type/:id) ist
-// bewusst KEIN Navigationspunkt aktiv.
-const isAuftraegeActive = computed(() => route.path === '/tickets')
+// „Neues Ticket" (Basis-Ticket) temporär ausblenden – NUR der Menüpunkt. Route und
+// Funktion bleiben erhalten (direkt über BASIS_TICKET_PATH weiter erreichbar).
+// Steuerbar per Umgebungsvariable VITE_HIDE_NEUES_TICKET (Vite bettet sie zur
+// Build-Zeit ein; „true"/„1" blendet aus, Standard: sichtbar).
+const neuesTicketAusgeblendet = ['true', '1'].includes(
+  String(import.meta.env.VITE_HIDE_NEUES_TICKET ?? '').trim().toLowerCase(),
+)
+
+// Zwei getrennte Ansichten, zwei Menüpunkte: „Übersicht" (die Startseite)
+// beantwortet „was liegt bei MIR an?" – Arbeitslisten, keine Filterleiste.
+// „Alle Aufträge" ist die durchsuchbare Liste über ALLE Aufträge. Beides in EINE
+// Seite zu legen hatte beiden die Aussage genommen. In der Einzelansicht
+// (/prozess-auftraege/:id) leuchtet bewusst KEIN Menüpunkt.
+const isUebersichtActive = computed(() => route.path === '/dashboard')
+const isArchivActive = computed(() => route.path === '/archiv')
+const isAuftraegeActive = computed(() => route.path === '/auftraege')
+
+// „Alle Aufträge" ist eine Aufsichts-Seite (Alt-System-Regel): nur viewer/
+// manager/admin sehen den Menüpunkt – die Route ist zusätzlich per Guard
+// geschützt. Alle anderen arbeiten über die Übersicht.
+const hatAufsicht = computed(() => auth.canView || auth.canManage || auth.isAdmin)
 
 function navigate(path: string) {
   router.push(path)
@@ -61,6 +85,49 @@ async function submitFeedback() {
   }
 }
 
+// ── Profil ───────────────────────────────────────────────────────────────────
+const showProfile    = ref(false)
+const profile        = ref<UserProfile | null>(null)
+const profileLoading = ref(false)
+const profileError   = ref(false)
+
+async function openProfile() {
+  showProfile.value = true
+  mobileOpen.value = false
+  profileError.value = false
+  profileLoading.value = true
+  try {
+    const { data } = await authApi.profile()
+    profile.value = data.data
+  } catch {
+    profileError.value = true
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+const employeeInfo = computed(() => employeeRows(profile.value?.employee ?? null))
+
+// Fallback, wenn kein Directus-Datensatz verknüpft ist (Break-Glass / Gate aus):
+// wenigstens die Azure-Angaben zeigen.
+const azureInfo = computed(() => {
+  const p = profile.value
+  if (!p) return []
+  return [
+    { label: 'Telefon',  value: p.phone || '–' },
+    { label: 'Mobil',    value: p.mobile || '–' },
+    { label: 'Firma',    value: p.company || '–' },
+    { label: 'Position', value: p.position || '–' },
+  ]
+})
+
+const ROLE_LABELS: Record<string, string> = {
+  view: 'Ansicht', manage: 'Bearbeiten', admin: 'Administrator',
+}
+function roleLabel(p: string): string {
+  return ROLE_LABELS[p] ?? p
+}
+
 defineProps<{ title?: string }>()
 </script>
 
@@ -87,11 +154,13 @@ defineProps<{ title?: string }>()
     >
       <!-- Brand -->
       <div class="flex items-center justify-between px-4 py-4 border-b border-white/15 min-h-[64px]">
-        <div v-if="sidebarOpen" class="flex items-center gap-2.5 min-w-0 cursor-pointer" @click="navigate('/dashboard')">
-          <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
-            <span class="text-sm font-bold">A</span>
-          </div>
-          <span class="text-base font-semibold tracking-tight truncate">AlphaRequest</span>
+        <div v-if="sidebarOpen" class="flex items-center gap-2.5 min-w-0 cursor-pointer select-none" @click="navigate('/dashboard')">
+          <!-- Alpha-„A" in Weiß: dieselbe Logo-Datei wie in der Topbar, per CSS-Filter
+               von Türkis auf Weiß gezogen (brightness(0)=schwarz, invert(1)=weiß),
+               damit es auf dem türkisen Sidebar-Hintergrund sauber steht. -->
+          <img src="/logo.png" alt="Alpha" draggable="false"
+               class="h-9 w-auto flex-shrink-0" style="filter: brightness(0) invert(1)" />
+          <span class="text-lg font-semibold tracking-tight truncate">Request</span>
         </div>
         <button @click="sidebarOpen = !sidebarOpen"
                 class="p-1.5 rounded-lg hover:bg-white/15 transition flex-shrink-0 hidden md:flex">
@@ -109,13 +178,16 @@ defineProps<{ title?: string }>()
         </button>
       </div>
 
-      <!-- Ticket-Erstellung -->
+      <!-- Auftrag anlegen: ZWEI Knöpfe. „Neues Prozess-Ticket" führt in den
+           Katalog (alle Prozesse mit festem Ablauf), „Neues Ticket" direkt in das
+           Basis-Ticket – das für alles, was in keinen Prozess passt, und deshalb
+           ohne Umweg über die Auswahl erreichbar sein soll. -->
       <div class="px-3 pt-4 pb-2 space-y-1.5">
-        <button @click="navigate('/tickets/new')"
+        <button @click="navigate('/prozess-auftraege/neu')"
                 class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
                 :class="[
                   sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
-                  isProcessTicketActive
+                  isProzessTicketActive
                     ? 'bg-white text-[#3EAAB8] font-semibold shadow-sm'
                     : 'bg-white/20 hover:bg-white/30 text-white'
                 ]">
@@ -124,7 +196,7 @@ defineProps<{ title?: string }>()
           </svg>
           <span v-if="sidebarOpen" class="text-sm truncate">Neues Prozess-Ticket</span>
         </button>
-        <button @click="navigate('/tickets/new/basis-ticket')"
+        <button v-if="!neuesTicketAusgeblendet" @click="navigate(BASIS_TICKET_PATH)"
                 class="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
                 :class="[
                   sidebarOpen ? 'px-3.5 py-2.5' : 'px-0 py-2.5 justify-center',
@@ -146,24 +218,43 @@ defineProps<{ title?: string }>()
           Navigation
         </p>
 
+        <!-- Bewusst OHNE Rechte-Gate und nicht im Admin-Block: die Endpunkte sind
+             für alle Beteiligten offen (Ersteller:in, Zuständige, Beobachter:innen)
+             – ein Gate würde genau die Personen aussperren, die hier arbeiten
+             sollen. Der Server entscheidet pro Auftrag, wer was sieht. -->
         <a @click.prevent="navigate('/dashboard')"
            href="/dashboard"
            class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
            :class="[
-             isActive('/dashboard') ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
+             isUebersichtActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
              sidebarOpen ? '' : 'justify-center'
            ]">
-          <div v-if="isActive('/dashboard')" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
+          <div v-if="isUebersichtActive" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
           <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
-            <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+            <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6"/>
           </svg>
           <span v-if="sidebarOpen" class="truncate">Übersicht</span>
         </a>
 
-        <a v-if="auth.canView"
-           @click.prevent="navigate('/tickets')"
-           href="/tickets"
+        <!-- Archiv: für ALLE (kein Gate) – der Server entscheidet je Auftrag, was
+             sichtbar ist. Alle Aufträge, an denen man je beteiligt war. -->
+        <a @click.prevent="navigate('/archiv')"
+           href="/archiv"
+           class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
+           :class="[
+             isArchivActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
+             sidebarOpen ? '' : 'justify-center'
+           ]">
+          <div v-if="isArchivActive" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
+          <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
+          </svg>
+          <span v-if="sidebarOpen" class="truncate">Persönliches Archiv</span>
+        </a>
+
+        <a v-if="hatAufsicht"
+           @click.prevent="navigate('/auftraege')"
+           href="/auftraege"
            class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
            :class="[
              isAuftraegeActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
@@ -174,7 +265,7 @@ defineProps<{ title?: string }>()
             <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
           </svg>
-          <span v-if="sidebarOpen" class="truncate">Alle Aufträge</span>
+          <span v-if="sidebarOpen" class="truncate">Globales Archiv</span>
         </a>
 
         <!-- Admin -->
@@ -235,16 +326,20 @@ defineProps<{ title?: string }>()
           <span v-if="sidebarOpen" class="truncate">{{ dark ? 'Light Mode' : 'Dark Mode' }}</span>
         </button>
 
-        <!-- User info + Logout -->
-        <div class="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/10"
+        <!-- User info (klickbar → Profil) + Logout -->
+        <div class="flex items-center gap-1 px-1 py-1 rounded-xl bg-white/10"
              :class="sidebarOpen ? '' : 'justify-center'">
-          <div class="w-8 h-8 rounded-full bg-white/25 flex items-center justify-center flex-shrink-0 text-xs font-bold">
-            {{ auth.user?.displayName?.charAt(0) ?? '?' }}
-          </div>
-          <div v-if="sidebarOpen" class="min-w-0 flex-1">
-            <p class="text-sm font-medium truncate leading-tight">{{ auth.user?.displayName }}</p>
-            <p class="text-[11px] text-white/60 truncate leading-tight">{{ auth.user?.mail }}</p>
-          </div>
+          <button @click="openProfile" title="Profil anzeigen"
+                  class="flex items-center gap-3 min-w-0 flex-1 px-2 py-1.5 rounded-lg hover:bg-white/10 transition text-left"
+                  :class="sidebarOpen ? '' : 'justify-center'">
+            <div class="w-8 h-8 rounded-full bg-white/25 flex items-center justify-center flex-shrink-0 text-xs font-bold">
+              {{ auth.user?.displayName?.charAt(0) ?? '?' }}
+            </div>
+            <div v-if="sidebarOpen" class="min-w-0 flex-1">
+              <p class="text-sm font-medium truncate leading-tight">{{ auth.user?.displayName }}</p>
+              <p class="text-[11px] text-white/60 truncate leading-tight">{{ auth.user?.mail }}</p>
+            </div>
+          </button>
           <button v-if="sidebarOpen" @click="auth.logout()" title="Abmelden"
                   class="p-1.5 rounded-lg hover:bg-white/15 transition flex-shrink-0">
             <svg class="w-4 h-4 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -270,8 +365,6 @@ defineProps<{ title?: string }>()
               <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
           </button>
-          <img src="/logo.png" alt="Logo" class="h-8 w-auto object-contain" />
-          <div class="h-5 w-px bg-gray-200 dark:bg-white/10 hidden sm:block"/>
           <span class="text-sm font-medium text-gray-500 dark:text-gray-400 hidden sm:block">
             <slot name="title">{{ title ?? 'AlphaRequest' }}</slot>
           </span>
@@ -287,6 +380,69 @@ defineProps<{ title?: string }>()
         </div>
       </main>
     </div>
+
+    <!-- ── Profil-Modal ── -->
+    <Teleport to="body">
+      <div v-if="showProfile"
+           class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+           @click.self="showProfile = false">
+        <div class="bg-white dark:bg-[#1C2535] rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+          <!-- Kopf -->
+          <div class="flex items-start gap-4 p-6 border-b border-gray-100 dark:border-white/10">
+            <div class="w-14 h-14 rounded-full bg-[#3EAAB8] text-white flex items-center justify-center text-xl font-bold flex-shrink-0">
+              {{ (profile?.displayName ?? auth.user?.displayName)?.charAt(0) ?? '?' }}
+            </div>
+            <div class="min-w-0 flex-1">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                {{ profile?.displayName ?? auth.user?.displayName }}
+              </h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400 truncate">
+                {{ profile?.mail ?? auth.user?.mail }}
+              </p>
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <span v-for="p in (profile?.permissions ?? auth.permissions)" :key="p"
+                      class="text-[11px] px-2 py-0.5 rounded-full bg-[#3EAAB8]/15 text-[#2B7D89] dark:text-[#7FD3DE] font-medium">
+                  {{ roleLabel(p) }}
+                </span>
+              </div>
+            </div>
+            <button @click="showProfile = false" title="Schließen"
+                    class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Inhalt -->
+          <div class="p-6">
+            <div v-if="profileLoading" class="text-sm text-gray-400 py-6 text-center">Wird geladen…</div>
+            <div v-else-if="profileError" class="text-sm text-red-500 py-6 text-center">
+              Profil konnte nicht geladen werden.
+            </div>
+            <template v-else>
+              <div v-if="employeeInfo.length" class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                <div v-for="row in employeeInfo" :key="row.key" class="min-w-0">
+                  <p class="text-[11px] uppercase tracking-wide text-gray-400">{{ row.label }}</p>
+                  <p class="text-sm text-gray-800 dark:text-gray-100 break-words">{{ row.value }}</p>
+                </div>
+              </div>
+              <div v-else class="space-y-3">
+                <p class="text-sm text-amber-600 dark:text-amber-400">
+                  Kein Directus-Mitarbeiter-Datensatz verknüpft – es werden die Azure-Angaben gezeigt.
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  <div v-for="row in azureInfo" :key="row.label" class="min-w-0">
+                    <p class="text-[11px] uppercase tracking-wide text-gray-400">{{ row.label }}</p>
+                    <p class="text-sm text-gray-800 dark:text-gray-100 break-words">{{ row.value }}</p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- ── Fehler-melden-Modal ── -->
     <Teleport to="body">

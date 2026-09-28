@@ -1,0 +1,725 @@
+<script setup lang="ts">
+/**
+ * Auftrag eines dynamischen Prozesses: aktuelle Phase bearbeiten, speichern und
+ * weitergeben/abschließen. Formular und Sichtbarkeit kommen aus der GEPINNTEN
+ * Definition. Ablehnen, Zwangsabschluss, Wiederaufnahme und Löschen sind
+ * Admin-Werkzeuge und leben im AdminActionsPanel (?ansicht=admin).
+ */
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import AppLayout from '@/components/AppLayout.vue'
+import { useToast } from '@/composables/useToast'
+import type { OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
+import type { SimFieldError, SimViewer } from '@/lib/processSim'
+import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
+import { normalizeDefinition } from '@/lib/processNormalize'
+import { errorMessage, issuesFromError } from '@/lib/processErrors'
+import { STATUS_LABEL } from '@/lib/processSchema'
+import { emptySources, loadOptionSources, loadDirectusLabels } from '@/lib/processSources'
+import { applyComputed } from '@/lib/conditionDsl'
+import { departmentProgress, isDepartmentPending } from '@/lib/processDepartments'
+import * as ticketsApi from '@/api/processTickets'
+import { useAuthStore } from '@/stores/authStore'
+import SchemaForm from '@/components/process/form/SchemaForm.vue'
+import AdminActionsPanel from '@/components/process/AdminActionsPanel.vue'
+import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
+import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
+import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
+import ProcessDepartments from '@/components/process/ProcessDepartments.vue'
+import BasisTicketDetail from '@/components/process/BasisTicketDetail.vue'
+import { isBasisTicket } from '@/lib/basisTicket'
+import SchemaExportView from '@/components/process/form/SchemaExportView.vue'
+import DocumentView from '@/components/process/form/DocumentView.vue'
+import ProcessApprovalPanel from '@/components/process/ProcessApprovalPanel.vue'
+
+const route = useRoute()
+const router = useRouter()
+const { showToast } = useToast()
+const auth = useAuthStore()
+
+const id = computed(() => Number(route.params.id))
+const loading = ref(true)
+const busy = ref(false)
+const ticket = ref<ProcessTicketOut | null>(null)
+const definition = ref<ProcessDefinition | null>(null)
+const values = ref<Record<string, unknown>>({})
+const errors = ref<SimFieldError[]>([])
+const sources = ref<OptionSources>(emptySources())
+const loadError = ref<string | null>(null)
+
+/**
+ * Standardisierte Fehlermeldung dieser Ansicht: der rote Balken GANZ OBEN im
+ * Ticket. Bewusst FLÜCHTIG – nur für den aktuellen Blick gültig: `load()` (jeder
+ * Neuaufruf des Tickets, jede Aktualisierung, jeder Ticket-Wechsel) setzt ihn
+ * zurück. So steht die Meldung wirklich nur im Moment des Fehlers und ist beim
+ * nächsten Betreten wieder weg. Jede Fehlerquelle (Speichern, Weitergeben,
+ * Fachabteilung abschließen, Admin-Eingriffe …) füllt ihn über `showViewError`.
+ */
+const viewError = ref<string | null>(null)
+
+/**
+ * Sichtbarkeits-Kontext für die ANZEIGE – er kommt VOM SERVER.
+ *
+ * Das Frontend kennt die Gruppen-Mitgliedschaft nicht und könnte die Entscheidung
+ * gar nicht nachbauen. Die Antwort liefert deshalb `visible_fields` und
+ * `editable_fields`; ohne sie zeigte das Formular Eingabefelder für Daten, die
+ * diese Person nicht sehen darf – sie kämen leer an und der Server verwürfe die
+ * Eingabe wieder.
+ *
+ * Fehlt die Liste ganz (unerwartet alte Antwort), wird NICHT auf Vollsicht
+ * zurückgefallen: lieber ein leeres Formular als eines, das zu viel zeigt.
+ */
+const viewer = computed<SimViewer>(() => ({
+  fullView: false,
+  isAdmin: false,
+  groupIds: [],
+  visibleKeys: new Set(ticket.value?.visible_fields ?? []),
+  editableKeys: new Set(ticket.value?.editable_fields ?? []),
+}))
+
+/** Das Basis-Ticket hat eine EIGENE, feste Ansicht im Layout des Alt-Systems –
+ *  alle übrigen Prozesse rendern generisch aus der Definition. */
+const istBasis = computed(() => isBasisTicket(ticket.value?.process_key))
+
+const phase = computed(() => {
+  if (!definition.value || !ticket.value) return null
+  const i = ticket.value.runtime?.current_index ?? 0
+  return definition.value.phases[i] ?? null
+})
+
+/** Index der aktiven Phase – Grundlage für den Fortschritts-Stepper links. */
+const aktivIndex = computed(() => ticket.value?.runtime?.current_index ?? 0)
+
+/** Ist die aktuelle Phase die LETZTE? Dann schließt der Abschluss den Auftrag ab
+ *  („Abschließen"), sonst geht er an die nächste Stelle („Weitergeben"). */
+const istLetztePhase = computed(() => {
+  const i = ticket.value?.runtime?.current_index ?? 0
+  return i >= (definition.value?.phases.length ?? 1) - 1
+})
+const weiterLabel = computed(() =>
+  phase.value?.advanceLabel?.trim()
+  || (istLetztePhase.value ? 'Abschließen' : 'Weitergeben'))
+
+/**
+ * Erlaubte Aktionen kommen vom Server (`abilities`). Fehlt das Feld (alte
+ * Antwort), wird konservativ NICHTS angeboten – lieber eine fehlende
+ * Schaltfläche als eine, die mit 403 endet.
+ */
+const serverAbilities = computed(() => ticket.value?.abilities ?? {
+  edit: false, internal_comment: false, manage_watchers: false, attach: false,
+  reopen: false, archive: false, delete: false, export_document: false,
+})
+
+/** LESEN ist der Standard, Bearbeiten das Opt-in (?ansicht=bearbeiten): so gibt
+ *  es keinen URL-Parameter, dessen ENTFERNEN mehr Oberfläche freischaltet. Den
+ *  Parameter von Hand anzuhängen bringt nichts Verbotenes – die Knöpfe hängen
+ *  weiter an den Server-Rechten (abilities), und verbindlich prüft ohnehin der
+ *  Server jede Änderung. Die Arbeits-Reiter der Übersicht („Mir zugewiesen",
+ *  „Meine Abteilungen") verlinken direkt in die Bearbeitung; „Beobachtet",
+ *  „Beteiligt" und alle sonstigen Wege landen im Lesemodus. */
+const leseModus = computed(() => route.query.ansicht !== 'bearbeiten')
+
+/** Aus dem Dashboard (Reiter „Meine Abteilungen") kommt die aufgerufene Abteilung
+ *  als ?abteilung=<gruppen-id> mit – dann bietet die Fachabteilungs-Ansicht nur
+ *  DIESE zum Abschließen an (zusätzlich zur Mitgliedschaftsprüfung). */
+const focusDepartment = computed(() => {
+  const v = route.query.abteilung
+  return (typeof v === 'string' && v) ? v : null
+})
+
+const istFachabteilungsPhase = computed(() => ticket.value?.responsibility?.kind === 'departments')
+
+/** Offene Fachabteilungen der aktuellen Phase, in denen ICH Mitglied bin
+ *  (abilities.completable_departments), optional auf die per URL aufgerufene
+ *  verengt. Der grüne Knopf unten schließt genau diese ab. */
+const meineOffeneAbteilungen = computed<string[]>(() => {
+  const t = ticket.value
+  const resp = t?.responsibility
+  if (!t || !resp || resp.kind !== 'departments') return []
+  const meine = new Set(t.abilities?.completable_departments ?? [])
+  const fokus = focusDepartment.value
+  return (resp.departments ?? [])
+    .filter((d) => isDepartmentPending(d) && meine.has(d.group))
+    .filter((d) => !fokus || d.group === fokus)
+    .map((d) => d.group)
+})
+
+/** Admin-Ansicht (?ansicht=admin, Einstieg über die Auftragsliste): Leseansicht
+ *  PLUS Reparatur-Werkzeuge. Das isAdmin hier ist reine Anzeige – JEDER
+ *  Admin-Endpunkt prüft die Rechte selbst und antwortet sonst mit 403. */
+const adminModus = computed(() => route.query.ansicht === 'admin' && auth.isAdmin)
+
+/** Die FELD-Sicht des Servers hängt am Entry-Modus, nicht nur an der Rolle:
+ *  Admin-Ansicht → alle Felder; Fachabteilungs-Link → nur Basis + genau diese
+ *  Abteilung (für alle gleich); sonst die normale Sicht OHNE Admin-Gottmodus.
+ *  Wir geben den Modus explizit mit, damit dieselbe Abteilungsansicht über
+ *  verschiedene Nutzer/Gruppen hinweg identisch aussieht. */
+const viewParams = computed<{ view?: 'admin' | 'department'; department?: string }>(() => {
+  if (adminModus.value) return { view: 'admin' }
+  if (focusDepartment.value) return { view: 'department', department: focusDepartment.value }
+  return {}
+})
+
+// Die Admin-Ansicht rendert eine EIGENE Komponente (AdminTicketDetail) – die
+// abilities hier steuern nur noch die Lese-/Bearbeitungsansicht.
+//
+// Ausnahme in der Leseansicht: die Admin-Ansicht (?ansicht=admin) ist Lesen PLUS
+// Reparatur-Werkzeuge – dort dürfen Admins weiterhin Beobachter:innen ein- und
+// austragen (Verwaltungs-Werkzeug, kein Bearbeiten des Auftrags). Der Server
+// erlaubt das ohnehin nur Ersteller:in + Admins und prüft jede Änderung selbst.
+const abilities = computed(() => (leseModus.value
+  ? { ...serverAbilities.value, edit: false, internal_comment: false,
+      manage_watchers: adminModus.value && serverAbilities.value.manage_watchers,
+      attach: false, reopen: false, archive: false, delete: false }
+  : serverAbilities.value))
+
+// BEWUSST kein Wechsel-Knopf in der Leseansicht: in die Bearbeitung kommt man
+// nur über die richtigen Einstiege (Arbeits-Reiter der Übersicht, Mail-Link).
+// Die Admin-Werkzeuge leben in components/process/AdminTicketDetail.vue.
+
+/** Beschriftungen für den Verlauf (Feld-/Phasen-Schlüssel sind nicht lesbar). */
+const fieldLabels = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {}
+  for (const f of definition.value?.fields ?? []) out[f.key] = f.label || f.key
+  return out
+})
+const phaseLabels = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {}
+  for (const p of definition.value?.phases ?? []) out[p.key] = p.label || p.key
+  return out
+})
+
+/** Verlauf nach jeder Aktion neu laden (Referenz auf die Komponente). */
+const timeline = ref<{ reload: () => void } | null>(null)
+
+/** Phasen mit view='export' zeigen die Druckansicht statt der Gesamtansicht. */
+const isExportPhase = computed(() => phase.value?.view === 'export')
+/** Dokument-Phase (view=document): Vertrag/Dokument aus Vorlage, Inline-Editor + Word-Export. */
+const isDocumentPhase = computed(() => phase.value?.view === 'document')
+/** Freigabe-Phase (kind=approval): kein Formular, sondern oben genehmigen/ablehnen,
+ *  darunter alles schreibgeschützt. Erkennung am Freigabe-Block der Phase. */
+const isFreigabePhase = computed(() => !!phase.value?.approval)
+/** Darf ICH hier (im Web) entscheiden? Server-Flag, nur im Bearbeiten-Modus – die
+ *  Leseansicht bleibt reines Lesen. Zuständige Stelle ODER Admin. */
+const kannEntscheiden = computed(() =>
+  !leseModus.value && !!ticket.value?.abilities?.decide_approval)
+
+/** Ist ein Phasen-Feld für die aktuelle Sicht sichtbar? Der Server liefert die
+ *  Sicht-Allowlist (visible_fields); ohne sie (alte Antwort) nicht ausblenden. */
+function refVisible(ref: string): boolean {
+  const vis = viewer.value.visibleKeys
+  return !vis || vis.has(ref)
+}
+
+/** Feld-Refs dieser Phase, die tatsächlich gerendert werden (sichtbar + nicht
+ *  hidden). Grundlage fürs „Formular zeigen?" UND fürs Ausblenden aus der
+ *  Gesamt-Leseansicht. */
+const phaseVisibleRefs = computed(() =>
+  (phase.value?.fields ?? [])
+    .filter((fr) => fr.mode !== 'hidden' && refVisible(fr.ref))
+    .map((fr) => fr.ref))
+
+/** Hat die Phase für DIESE Sicht bearbeitbare, sichtbare Felder? Dokument-Phasen
+ *  haben meist ein leeres Layout; nur wenn dort echte, für die Person sichtbare
+ *  editierbare Felder liegen (z. B. Fuhrpark im Arbeitsvertrag), soll zusätzlich
+ *  zum Dokument ein Formular erscheinen (sonst stünde ein leeres „keine
+ *  sichtbaren Felder" da). */
+const phaseHasEditableFields = computed(() =>
+  (phase.value?.fields ?? []).some(
+    (fr) => (fr.mode === 'editable' || fr.mode === 'append_only' || !!fr.editableWhen)
+            && fr.mode !== 'hidden' && refVisible(fr.ref)))
+
+/** Wird das Phasen-Formular gezeigt? In normalen Phasen wie bisher; in
+ *  Dokument-Phasen nur, wenn sie eigene (sichtbare) editierbare Felder haben. */
+const showPhaseForm = computed(() =>
+  abilities.value.edit && !!phase.value && !isExportPhase.value && !isFreigabePhase.value
+  && (!isDocumentPhase.value || phaseHasEditableFields.value))
+
+/** Feld-Keys, die das Phasen-Formular rendert – in der Gesamt-Leseansicht
+ *  ausgeblendet, damit sie in einer Dokument-Phase nicht doppelt (bearbeitbar
+ *  oben, read-only unten) erscheinen. */
+const phaseFormKeys = computed(() =>
+  showPhaseForm.value ? phaseVisibleRefs.value : [])
+
+const dirty = computed(() =>
+  JSON.stringify(values.value) !== JSON.stringify(ticket.value?.values ?? {}))
+
+/** Abgeleitete Felder wie auf dem Server nachziehen. */
+function onValues(next: Record<string, unknown>) {
+  values.value = definition.value ? applyComputed(definition.value.fields, next) : next
+}
+
+/** Fehler ohne Feldbezug (Phasen-Regeln, Server-Meldungen). */
+const generalErrors = computed(() => {
+  const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
+  return errors.value.filter((e) => !fieldKeys.has(e.path))
+})
+
+/** Gibt es aktuell FELD-bezogene Fehler (die Felder sind rot)? Dann ganz oben im
+ *  Ticket ein deutlicher Hinweis, sonst übersieht man die Markierungen im langen
+ *  Formular. */
+const hatPflichtfehler = computed(() => {
+  const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
+  return errors.value.some((e) => fieldKeys.has(e.path))
+})
+
+// Bei fehlenden/roten Pflichtfeldern nach OBEN scrollen, damit der Hinweis-Banner
+// sichtbar wird (jeder Weitergeben-/Speichern-/Abschließen-Versuch setzt `errors`
+// neu, deshalb greift der Watch auch bei wiederholten Fehlversuchen).
+watch(errors, () => {
+  if (hatPflichtfehler.value) window.scrollTo({ top: 0, behavior: 'smooth' })
+})
+
+/** Eine (fertig formulierte) Fehlermeldung im roten Balken ganz oben zeigen und
+ *  dorthin scrollen, damit sie sicher im Blick ist. Für Kind-Komponenten
+ *  (z. B. AdminActionsPanel) über `@error` erreichbar. */
+function showViewError(message: string) {
+  viewError.value = message || 'Es ist ein Fehler aufgetreten'
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+/** Fehler einer Aktion standardisiert anzeigen: etwaige FELD-Fehler markieren
+ *  weiterhin die Felder, die allgemeine Server-Meldung landet im roten Balken
+ *  (statt in einer flüchtigen Toast-Meldung, die man im Moment des Fehlers
+ *  leicht übersieht). Der synthetische „body"-Eintrag wandert bewusst NUR in den
+ *  Balken, nicht zusätzlich in die Feldliste. */
+function reportActionError(e: unknown, fallback: string) {
+  errors.value = issuesFromError(e)
+    .filter((i) => i.path !== 'body')
+    .map((i) => ({ path: i.path, code: i.code, message: i.message }))
+  showViewError(errorMessage(e, fallback))
+}
+
+/** Nach Admin-Eingriffen: Auftrag UND Verlauf nachziehen. */
+async function reloadAll() {
+  await load()
+  timeline.value?.reload()
+}
+
+async function load() {
+  loading.value = true
+  loadError.value = null
+  // Flüchtige Fehlermeldung zurücksetzen: beim (Neu-)Laden des Tickets soll der
+  // rote Balken weg sein – er gehört nur zum Moment des vorigen Fehlers.
+  viewError.value = null
+  try {
+    const t = await ticketsApi.getTicket(id.value, viewParams.value)
+    ticket.value = t
+    values.value = { ...(t.values || {}) }
+    // Die GEPINNTE Definition über den Ticket-Endpunkt: der Verwaltungs-Endpunkt
+    // /processes/{key}/versions/{v} verlangt `manage` und würde für normale
+    // Beteiligte mit 403 antworten – das Formular bliebe leer.
+    definition.value = normalizeDefinition(await ticketsApi.getPinnedDefinition(id.value))
+    // Directus-Felder speichern nur die ID – Klartext-Labels für die Anzeige
+    // (Lese-/Druckansicht) auflösen und in die sources mergen. fail-soft.
+    const labels = await loadDirectusLabels(definition.value, ticket.value?.values)
+    sources.value = { ...sources.value, directusLabels: labels }
+  } catch (e) {
+    loadError.value = errorMessage(e, 'Auftrag konnte nicht geladen werden')
+  } finally {
+    loading.value = false
+  }
+}
+
+/** Nur die Auftragswerte (und den Ticket-Stand) nachladen – ohne Lade-Overlay,
+ *  Definition oder den roten Fehlerbalken zurückzusetzen. Gedacht für den Fall,
+ *  dass der Server beim Weiterschalten bereits Felder gesetzt hat (z. B. den
+ *  Firmenmail-Konflikt), damit diese sofort im Formular erscheinen. */
+async function refreshValues() {
+  const t = await ticketsApi.getTicket(id.value, viewParams.value)
+  ticket.value = t
+  values.value = { ...(t.values || {}) }
+}
+
+async function saveValues() {
+  if (!definition.value) return
+  const shape = validateValues(definition.value, values.value)
+  if (shape.length) { errors.value = shape; showToast('Bitte Eingaben prüfen', false); return }
+  busy.value = true
+  try {
+    ticket.value = await ticketsApi.patchTicket(id.value, { values: values.value })
+    values.value = { ...(ticket.value.values || {}) }
+    errors.value = []
+    showToast('Gespeichert')
+    // In Dokument-Phasen auf der Seite BLEIBEN: so kann direkt nach dem Speichern
+    // das Dokument mit den neuen Werten erzeugt werden (ticket/values sind aus der
+    // Antwort schon aktualisiert). Sonst wie bisher zurück zur Übersicht.
+    if (!isDocumentPhase.value) router.push('/dashboard')
+  } catch (e) {
+    reportActionError(e, 'Speichern fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+async function advance() {
+  if (!definition.value || !phase.value) return
+  // Gegen die AKTUELLEN (evtl. noch ungespeicherten) Eingaben prüfen – nicht
+  // gegen den zuletzt geladenen Stand. So darf man direkt nach dem Ausfüllen
+  // weitergeben, ohne vorher separat speichern zu müssen.
+  const shape = validateValues(definition.value, values.value)
+  if (shape.length) { errors.value = shape; showToast('Bitte Eingaben prüfen', false); return }
+  const req = validatePhaseCompletion(definition.value, phase.value, values.value)
+  if (req.length) { errors.value = req; showToast('Pflichtangaben fehlen', false); return }
+  if (!confirm(istLetztePhase.value
+    ? 'Auftrag abschließen?' : 'An die nächste Stelle weitergeben?')) return
+  busy.value = true
+  try {
+    // Offene Eingaben zuerst persistieren – sonst prüft/schaltet der Server
+    // gegen den alten Stand und die Weitergabe scheitert an „Pflichtangaben
+    // fehlen", obwohl im Formular alles ausgefüllt ist.
+    if (dirty.value) {
+      ticket.value = await ticketsApi.patchTicket(id.value, { values: values.value })
+      values.value = { ...(ticket.value.values || {}) }
+    }
+    ticket.value = await ticketsApi.advanceTicket(id.value)
+    values.value = { ...(ticket.value.values || {}) }
+    errors.value = []
+    showToast('Phase abgeschlossen')
+    router.push('/dashboard')
+  } catch (e) {
+    // Firmenmail-Konflikt: der Server hat das Konflikt-Flag und die
+    // vorgeschlagene Adresse bereits gespeichert. Werte nachladen, damit das
+    // Feld sofort sichtbar/editierbar ist (editableWhen greift auf
+    // base.firmenmail_conflict zu) – ohne das Ticket erst verlassen zu müssen.
+    if (issuesFromError(e).some((i) => i.code === 'EMAIL_CONFLICT')) {
+      try { await refreshValues() } catch { /* best-effort, Balken zeigt den Konflikt */ }
+    }
+    reportActionError(e, 'Weiterschalten fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+/**
+ * Fachabteilungs-Phase: der grüne Knopf schließt die EIGENE Abteilung ab (die
+ * obere Fachabteilungs-Anzeige ist reine Info). Sind damit alle Pflicht-
+ * Abteilungen fertig, wird die Phase gleich weitergeschaltet – so muss niemand
+ * separat „abschließen". Danach zurück aufs Dashboard.
+ */
+async function fachabteilungAbschliessen() {
+  if (!definition.value || !meineOffeneAbteilungen.value.length) return
+  const shape = validateValues(definition.value, values.value)
+  if (shape.length) { errors.value = shape; showToast('Bitte Eingaben prüfen', false); return }
+  if (!confirm('Wirklich abschließen? Ein Bearbeiten ist danach nicht mehr möglich.')) return
+  busy.value = true
+  try {
+    // Etwaige Feld-Eingaben der Abteilung zuerst sichern.
+    if (dirty.value) {
+      ticket.value = await ticketsApi.patchTicket(id.value, { values: values.value })
+      values.value = { ...(ticket.value.values || {}) }
+    }
+    // Eigene Abteilung(en) abschließen (i. d. R. genau eine).
+    for (const gid of meineOffeneAbteilungen.value) {
+      ticket.value = await ticketsApi.completeDepartment(id.value, gid, null)
+    }
+    errors.value = []
+    // War es die letzte Pflicht-Abteilung? Dann die Phase weiterschalten – aber
+    // BEST-EFFORT: scheitert das (z. B. an fehlenden Pflichtfeldern einer anderen
+    // Stelle), bleibt der eigene Abschluss trotzdem gültig und es geht zurück
+    // aufs Dashboard; der Phasen-Abschluss wird dann separat nachgeholt.
+    const resp = ticket.value?.responsibility
+    const deps = resp && resp.kind === 'departments' ? resp.departments : []
+    if (departmentProgress(deps).ready) {
+      try {
+        ticket.value = await ticketsApi.advanceTicket(id.value)
+      } catch { /* eigener Abschluss steht; Weiterschalten separat */ }
+    }
+    showToast('Fachabteilung abgeschlossen')
+    router.push('/dashboard')
+  } catch (e) {
+    reportActionError(e, 'Abschließen fehlgeschlagen')
+  } finally { busy.value = false }
+}
+
+// Ablehnen, Zwangsabschluss, Wiederaufnahme und Löschen sind Admin-Werkzeuge und
+// leben ausschließlich im AdminActionsPanel (?ansicht=admin). Die normale
+// Bearbeitungs-Leiste kennt nur Speichern und Weitergeben.
+
+const groupName = (gid: string) => sources.value.groups.find((g) => g.id === gid)?.name || gid
+const userName = (uid: string) => sources.value.users.find((u) => u.id === uid)?.displayName || uid
+
+// Ticket-Wechsel ohne Remount (App.vue hat kein router-view :key): beim Wechsel
+// der id neu laden – zieht die Daten nach UND räumt den flüchtigen Fehlerbalken.
+watch(id, () => { load() })
+
+// auth.isAdmin: normale Nutzer:innen direkt über den öffentlichen /groups-Endpunkt
+// (der Admin-Endpunkt gäbe 403 – ohne Gruppennamen stünden rohe IDs in der Ansicht).
+onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); await load() })
+</script>
+
+<template>
+  <AppLayout>
+    <!-- Admin-Modus am breitesten (Verlauf-Spalte rechts); sonst breit genug für
+         die zweispaltige Ansicht (Fortschritt-Leiste links + Formular rechts). -->
+    <div class="mx-auto px-4 py-6" :class="adminModus ? 'max-w-7xl' : 'max-w-6xl'">
+      <div v-if="loading" class="flex items-center justify-center py-20">
+        <div class="w-7 h-7 rounded-full border-2 border-[#3EAAB8] border-t-transparent animate-spin" />
+      </div>
+
+      <div v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</div>
+
+      <template v-else>
+        <!-- Standardisierter Fehlerbalken GANZ OBEN: gilt nur für den aktuellen
+             Blick (load() räumt ihn), fängt aber Fehler ALLER Quellen ab –
+             Speichern, Weitergeben, Fachabteilung abschließen, Admin-Eingriffe.
+             Damit sieht man z. B. „Abschließen nicht möglich – Directus …", statt
+             nur festzustellen, dass sich nichts abschließen lässt. -->
+        <div v-if="viewError" role="alert"
+             class="mb-4 rounded-xl border border-red-300 dark:border-red-500/40
+                    bg-red-50 dark:bg-red-900/25 px-4 py-3 flex items-start gap-3">
+          <svg class="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" fill="none" viewBox="0 0 24 24"
+               stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p class="flex-1 min-w-0 text-sm text-red-800 dark:text-red-200 whitespace-pre-wrap">
+            {{ viewError }}
+          </p>
+          <button type="button" @click="viewError = null" aria-label="Meldung schließen"
+                  class="text-red-400 hover:text-red-600 dark:hover:text-red-300 text-lg leading-none
+                         -mt-0.5 shrink-0">✕</button>
+        </div>
+
+        <!-- Admin-Ansicht = normale LESEANSICHT als Basis, die Aktionen-Leiste
+             legt sich nur darüber. So haben alle Aufträge überall dieselbe
+             Struktur; die Rechte prüft jeder Endpunkt selbst. -->
+        <AdminActionsPanel v-if="adminModus && ticket && definition"
+                           class="mb-4"
+                           :ticket="ticket" :definition="definition" :sources="sources"
+                           @reload="reloadAll" @error="showViewError" />
+
+        <!-- Im Admin-Modus rückt der Verlauf als EIGENE Spalte rechts neben das
+             normale Layout – die Reparatur braucht ihn ständig im Blick. -->
+        <div :class="adminModus ? 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px] items-start' : ''">
+        <div class="min-w-0">
+        <!-- :key remountet die Basis-Ansicht nach Admin-Eingriffen (sie hält
+             eine eigene Kopie des Auftrags und würde sonst den alten Stand zeigen). -->
+        <BasisTicketDetail v-if="istBasis && ticket && definition"
+                           :key="`${ticket.id}:${ticket.updated_at || ''}`"
+                           :ticket="ticket" :definition="definition" :sources="sources"
+                           :readonly="leseModus" />
+
+        <template v-else-if="ticket && definition">
+        <!-- Kopf: volle Breite über den zwei Spalten. -->
+        <div class="mb-4 min-w-0">
+          <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100 truncate">
+            {{ ticket.title }}
+          </h1>
+          <div class="text-xs text-gray-400 flex items-center gap-2 flex-wrap">
+            <span>#{{ ticket.id }}</span><span>·</span>
+            <span class="font-mono">{{ ticket.process_key }} v{{ ticket.process_version }}</span>
+            <span>·</span>
+            <span>{{ STATUS_LABEL[ticket.status] || ticket.status }}</span>
+          </div>
+        </div>
+
+        <!-- Pflichtfeld-Hinweis: erscheint beim Weitergeben/Abschließen, wenn noch
+             Felder fehlen (die Felder selbst werden im Formular rot markiert). -->
+        <div v-if="hatPflichtfehler"
+             class="mb-4 rounded-xl border border-red-200 dark:border-red-500/30
+                    bg-red-50 dark:bg-red-900/20 px-4 py-3 flex items-start gap-2">
+          <svg class="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" fill="none" viewBox="0 0 24 24"
+               stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p class="text-sm text-red-800 dark:text-red-200">
+            Bitte alle Pflichtfelder ausfüllen – die fehlenden sind unten rot markiert.
+          </p>
+        </div>
+
+        <!-- Zwei Spalten wie beim Basis-Ticket: links Fortschritt + Beobachter,
+             rechts das Formular. Der Verlauf gehört NICHT hierher (nur Admin);
+             „Alle Angaben" ist die Leseansicht und wird beim Bearbeiten NICHT
+             doppelt gezeigt. -->
+        <div class="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)] items-start">
+          <!-- Linke Leiste -->
+          <!-- lg:z-30 hebt die Spalte ÜBER die sticky Aktionsleiste (z-20): sonst
+               läge das Beobachter-Dropdown (im sticky-Stacking-Context der aside)
+               hinter der Leiste. -->
+          <aside class="space-y-4 lg:sticky lg:top-4 lg:z-30">
+            <!-- Fortschritt (vertikaler Stepper) -->
+            <div class="card-section">
+              <div class="flex items-center justify-between mb-4">
+                <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Fortschritt
+                </span>
+                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full
+                             bg-[#3EAAB8]/15 text-[#3EAAB8]">
+                  Phase {{ aktivIndex + 1 }} von {{ definition.phases.length }}
+                </span>
+              </div>
+              <ol>
+                <li v-for="(p, i) in definition.phases" :key="p.key" class="flex gap-3">
+                  <!-- Kreis + Verbindungslinie -->
+                  <div class="flex flex-col items-center">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center
+                                 text-xs font-semibold shrink-0"
+                          :class="i < aktivIndex ? 'bg-green-500 text-white'
+                            : i === aktivIndex ? 'bg-[#3EAAB8] text-white'
+                            : 'bg-gray-100 text-gray-400 dark:bg-white/10 dark:text-gray-500'">
+                      <template v-if="i < aktivIndex">✓</template>
+                      <template v-else>{{ i + 1 }}</template>
+                    </span>
+                    <span v-if="i < definition.phases.length - 1" class="w-px flex-1 my-1 min-h-[1rem]"
+                          :class="i < aktivIndex ? 'bg-green-400/50' : 'bg-gray-200 dark:bg-white/10'" />
+                  </div>
+                  <div class="pb-3 min-w-0">
+                    <p class="text-sm font-medium leading-tight"
+                       :class="i === aktivIndex ? 'text-[#3EAAB8]'
+                         : i < aktivIndex ? 'text-green-700 dark:text-green-300'
+                         : 'text-gray-400'">
+                      {{ p.label || p.key }}
+                    </p>
+                    <p class="text-[11px] text-gray-400">
+                      {{ i < aktivIndex ? 'Erledigt' : i === aktivIndex ? 'Aktuell' : 'Ausstehend' }}
+                    </p>
+                  </div>
+                </li>
+              </ol>
+              <!-- Wer ist gerade zuständig? (bewusst kompakt, read-only) -->
+              <div v-if="ticket.responsibility"
+                   class="text-xs text-gray-400 mt-1 pt-3 border-t border-gray-100 dark:border-white/[0.06]">
+                Zuständig:
+                <template v-if="ticket.responsibility.kind === 'departments'">
+                  {{ ticket.responsibility.departments.map(d => groupName(d.group)).join(', ') || '—' }}
+                </template>
+                <template v-else-if="ticket.responsibility.kind === 'group'">
+                  <span v-if="ticket.responsibility.group">
+                    {{ groupName(ticket.responsibility.group) }}
+                  </span>
+                  <span v-else class="text-red-500 font-medium">niemand (keine Fachabteilung gewählt)</span>
+                </template>
+                <template v-else-if="ticket.responsibility.kind === 'owner'">
+                  {{ ticket.owner_name || 'Ersteller:in' }}
+                </template>
+                <template v-else>—</template>
+              </div>
+            </div>
+
+            <!-- Beobachter -->
+            <ProcessWatchers :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
+                             :can-manage="abilities.manage_watchers"
+                             :users="sources.users" />
+          </aside>
+
+          <!-- Rechte Spalte: Arbeitsbereich -->
+          <div class="min-w-0 space-y-4">
+            <!-- Freigabe-Phase: GANZ OBEN genehmigen/ablehnen direkt im Web (die
+                 zuständige Stelle braucht den Mail-Link nicht). Darunter stehen –
+                 wie in der Leseansicht – alle Angaben schreibgeschützt. -->
+            <ProcessApprovalPanel v-if="isFreigabePhase && kannEntscheiden && phase"
+                                  :ticket="ticket" :phase="phase"
+                                  @reload="reloadAll" @error="showViewError" />
+
+            <!-- Fachabteilungen der aktuellen Phase. Ohne diese Quittierungen
+                 blockiert `:advance` mit 409 DEPARTMENT_FORBIDDEN. Bewusst
+                 AUSSERHALB von abilities.edit: quittieren muss auch, wer den
+                 Auftrag nicht bearbeiten darf. `terminal` unterdrückt die Knöpfe
+                 in der Leseansicht und bei abgeschlossenen Aufträgen. -->
+            <ProcessDepartments
+              v-if="ticket.responsibility?.kind === 'departments'"
+              :departments="ticket.responsibility.departments"
+              :group-name="groupName" />
+
+            <!-- Dokument-Phase: Dokument-Karten GANZ OBEN. DocumentView zeigt je
+                 Dokument einen „Ausfüllen & exportieren"-Button (zuständige Stelle/
+                 Admin) ODER einen Hinweis „wird erstellt" (Beobachter:innen). Die
+                 übrigen (berechtigten) Feld-Abschnitte stehen darunter. -->
+            <DocumentView v-if="isDocumentPhase && phase"
+                          :definition="definition" :ticket="ticket" :phase="phase"
+                          :sources="sources" :readonly="!abilities.edit" />
+
+            <!-- Export-Phase: druckbare Zusammenfassung. Sonst die vollständige
+                 Leseansicht – nur, wenn nicht bearbeitet wird (das Formular zeigt die
+                 Felder sonst schon; die Dokument-Karten stehen ohnehin davor). -->
+            <SchemaExportView
+              v-if="isExportPhase"
+              :definition="definition" :ticket="ticket" :phase="phase"
+              :viewer="viewer" :sources="sources"
+              @exported="showToast('PDF erzeugt')"
+              @failed="showViewError($event)" />
+            <!-- Gesamt-Leseansicht: für Beobachtende IMMER, und in Dokument-Phasen
+                 auch für die Bearbeitenden. Felder, die oben schon im Phasen-
+                 Formular stehen (z. B. Fuhrpark), werden hier ausgeblendet, damit
+                 sie nicht doppelt erscheinen. -->
+            <div v-else-if="!abilities.edit || isDocumentPhase || isFreigabePhase" class="card-section">
+              <h3 class="section-title">Alle Angaben</h3>
+              <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
+                                  :sources="sources" :ticket-id="ticket.id" :view="viewParams.view"
+                                  :exclude-keys="phaseFormKeys" />
+            </div>
+
+            <!-- Formular der aktuellen Phase (nur für die zuständige Stelle). In
+                 normalen Phasen die einzige Arbeitsfläche; in Dokument-Phasen mit
+                 eigenen editierbaren Feldern (z. B. Fuhrpark im Arbeitsvertrag)
+                 steht es BEWUSST UNTER „Alle Angaben" – oben die Dokumente, dann
+                 die Gesamt-Übersicht, dann der bearbeitbare Abschnitt. Gespeicherte
+                 Änderungen fließen in die erzeugten Dokumente. -->
+            <template v-if="showPhaseForm && phase">
+              <SchemaForm :definition="definition" :phase="phase" :model-value="values"
+                          :viewer="viewer" :errors="errors" :sources="sources"
+                          :ticket-id="ticket.id" :current-user-id="auth.user?.id ?? null"
+                          @update:model-value="onValues($event)" />
+              <!-- Nur Fehler OHNE Feldbezug: feldbezogene zeigt das Formular selbst. -->
+              <div v-if="generalErrors.length"
+                   class="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20
+                          px-4 py-3 text-sm text-red-800 dark:text-red-200">
+                <ul class="list-disc list-inside">
+                  <li v-for="(e, i) in generalErrors" :key="i">
+                    <span v-if="e.path !== 'body'" class="font-mono text-xs opacity-70">{{ e.path }} — </span>{{ e.message }}
+                  </li>
+                </ul>
+              </div>
+            </template>
+
+            <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen
+                 Anhänge ausschließlich über konfigurierte Anhang-Felder
+                 (widget=attachment), die das Formular oben rendert. -->
+          </div>
+        </div>
+
+        <!-- Aktionsleiste – sticky, gleiches Layout wie das Basis-Ticket:
+             „Abbrechen" führt immer zurück; die Schreib-Knöpfe kommen nur dazu,
+             wenn bearbeitet werden darf. Ablehnen/Zwangsabschluss/Wiederaufnahme/
+             Löschen sind Admin-Werkzeuge (AdminActionsPanel, ?ansicht=admin). -->
+        <div class="card-section sticky bottom-4 z-20 shadow-lg mt-4
+                    flex items-center justify-end gap-2 flex-wrap">
+          <button @click="router.back()" class="btn-secondary text-sm">Abbrechen</button>
+          <!-- In einer Freigabe-Phase gibt es kein Speichern/Weitergeben: die
+               Entscheidung (genehmigen/ablehnen) steht oben in ProcessApprovalPanel. -->
+          <template v-if="abilities.edit && !isFreigabePhase">
+            <button @click="saveValues" :disabled="busy || !dirty"
+                    class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
+                           disabled:opacity-40 transition">
+              Speichern &amp; später weiterbearbeiten
+            </button>
+            <!-- Fachabteilungs-Phase: der grüne Knopf schließt die EIGENE Abteilung
+                 ab (die Fachabteilungs-Anzeige oben ist reine Info). -->
+            <button v-if="istFachabteilungsPhase && meineOffeneAbteilungen.length"
+                    @click="fachabteilungAbschliessen" :disabled="busy"
+                    class="px-4 py-2 rounded-xl text-sm text-white bg-green-600 hover:bg-green-700
+                           disabled:opacity-40 transition">
+              Fachabteilung abschließen
+            </button>
+            <!-- Alle übrigen Phasen: normale Weitergabe/Abschluss. -->
+            <button v-else-if="!istFachabteilungsPhase" @click="advance" :disabled="busy"
+                    class="px-4 py-2 rounded-xl text-sm text-white bg-green-600 hover:bg-green-700
+                           disabled:opacity-40 transition">
+              {{ weiterLabel }}
+            </button>
+          </template>
+        </div>
+        </template>
+        </div>
+
+        <!-- Rechte Verlauf-Spalte der Admin-Ansicht (klebt beim Scrollen,
+             scrollt bei langem Verlauf in sich selbst). -->
+        <ProcessTimeline v-if="adminModus && ticket && definition"
+                         ref="timeline" :ticket-id="ticket.id" view="admin"
+                         :field-labels="fieldLabels" :phase-labels="phaseLabels"
+                         :group-name="groupName" :user-name="userName"
+                         :fields="definition.fields" :sources="sources" :can-be-internal="true"
+                         class="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" />
+        </div>
+      </template>
+    </div>
+  </AppLayout>
+</template>

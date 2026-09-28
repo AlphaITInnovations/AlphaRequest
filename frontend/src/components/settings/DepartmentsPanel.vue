@@ -89,7 +89,7 @@ async function saveGroups() {
     back()
     showToast('Gespeichert', true)
   } catch (e: any) {
-    showToast(e?.response?.data?.detail || 'Fehler beim Speichern', false)
+    showToast(e?.response?.data?.error?.message || e?.response?.data?.detail || 'Fehler beim Speichern', false)
   } finally {
     setSaving(false)
   }
@@ -155,7 +155,7 @@ onMounted(loadGroups)
               </span>
             </div>
             <div class="flex gap-2">
-              <UserSelect label="" placeholder="Benutzer hinzufügen…"
+              <UserSelect label="" placeholder="Nutzende hinzufügen…"
                           :model-value="memberSel" @update:model-value="memberSel = $event" class="flex-1" />
               <button @click="addMember" class="btn-primary self-end">+</button>
             </div>

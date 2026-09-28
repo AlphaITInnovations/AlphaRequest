@@ -1,5 +1,6 @@
 import os
 import base64
+import hmac
 import threading
 import time
 
@@ -10,9 +11,12 @@ from prometheus_client import (
     REGISTRY
 )
 
+from backend.utils.config import config
+
+from backend.metrics.collect_guard import run_part
 from backend.metrics.http_metrics import MetricsMiddleware
 from backend.metrics.auth_metrics import collect_session_metrics
-from backend.metrics.ticket_metrics import collect_ticket_metrics
+from backend.metrics.process_metrics import collect_process_ticket_metrics
 from backend.metrics.system_metrics import collect_system_metrics
 
 
@@ -25,12 +29,7 @@ ENABLE_METRICS = os.getenv("ENABLE_METRICS", "true").lower() == "true"
 METRICS_USERNAME = os.getenv("METRICS_USERNAME")
 METRICS_PASSWORD = os.getenv("METRICS_PASSWORD")
 
-
-# ---------------------------------------------------------
-# GLOBAL SERVICES
-# ---------------------------------------------------------
-
-TICKET_MANAGER = None
+COLLECT_INTERVAL_SECONDS = int(os.getenv("METRICS_COLLECT_INTERVAL", "10"))
 
 
 # ---------------------------------------------------------
@@ -40,7 +39,10 @@ TICKET_MANAGER = None
 def _check_basic_auth(request: Request) -> bool:
 
     if not METRICS_USERNAME or not METRICS_PASSWORD:
-        return True
+        # FAIL-CLOSED in Produktion: ohne gesetzte Zugangsdaten bleibt /metrics NICHT
+        # offen (die Reihen verraten Prozess-Struktur, Auftrags-/Session-/Login-Zahlen).
+        # In der Entwicklung darf er offen sein – dort ist der Port nicht exponiert.
+        return config.APP_ENV == "development"
 
     auth = request.headers.get("Authorization")
 
@@ -59,7 +61,9 @@ def _check_basic_auth(request: Request) -> bool:
 
     user, pwd = decoded.split(":", 1)
 
-    return user == METRICS_USERNAME and pwd == METRICS_PASSWORD
+    # Zeitkonstanter Vergleich (hmac.compare_digest statt ==) gegen Timing-Angriffe.
+    return (hmac.compare_digest(user, METRICS_USERNAME)
+            and hmac.compare_digest(pwd, METRICS_PASSWORD))
 
 
 # ---------------------------------------------------------
@@ -90,37 +94,44 @@ async def metrics_endpoint(request: Request):
 # BACKGROUND COLLECTOR
 # ---------------------------------------------------------
 
+# Reihenfolge = Sammelreihenfolge. Jeder Eintrag läuft einzeln abgesichert:
+# ein Fehler in EINER Quelle darf die übrigen Reihen nicht mitnehmen und schon
+# gar nicht den Thread beenden (dann fröre das ganze Monitoring unbemerkt ein).
+_COLLECTORS = (
+    ("sessions", collect_session_metrics),
+    ("process_tickets", collect_process_ticket_metrics),
+    ("system", collect_system_metrics),
+)
+
+
+def collect_all() -> None:
+    """Ein vollständiger Sammeldurchlauf. Wirft nicht."""
+    for part, fn in _COLLECTORS:
+        run_part(part, fn)
+
+
 def _collector_thread():
 
     while True:
 
-        time.sleep(10)
+        time.sleep(COLLECT_INTERVAL_SECONDS)
 
         try:
-
-            collect_session_metrics()
-
-            if TICKET_MANAGER:
-                collect_ticket_metrics(TICKET_MANAGER)
-
-            collect_system_metrics()
-
-        except Exception as e:
-            print("Metrics collector error:", e)
+            collect_all()
+        except Exception:
+            # collect_all fängt bereits alles ab; dieser Gürtel sorgt dafür, dass
+            # selbst ein Fehler im Absicherungspfad den Thread nicht beendet.
+            pass
 
 
 # ---------------------------------------------------------
 # INITIALIZATION
 # ---------------------------------------------------------
 
-def init_metrics(app, ticket_manager):
-
-    global TICKET_MANAGER
-
+def init_metrics(app):
+    """Metrik-Endpunkt und Sammel-Thread aufsetzen."""
     if not ENABLE_METRICS:
         return
-
-    TICKET_MANAGER = ticket_manager
 
     app.add_middleware(MetricsMiddleware)
 

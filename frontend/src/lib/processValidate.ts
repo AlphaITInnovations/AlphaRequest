@@ -1,0 +1,907 @@
+/**
+ * Client-Validierung einer ProcessDefinition – Spiegel der Server-Regeln aus
+ * backend/schemas/process_definition.py (_integrity, Feld-/Phasen-/Action-Regeln).
+ *
+ * Zweck: Fehler VOR dem Speichern zeigen und den Speichern-Knopf sperren.
+ * Autoritativ bleibt der Server; Warnungen (severity 'warning') blockieren nicht.
+ */
+import type {
+  Condition, ProcessDefinition, ProcessIssue,
+} from '@/types/process'
+import {
+  ACTION_TYPES, ENTER_STATUS, PHASE_KINDS, PHASE_VIEWS, PRIORITIES,
+  RESPONSIBILITY_KINDS,
+  SCHEMA_VERSION, SEQUENCE_COUNTERS, WIDGETS_SUB, WIDGETS_TOP, WIDGET_LABEL, backToTarget,
+  isValidFieldKey, isValidOnReject, isValidPhaseKey, isValidProcessKey, isValidRecipient,
+  ESCALATION_MAX_DAYS,
+} from '@/lib/processSchema'
+import { isValidDuration } from '@/lib/isoDuration'
+import { SPECIAL_MAIL_VARS, mailFieldRefs, mailVariables } from '@/lib/mailTemplate'
+
+const DSL_OPS = ['==', '!=', 'in', 'truthy', 'and', 'or', 'not']
+
+/** Alle Feld-Referenzen aus einem DSL-Ausdruck einsammeln. */
+export function dslRefs(cond: Condition | null | undefined): string[] {
+  if (!cond || typeof cond !== 'object') return []
+  const keys = Object.keys(cond)
+  if (keys.length !== 1) return []
+  const op = keys[0]
+  const arg = (cond as any)[op]
+  if (op === '==' || op === '!=' || op === 'in') {
+    return Array.isArray(arg) && typeof arg[0] === 'string' ? [arg[0]] : []
+  }
+  if (op === 'truthy') return typeof arg === 'string' ? [arg] : []
+  if (op === 'and' || op === 'or') {
+    return Array.isArray(arg) ? arg.flatMap((c) => dslRefs(c)) : []
+  }
+  if (op === 'not') return dslRefs(arg)
+  return []
+}
+
+/** Wohlgeformtheit eines DSL-Ausdrucks (wie validate_condition serverseitig). */
+export function isWellFormedCondition(cond: any): boolean {
+  if (!cond || typeof cond !== 'object' || Array.isArray(cond)) return false
+  const keys = Object.keys(cond)
+  if (keys.length !== 1) return false
+  const op = keys[0]
+  const arg = cond[op]
+  if (!DSL_OPS.includes(op)) return false
+  if (op === 'in') {
+    return Array.isArray(arg) && arg.length === 2 && typeof arg[0] === 'string' && Array.isArray(arg[1])
+  }
+  if (op === '==' || op === '!=') {
+    return Array.isArray(arg) && arg.length === 2 && typeof arg[0] === 'string'
+  }
+  if (op === 'truthy') return typeof arg === 'string'
+  if (op === 'and' || op === 'or') {
+    return Array.isArray(arg) && arg.length > 0 && arg.every(isWellFormedCondition)
+  }
+  if (op === 'not') return isWellFormedCondition(arg)
+  return false
+}
+
+function err(path: string, anchor: string, code: string, message: string): ProcessIssue {
+  return { path, anchor, code, severity: 'error', message, source: 'client' }
+}
+function warn(path: string, anchor: string, code: string, message: string): ProcessIssue {
+  return { path, anchor, code, severity: 'warning', message, source: 'client' }
+}
+
+/**
+ * Prüft eine Definition. `knownGroupIds`/`knownUserIds` (optional) erzeugen
+ * Warnungen für Gruppen- bzw. Personen-IDs, die es nicht (mehr) gibt – der Server
+ * prüft das nicht.
+ */
+export function validateDefinition(
+  d: ProcessDefinition, knownGroupIds?: Set<string>, knownUserIds?: Set<string>,
+): ProcessIssue[] {
+  const out: ProcessIssue[] = []
+  const TOP = 'pe-top'
+
+  /** Ein Empfänger-Token (Rolle / `group:<id>` / `user:<id>`) prüfen: harter
+   *  Fehler bei unbekannter Form, Warnung bei gelöschter Gruppe/Person. */
+  const checkRecipientToken = (tok: string, path: string, anchor: string): void => {
+    if (!isValidRecipient(tok)) {
+      out.push(err(path, anchor, 'INVALID', `Unbekanntes Ziel „${tok}".`))
+      return
+    }
+    if (knownGroupIds && tok.startsWith('group:') && !knownGroupIds.has(tok.slice(6))) {
+      out.push(warn(path, anchor, 'UNKNOWN_GROUP', `Unbekannte Fachabteilung „${tok.slice(6)}".`))
+    }
+    if (knownUserIds && tok.startsWith('user:') && !knownUserIds.has(tok.slice(5))) {
+      out.push(warn(path, anchor, 'UNKNOWN_USER', `Unbekannte Person „${tok.slice(5)}".`))
+    }
+  }
+
+  // ── Kopfdaten ──
+  if (!isValidProcessKey(d.key)) {
+    out.push(err('key', TOP, 'INVALID_KEY',
+      'Prozess-Schlüssel: nur a–z, 0–9 und „-", Beginn alphanumerisch, max. 64 Zeichen.'))
+  }
+  if (!d.name?.trim()) out.push(err('name', TOP, 'REQUIRED', 'Der Prozess braucht einen Namen.'))
+  if (d.schemaVersion !== SCHEMA_VERSION) {
+    out.push(err('schemaVersion', TOP, 'UNSUPPORTED',
+      `Nicht unterstützte schemaVersion ${d.schemaVersion} (erwartet ${SCHEMA_VERSION}).`))
+  }
+
+  // ── Feld-Katalog ──
+  const seenFieldKeys = new Set<string>()
+  const catalog = new Set(d.fields.map((f) => f.key))
+  const widgetByKey = new Map(d.fields.map((f) => [f.key, f.widget]))
+  d.fields.forEach((f, i) => {
+    const anchor = `pe-catalog-${i}`
+    const p = `fields.${i}`
+    if (!f.key) out.push(err(`${p}.key`, anchor, 'REQUIRED', 'Feld braucht einen Schlüssel.'))
+    else if (!isValidFieldKey(f.key)) {
+      out.push(err(`${p}.key`, anchor, 'INVALID_KEY',
+        `Feld-Schlüssel „${f.key}": erlaubt sind Buchstaben, Ziffern, „_" und Punkte.`))
+    } else if (seenFieldKeys.has(f.key)) {
+      out.push(err(`${p}.key`, anchor, 'DUPLICATE_KEY', `Doppelter Feld-Schlüssel „${f.key}".`))
+    }
+    seenFieldKeys.add(f.key)
+
+    if (!WIDGETS_TOP.includes(f.widget)) {
+      out.push(err(`${p}.widget`, anchor, 'UNSUPPORTED_WIDGET',
+        `Feldtyp „${f.widget}" ist nicht verfügbar.`))
+    }
+    if (f.widget === 'collection' && f.item.length === 0) {
+      out.push(err(`${p}.item`, anchor, 'REQUIRED',
+        'Eine Wiederholgruppe braucht mindestens ein Unterfeld.'))
+    }
+    if (f.widget !== 'collection' && f.item.length > 0) {
+      out.push(err(`${p}.item`, anchor, 'INVALID',
+        'Unterfelder sind nur bei einer Wiederholgruppe erlaubt.'))
+    }
+    const subKeys = new Set<string>()
+    f.item.forEach((sf, j) => {
+      if (!sf.key) {
+        out.push(err(`${p}.item.${j}.key`, anchor, 'REQUIRED', 'Unterfeld braucht einen Schlüssel.'))
+      } else if (subKeys.has(sf.key)) {
+        out.push(err(`${p}.item.${j}.key`, anchor, 'DUPLICATE_KEY',
+          `Doppeltes Unterfeld „${sf.key}".`))
+      }
+      subKeys.add(sf.key)
+      if (!WIDGETS_SUB.includes(sf.widget)) {
+        out.push(err(`${p}.item.${j}.widget`, anchor, 'UNSUPPORTED_WIDGET',
+          `Unterfeld-Typ „${sf.widget}" ist hier nicht erlaubt.`))
+      }
+      if (sf.widget === 'server_stamped' && sf.value !== 'actor' && sf.value !== 'now') {
+        out.push(err(`${p}.item.${j}.value`, anchor, 'INVALID',
+          'Systemstempel braucht die Quelle „actor" oder „now".'))
+      }
+    })
+
+    if (f.visibility?.confidential && f.visibility.visibleToGroups.length === 0) {
+      out.push(err(`${p}.visibility`, anchor, 'REQUIRED',
+        'Vertrauliche Felder brauchen mindestens eine berechtigte Fachabteilung.'))
+    }
+    f.visibility?.visibleToGroups.forEach((g) => {
+      if (knownGroupIds && !knownGroupIds.has(g)) {
+        out.push(warn(`${p}.visibility`, anchor, 'UNKNOWN_GROUP',
+          `Unbekannte Fachabteilung „${g}" in der Sichtbarkeit.`))
+      }
+    })
+    if (f.computed?.op === 'template') {
+      // op=template: die {{feld}}-Platzhalter müssen Katalog-Felder sein.
+      for (const ref of mailFieldRefs(f.computed.template)) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${p}.computed`, anchor, 'UNKNOWN_REF',
+            `Textvorlage verweist auf „${ref}" – dieses Feld gibt es nicht.`))
+        }
+      }
+    } else if (f.computed && !catalog.has(f.computed.from ?? '')) {
+      out.push(err(`${p}.computed`, anchor, 'UNKNOWN_REF',
+        `Abgeleitet aus „${f.computed.from}" – dieses Feld gibt es nicht.`))
+    }
+
+    // ── Directus-Feld (widget=directus/directus_multi + Quelle [+ Auto-Fill]) ──
+    if (f.widget === 'directus' || f.widget === 'directus_multi') {
+      if (!f.directusSource) {
+        out.push(err(`${p}.directusSource`, anchor, 'REQUIRED', 'Directus-Feld braucht eine Quelle.'))
+      }
+      // Mehrfachauswahl kennt keinen Einzel-Snapshot in ein Zielfeld.
+      if (f.widget === 'directus_multi' && f.directusFieldMap.length) {
+        out.push(err(`${p}.directusFieldMap`, anchor, 'INVALID',
+          'Auto-Fill-Zuordnungen sind bei der Mehrfachauswahl nicht möglich.'))
+      }
+      f.directusFieldMap.forEach((b, j) => {
+        if (!b.source || !b.target) {
+          out.push(err(`${p}.directusFieldMap.${j}`, anchor, 'REQUIRED',
+            'Zuordnung braucht Quell-Pfad und Ziel-Feld.'))
+        } else if (b.target === f.key) {
+          out.push(err(`${p}.directusFieldMap.${j}`, anchor, 'INVALID',
+            'Das Ziel darf nicht das Feld selbst sein.'))
+        } else if (!catalog.has(b.target)) {
+          out.push(err(`${p}.directusFieldMap.${j}`, anchor, 'UNKNOWN_REF',
+            `Ziel-Feld „${b.target}" gibt es nicht.`))
+        }
+      })
+    } else if (f.directusSource || f.directusFieldMap.length) {
+      out.push(err(`${p}.directusSource`, anchor, 'INVALID',
+        'Directus-Zuordnung ist nur beim Feldtyp „Directus" möglich.'))
+    }
+
+    // ── Vom Server vergebene Nummer (widget=server_generated + assign) ──
+    if (f.widget === 'server_generated' && !f.assign) {
+      out.push(err(`${p}.assign`, anchor, 'REQUIRED',
+        'Ein vom System vergebener Wert braucht die Angabe, woher die Nummer kommt.'))
+    }
+    if (f.assign) {
+      if (f.widget !== 'server_generated') {
+        out.push(warn(`${p}.assign`, anchor, 'INVALID',
+          `Die Nummernvergabe wirkt nur beim Feldtyp „${WIDGET_LABEL.server_generated}" – `
+          + 'bei diesem Feldtyp bleibt sie wirkungslos.'))
+      }
+      if (f.assign.action !== 'assign_sequence') {
+        out.push(err(`${p}.assign.action`, anchor, 'UNSUPPORTED',
+          `„${f.assign.action}" ist keine Vergabe-Aktion (erlaubt: Nummer aus Nummernkreis).`))
+      }
+      if (!f.assign.counter) {
+        out.push(err(`${p}.assign.counter`, anchor, 'REQUIRED',
+          'Bitte den Nummernkreis angeben, aus dem die Nummer kommt.'))
+      } else if (!SEQUENCE_COUNTERS.includes(f.assign.counter)) {
+        // Der Server lehnt einen unbekannten Nummernkreis ab (KNOWN_COUNTERS) –
+        // deshalb harter Fehler, nicht nur Warnung.
+        out.push(err(`${p}.assign.counter`, anchor, 'UNKNOWN_COUNTER',
+          `Nummernkreis „${f.assign.counter}" ist der Laufzeit unbekannt. `
+          + `Bekannt: ${SEQUENCE_COUNTERS.join(', ')}.`))
+      }
+      // Nummernkreise werden je Firma geführt: companyRef ist Pflicht, muss im
+      // Katalog stehen UND ein Firmen-Feld sein (alles serverseitig hart geprüft).
+      if (!f.assign.companyRef) {
+        out.push(err(`${p}.assign.companyRef`, anchor, 'REQUIRED',
+          'Firmen-Feld fehlt – ohne Firma gibt es keinen Nummernkreis.'))
+      } else if (!catalog.has(f.assign.companyRef)) {
+        out.push(err(`${p}.assign.companyRef`, anchor, 'UNKNOWN_REF',
+          `Firmen-Feld „${f.assign.companyRef}" ist nicht im Katalog.`))
+      } else if (widgetByKey.get(f.assign.companyRef) !== 'company') {
+        out.push(err(`${p}.assign.companyRef`, anchor, 'INVALID',
+          `„${f.assign.companyRef}" muss ein Firmen-Feld sein (Feldtyp „Firma").`))
+      }
+    }
+    const c = f.constraints
+    if (c?.pattern) {
+      try { new RegExp(c.pattern) } catch {
+        out.push(err(`${p}.constraints.pattern`, anchor, 'INVALID', 'Ungültiges Muster (Regex).'))
+      }
+    }
+    if (c && c.minLength != null && c.maxLength != null && c.minLength > c.maxLength) {
+      out.push(err(`${p}.constraints`, anchor, 'INVALID', 'Mindestlänge größer als Maximallänge.'))
+    }
+    if (c && c.min != null && c.max != null && c.min > c.max) {
+      out.push(err(`${p}.constraints`, anchor, 'INVALID', 'Minimum größer als Maximum.'))
+    }
+    if (c && c.minDate && c.maxDate && c.minDate > c.maxDate) {
+      out.push(err(`${p}.constraints`, anchor, 'INVALID', 'Von-Datum liegt nach dem Bis-Datum.'))
+    }
+  })
+
+  // ── Phasen ──
+  if (d.phases.length === 0) {
+    out.push(err('phases', TOP, 'REQUIRED', 'Der Prozess braucht mindestens eine Phase.'))
+  }
+  const starts = d.phases.filter((p) => p.kind === 'start')
+  if (d.phases.length && starts.length !== 1) {
+    out.push(err('phases', TOP, 'MISSING_START',
+      'Der Prozess braucht genau eine Start-Phase.'))
+  }
+  if (d.phases.length && d.phases[0].kind !== 'start') {
+    out.push(err('phases.0', 'pe-phase-0', 'START_NOT_FIRST',
+      'Die Start-Phase muss die erste Phase sein.'))
+  }
+
+  const seenPhaseKeys = new Set<string>()
+  const autoIds = new Map<string, number>()
+  const countAuto = (id: string) => autoIds.set(id, (autoIds.get(id) ?? 0) + 1)
+  d.automations.forEach((a) => countAuto(a.id))
+
+  const roComputed = new Set(d.fields.filter((f) => f.computed && !f.overridable).map((f) => f.key))
+  /** Felder, die ausschließlich der Server füllt – in keiner Phase beschreibbar. */
+  const serverAssigned = new Set(d.fields.filter((f) => f.widget === 'server_generated')
+    .map((f) => f.key))
+  const phaseKeys = d.phases.map((ph) => ph.key)
+
+  // Ein server_generated-Feld wird beim Abschluss der ERSTEN Phase vergeben, die
+  // es führt. Bindet es keine Phase ein, bekommt es nie eine Nummer.
+  serverAssigned.forEach((k) => {
+    if (!d.phases.some((ph) => ph.fields.some((fr) => fr.ref === k))) {
+      const idx = d.fields.findIndex((f) => f.key === k)
+      // Server lehnt das ab (kein Vergabe-Zeitpunkt) → harter Fehler.
+      out.push(err(`fields.${idx}`, `pe-catalog-${idx}`, 'NEVER_ASSIGNED',
+        `„${k}" wird vom System vergeben, ist aber in keiner Phase eingebunden – `
+        + 'damit bekommt es nie eine Nummer.'))
+    }
+  })
+
+  d.phases.forEach((ph, i) => {
+    const anchor = `pe-phase-${i}`
+    const p = `phases.${i}`
+    if (!ph.key) out.push(err(`${p}.key`, anchor, 'REQUIRED', 'Phase braucht einen Schlüssel.'))
+    else if (!isValidPhaseKey(ph.key)) {
+      out.push(err(`${p}.key`, anchor, 'INVALID_KEY',
+        `Phasen-Schlüssel „${ph.key}": nur a–z, 0–9 und „_".`))
+    } else if (seenPhaseKeys.has(ph.key)) {
+      out.push(err(`${p}.key`, anchor, 'DUPLICATE_KEY', `Doppelter Phasen-Schlüssel „${ph.key}".`))
+    }
+    seenPhaseKeys.add(ph.key)
+
+    if (!PHASE_KINDS.includes(ph.kind)) {
+      out.push(err(`${p}.kind`, anchor, 'UNSUPPORTED', `Phasen-Art „${ph.kind}" ist nicht verfügbar.`))
+    }
+    if (!PHASE_VIEWS.includes(ph.view)) {
+      out.push(err(`${p}.view`, anchor, 'UNSUPPORTED', `Ansicht „${ph.view}" ist nicht verfügbar.`))
+    }
+    if (ph.enterStatus && !ENTER_STATUS.includes(ph.enterStatus)) {
+      out.push(err(`${p}.enterStatus`, anchor, 'UNSUPPORTED',
+        `Status „${ph.enterStatus}" ist hier nicht erlaubt (terminale Status sperren das Ticket).`))
+    }
+    if (ph.responsibility.resetOnDescriptionChange) {
+      out.push(err(`${p}.responsibility`, anchor, 'UNSUPPORTED',
+        'Zurücksetzen bei Änderung ist noch nicht umgesetzt.'))
+    }
+
+    // ── Freigabe-Phase: Art, Ansicht und Block gehören zusammen ──
+    const ap = ph.approval
+    if (ph.kind === 'approval' && !ap) {
+      out.push(err(`${p}.approval`, anchor, 'REQUIRED',
+        'Eine Freigabe-Phase braucht eine Frage und das Verhalten bei „Nein".'))
+    }
+    if (ph.kind !== 'approval' && ap) {
+      out.push(err(`${p}.approval`, anchor, 'INVALID',
+        'Freigabe-Angaben sind nur bei der Phasen-Art „Freigabe" erlaubt.'))
+    }
+    if (ph.view === 'approval' && ph.kind !== 'approval') {
+      out.push(err(`${p}.view`, anchor, 'INVALID',
+        'Die Ansicht „Freigabe" passt nur zur Phasen-Art „Freigabe".'))
+    }
+    if (ap) {
+      if (!ap.question?.trim()) {
+        out.push(err(`${p}.approval.question`, anchor, 'REQUIRED',
+          'Ohne Frage weiß niemand, worüber entschieden wird.'))
+      }
+      if (!isValidDuration(ap.linkMaxAge)) {
+        out.push(err(`${p}.approval.linkMaxAge`, anchor, 'INVALID',
+          `Ungültige Gültigkeit „${ap.linkMaxAge}" (z. B. P7D, PT12H; Monate/Jahre `
+          + 'nicht möglich).'))
+      }
+      for (const [feld, lbl] of [[ap.decisionField, 'Entscheidungs-Feld'],
+        [ap.reasonField, 'Begründungs-Feld']] as const) {
+        if (feld && !catalog.has(feld)) {
+          out.push(err(`${p}.approval`, anchor, 'UNKNOWN_REF',
+            `${lbl} „${feld}" ist nicht im Katalog.`))
+        }
+      }
+      // Mail-Vorlage: jede {{variable}} muss ein Katalog-Feld sein (Spezial-Vars
+      // title/id sind immer erlaubt). Sonst bliebe in der Mail eine leere Stelle.
+      for (const ref of mailFieldRefs(ap.emailBody)) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${p}.approval.emailBody`, anchor, 'UNKNOWN_REF',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
+          continue
+        }
+        // Nicht-skalare Felder lassen sich nicht als Text in die Mail setzen.
+        const wf = d.fields.find((f) => f.key === ref)?.widget
+        if (wf === 'collection' || wf === 'attachment') {
+          out.push(err(`${p}.approval.emailBody`, anchor, 'INVALID',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld vom Typ `
+            + `„${WIDGET_LABEL[wf] ?? wf}", das sich nicht als Text einsetzen lässt.`))
+        }
+      }
+      // Kollision Spezial-Variable ↔ Feld-Key (sonst gewänne still die Spezial-Var).
+      for (const sv of mailVariables(ap.emailBody)) {
+        if ((SPECIAL_MAIL_VARS as readonly string[]).includes(sv) && catalog.has(sv)) {
+          out.push(err(`${p}.approval.emailBody`, anchor, 'INVALID',
+            `„{{${sv}}}" ist als Mail-Variable reserviert `
+            + `(${sv === 'title' ? 'Auftragstitel' : 'Auftragsnummer'}), es gibt aber ein Feld `
+            + `mit diesem Schlüssel. Bitte das Feld umbenennen.`))
+        }
+      }
+      if (!isValidOnReject(ap.onReject)) {
+        out.push(err(`${p}.approval.onReject`, anchor, 'INVALID',
+          `Verhalten bei „Nein" ist unbekannt: „${ap.onReject}".`))
+      } else {
+        const ziel = backToTarget(ap.onReject)
+        if (ziel && !phaseKeys.includes(ziel)) {
+          out.push(err(`${p}.approval.onReject`, anchor, 'UNKNOWN_REF',
+            `Rücksprung auf „${ziel}" – diese Phase gibt es nicht.`))
+        } else if (ziel && phaseKeys.indexOf(ziel) >= i) {
+          // Ein Sprung nach vorn (oder auf sich selbst) würde Arbeit überspringen.
+          out.push(err(`${p}.approval.onReject`, anchor, 'INVALID',
+            `Rücksprung auf „${ziel}": das Ziel muss VOR dieser Phase liegen.`))
+        }
+      }
+    }
+
+    // Dokument-Phase: Ansicht „Dokument" und mindestens eine Vorlage gehören
+    // zusammen; jede {{variable}} muss ein Katalog-Feld sein (wie serverseitig).
+    const docs = ph.documents ?? []
+    if ((ph.view === 'document') !== (docs.length > 0)) {
+      out.push(err(`${p}.view`, anchor, 'INVALID',
+        'Die Ansicht „Dokument" und mindestens eine Dokument-Vorlage gehören zusammen – '
+        + 'entweder beides oder keins.'))
+    }
+    for (const doc of docs) {
+      for (const ref of [...mailFieldRefs(doc.templateHtml), ...mailFieldRefs(doc.filename)]) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${p}.document`, anchor, 'UNKNOWN_REF',
+            `Vorlagen-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
+        }
+      }
+      // Marker-Zuordnungen (.docx/PDF-Vorlage): jedes zugeordnete Feld muss existieren
+      // und als Text einsetzbar sein (collection/attachment lehnt der Server ab).
+      // Die Sonderquelle @today (aktuelles Datum) ist kein Katalog-Feld.
+      for (const [marker, binding] of Object.entries(doc.bindings ?? {})) {
+        const fieldKey = binding?.field
+        if (!fieldKey || fieldKey === '@today') continue
+        if (!catalog.has(fieldKey)) {
+          out.push(err(`${p}.document`, anchor, 'UNKNOWN_REF',
+            `Vorlagen-Marker „{{${marker}}}" ist einem Feld zugeordnet, das es nicht gibt.`))
+          continue
+        }
+        // Nicht einsetzbar: Anhang/Wiederholgruppe (kein Text) und Personen-/
+        // Gruppenauswahl (nur rohe ID – serverseitig nicht zum Namen aufgelöst).
+        const bf = d.fields.find((f) => f.key === fieldKey)
+        if (bf && (bf.widget === 'collection' || bf.widget === 'attachment'
+                   || bf.widget === 'user' || bf.widget === 'group'
+                   || bf.optionsSource === 'users' || bf.optionsSource === 'groups')) {
+          out.push(err(`${p}.document`, anchor, 'INVALID',
+            `Vorlagen-Marker „{{${marker}}}" verweist auf ein Feld, das sich nicht `
+            + 'in das Dokument einsetzen lässt (Anhang, Wiederholgruppe oder '
+            + 'Personen-/Gruppenauswahl).'))
+        }
+      }
+    }
+
+    // ── Eskalation / Erinnerungen ──
+    const esc = ph.escalation
+    if (esc) {
+      if (ph.kind === 'end') {
+        out.push(err(`${p}.escalation`, anchor, 'INVALID',
+          'In einer Abschluss-Phase gibt es keine Erinnerungen (dort wartet nichts mehr).'))
+      }
+      if (esc.enabled && esc.stages.length === 0) {
+        out.push(err(`${p}.escalation`, anchor, 'REQUIRED',
+          'Die Eskalation ist aktiv, hat aber keine Stufe – bitte eine Stufe hinzufügen '
+          + 'oder die Eskalation ausschalten.'))
+      }
+      esc.stages.forEach((st, j) => {
+        const sp = `${p}.escalation.stages.${j}`
+        if (!(st.afterDays > 0)) {
+          out.push(err(`${sp}.afterDays`, anchor, 'INVALID',
+            'Die Frist muss mindestens 1 Tag sein.'))
+        } else if (st.afterDays > ESCALATION_MAX_DAYS) {
+          out.push(err(`${sp}.afterDays`, anchor, 'INVALID',
+            `Die Frist darf ${ESCALATION_MAX_DAYS} Tage nicht überschreiten.`))
+        }
+        if (st.repeatDays !== null && !(st.repeatDays > 0)) {
+          out.push(err(`${sp}.repeatDays`, anchor, 'INVALID',
+            'Die Wiederholung muss mindestens 1 Tag sein (oder leer für einmalig).'))
+        } else if (st.repeatDays !== null && st.repeatDays > ESCALATION_MAX_DAYS) {
+          out.push(err(`${sp}.repeatDays`, anchor, 'INVALID',
+            `Die Wiederholung darf ${ESCALATION_MAX_DAYS} Tage nicht überschreiten.`))
+        }
+        if (!st.recipients.length) {
+          out.push(err(`${sp}.recipients`, anchor, 'REQUIRED',
+            'Bitte mindestens eine empfangende Person oder Stelle wählen.'))
+        }
+        st.recipients.forEach((tok) => checkRecipientToken(tok, `${sp}.recipients`, anchor))
+      })
+    }
+
+    const r = ph.responsibility
+    if (!RESPONSIBILITY_KINDS.includes(r.kind)) {
+      out.push(err(`${p}.responsibility.kind`, anchor, 'UNSUPPORTED',
+        `Zuständigkeit „${r.kind}" ist nicht verfügbar.`))
+    }
+    if (r.kind === 'group' && !r.group) {
+      out.push(err(`${p}.responsibility.group`, anchor, 'REQUIRED', 'Bitte eine Fachabteilung wählen.'))
+    }
+    if (r.kind === 'user' && !r.user) {
+      out.push(err(`${p}.responsibility.user`, anchor, 'REQUIRED', 'Bitte eine Person wählen.'))
+    }
+    // Zuständigkeit aus einem FELD: die Quelle muss existieren UND vom richtigen
+    // Typ sein – sonst stünde dort später irgendein Text statt einer Kennung.
+    // Ohne gültige Quelle hätte die Phase niemanden; der Server lehnt sie ab.
+    const AUS_FELD = {
+      assignable: { widget: 'user' as const, was: 'Personen-Feld' },
+      group_from_field: { widget: 'group' as const, was: 'Fachabteilungs-Feld' },
+    }
+    const erwartet = r.kind === 'assignable' || r.kind === 'group_from_field'
+      ? AUS_FELD[r.kind] : null
+    if (erwartet) {
+      const src = d.fields.find((f) => f.key === r.fromField)
+      if (!r.fromField) {
+        out.push(err(`${p}.responsibility.fromField`, anchor, 'REQUIRED',
+          `Bitte das ${erwartet.was} angeben, aus dem die Zuständigkeit kommt.`))
+      } else if (!src) {
+        out.push(err(`${p}.responsibility.fromField`, anchor, 'UNKNOWN_REF',
+          `Feld „${r.fromField}" ist nicht im Katalog.`))
+      } else if (src.widget !== erwartet.widget) {
+        out.push(err(`${p}.responsibility.fromField`, anchor, 'INVALID',
+          `„${r.fromField}" muss ein ${erwartet.was} sein `
+          + `(aktuell „${WIDGET_LABEL[src.widget] ?? src.widget}").`))
+      }
+    }
+    if (r.kind === 'departments' && r.rule.length === 0) {
+      out.push(err(`${p}.responsibility.rule`, anchor, 'REQUIRED',
+        'Mindestens eine Fachabteilung angeben.'))
+    }
+    r.rule.forEach((dr, j) => {
+      if (!dr.group) {
+        out.push(err(`${p}.responsibility.rule.${j}`, anchor, 'REQUIRED', 'Fachabteilung fehlt.'))
+      } else if (knownGroupIds && !knownGroupIds.has(dr.group)) {
+        out.push(warn(`${p}.responsibility.rule.${j}`, anchor, 'UNKNOWN_GROUP',
+          `Unbekannte Fachabteilung „${dr.group}".`))
+      }
+      if (dr.when && !isWellFormedCondition(dr.when)) {
+        out.push(err(`${p}.responsibility.rule.${j}.when`, anchor, 'INVALID_DSL',
+          'Bedingung ist nicht wohlgeformt.'))
+      }
+      dslRefs(dr.when).forEach((ref) => {
+        if (!catalog.has(ref)) {
+          out.push(err(`${p}.responsibility.rule.${j}.when`, anchor, 'UNKNOWN_REF',
+            `Bedingung verweist auf unbekanntes Feld „${ref}".`))
+        }
+      })
+    })
+    if (knownGroupIds && r.kind === 'group' && r.group && !knownGroupIds.has(r.group)) {
+      out.push(warn(`${p}.responsibility.group`, anchor, 'UNKNOWN_GROUP',
+        `Unbekannte Fachabteilung „${r.group}".`))
+    }
+
+    // Felder der Phase
+    const seenRefs = new Set<string>()
+    ph.fields.forEach((fr, j) => {
+      const fp = `${p}.fields.${j}`
+      const fanchor = `pe-phase-${i}-field-${j}`
+      if (!catalog.has(fr.ref)) {
+        out.push(err(`${fp}.ref`, fanchor, 'UNKNOWN_REF',
+          `Feld „${fr.ref}" ist nicht im Katalog.`))
+      }
+      if (seenRefs.has(fr.ref)) {
+        out.push(warn(`${fp}.ref`, fanchor, 'DUPLICATE_REF',
+          `Feld „${fr.ref}" ist in dieser Phase mehrfach eingebunden.`))
+      }
+      seenRefs.add(fr.ref)
+      const beschreibbar = fr.mode === 'editable' || fr.mode === 'append_only'
+      if (roComputed.has(fr.ref) && beschreibbar) {
+        out.push(err(`${fp}.mode`, fanchor, 'COMPUTED_NOT_EDITABLE',
+          `„${fr.ref}" wird berechnet und darf nicht bearbeitbar sein.`))
+      }
+      if (serverAssigned.has(fr.ref) && beschreibbar) {
+        out.push(err(`${fp}.mode`, fanchor, 'SERVER_FIELD_NOT_EDITABLE',
+          `„${fr.ref}" wird vom System vergeben und darf nicht bearbeitbar sein `
+          + '(nur „Nur lesen" oder „Ausgeblendet").'))
+      }
+      for (const [cond, label] of [[fr.requiredWhen, 'Pflicht-Bedingung'],
+        [fr.visibleWhen, 'Anzeige-Bedingung']] as const) {
+        if (!cond) continue
+        if (!isWellFormedCondition(cond)) {
+          out.push(err(fp, fanchor, 'INVALID_DSL', `${label} ist nicht wohlgeformt.`))
+        }
+        dslRefs(cond).forEach((ref) => {
+          if (!catalog.has(ref)) {
+            out.push(err(fp, fanchor, 'UNKNOWN_REF',
+              `${label} verweist auf unbekanntes Feld „${ref}".`))
+          }
+        })
+      }
+    })
+
+    // Layout: darf nur Felder dieser Phase platzieren, jedes höchstens einmal.
+    // Nicht platzierte Felder sind kein Fehler (sie landen im Sammel-Abschnitt),
+    // aber ein Hinweis – sonst wundert sich später jemand über die Reihenfolge.
+    const phaseRefs = new Set(ph.fields.map((fr) => fr.ref))
+    const placed = new Set<string>()
+    ph.layout.forEach((sec, si) => {
+      const lanchor = `pe-layout-${si}`
+      sec.items.forEach((it, ii) => {
+        const lp = `${p}.layout.${si}.items.${ii}`
+        if (it.type === 'field') {
+          if (!phaseRefs.has(it.ref)) {
+            out.push(err(lp, lanchor, 'UNKNOWN_REF',
+              `„${it.ref}" ist in dieser Phase nicht eingebunden.`))
+          }
+          if (placed.has(it.ref)) {
+            out.push(err(lp, lanchor, 'DUPLICATE_REF',
+              `„${it.ref}" ist mehrfach platziert.`))
+          }
+          placed.add(it.ref)
+        } else if (it.type === 'note' && !it.text.trim()) {
+          out.push(warn(lp, lanchor, 'EMPTY', 'Leere Hinweisbox.'))
+        } else if (it.type === 'heading' && !it.text.trim()) {
+          out.push(warn(lp, lanchor, 'EMPTY', 'Zwischen-Überschrift ohne Text.'))
+        }
+      })
+    })
+    if (ph.layout.length) {
+      // Versteckte Felder (mode='hidden') tragen nur einen Wert und werden im
+      // Formular nie gerendert – sie brauchen keinen Layout-Platz und landen
+      // auch nicht sichtbar unter „Weitere Angaben".
+      const hidden = new Set(ph.fields.filter((fr) => fr.mode === 'hidden').map((fr) => fr.ref))
+      const missing = [...phaseRefs].filter((r) => !placed.has(r) && !hidden.has(r))
+      if (missing.length) {
+        out.push(warn(`${p}.layout`, `pe-phase-${i}`, 'UNPLACED',
+          `${missing.length} Feld(er) sind nicht im Layout platziert und erscheinen `
+          + `hinten unter „Weitere Angaben": ${missing.slice(0, 5).join(', ')}`
+          + (missing.length > 5 ? ' …' : '')))
+      }
+    }
+
+    // Phasen-Constraints
+    ph.constraints.forEach((c, j) => {
+      const cp = `${p}.constraints.${j}`
+      if (!c.message?.trim()) {
+        out.push(err(cp, anchor, 'REQUIRED', 'Regel braucht eine Meldung.'))
+      }
+      if (!isWellFormedCondition(c.when)) {
+        out.push(err(cp, anchor, 'INVALID_DSL', 'Regel-Bedingung ist nicht wohlgeformt.'))
+      }
+      dslRefs(c.when).forEach((ref) => {
+        if (!catalog.has(ref)) {
+          out.push(err(cp, anchor, 'UNKNOWN_REF', `Regel verweist auf unbekanntes Feld „${ref}".`))
+        }
+      })
+    })
+
+    ph.automations.forEach((a) => countAuto(a.id))
+  })
+
+  // ── Automationen (prozessweit + je Phase) ──
+  const allAutos = [
+    ...d.automations.map((a, i) => ({ a, path: `automations.${i}`, anchor: `pe-automation-${i}` })),
+    ...d.phases.flatMap((ph, i) => ph.automations.map((a, j) => ({
+      a, path: `phases.${i}.automations.${j}`, anchor: `pe-phase-${i}` }))),
+  ]
+  allAutos.forEach(({ a, path, anchor }) => {
+    if (!a.id?.trim()) out.push(err(`${path}.id`, anchor, 'REQUIRED', 'Automation braucht eine ID.'))
+    else if ((autoIds.get(a.id) ?? 0) > 1) {
+      out.push(err(`${path}.id`, anchor, 'DUPLICATE_KEY', `Doppelte Automations-ID „${a.id}".`))
+    }
+    const t = a.trigger
+    if (t.type === 'timer') {
+      if (!t.after) out.push(err(`${path}.trigger.after`, anchor, 'REQUIRED', 'Zeitpunkt fehlt.'))
+      else if (!isValidDuration(t.after)) {
+        out.push(err(`${path}.trigger.after`, anchor, 'INVALID',
+          `Ungültige Dauer „${t.after}" (z.B. P7D, PT12H; Monate/Jahre nicht möglich).`))
+      }
+      if (t.repeat && !isValidDuration(t.repeat)) {
+        out.push(err(`${path}.trigger.repeat`, anchor, 'INVALID',
+          `Ungültige Wiederholung „${t.repeat}".`))
+      }
+    } else if (t.after || t.repeat) {
+      out.push(err(`${path}.trigger`, anchor, 'INVALID',
+        'Zeitangaben sind nur bei zeitgesteuerten Automationen erlaubt.'))
+    }
+    if (t.type === 'on_field_change') {
+      if (!t.field) out.push(err(`${path}.trigger.field`, anchor, 'REQUIRED', 'Feld fehlt.'))
+      else if (!catalog.has(t.field)) {
+        out.push(err(`${path}.trigger.field`, anchor, 'UNKNOWN_REF',
+          `Unbekanntes Feld „${t.field}".`))
+      }
+    }
+    if (a.guard) {
+      if (!isWellFormedCondition(a.guard)) {
+        out.push(err(`${path}.guard`, anchor, 'INVALID_DSL', 'Bedingung ist nicht wohlgeformt.'))
+      }
+      dslRefs(a.guard).forEach((ref) => {
+        if (!catalog.has(ref)) {
+          out.push(err(`${path}.guard`, anchor, 'UNKNOWN_REF',
+            `Bedingung verweist auf unbekanntes Feld „${ref}".`))
+        }
+      })
+    }
+    const ac = a.action
+    if (!ACTION_TYPES.includes(ac.type)) {
+      out.push(err(`${path}.action.type`, anchor, 'UNSUPPORTED',
+        `Aktion „${ac.type}" ist nicht verfügbar.`))
+    }
+    if ((ac.type === 'notify' || ac.type === 'escalate')) {
+      const toks = (ac.recipients && ac.recipients.length) ? ac.recipients
+        : (ac.to ? [ac.to] : [])
+      if (!toks.length) out.push(err(`${path}.action.to`, anchor, 'REQUIRED', 'Empfänger:in fehlt.'))
+      else toks.forEach((tok) => checkRecipientToken(tok, `${path}.action.to`, anchor))
+      // Mail-Vorlage: jede {{variable}} muss ein einsetzbares Katalog-Feld sein
+      // (analog approval.emailBody) – sonst bliebe in der Mail eine leere Stelle.
+      for (const ref of mailFieldRefs(ac.emailBody)) {
+        if (!catalog.has(ref)) {
+          out.push(err(`${path}.action.emailBody`, anchor, 'UNKNOWN_REF',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld, das es nicht gibt.`))
+          continue
+        }
+        const wf = d.fields.find((f) => f.key === ref)?.widget
+        if (wf === 'collection' || wf === 'attachment') {
+          out.push(err(`${path}.action.emailBody`, anchor, 'INVALID',
+            `Mail-Variable „{{${ref}}}" verweist auf ein Feld vom Typ `
+            + `„${WIDGET_LABEL[wf] ?? wf}", das sich nicht als Text einsetzen lässt.`))
+        }
+      }
+      for (const sv of mailVariables(ac.emailBody)) {
+        if ((SPECIAL_MAIL_VARS as readonly string[]).includes(sv) && catalog.has(sv)) {
+          out.push(err(`${path}.action.emailBody`, anchor, 'INVALID',
+            `„{{${sv}}}" ist als Mail-Variable reserviert `
+            + `(${sv === 'title' ? 'Auftragstitel' : 'Auftragsnummer'}), es gibt aber ein Feld `
+            + `mit diesem Schlüssel. Bitte das Feld umbenennen.`))
+        }
+      }
+    }
+    if (ac.type === 'set_field') {
+      if (!ac.field) out.push(err(`${path}.action.field`, anchor, 'REQUIRED', 'Feld fehlt.'))
+      else if (!catalog.has(ac.field)) {
+        out.push(err(`${path}.action.field`, anchor, 'UNKNOWN_REF',
+          `Unbekanntes Feld „${ac.field}".`))
+      }
+      if (ac.value === null || ac.value === undefined) {
+        out.push(err(`${path}.action.value`, anchor, 'REQUIRED', 'Wert fehlt.'))
+      }
+    }
+    if (ac.type === 'set_status' && !ENTER_STATUS.includes(String(ac.value))) {
+      out.push(err(`${path}.action.value`, anchor, 'INVALID',
+        'Nur nicht-terminale Status sind erlaubt.'))
+    }
+    if (ac.type === 'set_priority' && !PRIORITIES.includes(String(ac.value))) {
+      out.push(err(`${path}.action.value`, anchor, 'INVALID', 'Unbekannte Priorität.'))
+    }
+    if (ac.type === 'assign_sequence') {
+      // Nummernvergabe ist KEINE Automation – der Server lehnt sie immer mit 422
+      // ab. Sie wird als FELD eingerichtet (Feldtyp „Vom System vergeben" mit
+      // Nummernkreis), nicht als Aktion.
+      out.push(err(`${path}.action.type`, anchor, 'UNSUPPORTED',
+        'Nummernvergabe ist keine Automation. Sie wird als Feld eingerichtet '
+        + '(Feldtyp „Vom System vergeben" mit Nummernkreis).'))
+    }
+    // onError=block wirkt nur beim Auslöser „Fachabteilung abgeschlossen"
+    // (on_department_done); sonst schaltet die Phase trotzdem weiter → Server 422.
+    const onErr = ac.type === 'directus_write' ? ac.directus?.onError
+      : ac.type === 'http_request' ? ac.http?.onError : undefined
+    if (onErr === 'block' && a.trigger.type !== 'on_department_done') {
+      out.push(err(`${path}.action`, anchor, 'INVALID',
+        'Bei Fehler „Blockieren" wirkt nur mit dem Auslöser „Fachabteilung '
+        + 'abgeschlossen". Sonst schaltet die Phase trotzdem weiter – Auslöser '
+        + 'ändern oder „Weiterlaufen" wählen.'))
+    }
+    if (ac.type === 'directus_write') {
+      const dw = ac.directus
+      if (!dw) {
+        out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-Konfiguration fehlt.'))
+      } else {
+        if (!dw.collection?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-Collection fehlt.'))
+        }
+        if (!dw.idField?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'id-Feld fehlt.'))
+        } else if (!catalog.has(dw.idField)) {
+          out.push(err(`${path}.action`, anchor, 'UNKNOWN_REF', `id-Feld „${dw.idField}" gibt es nicht.`))
+        } else if (['collection', 'attachment', 'server_generated'].includes(widgetByKey.get(dw.idField) ?? '')) {
+          out.push(err(`${path}.action`, anchor, 'INVALID',
+            'Das id-Feld muss ein einfaches Textfeld sein (kein Anhang/Wiederholgruppe/Systemnummer).'))
+        }
+        if ((dw.operation === 'create' || dw.operation === 'update') && dw.fieldMap.length === 0) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED',
+            'Mindestens eine Feld-Zuordnung nötig.'))
+        }
+        dw.fieldMap.forEach((b, j) => {
+          const hasValue = b.value !== undefined && b.value !== null && b.value !== ''
+          const hasSource = !!b.source
+          // Genau EINES: Prozess-Feld ODER fester Wert (spiegelt die Server-Regel).
+          if (hasValue === hasSource) {
+            out.push(err(`${path}.action.directus.${j}`, anchor, 'INVALID',
+              'Zuordnung braucht genau eines: ein Prozess-Feld oder einen festen Wert.'))
+          } else if (!hasValue && !catalog.has(b.source as string)) {
+            out.push(err(`${path}.action.directus.${j}`, anchor, 'UNKNOWN_REF',
+              `Quell-Feld „${b.source}" gibt es nicht.`))
+          }
+          if (!b.target?.trim()) {
+            out.push(err(`${path}.action.directus.${j}`, anchor, 'REQUIRED', 'Directus-Zielfeld fehlt.'))
+          }
+          // Bedingung (when): das getestete Prozess-Feld muss existieren.
+          if (b.when) {
+            if (!b.when.field?.trim()) {
+              out.push(err(`${path}.action.directus.${j}`, anchor, 'REQUIRED',
+                'Bedingung braucht ein Prozess-Feld.'))
+            } else if (!catalog.has(b.when.field)) {
+              out.push(err(`${path}.action.directus.${j}`, anchor, 'UNKNOWN_REF',
+                `Bedingungs-Feld „${b.when.field}" gibt es nicht.`))
+            }
+          }
+          // Spiegelt die Server-Regel: „als Firmen-ID auflösen" nur bei widget=company
+          // (nur für ein Prozess-Feld, nicht bei einem festen Wert).
+          if (!hasValue && b.resolve === 'company_directus_id' && widgetByKey.get(b.source as string) !== 'company') {
+            out.push(err(`${path}.action.directus.${j}`, anchor, 'INVALID',
+              '„Als alphacore-Firmen-ID auflösen" ist nur für ein Firmen-Feld erlaubt.'))
+          }
+        })
+        // Geschäftsschlüssel (get-or-create): nur bei create + nur auf ein gemapptes
+        // Directus-Zielfeld (spiegelt die Server-Regel).
+        if (dw.matchField) {
+          const matchBindings = dw.fieldMap.filter((b) => b.target === dw.matchField)
+          if (dw.operation !== 'create') {
+            out.push(err(`${path}.action`, anchor, 'INVALID',
+              'Der Doppelanlage-Schutz (Geschäftsschlüssel) ist nur bei „Anlegen" möglich.'))
+          } else if (!matchBindings.length) {
+            out.push(err(`${path}.action`, anchor, 'INVALID',
+              `Der Geschäftsschlüssel „${dw.matchField}" muss ein zugeordnetes Directus-Zielfeld sein.`))
+          } else if (matchBindings.some((b) => b.resolve)) {
+            out.push(err(`${path}.action`, anchor, 'INVALID',
+              `Der Geschäftsschlüssel „${dw.matchField}" darf kein aufgelöstes Feld sein.`))
+          } else if (matchBindings.some((b) => b.value !== undefined && b.value !== null && b.value !== '')) {
+            out.push(err(`${path}.action`, anchor, 'INVALID',
+              `Der Geschäftsschlüssel „${dw.matchField}" darf kein fester Wert sein.`))
+          }
+        }
+      }
+    }
+    if (ac.type === 'company_email') {
+      // Firmenmail wird beim Verlassen der Phase gebildet und gegen Directus geprüft;
+      // bei Konflikt blockiert der Server die Phase (spiegelt die Server-Regeln).
+      const em = ac.email
+      if (!em) {
+        out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Firmenmail-Konfiguration fehlt.'))
+      } else {
+        if (a.trigger.type !== 'on_exit') {
+          out.push(err(`${path}.action`, anchor, 'INVALID',
+            'Die Firmenmail wird nur beim Verlassen der Phase gebildet '
+            + '(Auslöser „Beim Verlassen der Phase").'))
+        }
+        const emailRefs: Array<[string, string]> = [
+          ['Zielfeld (Firmenmail)', em.targetField],
+          ['Vorname-Feld', em.firstNameField],
+          ['Nachname-Feld', em.lastNameField],
+          ['Firmen-Feld', em.companyField],
+          ['Konflikt-Feld', em.conflictField],
+        ]
+        emailRefs.forEach(([label, key]) => {
+          if (!key?.trim()) {
+            out.push(err(`${path}.action`, anchor, 'REQUIRED', `${label} fehlt.`))
+          } else if (!catalog.has(key)) {
+            out.push(err(`${path}.action`, anchor, 'UNKNOWN_REF',
+              `${label}: Feld „${key}" gibt es nicht.`))
+          }
+        })
+        if (!em.collection?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-Collection fehlt.'))
+        }
+        if (!em.emailField?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-E-Mail-Feld fehlt.'))
+        }
+      }
+    }
+    if (ac.type === 'http_request') {
+      const h = ac.http
+      if (!h) {
+        out.push(err(`${path}.action`, anchor, 'REQUIRED', 'API-Konfiguration fehlt.'))
+      } else {
+        const u = (h.url ?? '').trim()
+        if (!u) {
+          out.push(err(`${path}.action.http.url`, anchor, 'REQUIRED', 'Adresse (URL) fehlt.'))
+        } else if (!/^https?:\/\//i.test(u)) {
+          out.push(err(`${path}.action.http.url`, anchor, 'INVALID',
+            'Die Adresse muss mit http:// oder https:// beginnen.'))
+        }
+        if (!(h.timeoutSeconds >= 1 && h.timeoutSeconds <= 60)) {
+          out.push(err(`${path}.action.http.timeoutSeconds`, anchor, 'INVALID',
+            'Zeitlimit muss zwischen 1 und 60 Sekunden liegen.'))
+        }
+        h.headers.forEach((hd, j) => {
+          if (!hd.name?.trim()) {
+            out.push(err(`${path}.action.http.headers.${j}`, anchor, 'REQUIRED',
+              'Header-Name fehlt.'))
+          }
+        })
+      }
+    }
+  })
+
+  // on_department_done: nur als Phasen-Automation einer Fachabteilungs-Phase; die
+  // Gruppe muss eine Fachabteilung genau dieser Phase sein.
+  d.automations.forEach((a, i) => {
+    if (a.trigger.type === 'on_department_done') {
+      out.push(err(`automations.${i}.trigger`, `pe-automation-${i}`, 'INVALID',
+        'on_department_done gibt es nur als Phasen-Automation.'))
+    }
+  })
+  d.phases.forEach((ph, i) => {
+    const isDept = ph.responsibility.kind === 'departments'
+    const deptGroups = new Set((ph.responsibility.rule ?? []).map((r) => r.group))
+    ph.automations.forEach((a, j) => {
+      if (a.trigger.type !== 'on_department_done') return
+      const anchor = `pe-phase-${i}`
+      const p = `phases.${i}.automations.${j}`
+      if (!isDept) {
+        out.push(err(`${p}.trigger`, anchor, 'INVALID',
+          'on_department_done gibt es nur in einer Fachabteilungs-Phase.'))
+      } else if (!a.trigger.group) {
+        out.push(err(`${p}.trigger.group`, anchor, 'REQUIRED', 'Fachabteilung fehlt.'))
+      } else if (!deptGroups.has(a.trigger.group)) {
+        out.push(err(`${p}.trigger.group`, anchor, 'INVALID',
+          'Diese Fachabteilung gehört nicht zur Phase.'))
+      }
+    })
+  })
+
+  return out
+}
+
+export function errorCount(issues: ProcessIssue[]): number {
+  return issues.filter((i) => i.severity === 'error').length
+}

@@ -1,0 +1,420 @@
+/**
+ * Normalisierung einer ProcessDefinition auf die vollständige Form
+ * (jeder Key vorhanden, `null` statt fehlend).
+ *
+ * Warum: Der Server liefert dank `model_dump(by_alias=True)` immer ALLE Keys
+ * zurück. Vergleicht man einen selbst gebauten Entwurf naiv mit der Server-
+ * Antwort, ist er sofort „dirty", obwohl sich nichts geändert hat. Normalisieren
+ * beide Seiten → stabiler Dirty-Vergleich (canonicalJson).
+ *
+ * Außerdem: `computed.from_` (Python-Feldname) wird beim Einlesen akzeptiert,
+ * ausgegeben wird IMMER `from` (der Wire-Name).
+ */
+import type {
+  Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions,
+  DirectusWriteSpec, HttpRequestSpec, EmailSpec, LayoutItem,
+  DocumentSpec, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
+  FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
+  StaticOption, SubField, Trigger, EscalationSpec, EscalationStage,
+} from '@/types/process'
+import { SCHEMA_VERSION, blankApproval } from '@/lib/processSchema'
+
+const str = (v: unknown): string | null =>
+  v === undefined || v === null || v === '' ? null : String(v)
+const num = (v: unknown): number | null =>
+  v === undefined || v === null || v === '' || Number.isNaN(Number(v)) ? null : Number(v)
+const bool = (v: unknown, dflt = false): boolean => (v === undefined || v === null ? dflt : !!v)
+const arr = (v: unknown): any[] => (Array.isArray(v) ? v : [])
+const cond = (v: unknown): Condition | null =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Condition) : null
+
+function normConstraints(v: any): FieldConstraints | null {
+  if (!v || typeof v !== 'object') return null
+  return {
+    pattern: str(v.pattern), minLength: num(v.minLength), maxLength: num(v.maxLength),
+    min: num(v.min), max: num(v.max), minDate: str(v.minDate), maxDate: str(v.maxDate),
+  }
+}
+
+function normVisibility(v: any): FieldVisibility | null {
+  if (!v || typeof v !== 'object') return null
+  return {
+    confidential: bool(v.confidential),
+    visibleToGroups: arr(v.visibleToGroups).map((g) => String(g)).filter(Boolean),
+  }
+}
+
+function normOptions(v: unknown): StaticOption[] {
+  return arr(v).map((o) =>
+    typeof o === 'string'
+      ? { value: o, label: null }
+      : { value: String(o?.value ?? ''), label: str(o?.label) })
+}
+
+function normSubField(v: any): SubField {
+  return { key: String(v?.key ?? ''), label: str(v?.label), widget: v?.widget ?? 'text',
+    value: str(v?.value) }
+}
+
+export function normalizeField(v: any): FieldDef {
+  // `from_` (Python-Feldname) beim Einlesen tolerieren, `from` ausgeben.
+  const from = v?.computed?.from ?? v?.computed?.from_
+  const op = v?.computed?.op ? String(v.computed.op) : null
+  const template = op === 'template' && typeof v?.computed?.template === 'string'
+    ? v.computed.template : null
+  // computed gilt, wenn eine Quelle (from) ODER eine Textvorlage (op=template) da ist.
+  const hasComputed = !!from || !!template
+  return {
+    key: String(v?.key ?? ''),
+    label: str(v?.label),
+    widget: v?.widget ?? 'text',
+    help: str(v?.help),
+    placeholder: str(v?.placeholder),
+    options: normOptions(v?.options),
+    optionsSource: v?.optionsSource ?? null,
+    allowOther: bool(v?.allowOther),
+    valueShape: str(v?.valueShape),
+    constraints: normConstraints(v?.constraints),
+    visibility: normVisibility(v?.visibility),
+    computed: hasComputed
+      ? (template
+          // Textvorlage (op=template): from/to/map bleiben leer.
+          ? { from: null, op: 'template', template }
+          // `op`/`to` (z. B. days_between) beim Round-Trip erhalten – sonst ginge
+          // eine importierte Datumsdifferenz beim Speichern im Editor verloren.
+          : { from: String(from),
+              ...(op ? { op } : {}),
+              ...(v?.computed?.to ? { to: String(v.computed.to) } : {}),
+              map: (v?.computed?.map && typeof v.computed.map === 'object') ? v.computed.map : null })
+      : null,
+    overridable: bool(v?.overridable),
+    // `action` ist serverseitig Pflicht und darf nur assign_sequence sein –
+    // fehlt sie, wäre das Feld ohne Ersatz unspeicherbar (422 statt Meldung).
+    assign: v?.assign
+      ? { action: v.assign.action ?? 'assign_sequence', counter: str(v.assign.counter),
+        companyRef: str(v.assign.companyRef) }
+      : null,
+    mode: v?.mode ?? null,
+    item: arr(v?.item).map(normSubField),
+    directusSource: str(v?.directusSource),
+    directusFieldMap: arr(v?.directusFieldMap).map((b: any) => ({
+      source: String(b?.source ?? ''), target: String(b?.target ?? ''),
+    })),
+    // Vorbelegung erhalten (sonst ginge sie beim Editor-Import verloren).
+    prefill: (v?.prefill && v.prefill.field)
+      ? { source: String(v.prefill.source ?? 'employee'), field: String(v.prefill.field) }
+      : null,
+  }
+}
+
+export function normalizeFieldRef(v: any): FieldRef {
+  return {
+    ref: String(v?.ref ?? ''),
+    mode: v?.mode ?? 'editable',
+    required: bool(v?.required, false),        // Default false
+    requiredWhen: cond(v?.requiredWhen),
+    visibleWhen: cond(v?.visibleWhen),
+    editableWhen: cond(v?.editableWhen),
+  }
+}
+
+function normDepartmentRule(v: any): DepartmentRule {
+  return {
+    group: String(v?.group ?? ''),
+    required: bool(v?.required, true),         // Default true (anders als FieldRef!)
+    when: cond(v?.when),
+  }
+}
+
+function normResponsibility(v: any): Responsibility {
+  return {
+    kind: v?.kind ?? 'owner',
+    group: str(v?.group),
+    user: str(v?.user),
+    fromField: str(v?.fromField),
+    rule: arr(v?.rule).map(normDepartmentRule),
+    resetOnDescriptionChange: bool(v?.resetOnDescriptionChange),
+    notifyOnEnter: bool(v?.notifyOnEnter, true),
+  }
+}
+
+function normCreatePermissions(v: any): CreatePermissions {
+  return {
+    everyone: bool(v?.everyone),
+    groups: arr(v?.groups).map((g) => String(g)).filter(Boolean),
+    users: arr(v?.users).map((u) => String(u)).filter(Boolean),
+    executives: bool(v?.executives),
+  }
+}
+
+function normLayoutItem(v: any): LayoutItem | null {
+  const t = v?.type
+  if (t === 'field') return { type: 'field', ref: String(v.ref ?? ''), width: v.width ?? 'full' }
+  if (t === 'note') {
+    return { type: 'note', text: String(v.text ?? ''), tone: v.tone ?? 'info',
+      width: v.width ?? 'full', visibleWhen: cond(v.visibleWhen) }
+  }
+  if (t === 'heading') return { type: 'heading', text: String(v.text ?? '') }
+  if (t === 'divider') return { type: 'divider' }
+  if (t === 'spacer') return { type: 'spacer' }
+  return null   // unbekannter Typ wird verworfen (der Server lehnt ihn ohnehin ab)
+}
+
+function normLayoutSection(v: any): LayoutSection {
+  return {
+    type: 'section',
+    title: String(v?.title ?? ''),
+    variant: v?.variant ?? 'default',
+    badge: str(v?.badge),
+    description: str(v?.description),
+    collapsed: bool(v?.collapsed),
+    items: arr(v?.items).map(normLayoutItem).filter((x): x is LayoutItem => x !== null),
+  }
+}
+
+function normTrigger(v: any): Trigger {
+  return { type: v?.type ?? 'on_enter', after: str(v?.after), repeat: str(v?.repeat),
+    field: str(v?.field), group: str(v?.group) }
+}
+
+function normDirectusWrite(v: any): DirectusWriteSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return {
+    operation: (v.operation ?? 'create') as DirectusWriteSpec['operation'],
+    collection: String(v.collection ?? ''),
+    fieldMap: arr(v.fieldMap).map((b: any) => {
+      const hasValue = b?.value !== undefined && b?.value !== null
+      const bind: any = { target: String(b?.target ?? '') }
+      if (hasValue) {
+        // Fester Wert: kein Prozess-Feld, kein resolve. Bool/Zahl typgetreu
+        // erhalten (z. B. has_car=true), sonst als Text.
+        bind.value = (typeof b.value === 'boolean' || typeof b.value === 'number')
+          ? b.value : String(b.value)
+        bind.source = null
+      } else {
+        bind.source = String(b?.source ?? '')
+        if (b?.resolve === 'company_directus_id') bind.resolve = 'company_directus_id'
+      }
+      // Bedingung (when): nur übernehmen, wenn ein Feld angegeben ist.
+      if (b?.when && typeof b.when === 'object' && String(b.when.field ?? '').trim()) {
+        const eq = b.when.equals
+        bind.when = {
+          field: String(b.when.field),
+          equals: (typeof eq === 'boolean' || typeof eq === 'number') ? eq : String(eq ?? ''),
+        }
+      }
+      return bind
+    }),
+    idField: String(v.idField ?? ''),
+    onError: v.onError === 'block' ? 'block' : 'continue',
+    matchField: v.matchField ? String(v.matchField) : null,
+  }
+}
+
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+
+function normHttpRequest(v: any): HttpRequestSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const method = HTTP_METHODS.includes(String(v.method))
+    ? (String(v.method) as HttpRequestSpec['method']) : 'POST'
+  const timeout = Number(v.timeoutSeconds)
+  return {
+    method,
+    url: String(v.url ?? ''),
+    headers: arr(v.headers).map((h: any) => ({
+      name: String(h?.name ?? ''), value: String(h?.value ?? ''),
+    })),
+    body: str(v.body),
+    contentType: str(v.contentType),
+    timeoutSeconds: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : 10,
+    onError: v.onError === 'block' ? 'block' : 'continue',
+  }
+}
+
+function normEmailSpec(v: any): EmailSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return {
+    targetField: String(v.targetField ?? ''),
+    firstNameField: String(v.firstNameField ?? ''),
+    lastNameField: String(v.lastNameField ?? ''),
+    companyField: String(v.companyField ?? ''),
+    collection: String(v.collection ?? ''),
+    emailField: String(v.emailField ?? ''),
+    conflictField: String(v.conflictField ?? ''),
+  }
+}
+
+function normAction(v: any): Action {
+  return {
+    type: v?.type ?? 'notify',
+    to: str(v?.to),
+    recipients: Array.isArray(v?.recipients)
+      ? v.recipients.map((r: unknown) => String(r)).filter(Boolean)
+      : null,
+    template: str(v?.template),
+    field: str(v?.field),
+    value: v?.value === undefined ? null : v.value,
+    counter: str(v?.counter),
+    directus: normDirectusWrite(v?.directus),
+    http: normHttpRequest(v?.http),
+    email: normEmailSpec(v?.email),
+    emailBody: str(v?.emailBody),
+  }
+}
+
+/**
+ * Freigabe-Block. FEHLT er, bleibt es bei `null` – hier darf nichts erfunden
+ * werden: der Server verbietet `approval` bei jeder Phasenart außer approval,
+ * und ein hinzugedichteter Block würde jede Definition als geändert zeigen.
+ * Ist er DA, werden alle Keys mit den Server-Defaults aufgefüllt (der Server
+ * liefert sie ebenfalls vollständig zurück → stabiler Dirty-Vergleich).
+ */
+function normApproval(v: any): ApprovalSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const d = blankApproval()
+  return {
+    question: String(v.question ?? ''),
+    approveLabel: str(v.approveLabel) ?? d.approveLabel,
+    rejectLabel: str(v.rejectLabel) ?? d.rejectLabel,
+    externalLink: bool(v.externalLink, d.externalLink),
+    emailBody: str(v.emailBody),
+    linkMaxAge: str(v.linkMaxAge) ?? d.linkMaxAge,
+    requireReason: bool(v.requireReason, d.requireReason),
+    decisionField: str(v.decisionField),
+    reasonField: str(v.reasonField),
+    onReject: (str(v.onReject) ?? d.onReject) as ApprovalOnReject,
+  }
+}
+
+export function normalizeAutomation(v: any): Automation {
+  return { id: String(v?.id ?? ''), trigger: normTrigger(v?.trigger),
+    guard: cond(v?.guard), action: normAction(v?.action) }
+}
+
+/** Dokument-Vorlage. FEHLT sie, bleibt es bei `null` (der Server verbietet sie
+ *  bei jeder Ansicht außer view=document). Ist sie DA, werden alle Keys gefüllt. */
+function normDocument(v: any): DocumentSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const bindings: Record<string, { field: string; offset: number | null }> = {}
+  if (v.bindings && typeof v.bindings === 'object' && !Array.isArray(v.bindings)) {
+    for (const [k, val] of Object.entries(v.bindings)) {
+      // Alt-Form: nackter Feldschlüssel-String → {field}. Neu: {field, offset}.
+      if (typeof val === 'string') {
+        if (val) bindings[String(k)] = { field: val, offset: null }
+      } else if (val && typeof val === 'object') {
+        const field = str((val as any).field)
+        if (field) bindings[String(k)] = { field, offset: num((val as any).offset) }
+      }
+    }
+  }
+  const sections: Record<string, any> = {}
+  if (v.sections && typeof v.sections === 'object' && !Array.isArray(v.sections)) {
+    for (const [k, val] of Object.entries(v.sections)) {
+      const c = cond(val)
+      if (c) sections[String(k)] = c
+    }
+  }
+  return {
+    key: String(v.key ?? ''),
+    templateHtml: String(v.templateHtml ?? ''),
+    filename: String(v.filename ?? 'Dokument'),
+    title: String(v.title ?? 'Dokument'),
+    bindings,
+    sections,
+  }
+}
+
+/** Dokument-Vorlagen einer Phase + Migration der Alt-Form (einzelnes `document`
+ *  → Liste mit Key „dokument"). */
+function normDocuments(v: any): DocumentSpec[] {
+  const list = arr(v?.documents).map(normDocument).filter(Boolean) as DocumentSpec[]
+  if (list.length) return list
+  const legacy = normDocument(v?.document)
+  return legacy ? [{ ...legacy, key: legacy.key || 'dokument' }] : []
+}
+
+function normEscalationStage(v: any): EscalationStage {
+  return {
+    afterDays: num(v?.afterDays) ?? 0,
+    repeatDays: num(v?.repeatDays),
+    recipients: arr(v?.recipients).map((r) => String(r)).filter(Boolean),
+    message: str(v?.message),
+    raisePriority: bool(v?.raisePriority),
+  }
+}
+
+/** Eskalations-Block. FEHLT er, bleibt es bei `null` (ein hinzugedichteter Block
+ *  würde jede geladene Definition sofort als geändert zeigen). Ist er DA, werden
+ *  alle Keys mit den Server-Defaults gefüllt. */
+function normEscalation(v: any): EscalationSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return { enabled: bool(v.enabled, true), stages: arr(v.stages).map(normEscalationStage) }
+}
+
+/** Extra-Keys bleiben erhalten – der Server verbietet sie hier NICHT. */
+function normConstraintEntry(v: any): PhaseConstraint {
+  return { ...(v ?? {}), when: cond(v?.when) ?? {}, message: String(v?.message ?? '') }
+}
+
+export function normalizePhase(v: any): PhaseDef {
+  const kind = v?.kind ?? 'task'
+  return {
+    key: String(v?.key ?? ''),
+    label: str(v?.label),
+    kind,
+    view: v?.view ?? 'form',
+    enterStatus: str(v?.enterStatus),
+    advanceLabel: str(v?.advanceLabel),
+    grantsFullView: bool(v?.grantsFullView),
+    responsibility: normResponsibility(v?.responsibility),
+    approval: normApproval(v?.approval),
+    // Alt-Form `document` wird nach `documents` migriert (document bleibt null).
+    document: null,
+    documents: normDocuments(v),
+    escalation: normEscalation(v?.escalation),
+    fields: arr(v?.fields).map(normalizeFieldRef),
+    layout: arr(v?.layout).map(normLayoutSection),
+    constraints: arr(v?.constraints).map(normConstraintEntry),
+    automations: arr(v?.automations).map(normalizeAutomation),
+  }
+}
+
+export function normalizeDefinition(v: any): ProcessDefinition {
+  return {
+    schemaVersion: num(v?.schemaVersion) ?? SCHEMA_VERSION,
+    key: String(v?.key ?? ''),
+    name: String(v?.name ?? ''),
+    description: str(v?.description),
+    icon: str(v?.icon),
+    titleEditable: bool(v?.titleEditable, true),   // Default true (wie der Server)
+    titleTemplate: str(v?.titleTemplate),
+    createButtonLabel: str(v?.createButtonLabel),
+    createPermissions: normCreatePermissions(v?.createPermissions),
+    fields: arr(v?.fields).map(normalizeField),
+    phases: arr(v?.phases).map(normalizePhase),
+    automations: arr(v?.automations).map(normalizeAutomation),
+  }
+}
+
+/** Stabile JSON-Form (Keys sortiert) – Basis für den Dirty-Vergleich. */
+export function canonicalJson(value: unknown): string {
+  const walk = (v: any): any => {
+    if (Array.isArray(v)) return v.map(walk)
+    if (v && typeof v === 'object') {
+      const out: Record<string, any> = {}
+      for (const k of Object.keys(v).sort()) out[k] = walk(v[k])
+      return out
+    }
+    return v
+  }
+  return JSON.stringify(walk(value))
+}
+
+export function isSameDefinition(a: unknown, b: unknown): boolean {
+  return canonicalJson(normalizeDefinition(a)) === canonicalJson(normalizeDefinition(b))
+}
+
+/** Tiefe Kopie über die normalisierte Form (für „Änderungen verwerfen"). */
+export function cloneDefinition(d: ProcessDefinition): ProcessDefinition {
+  return normalizeDefinition(JSON.parse(JSON.stringify(d)))
+}

@@ -2,18 +2,32 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      # Kontext ist der Unterordner, nicht das Repo-Root: das Dockerfile macht
+      # `COPY requirements.txt .`, und im Root gibt es keine. Folge fürs Packaging:
+      # was das Backend zur Laufzeit braucht (z. B. die Prozess-Seeds), muss unter
+      # backend/ liegen – docs/ landet NICHT im Image.
+      context: ./backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env
+    # Hochgeladene Dateien (Ticket-Anhänge UND die .docx-Dokumentvorlagen) liegen
+    # unter ATTACHMENTS_DIR (Default /app/data/attachments). OHNE dieses Volume
+    # wäre der Ordner im frischen Container nach jedem Rebuild/Neustart leer –
+    # sämtliche Uploads gingen verloren. Persistiert die DB extern liegt, nur die
+    # Blobs brauchen hier ein Volume.
+    volumes:
+      - attachments:/app/data/attachments
     networks:
       - web
       - dokploy-network
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      # Gleiches Muster: `COPY package*.json ./` funktioniert nur mit frontend/
+      # als Kontext. Deshalb darf auch kein Frontend-TESTFILE etwas von außerhalb
+      # importieren (siehe frontend/tsconfig.app.json).
+      context: ./frontend
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       - backend
@@ -26,3 +40,9 @@ networks:
     driver: bridge
   dokploy-network:
     external: true
+
+volumes:
+  # Überlebt Rebuild/Neustart des Containers (wird NICHT bei `up --build`
+  # entfernt). In Dokploy ggf. zusätzlich als persistentes Volume für diesen
+  # Service hinterlegen, damit es bei Redeploys nicht neu angelegt wird.
+  attachments:

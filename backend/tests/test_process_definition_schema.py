@@ -1,0 +1,688 @@
+"""Ebene-1: Meta-Schema-Validierung der ProcessDefinition (kein DB-Zugriff)."""
+
+import copy
+
+import pytest
+from pydantic import ValidationError
+
+from backend.schemas.process_definition import ProcessDefinition, validate_condition
+
+
+def test_onerror_block_nur_bei_department_done():
+    """onError=block ist nur beim Auslöser on_department_done wirksam – bei jedem
+    anderen Trigger wäre es ein stiller No-Op und wird deshalb abgelehnt."""
+    from backend.schemas.process_definition import Automation
+    dw = {"type": "directus_write", "directus": {
+        "operation": "create", "collection": "c", "idField": "mid", "onError": "block",
+        "fieldMap": [{"source": "a", "target": "n"}]}}
+    with pytest.raises(ValidationError):
+        Automation.model_validate({"id": "x", "trigger": {"type": "on_enter"}, "action": dw})
+    # Beim richtigen Auslöser erlaubt.
+    Automation.model_validate(
+        {"id": "x", "trigger": {"type": "on_department_done", "group": "g_it"}, "action": dw})
+    # onError=continue ist überall erlaubt.
+    cont = {"type": "directus_write", "directus": {**dw["directus"], "onError": "continue"}}
+    Automation.model_validate({"id": "x", "trigger": {"type": "on_enter"}, "action": cont})
+    # Gilt genauso für http_request.
+    http_block = {"type": "http_request", "http": {"url": "https://x.test", "onError": "block"}}
+    with pytest.raises(ValidationError):
+        Automation.model_validate(
+            {"id": "x", "trigger": {"type": "timer", "after": "P1D"}, "action": http_block})
+
+
+def test_emailbody_nur_bei_notify_escalate():
+    """Ein eigener Mailkörper ergibt nur bei notify/escalate Sinn – jede andere
+    Aktion lehnt ihn ab (sonst stünde stiller, wirkungsloser Text in der Definition)."""
+    from backend.schemas.process_definition import Action
+    Action.model_validate({"type": "notify", "to": "owner", "emailBody": "Hallo {{a}}"})
+    Action.model_validate({"type": "escalate", "to": "owner", "emailBody": "Hallo"})
+    with pytest.raises(ValidationError):
+        Action.model_validate({"type": "set_field", "field": "a", "value": "1",
+                               "emailBody": "Hallo"})
+
+
+def _defn_notify_body(body, extra_fields=None):
+    return {
+        "key": "d", "name": "D",
+        "fields": [{"key": "a", "widget": "text"}] + (extra_fields or []),
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}],
+             "automations": [{"id": "m", "trigger": {"type": "on_enter"},
+                              "action": {"type": "notify", "to": "owner", "emailBody": body}}]},
+        ],
+    }
+
+
+def test_emailbody_platzhalter_muss_katalogfeld_sein():
+    ProcessDefinition.model_validate(_defn_notify_body("Feld {{a}} in Auftrag #{{id}}"))
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(_defn_notify_body("Feld {{gibtsnicht}}"))
+
+
+def test_emailbody_nicht_skalares_feld_verboten():
+    liste = {"key": "liste", "widget": "collection", "item": [{"key": "t", "widget": "text"}]}
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(_defn_notify_body("{{liste}}", extra_fields=[liste]))
+
+
+def test_emailbody_spezialvariable_kollision_verboten():
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(
+            _defn_notify_body("{{title}}", extra_fields=[{"key": "title", "widget": "text"}]))
+
+
+VALID = {
+    "schemaVersion": 1,
+    "key": "demo-prozess",
+    "name": "Demo-Prozess",
+    "fields": [
+        {"key": "base.name", "widget": "text", "constraints": {"maxLength": 50}},
+        {"key": "fuhrpark.car", "widget": "select", "options": [{"value": "Ja"}, {"value": "Nein"}]},
+        {"key": "personal.salary", "widget": "textarea",
+         "visibility": {"confidential": True, "visibleToGroups": ["grp_sgl"]}},
+        {"key": "eintraege", "widget": "collection", "mode": "append_only",
+         "item": [{"key": "text", "widget": "textarea"},
+                  {"key": "author", "widget": "server_stamped", "value": "actor"}]},
+    ],
+    "phases": [
+        {"key": "start", "label": "Erstellung", "kind": "start",
+         "responsibility": {"kind": "owner"}, "grantsFullView": True,
+         "enterStatus": "in_progress",
+         "fields": [
+             {"ref": "base.name", "required": True},
+             {"ref": "personal.salary", "requiredWhen": {"==": ["fuhrpark.car", "Ja"]}},
+         ]},
+        {"key": "durchfuehrung", "kind": "review", "view": "review",
+         "responsibility": {"kind": "departments",
+                            "rule": [{"group": "grp_it"},
+                                     {"group": "grp_fp", "when": {"==": ["fuhrpark.car", "Ja"]}}]},
+         "fields": [{"ref": "base.name", "mode": "readonly",
+                     "visibleWhen": {"truthy": "fuhrpark.car"}}],
+         "automations": [
+             {"id": "rem7", "trigger": {"type": "timer", "after": "P7D", "repeat": "P7D"},
+              "action": {"type": "notify", "to": "responsible"}},
+         ]},
+    ],
+}
+
+
+def test_valid_definition_parses():
+    d = ProcessDefinition.model_validate(VALID)
+    assert d.key == "demo-prozess"
+    assert len(d.phases) == 2
+    # `from`-Alias / by_alias-Dump bleibt rund
+    assert d.model_dump(by_alias=True)["fields"][0]["key"] == "base.name"
+
+
+def _invalid(mutate):
+    bad = copy.deepcopy(VALID)
+    mutate(bad)
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(bad)
+
+
+def test_duplicate_field_keys():
+    _invalid(lambda d: d["fields"].append({"key": "base.name", "widget": "text"}))
+
+
+def test_fieldref_must_exist_in_catalog():
+    _invalid(lambda d: d["phases"][0]["fields"].append({"ref": "does.not.exist"}))
+
+
+def test_exactly_one_start_phase():
+    _invalid(lambda d: d["phases"][1].__setitem__("kind", "start"))
+
+
+def test_start_phase_must_be_first():
+    def mut(d):
+        d["phases"][0]["kind"] = "task"
+        d["phases"][1]["kind"] = "start"
+    _invalid(mut)
+
+
+def test_bad_key_slug():
+    _invalid(lambda d: d.__setitem__("key", "Nicht Erlaubt!"))
+
+
+def test_server_generated_braucht_bekannten_nummernkreis():
+    """Die Laufzeit setzt server_generated jetzt um. Abgelehnt wird nur noch, was
+    sie NICHT ausführen kann – hier ein erfundener Nummernkreis."""
+    _invalid(lambda d: d["fields"].append(
+        {"key": "x", "widget": "server_generated",
+         "assign": {"action": "assign_sequence", "counter": "gibtsnicht"}}))
+
+
+def test_server_generated_braucht_phase_und_firmenfeld():
+    """Ohne Phase bekäme das Feld nie eine Nummer (die Vergabe hängt am Abschluss
+    der ersten Phase, die es führt); ohne Firmen-Bezug scheitert sie zur Laufzeit."""
+    _invalid(lambda d: d["fields"].append(
+        {"key": "x", "widget": "server_generated",
+         "assign": {"action": "assign_sequence", "counter": "personalnummer"}}))
+
+
+def test_collection_needs_item():
+    _invalid(lambda d: d["fields"].append({"key": "liste", "widget": "collection"}))
+
+
+def test_confidential_needs_groups():
+    _invalid(lambda d: d["fields"][2]["visibility"].__setitem__("visibleToGroups", []))
+
+
+def test_unknown_top_level_key_rejected():
+    _invalid(lambda d: d.__setitem__("bogus", 123))
+
+
+def test_unsupported_schema_version():
+    _invalid(lambda d: d.__setitem__("schemaVersion", 99))
+
+
+def test_malformed_dsl_in_fieldref():
+    _invalid(lambda d: d["phases"][0]["fields"][0].__setitem__("requiredWhen", {"==": ["only-one"]}))
+
+
+# ── DSL direkt ────────────────────────────────────────────────────────────────
+
+def test_validate_condition_accepts_wellformed():
+    validate_condition({"==": ["a.b", "x"]})
+    validate_condition({"truthy": "a.b"})
+    validate_condition({"in": ["a.b", ["x", "y"]]})
+    validate_condition({"and": [{"truthy": "a"}, {"not": {"==": ["b", 1]}}]})
+
+
+def _base(**over):
+    d = {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "b", "widget": "text"}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "a"}]}],
+    }
+    d.update(over)
+    return d
+
+
+def _reject(d):
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_dsl_ref_must_exist_in_catalog():
+    d = _base()
+    d["phases"][0]["fields"] = [{"ref": "a", "requiredWhen": {"==": ["ghost", "x"]}}]
+    _reject(d)
+
+
+def test_computed_from_must_exist():
+    _reject(_base(fields=[{"key": "a", "widget": "text", "computed": {"from": "ghost"}}]))
+
+
+def test_non_overridable_computed_not_editable():
+    d = _base(fields=[{"key": "a", "widget": "text"},
+                      {"key": "c", "widget": "text", "computed": {"from": "a"}}])  # overridable default False
+    d["phases"][0]["fields"] = [{"ref": "c", "mode": "editable"}]
+    _reject(d)
+
+
+def test_bad_regex_pattern_rejected():
+    _reject(_base(fields=[{"key": "a", "widget": "text", "constraints": {"pattern": "["}}]))
+
+
+def test_top_level_server_stamped_rejected():
+    _reject(_base(fields=[{"key": "a", "widget": "server_stamped"}]))
+
+
+def test_directus_field_requires_source():
+    _reject(_base(fields=[{"key": "a", "widget": "directus"}]))
+
+
+def test_directus_props_only_on_directus_widget():
+    _reject(_base(fields=[{"key": "a", "widget": "text", "directusSource": "kostenstelle"}]))
+
+
+def test_directus_field_map_target_must_exist():
+    _reject(_base(fields=[
+        {"key": "a", "widget": "directus", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "ghost"}]},
+        {"key": "b", "widget": "text"}]))
+
+
+def test_directus_field_map_target_not_self():
+    _reject(_base(fields=[
+        {"key": "a", "widget": "directus", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "a"}]}]))
+
+
+def test_directus_field_valid():
+    d = _base(fields=[
+        {"key": "kostenstelle", "widget": "directus", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "firma"}]},
+        {"key": "firma", "widget": "text"}])
+    # Ziel „firma" muss dort bearbeitbar sein, wo das directus-Feld bearbeitbar ist.
+    d["phases"][0]["fields"] = [{"ref": "kostenstelle"}, {"ref": "firma"}]
+    ProcessDefinition.model_validate(d)   # valide
+
+
+def test_directus_write_requires_spec():
+    d = _base()
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+                                      "action": {"type": "directus_write"}}]
+    _reject(d)
+
+
+def test_directus_write_idfield_must_exist():
+    d = _base(fields=[{"key": "a", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "ghost", "fieldMap": [{"source": "a", "target": "t"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_empty_target_rejected():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [{"source": "a", "target": "  "}]}}}]
+    _reject(d)
+
+
+def test_directus_write_idfield_not_computed():
+    d = _base(fields=[{"key": "a", "widget": "text"},
+                      {"key": "mid", "widget": "text", "computed": {"from": "a"}}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_resolve_requires_company_source():
+    # resolve=company_directus_id an einem Text-Feld → abgelehnt.
+    d = _base(fields=[{"key": "c", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "c"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "k",
+                   "idField": "mid",
+                   "fieldMap": [{"source": "c", "target": "firma", "resolve": "company_directus_id"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_resolve_on_company_ok():
+    d = _base(fields=[{"key": "c", "widget": "company"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "c"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "k",
+                   "idField": "mid",
+                   "fieldMap": [{"source": "c", "target": "firma", "resolve": "company_directus_id"}]}}}]
+    ProcessDefinition.model_validate(d)  # darf nicht werfen
+
+
+def test_directus_write_matchfield_must_be_a_target():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "matchField": "gibtsnicht",
+                   "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_matchfield_only_for_create():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "update", "collection": "c",
+                   "idField": "mid", "matchField": "name",
+                   "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_matchfield_not_on_resolved_target():
+    # Geschäftsschlüssel auf einem aufgelösten Feld (resolve) → verboten: der
+    # Suchwert (roh) passt nie zum gespeicherten (aufgelösten) Wert.
+    d = _base(fields=[{"key": "c", "widget": "company"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "c"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "k",
+                   "idField": "mid", "matchField": "firma",
+                   "fieldMap": [{"source": "c", "target": "firma", "resolve": "company_directus_id"}]}}}]
+    _reject(d)
+
+
+def test_directus_write_matchfield_ok():
+    # matchField (Geschäftsschlüssel) ist strukturell gültig. onError=block wird
+    # separat geprüft (nur beim Auslöser on_department_done erlaubt), daher hier
+    # continue.
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "matchField": "name", "onError": "continue",
+                   "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    ProcessDefinition.model_validate(d)  # darf nicht werfen
+
+
+def test_on_department_done_needs_departments_phase():
+    d = {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "a", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"}, "fields": [{"ref": "a"}]},
+            {"key": "t", "kind": "task", "responsibility": {"kind": "group", "group": "g"},
+             "fields": [{"ref": "a", "mode": "readonly"}],
+             "automations": [{"id": "x", "trigger": {"type": "on_department_done", "group": "g"},
+                              "action": {"type": "notify", "to": "responsible"}}]},
+        ],
+    }
+    _reject(d)
+
+
+def _defn_with_review_automation(group, trigger_group):
+    return {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"}, "fields": [{"ref": "a"}]},
+            {"key": "rev", "kind": "review", "view": "review",
+             "responsibility": {"kind": "departments", "rule": [{"group": group, "required": True}]},
+             "fields": [{"ref": "a", "mode": "readonly"}],
+             "automations": [{"id": "anlegen", "trigger": {"type": "on_department_done", "group": trigger_group},
+                              "action": {"type": "directus_write", "directus": {"operation": "create",
+                                         "collection": "mitarbeiter", "idField": "mid",
+                                         "fieldMap": [{"source": "a", "target": "name"}]}}}]},
+        ],
+    }
+
+
+def test_on_department_done_valid_with_directus_write():
+    ProcessDefinition.model_validate(_defn_with_review_automation("g-it", "g-it"))
+
+
+def test_on_department_done_group_must_belong_to_phase():
+    _reject(_defn_with_review_automation("g-it", "g-andere"))
+
+
+def test_directus_readonly_target_is_allowed():
+    # Read-only Ziel ist erlaubt: den Snapshot schreibt der Server autoritativ.
+    d = _base(fields=[
+        {"key": "kostenstelle", "widget": "directus", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "firma"}]},
+        {"key": "firma", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "kostenstelle"}, {"ref": "firma", "mode": "readonly"}]
+    ProcessDefinition.model_validate(d)   # valide
+
+
+def test_action_set_status_validated():
+    d = _base()
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+                                      "action": {"type": "set_status", "value": "bogus"}}]
+    _reject(d)
+
+
+def test_action_notify_requires_to():
+    d = _base()
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+                                      "action": {"type": "notify"}}]
+    _reject(d)
+
+
+def test_group_reference_detector():
+    from backend.database.process_definitions import _refs_group
+    d = {
+        "fields": [{"key": "x", "visibility": {"visibleToGroups": ["g_sgl"]}}],
+        "phases": [{"responsibility": {"kind": "departments", "rule": [{"group": "g_it"}]}},
+                   {"responsibility": {"kind": "group", "group": "g_lead"}}],
+    }
+    assert _refs_group(d, "g_sgl") is True    # Feld-Sichtbarkeit
+    assert _refs_group(d, "g_it") is True     # Abteilungs-Regel
+    assert _refs_group(d, "g_lead") is True   # Gruppen-Zuständigkeit
+    assert _refs_group(d, "g_unknown") is False
+
+
+@pytest.mark.parametrize("bad", [
+    {"==": ["a"]},                 # falsche Arität
+    {"in": ["a", "notalist"]},     # in braucht Liste
+    {"truthy": 5},                 # ref muss String sein
+    {"and": []},                   # leere Liste
+    {"unknown": [1]},              # unbekannter Operator
+    {"==": ["a", 1], "or": []},    # zwei Operatoren
+    "notadict",
+])
+def test_validate_condition_rejects_malformed(bad):
+    with pytest.raises(ValueError):
+        validate_condition(bad)
+
+
+# ── computed.map + bedingte Layout-Notiz (Position → Fahrzeuggruppe) ──────────
+
+def test_computed_map_accepted():
+    """computed darf zusätzlich zu `from` ein Lookup-`map` tragen."""
+    d = copy.deepcopy(VALID)
+    d["fields"].append({"key": "gruppe", "widget": "text",
+                        "computed": {"from": "fuhrpark.car", "map": {"Ja": "G1"}}})
+    d["phases"][0]["fields"].append({"ref": "gruppe", "mode": "readonly"})
+    defn = ProcessDefinition.model_validate(d)
+    g = next(f for f in defn.fields if f.key == "gruppe")
+    assert g.computed.map == {"Ja": "G1"}
+
+
+def test_title_template_valid():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "Demo – {{base.name}} ({{erstellt}})"
+    ProcessDefinition.model_validate(d)   # {{erstellt}} + Katalog-Feld sind erlaubt
+
+
+def test_title_template_unknown_ref_rejected():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "{{gibtsnicht}}"
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_title_template_reserved_id_rejected():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "#{{id}} {{base.name}}"   # id ist beim Anlegen noch nicht vergeben
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_title_template_collection_field_rejected():
+    d = copy.deepcopy(VALID)
+    d["titleTemplate"] = "{{eintraege}}"           # collection lässt sich nicht als Titel setzen
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def _defn_with_document(bindings):
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "vertrag", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"},
+        "document": {"title": "Vertrag", "filename": "Vertrag_{{base.name}}",
+                     "bindings": bindings}})
+    return d
+
+
+def test_document_bindings_valid():
+    ProcessDefinition.model_validate(_defn_with_document({"name": "base.name"}))
+
+
+def test_document_bindings_unknown_field_rejected():
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(_defn_with_document({"name": "gibtsnicht"}))
+
+
+def test_single_document_migriert_zu_documents_liste():
+    d = ProcessDefinition.model_validate(_defn_with_document({"name": "base.name"}))
+    ph = next(p for p in d.phases if p.key == "vertrag")
+    assert ph.document is None                       # Alt-Feld geräumt
+    assert [x.key for x in ph.documents] == ["dokument"]
+
+
+def test_mehrere_documents_je_phase():
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "vertrag", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"},
+        "documents": [
+            {"key": "arbeitsvertrag", "title": "Arbeitsvertrag", "filename": "AV",
+             "bindings": {"n": "base.name"}},
+            {"key": "fragebogen", "title": "Fragebogen", "filename": "FB", "bindings": {}},
+        ]})
+    out = ProcessDefinition.model_validate(d)
+    ph = next(p for p in out.phases if p.key == "vertrag")
+    assert [x.key for x in ph.documents] == ["arbeitsvertrag", "fragebogen"]
+
+
+def test_documents_doppelter_key_abgelehnt():
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "vertrag", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"},
+        "documents": [{"key": "x", "bindings": {}}, {"key": "x", "bindings": {}}]})
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_view_document_ohne_documents_abgelehnt():
+    d = copy.deepcopy(VALID)
+    d["phases"].append({
+        "key": "leer", "kind": "task", "view": "document",
+        "responsibility": {"kind": "owner"}})       # view=document, aber keine documents
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def test_document_bindings_collection_field_rejected():
+    with pytest.raises(ValidationError):     # eintraege ist eine collection
+        ProcessDefinition.model_validate(_defn_with_document({"eintr": "eintraege"}))
+
+
+def test_document_binding_today_source_valid():
+    # @today ist kein Katalog-Feld, aber als Sonderquelle erlaubt.
+    ProcessDefinition.model_validate(_defn_with_document({"heute": {"field": "@today"}}))
+
+
+def test_document_binding_offset_und_string_coercion():
+    d = ProcessDefinition.model_validate(_defn_with_document(
+        {"a": "base.name", "b": {"field": "base.name", "offset": -20}}))
+    # Einzelnes `document` wird beim Laden nach documents[] migriert.
+    doc = next(p for p in d.phases if p.key == "vertrag").documents[0]
+    assert doc.bindings["a"].field == "base.name" and doc.bindings["a"].offset is None
+    assert doc.bindings["b"].field == "base.name" and doc.bindings["b"].offset == -20
+
+
+def test_computed_map_on_number_source_rejected():
+    """map arbeitet mit Zeichenketten-Schlüsseln – ein Zahlen-Quellfeld ist nicht
+    unterstützt (Backend/Frontend würden sonst auseinanderlaufen)."""
+    d = copy.deepcopy(VALID)
+    d["fields"].append({"key": "stufe", "widget": "number"})
+    d["fields"].append({"key": "label", "widget": "text",
+                        "computed": {"from": "stufe", "map": {"1": "Junior"}}})
+    d["phases"][0]["fields"] += [{"ref": "stufe"}, {"ref": "label", "mode": "readonly"}]
+    with pytest.raises(ValidationError):
+        ProcessDefinition.model_validate(d)
+
+
+def _defn_with_note(visible_when):
+    return {
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "base.name", "widget": "text"}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "base.name"}],
+                    "layout": [{"type": "section", "title": "S", "items": [
+                        {"type": "field", "ref": "base.name"},
+                        {"type": "note", "text": "Hinweis", "visibleWhen": visible_when},
+                    ]}]}],
+    }
+
+
+def test_layout_note_visible_when_valid():
+    ProcessDefinition.model_validate(_defn_with_note({"truthy": "base.name"}))
+
+
+def test_layout_note_visible_when_unknown_ref_rejected():
+    with pytest.raises(ValidationError):    # Referenz nicht im Katalog
+        ProcessDefinition.model_validate(_defn_with_note({"truthy": "gibtsnicht"}))
+
+
+def test_layout_note_visible_when_malformed_rejected():
+    with pytest.raises(ValidationError):    # kaputte DSL-Struktur
+        ProcessDefinition.model_validate(_defn_with_note({"kaputt": 1}))
+
+
+# ── directus_multi (Mehrfachauswahl aus einer Directus-Quelle) ────────────────
+
+def test_directus_multi_requires_source():
+    _reject(_base(fields=[{"key": "a", "widget": "directus_multi"}]))
+
+
+def test_directus_multi_verbietet_field_map():
+    _reject(_base(fields=[
+        {"key": "a", "widget": "directus_multi", "directusSource": "kostenstelle",
+         "directusFieldMap": [{"source": "firma.name", "target": "b"}]},
+        {"key": "b", "widget": "text"}]))
+
+
+def test_directus_multi_ok_mit_quelle():
+    ProcessDefinition.model_validate(_base(fields=[
+        {"key": "a", "widget": "directus_multi", "directusSource": "kostenstelle"},
+        {"key": "b", "widget": "text"}]))
+
+
+def test_directus_multi_wert_ist_eine_liste_von_ids():
+    from backend.services.process_validation import validate_values
+    defn = ProcessDefinition.model_validate(_base(fields=[
+        {"key": "a", "widget": "directus_multi", "directusSource": "kostenstelle"},
+        {"key": "b", "widget": "text"}]))
+    assert validate_values(defn, {"a": ["1", "2"]}) == []          # Liste von IDs: ok
+    assert validate_values(defn, {"a": []}) == []                  # leer erlaubt (Pflicht separat)
+    assert validate_values(defn, {"a": "1"})[0]["code"] == "TYPE"  # Skalar → Liste erwartet
+    assert validate_values(defn, {"a": [1, 2]})[0]["code"] == "TYPE"  # Nicht-Strings → Fehler
+
+
+def test_directus_write_fester_wert_ok():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [{"source": "a", "target": "name"},
+                                                  {"value": "AlphaRequest", "target": "source"}]}}}]
+    ProcessDefinition.model_validate(d)   # valide: fester Wert braucht kein Prozess-Feld
+
+
+def test_directus_write_matchfield_kein_fester_wert():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "matchField": "source",
+                   "fieldMap": [{"source": "a", "target": "name"},
+                                {"value": "AlphaRequest", "target": "source"}]}}}]
+    _reject(d)   # Suchschlüssel darf kein fester Wert sein
+
+
+def test_directus_write_bedingte_zuordnung_ok():
+    # has_car=true (echter Bool) NUR wenn Feld „car" == „Ja".
+    d = _base(fields=[{"key": "car", "widget": "select",
+                       "options": [{"value": "Ja"}, {"value": "Nein"}]},
+                      {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "car"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [
+                       {"value": True, "target": "has_car", "when": {"field": "car", "equals": "Ja"}}]}}}]
+    dfn = ProcessDefinition.model_validate(d)
+    b = dfn.phases[0].automations[0].action.directus.fieldMap[0]
+    assert b.value is True and b.when.field == "car" and b.when.equals == "Ja"
+
+
+def test_directus_write_bedingung_feld_muss_existieren():
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": "create", "collection": "c",
+                   "idField": "mid", "fieldMap": [
+                       {"value": True, "target": "has_car", "when": {"field": "ghost", "equals": "Ja"}}]}}}]
+    _reject(d)   # Bedingungs-Feld „ghost" ist nicht im Katalog

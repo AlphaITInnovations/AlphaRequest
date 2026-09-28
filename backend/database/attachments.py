@@ -1,0 +1,275 @@
+"""
+Metadaten der Datei-Anhänge (die Blobs liegen auf dem Dateisystem, siehe
+backend/services/attachment_storage.py).
+
+Versionierung: gleiche „logische" Datei erneut hochladen → neue Version derselben
+`family_id` (alte bleibt, is_current=0). Löschen = Soft-Delete (deleted_at) – die
+Zeile bleibt für die Nachverfolgung erhalten, der Blob wird entfernt.
+
+Anhänge gehören zu einem Prozess-Ticket (`process_tickets`); die Spalte
+`ticket_id` heißt aus Kompatibilitätsgründen weiter so, bedeutet aber „ID der
+Entität vom Typ `entity_type`". `field_key` bindet eine Datei an ein konkretes
+Anhang-Feld der Prozess-Definition (NULL = allgemeiner Anhang).
+
+`entity_type` bleibt trotz Wegfall des Alt-Systems erhalten – und zwar mit dem
+Wert 'ticket' in ENTITY_TYPES: in einer bestehenden Installation liegen Zeilen
+mit diesem Marker noch in der Tabelle. Sie belegen echten Speicher, müssen also
+in der Admin-Übersicht auffindbar und löschbar bleiben. Neue Zeilen entstehen
+ausschließlich mit 'process_ticket'.
+"""
+
+import uuid
+from typing import List, Optional, Tuple
+
+from backend.database.connection import get_connection, _exec, _fetchone, _fetchall
+
+
+ATTACHMENTS_DDL = """
+CREATE TABLE IF NOT EXISTS attachments (
+    id                BIGINT        NOT NULL AUTO_INCREMENT,
+    entity_type       VARCHAR(32)   NOT NULL DEFAULT 'ticket',
+    ticket_id         BIGINT        NULL,
+    field_key         VARCHAR(255)  NULL,
+    phase_key         VARCHAR(64)   NULL,
+    family_id         CHAR(32)      NOT NULL,
+    version           INT           NOT NULL DEFAULT 1,
+    is_current        TINYINT(1)    NOT NULL DEFAULT 1,
+    original_filename VARCHAR(255)  NOT NULL,
+    stored_path       VARCHAR(255)  NOT NULL,
+    content_type      VARCHAR(150)  NULL,
+    size_bytes        BIGINT        NOT NULL DEFAULT 0,
+    sha256            CHAR(64)      NULL,
+    uploaded_by_id    VARCHAR(64)   NULL,
+    uploaded_by_name  VARCHAR(255)  NULL,
+    uploaded_at       DATETIME      NOT NULL,
+    deleted_at        DATETIME      NULL,
+    PRIMARY KEY (id),
+    INDEX idx_att_ticket (ticket_id),
+    INDEX idx_att_entity (entity_type, ticket_id),
+    INDEX idx_att_uploaded (uploaded_at),
+    INDEX idx_att_family (family_id, version),
+    INDEX idx_att_deleted (deleted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
+# Idempotente In-Place-Migrationen (für bereits bestehende Tabellen). Additiv:
+# `entity_type` bekommt den Default 'ticket', damit JEDE bestehende Zeile ohne
+# Backfill ihren Alt-Marker behält.
+#
+# Der Spalten-Default bleibt bewusst 'ticket' und wird NICHT auf 'process_ticket'
+# umgestellt: ein MODIFY COLUMN auf einer gewachsenen Kundentabelle ist ein
+# Kopiervorgang unter Sperre, und der Default wird ohnehin nie benutzt –
+# insert_attachment schreibt `entity_type` immer mit.
+ATTACHMENTS_MIGRATIONS = [
+    "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS entity_type VARCHAR(32) NOT NULL DEFAULT 'ticket'",
+    "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS field_key VARCHAR(255) NULL",
+    "ALTER TABLE attachments ADD INDEX IF NOT EXISTS idx_att_entity (entity_type, ticket_id)",
+]
+
+#: Marker der Alt-Zeilen. Kein Schreibpfad erzeugt ihn noch – er bleibt, weil
+#: bestehende Zeilen ihn tragen und in der Admin-Übersicht sichtbar sein müssen.
+ENTITY_TICKET = "ticket"
+ENTITY_PROCESS_TICKET = "process_ticket"
+# Erlaubte Werte – Grundlage der Filter-Prüfung in list_all.
+ENTITY_TYPES = (ENTITY_TICKET, ENTITY_PROCESS_TICKET)
+
+_COLS = (
+    "id, entity_type, ticket_id, field_key, phase_key, family_id, version, is_current, "
+    "original_filename, stored_path, content_type, size_bytes, sha256, uploaded_by_id, "
+    "uploaded_by_name, uploaded_at, deleted_at"
+)
+
+# ── Admin-Übersicht ───────────────────────────────────────────────────────────
+# Der Auftrags-Titel steht in `process_tickets`, deshalb ein LEFT JOIN in EINEM
+# Statement (kein N+1 über die Seite).
+#
+# Zwei Details, die hier leicht schiefgehen:
+#   1. Die ON-Bedingung MUSS `entity_type` enthalten. Alt-Ticket #7 und
+#      Prozess-Ticket #7 existieren gleichzeitig – ohne sie stünde am
+#      Alt-Anhang der Titel eines völlig fremden Prozess-Auftrags.
+#   2. LEFT, nicht INNER: ein Anhang ohne (oder mit inzwischen gelöschter)
+#      Entität – und jede Alt-Zeile – muss in der Liste bleiben, sonst
+#      verschluckt der Join halbe Seiten und die Paginierung lügt. Alt-Zeilen
+#      haben deshalb `ticket_title = NULL`; die Tabelle `tickets` wird nicht
+#      mehr gejoint (das Alt-System ist weg, die Tabelle verwaist).
+_ADMIN_FROM = (
+    "FROM attachments a "
+    f"LEFT JOIN process_tickets pt ON a.entity_type='{ENTITY_PROCESS_TICKET}' AND pt.id=a.ticket_id"
+)
+
+# Dieselben Spalten wie _COLS, nur qualifiziert (der Join macht `id`, `title` &
+# Co. sonst mehrdeutig) – plus der aufgelöste Titel.
+_ADMIN_COLS = (
+    ", ".join(f"a.{c.strip()}" for c in _COLS.split(","))
+    + ", pt.title AS ticket_title"
+)
+
+
+def insert_attachment(*, ticket_id: Optional[int], phase_key: Optional[str],
+                      family_id: Optional[str], original_filename: str, stored_path: str,
+                      content_type: Optional[str], size_bytes: int, sha256: Optional[str],
+                      uploaded_by_id: Optional[str], uploaded_by_name: Optional[str],
+                      entity_type: str = ENTITY_PROCESS_TICKET,
+                      field_key: Optional[str] = None) -> dict:
+    """Legt eine Anhang-Version an. Ohne `family_id` = neue Datei (Version 1); mit
+    `family_id` = neue Version (bisherige verlieren is_current).
+
+    `entity_type`/`field_key` siehe Modul-Docstring; `ticket_id` ist die ID der
+    Entität vom Typ `entity_type`."""
+    conn = get_connection()
+    try:
+        if family_id:
+            row = _fetchone(conn, "SELECT COALESCE(MAX(version), 0) AS v FROM attachments WHERE family_id=%s", (family_id,))
+            version = (row["v"] if row else 0) + 1
+            _exec(conn, "UPDATE attachments SET is_current=0 WHERE family_id=%s", (family_id,))
+        else:
+            family_id = uuid.uuid4().hex
+            version = 1
+        _exec(
+            conn,
+            "INSERT INTO attachments "
+            "(entity_type, ticket_id, field_key, phase_key, family_id, version, is_current, "
+            " original_filename, stored_path, content_type, size_bytes, sha256, "
+            " uploaded_by_id, uploaded_by_name, uploaded_at) "
+            "VALUES (%s,%s,%s,%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,NOW())",
+            (entity_type, ticket_id, field_key, phase_key, family_id, version,
+             original_filename, stored_path, content_type, size_bytes, sha256,
+             uploaded_by_id, uploaded_by_name),
+        )
+        new_id = _fetchone(conn, "SELECT LAST_INSERT_ID() AS id", ())["id"]
+        conn.commit()
+    finally:
+        conn.close()
+    return get_attachment(new_id)
+
+
+def get_attachment(attachment_id: int) -> Optional[dict]:
+    conn = get_connection()
+    try:
+        return _fetchone(conn, f"SELECT {_COLS} FROM attachments WHERE id=%s", (attachment_id,))
+    finally:
+        conn.close()
+
+
+def list_for_ticket(ticket_id: int, *, include_versions: bool = False,
+                    entity_type: str = ENTITY_PROCESS_TICKET,
+                    field_key: Optional[str] = None) -> List[dict]:
+    """Anhänge EINER Entität (nicht gelöscht). Standard: nur aktuelle Versionen.
+
+    `entity_type` bleibt ein expliziter Parameter: Alt-Zeilen und Prozess-Zeilen
+    liegen in derselben Tabelle und teilen den Namen `ticket_id`, obwohl die
+    ID-Räume verschieden sind – Alt-Ticket #7 und Prozess-Ticket #7 existieren
+    gleichzeitig. Ohne den Filter mischten sie sich.
+
+    `field_key=None` heißt hier „kein Filter" (alle Anhänge der Entität), NICHT
+    „nur allgemeine Anhänge" – für Letzteres gibt es count_for_field."""
+    where = "entity_type=%s AND ticket_id=%s AND deleted_at IS NULL"
+    params: tuple = (entity_type, ticket_id)
+    if field_key is not None:
+        where += " AND field_key=%s"
+        params += (field_key,)
+    if not include_versions:
+        where += " AND is_current=1"
+    conn = get_connection()
+    try:
+        return _fetchall(conn, f"SELECT {_COLS} FROM attachments WHERE {where} ORDER BY uploaded_at DESC", params)
+    finally:
+        conn.close()
+
+
+def count_for_field(entity_type: str, entity_id: int, field_key: Optional[str]) -> int:
+    """Anzahl aktueller (nicht gelöschter) Anhänge an EINEM Feld einer Entität.
+
+    Anders als bei list_for_ticket bedeutet `field_key=None` hier „allgemeine
+    Anhänge" (field_key IS NULL) – die Funktion beantwortet die Frage „liegt an
+    genau diesem Feld eine Datei?" (z. B. für Pflicht-Anhang-Prüfungen)."""
+    where = "entity_type=%s AND ticket_id=%s AND deleted_at IS NULL AND is_current=1"
+    params: tuple = (entity_type, entity_id)
+    if field_key is None:
+        where += " AND field_key IS NULL"
+    else:
+        where += " AND field_key=%s"
+        params += (field_key,)
+    conn = get_connection()
+    try:
+        row = _fetchone(conn, f"SELECT COUNT(*) AS c FROM attachments WHERE {where}", params)
+        return int(row["c"]) if row else 0
+    finally:
+        conn.close()
+
+
+def soft_delete(attachment_id: int) -> None:
+    conn = get_connection()
+    try:
+        _exec(conn, "UPDATE attachments SET deleted_at=NOW(), is_current=0 WHERE id=%s AND deleted_at IS NULL", (attachment_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _search_where(q: Optional[str] = None,
+                  entity_type: Optional[str] = None) -> Tuple[str, tuple]:
+    """WHERE-Teil der Admin-Übersicht – Spalten sind auf die Aliase von
+    `_ADMIN_FROM` qualifiziert (a = attachments, pt = process_tickets).
+
+    `entity_type=None` heißt „kein Filter" (auch die Alt-Zeilen)."""
+    where = "a.deleted_at IS NULL"
+    params: tuple = ()
+    if entity_type is not None:
+        where += " AND a.entity_type=%s"
+        params += (entity_type,)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        where += (" AND (a.original_filename LIKE %s OR a.uploaded_by_name LIKE %s"
+                  " OR pt.title LIKE %s")
+        params += (like, like, like)
+        if q.strip().isdigit():
+            where += " OR a.ticket_id=%s"
+            params += (int(q.strip()),)
+        where += ")"
+    return where, params
+
+
+def list_all(*, q: Optional[str] = None, entity_type: Optional[str] = None,
+             limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
+    """Admin-Übersicht: nicht gelöschte Anhänge, neueste zuerst, optional gefiltert.
+
+    `entity_type=None` = alle Anhänge, auch die Alt-Zeilen (mit `entity_type` in
+    der Ausgabe, damit die Oberfläche sie unterscheiden und richtig verlinken
+    kann); gesetzt = nur dieser Marker. Der Filter gilt für Seite UND Gesamtzahl,
+    sonst zeigt die Paginierung Seiten an, die es nicht gibt.
+
+    Rückgabe: (Zeilen der Seite inkl. `ticket_title`, Gesamtzahl)."""
+    if entity_type is not None and entity_type not in ENTITY_TYPES:
+        # Hart fehlschlagen statt still „beide Welten" zu liefern – ein Tippfehler
+        # im Aufrufer wäre sonst als vollständige Liste getarnt.
+        raise ValueError(f"Unbekannter entity_type: {entity_type!r}")
+    where, params = _search_where(q, entity_type)
+    conn = get_connection()
+    try:
+        total_row = _fetchone(conn, f"SELECT COUNT(*) AS c {_ADMIN_FROM} WHERE {where}", params)
+        total = int(total_row["c"]) if total_row else 0
+        rows = _fetchall(
+            conn,
+            f"SELECT {_ADMIN_COLS} {_ADMIN_FROM} WHERE {where} "
+            "ORDER BY a.uploaded_at DESC LIMIT %s OFFSET %s",
+            params + (limit, offset),
+        )
+        return rows, total
+    finally:
+        conn.close()
+
+
+def stats() -> dict:
+    """Speicher-Kennzahlen über nicht gelöschte Anhänge (effizient, nur Aggregat)."""
+    conn = get_connection()
+    try:
+        row = _fetchone(
+            conn,
+            "SELECT COUNT(*) AS count, COALESCE(SUM(size_bytes),0) AS total_bytes "
+            "FROM attachments WHERE deleted_at IS NULL",
+            (),
+        )
+        return {"count": int(row["count"]), "total_bytes": int(row["total_bytes"])} if row else {"count": 0, "total_bytes": 0}
+    finally:
+        conn.close()

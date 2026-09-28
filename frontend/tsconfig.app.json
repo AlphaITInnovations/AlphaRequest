@@ -16,5 +16,12 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  // Tests gehören NICHT in den Produktions-Typecheck. Sie dürfen Fixtures von
+  // außerhalb von frontend/ lesen (z. B. die echten Prozess-Definitionen, damit
+  // ein Test merkt, wenn Definition und Client-Schema auseinanderlaufen) – im
+  // Docker-Image liegt aber NUR frontend/, und `npm run build` ist dort dann an
+  // einem Testdatei-Import gescheitert. Geprüft werden die Tests über
+  // tsconfig.vitest.json (`npm run typecheck`), wo das ganze Repo vorliegt.
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts", "src/**/__tests__/**"]
 }
