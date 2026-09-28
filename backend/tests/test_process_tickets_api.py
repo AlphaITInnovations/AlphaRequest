@@ -408,6 +408,24 @@ def test_create_ok(client):
     assert d["values"] == {"base.name": "Max"}
 
 
+def test_initial_changes_zeigt_nur_abweichungen_von_der_vorbelegung():
+    from backend.api.v1.process_tickets import _initial_changes
+    baseline = {"b.vorname": "Marco", "b.plz": "90402", "b.mobil": "0151"}
+    # Nutzer ändert nur Mobil und PLZ, lässt Vorname wie vorbelegt, trägt Titel neu ein.
+    values = {"b.vorname": "Marco", "b.plz": "90579", "b.mobil": "0170", "b.titel": "IT"}
+    ch = _initial_changes(values, baseline)
+    assert set(ch) == {"b.plz", "b.mobil", "b.titel"}          # vorname (unverändert) fehlt
+    assert ch["b.plz"] == {"from": "90402", "to": "90579"}     # geändert: alt→neu
+    assert ch["b.mobil"] == {"from": "0151", "to": "0170"}
+    assert ch["b.titel"] == {"from": None, "to": "IT"}         # neu ohne Vorbelegung: leer→neu
+
+
+def test_initial_changes_ohne_vorbelegung_wie_bisher():
+    from backend.api.v1.process_tickets import _initial_changes
+    ch = _initial_changes({"a": "x", "b": "", "c": None}, {})
+    assert ch == {"a": {"from": None, "to": "x"}}               # leere Werte werden ignoriert
+
+
 def test_create_auto_start_schaltet_direkt_weiter(client):
     """Standard: eine Start-Phase mit on_enter-auto_advance schaltet beim Anlegen
     sofort weiter (unverändertes Verhalten)."""

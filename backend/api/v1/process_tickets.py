@@ -352,6 +352,25 @@ def _actor_name(user: dict) -> str:
     return user.get("displayName") or user.get("email") or user.get("id") or "System"
 
 
+def _initial_changes(values: dict, baseline: dict) -> dict:
+    """Erst-Eingaben eines Auftrags als alt→neu je Feld – aber NUR die von der
+    Vorbelegung abweichenden. `baseline` ist die reine Vorbelegung (apply_prefill in
+    leere Werte). Ein Feld, das nur vorbelegt und unverändert übernommen wurde, taucht
+    nicht auf; ein neu eingetragenes Feld ohne Vorbelegung erscheint als alt=leer→neu;
+    ein geändertes als alt→neu. Ohne Vorbelegung (leere baseline) also wie bisher."""
+    def _leer(x) -> bool:
+        return x is None or x == "" or x == []
+
+    out: dict = {}
+    for k in set(values) | set(baseline):
+        neu, alt = values.get(k), baseline.get(k)
+        if (_leer(neu) and _leer(alt)) or neu == alt:
+            continue
+        out[k] = {"from": (None if _leer(alt) else alt),
+                  "to": (None if _leer(neu) else neu)}
+    return out
+
+
 def _render_title(defn: ProcessDefinition, values: dict, now_iso: str) -> str:
     """Titel aus `defn.titleTemplate` erzeugen: {{feld.key}} aus den (fertig
     berechneten) Startphasen-Werten, {{erstellt}} = Erstellzeitpunkt. Auf die
@@ -682,13 +701,19 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
                        row["id"])
     events.record(row, events.CREATED, actor_id=user.get("id"), actor_name=_actor_name(user),
                   details={"process_key": defn.key, "version": pub["version"]})
-    # Auch beim ANLEGEN festhalten, WAS in die Felder eingetragen wurde – als
-    # „Angaben geändert" (alt→neu, from = leer). So zeigt der Verlauf die Erst-
-    # Eingaben genau wie ein späteres Bearbeiten; die Feld-Sicht greift dabei wie
-    # überall (process_events.redact bindet fields UND changes an dieselbe Sicht,
-    # und lässt den Eintrag entfallen, wenn davon nichts sichtbar ist).
-    init_changes = {k: {"from": None, "to": v} for k, v in values.items()
-                    if v is not None and v != "" and v != []}
+    # Auch beim ANLEGEN festhalten, WAS eingetragen wurde – aber nur das, was von der
+    # Vorbelegung ABWEICHT. Sonst stünden bei einem voll vorbelegten Self-Service-
+    # Prozess (z. B. „Meine Stammdaten bearbeiten") alle Felder als „geändert" im
+    # Verlauf, obwohl sie nur aus den eigenen Stammdaten übernommen wurden.
+    #
+    # Baseline = reine Vorbelegung (apply_prefill in leere Werte); sie nutzt denselben
+    # (über create-prefill frisch geladenen) Mitarbeiter-Datensatz, den das Formular
+    # gezeigt hat. Ohne prefill ist die Baseline leer → jede Erst-Eingabe erscheint
+    # wie bisher als „alt leer → neu". Ein geändertes Feld zeigt „alt → neu"; die
+    # Feld-Sicht greift dabei wie überall (process_events.redact bindet fields UND
+    # changes an dieselbe Sicht und lässt den Eintrag entfallen, wenn nichts sichtbar ist).
+    baseline = process_prefill.apply_prefill(defn, {}, user)
+    init_changes = _initial_changes(values, baseline)
     if init_changes:
         events.record(row, events.UPDATED, actor_id=user.get("id"), actor_name=_actor_name(user),
                       details={"fields": sorted(init_changes), "changes": init_changes})
