@@ -1,0 +1,985 @@
+{
+  "schemaVersion": 1,
+  "key": "meine-stammdaten-bearbeiten",
+  "name": "Meine Stammdaten bearbeiten",
+  "description": "Sieh deine in AlphaCore hinterlegten Stammdaten ein und aktualisiere sie selbst.",
+  "icon": "🪪",
+  "titleEditable": false,
+  "titleTemplate": "Stammdaten – {{stammdaten.first_name}} {{stammdaten.last_name}}",
+  "createButtonLabel": "Speichern",
+  "createPermissions": {
+    "everyone": true,
+    "groups": [],
+    "users": [],
+    "executives": false
+  },
+  "fields": [
+    {
+      "key": "stammdaten.directus_id",
+      "label": "Directus-ID",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "id"
+      }
+    },
+    {
+      "key": "stammdaten.salutation",
+      "label": "Anrede",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Herr",
+          "label": "Herr"
+        },
+        {
+          "value": "Frau",
+          "label": "Frau"
+        },
+        {
+          "value": "Divers",
+          "label": "Divers"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "salutation"
+      }
+    },
+    {
+      "key": "stammdaten.first_name",
+      "label": "Vorname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "first_name"
+      }
+    },
+    {
+      "key": "stammdaten.last_name",
+      "label": "Nachname",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "last_name"
+      }
+    },
+    {
+      "key": "stammdaten.email",
+      "label": "E-Mail (dienstlich)",
+      "widget": "text",
+      "help": "Verknüpft dein Konto mit Directus – nur zur Ansicht.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "email"
+      }
+    },
+    {
+      "key": "stammdaten.job_title",
+      "label": "Jobtitel",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "job_title"
+      }
+    },
+    {
+      "key": "stammdaten.position",
+      "label": "Position",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "praktikum",
+          "label": "Praktikum"
+        },
+        {
+          "value": "ausbildung",
+          "label": "Ausbildung"
+        },
+        {
+          "value": "werkstudium",
+          "label": "Werkstudium"
+        },
+        {
+          "value": "teamassistenz",
+          "label": "Teamassistenz"
+        },
+        {
+          "value": "disposition",
+          "label": "Disposition"
+        },
+        {
+          "value": "niederlassungsleitung",
+          "label": "Niederlassungsleitung"
+        },
+        {
+          "value": "verwaltungsmitarbeitende",
+          "label": "Verwaltungsmitarbeitende HQ"
+        },
+        {
+          "value": "regionalleitung",
+          "label": "Regionalleitung"
+        },
+        {
+          "value": "regionaldirektion",
+          "label": "Regionaldirektion"
+        },
+        {
+          "value": "abteilungsleitung",
+          "label": "Abteilungsleitung / Verwaltung"
+        },
+        {
+          "value": "geschäftsbereichsleitung",
+          "label": "Geschäftsbereichsleitung"
+        },
+        {
+          "value": "c-level",
+          "label": "C-Level"
+        },
+        {
+          "value": "geschäftsführung",
+          "label": "Geschäftsführung"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "position"
+      }
+    },
+    {
+      "key": "stammdaten.company",
+      "label": "Firma",
+      "widget": "company",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "company"
+      }
+    },
+    {
+      "key": "stammdaten.cost_center",
+      "label": "Kostenstelle",
+      "widget": "directus",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": "kostenstelle",
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "cost_center"
+      }
+    },
+    {
+      "key": "stammdaten.location",
+      "label": "Niederlassung",
+      "widget": "directus",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": "niederlassung",
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "location"
+      }
+    },
+    {
+      "key": "stammdaten.phone",
+      "label": "Telefon (dienstlich)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "phone"
+      }
+    },
+    {
+      "key": "stammdaten.mobile",
+      "label": "Mobil (dienstlich)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "mobile"
+      }
+    },
+    {
+      "key": "stammdaten.private_mail",
+      "label": "E-Mail (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "private_mail"
+      }
+    },
+    {
+      "key": "stammdaten.private_phone",
+      "label": "Telefon (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "private_phone"
+      }
+    },
+    {
+      "key": "stammdaten.personal_address",
+      "label": "Adresse (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "personal_address"
+      }
+    },
+    {
+      "key": "stammdaten.personal_zip",
+      "label": "PLZ (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "personal_zip"
+      }
+    },
+    {
+      "key": "stammdaten.personal_location",
+      "label": "Ort (privat)",
+      "widget": "text",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "personal_location"
+      }
+    },
+    {
+      "key": "stammdaten.employee_number",
+      "label": "Personalnummer",
+      "widget": "text",
+      "help": "Wird von der Verwaltung vergeben – nur zur Ansicht.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "employee_number"
+      }
+    },
+    {
+      "key": "stammdaten.status",
+      "label": "Status",
+      "widget": "text",
+      "help": "Wird automatisch gepflegt – nur zur Ansicht.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": {
+        "source": "employee",
+        "field": "status"
+      }
+    }
+  ],
+  "phases": [
+    {
+      "key": "bearbeiten",
+      "label": "Meine Stammdaten",
+      "kind": "start",
+      "view": "form",
+      "enterStatus": null,
+      "advanceLabel": "Speichern",
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "owner",
+        "group": null,
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
+      },
+      "approval": null,
+      "document": null,
+      "documents": [],
+      "escalation": null,
+      "fields": [
+        {
+          "ref": "stammdaten.directus_id",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.salutation",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.first_name",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.last_name",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.job_title",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.position",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.company",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.cost_center",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.location",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.phone",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.mobile",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.private_mail",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.private_phone",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.personal_address",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.personal_zip",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.personal_location",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.employee_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.status",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Meine Stammdaten",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "stammdaten.salutation",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.job_title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.position",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.mobile",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.private_mail",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.private_phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.personal_address",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.personal_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.personal_location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.employee_number",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.status",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": [
+        {
+          "id": "stammdaten_direkt_archivieren",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": null,
+          "action": {
+            "type": "auto_advance",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null,
+            "directus": null,
+            "http": null,
+            "email": null,
+            "emailBody": null
+          }
+        },
+        {
+          "id": "stammdaten_speichern",
+          "trigger": {
+            "type": "on_exit",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": null,
+          "action": {
+            "type": "directus_write",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null,
+            "directus": {
+              "operation": "update",
+              "collection": "mitarbeitende",
+              "fieldMap": [
+                {
+                  "source": "stammdaten.salutation",
+                  "target": "salutation",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.first_name",
+                  "target": "first_name",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.last_name",
+                  "target": "last_name",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.job_title",
+                  "target": "job_title",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.position",
+                  "target": "position",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.company",
+                  "target": "company",
+                  "value": null,
+                  "resolve": "company_directus_id",
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.cost_center",
+                  "target": "cost_center",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.location",
+                  "target": "location",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.phone",
+                  "target": "phone",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.mobile",
+                  "target": "mobile",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.private_mail",
+                  "target": "private_mail",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.private_phone",
+                  "target": "private_phone",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.personal_address",
+                  "target": "personal_address",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.personal_zip",
+                  "target": "personal_zip",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                },
+                {
+                  "source": "stammdaten.personal_location",
+                  "target": "personal_location",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                }
+              ],
+              "idField": "stammdaten.directus_id",
+              "onError": "continue",
+              "matchField": null
+            },
+            "http": null,
+            "email": null,
+            "emailBody": null
+          }
+        }
+      ]
+    }
+  ],
+  "automations": []
+}
