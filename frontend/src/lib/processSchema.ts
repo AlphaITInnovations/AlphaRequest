@@ -419,6 +419,7 @@ export function blankDefinition(key: string, name: string): ProcessDefinition {
     schemaVersion: SCHEMA_VERSION, key, name, description: null, icon: null,
     titleEditable: true,          // Server-Default; abwählbar in den Kopfdaten
     titleTemplate: null,
+    createButtonLabel: null,
     createPermissions: blankCreatePermissions(),
     fields: [],
     phases: [blankPhase('erstellung', 'start')],

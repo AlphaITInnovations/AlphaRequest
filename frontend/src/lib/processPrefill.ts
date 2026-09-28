@@ -38,6 +38,19 @@ function displayValue(v: unknown): unknown {
   return v
 }
 
+/** Prefill-Wert eines select-Feldes auf einen Options-Wert abbilden (Directus
+ *  liefert evtl. Label/andere Schreibweise). Spiegel von _match_option; ohne
+ *  Treffer (und ohne allowOther) undefined → das Feld bleibt leer statt ungültig. */
+function matchOption(val: unknown, f: FieldDef): unknown {
+  if (val === undefined || val === null || val === '' || !f.options?.length) return val
+  const s = String(val).trim().toLocaleLowerCase()
+  for (const opt of f.options) {
+    if (String(opt.value).trim().toLocaleLowerCase() === s) return opt.value
+    if (opt.label && String(opt.label).trim().toLocaleLowerCase() === s) return opt.value
+  }
+  return f.allowOther ? val : undefined
+}
+
 /** `profile` = Antwort von /auth/profile (employee + Konto-Felder wie phone/email). */
 export function applyPrefill(
   fields: FieldDef[], profile: Record<string, unknown> | null, values: Values,
@@ -47,7 +60,8 @@ export function applyPrefill(
   for (const f of fields) {
     if (!f.prefill?.field) continue
     const src = f.prefill.source === 'user' ? (profile ?? {}) : employee
-    const val = displayValue(resolvePath(src, f.prefill.field))
+    let val = displayValue(resolvePath(src, f.prefill.field))
+    if (f.widget === 'select') val = matchOption(val, f)
     if (val !== undefined && val !== null && val !== '') out[f.key] = val
   }
   return out

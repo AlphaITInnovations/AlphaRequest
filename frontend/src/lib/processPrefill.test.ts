@@ -1,51 +1,48 @@
 import { describe, it, expect } from 'vitest'
+import { normalizeField } from './processNormalize'
 import { applyPrefill } from './processPrefill'
-import type { FieldDef } from '@/types/process'
 
-function field(key: string, prefill: { source: string; field: string } | null): FieldDef {
-  return {
-    key, label: null, widget: 'text', help: null, placeholder: null, options: [],
-    optionsSource: null, allowOther: false, valueShape: null, constraints: null,
-    visibility: null, computed: null, overridable: false, assign: null, mode: null,
-    item: [], directusSource: null, directusFieldMap: [], prefill,
-  } as FieldDef
-}
-
-const profile = {
-  email: 'a@b.de', phone: '+49',
-  employee: { last_name: 'Popp', first_name: 'Helmut', location: { name: 'Nürnberg' } },
-}
-
-describe('applyPrefill', () => {
-  it('füllt aus employee/user, dot-Pfad für Relationen, überschreibt vorhandene Werte', () => {
-    const fields = [
-      field('nach', { source: 'employee', field: 'last_name' }),
-      field('vor', { source: 'employee', field: 'first_name' }),
-      field('mail', { source: 'user', field: 'email' }),
-      field('nl', { source: 'employee', field: 'location.name' }),
-      field('frei', null),
-    ]
-    const out = applyPrefill(fields, profile, { frei: 'x', nach: 'alt' })
-    expect(out.nach).toBe('Popp')     // überschreibt 'alt' (read-only/autoritativ)
-    expect(out.vor).toBe('Helmut')
-    expect(out.mail).toBe('a@b.de')   // source=user
-    expect(out.nl).toBe('Nürnberg')   // dot-Pfad über Relation
-    expect(out.frei).toBe('x')        // unangetastet
+/** Client-Spiegel von services/process_prefill – nur die Anzeige beim Anlegen
+ *  (autoritativ setzt der Server; der Anlege-Dialog nutzt bevorzugt den Endpunkt
+ *  /processes/{key}/create-prefill, dieser Spiegel ist die Rückfallebene). */
+describe('applyPrefill (Client-Spiegel)', () => {
+  const anrede = normalizeField({
+    key: 'b.anrede', widget: 'select',
+    options: [{ value: 'Herr' }, { value: 'Frau' }, { value: 'Divers' }],
+    prefill: { source: 'employee', field: 'salutation' },
   })
 
-  it('lässt leere/fehlende Quelle unangetastet; ohne Profil kein Absturz', () => {
-    const fields = [field('vor', { source: 'employee', field: 'first_name' })]
-    expect(applyPrefill(fields, null, { vor: 'da' }).vor).toBe('da')
-    expect(applyPrefill(fields, { employee: {} }, {}).vor).toBeUndefined()
+  it('füllt Text-/Relationsfelder aus employee und user', () => {
+    const nachname = normalizeField({
+      key: 'b.nachname', widget: 'text', prefill: { source: 'employee', field: 'last_name' } })
+    const mail = normalizeField({
+      key: 'b.mail', widget: 'text', prefill: { source: 'user', field: 'email' } })
+    const nl = normalizeField({
+      key: 'b.nl', widget: 'text', prefill: { source: 'employee', field: 'location.name' } })
+    const out = applyPrefill([nachname, mail, nl], {
+      email: 'a@b.de', employee: { last_name: 'Popp', location: { name: 'Nürnberg' } },
+    }, {})
+    expect(out['b.nachname']).toBe('Popp')
+    expect(out['b.mail']).toBe('a@b.de')
+    expect(out['b.nl']).toBe('Nürnberg')
   })
 
-  it('löst eine Relation (Objekt/Liste) auf den Anzeigenamen auf statt [object Object]', () => {
-    const fields = [field('kst', { source: 'employee', field: 'cost_center' })]
-    expect(applyPrefill(fields, { employee: { cost_center: { id: '7', name: 'IT, EDV' } } }, {}).kst)
-      .toBe('IT, EDV')
-    expect(applyPrefill(fields, { employee: { cost_center: [{ name: 'IT' }, { name: 'EDV' }] } }, {}).kst)
-      .toBe('IT, EDV')
-    // Objekt ohne Anzeigefeld -> nicht gesetzt
-    expect(applyPrefill(fields, { employee: { cost_center: { foo: 'bar' } } }, {}).kst).toBeUndefined()
+  it('bildet einen select-Prefill unabhängig von Groß-/Kleinschreibung auf die Option ab', () => {
+    expect(applyPrefill([anrede], { employee: { salutation: 'herr' } }, {})['b.anrede']).toBe('Herr')
+    expect(applyPrefill([anrede], { employee: { salutation: 'FRAU' } }, {})['b.anrede']).toBe('Frau')
+  })
+
+  it('trifft eine Option auch über deren Label', () => {
+    const f = normalizeField({
+      key: 'b.anrede', widget: 'select',
+      options: [{ value: 'm', label: 'Herr' }, { value: 'w', label: 'Frau' }],
+      prefill: { source: 'employee', field: 'salutation' },
+    })
+    expect(applyPrefill([f], { employee: { salutation: 'Herr' } }, {})['b.anrede']).toBe('m')
+  })
+
+  it('lässt ein select ohne passende Option leer (statt ungültigen Wert)', () => {
+    expect('b.anrede' in applyPrefill([anrede], { employee: { salutation: 'weiß nicht' } }, {}))
+      .toBe(false)
   })
 })

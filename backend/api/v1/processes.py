@@ -35,6 +35,7 @@ from backend.services import template_format
 from backend.services import process_actions as pactions
 from backend.services import process_delete as pdel
 from backend.services import process_permissions as perms
+from backend.services import process_prefill
 from backend.services import process_runtime as pr
 from backend.services import process_visibility as vis
 from backend.services import seed_definitions as seeds
@@ -290,6 +291,26 @@ def get_create_field_access(key: str, user: dict = Depends(get_current_user)):
         editable_fields=sorted(vis.editable_field_keys(defn, start, ctx, {},
                                                        ignore_conditions=True)),
     ))
+
+
+class CreatePrefillOut(BaseModel):
+    """Vorbelegte Startwerte für den Anlege-Dialog (aus den eigenen Stammdaten)."""
+    values: dict = {}
+
+
+@router.get("/processes/{key}/create-prefill", response_model=DataResponse[CreatePrefillOut])
+def get_create_prefill(key: str, user: dict = Depends(get_current_user)):
+    """Serverseitig berechnete Vorbelegung für den Anlege-Dialog.
+
+    Zentral hier, damit Relationen (directus-Dropdown → ID) und das Firmen-Dropdown
+    (Directus-Firmen-ID → System-Firmenname) korrekt vorausgewählt sind – der Client
+    müsste sonst dasselbe Mapping doppelt pflegen. Liefert nur die eigenen Daten der
+    anfragenden Person."""
+    row = db.get_published(key)
+    if not row or not row.get("definition"):
+        raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {key}")
+    defn = ProcessDefinition.model_validate(row["definition"])
+    return DataResponse(data=CreatePrefillOut(values=process_prefill.apply_prefill(defn, {}, user)))
 
 
 # ── Mutationen (Admin) ────────────────────────────────────────────────────────

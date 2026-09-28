@@ -126,6 +126,69 @@ def test_prefill_company_id_wird_zu_firmenname(monkeypatch):
                                               "employee": {"company": "999"}})
 
 
+def test_prefill_editierbares_feld_bleibt_erhalten():
+    """Self-Service: ein EDITIERBARES prefill-Feld behält den bearbeiteten Wert;
+    nur read-only wird autoritativ überschrieben. Leeres editierbares Feld wird
+    trotzdem vorbelegt."""
+    d = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "b.vorname", "widget": "text", "prefill": {"source": "employee", "field": "first_name"}},
+            {"key": "b.nachname", "widget": "text", "prefill": {"source": "employee", "field": "last_name"}},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "b.vorname", "mode": "editable"},
+                               {"ref": "b.nachname", "mode": "readonly"}]}],
+    })
+    user = {"id": "a@b", "email": "a@b", "employee": {"first_name": "Helmut", "last_name": "Popp"}}
+    out = apply_prefill(d, {"b.vorname": "Heinz", "b.nachname": "Faelschung"}, user)
+    assert out["b.vorname"] == "Heinz"    # Bearbeitung des editierbaren Felds bleibt
+    assert out["b.nachname"] == "Popp"    # read-only bleibt autoritativ
+    assert apply_prefill(d, {}, user)["b.vorname"] == "Helmut"   # leer -> vorbelegt
+
+
+def _select_defn():
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "b.anrede", "widget": "select",
+                    "options": [{"value": "Herr"}, {"value": "Frau"}, {"value": "Divers"}],
+                    "prefill": {"source": "employee", "field": "salutation"}}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "b.anrede", "mode": "editable"}]}],
+    })
+
+
+def test_prefill_select_trifft_option_case_insensitive():
+    """Directus liefert die Anrede evtl. klein/anders geschrieben – sie wird auf den
+    Options-Wert normalisiert, damit das Dropdown den Wert vorwählt."""
+    d = _select_defn()
+    assert apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                 "employee": {"salutation": "herr"}})["b.anrede"] == "Herr"
+    assert apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                 "employee": {"salutation": "FRAU"}})["b.anrede"] == "Frau"
+
+
+def test_prefill_select_trifft_option_ueber_label():
+    d = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [{"key": "b.anrede", "widget": "select",
+                    "options": [{"value": "m", "label": "Herr"}, {"value": "w", "label": "Frau"}],
+                    "prefill": {"source": "employee", "field": "salutation"}}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "b.anrede", "mode": "editable"}]}],
+    })
+    # Directus liefert das Label „Herr" -> auf den Options-Wert „m" abgebildet.
+    assert apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                 "employee": {"salutation": "Herr"}})["b.anrede"] == "m"
+
+
+def test_prefill_select_ohne_treffer_bleibt_leer():
+    """Kein passender Options-Wert -> Feld NICHT setzen (lieber leer als ungültig)."""
+    d = _select_defn()
+    assert "b.anrede" not in apply_prefill(
+        d, {}, {"id": "a@b", "email": "a@b", "employee": {"salutation": "keine-ahnung"}})
+
+
 def test_prefill_source_unbekannt_wird_abgewiesen():
     with pytest.raises(ValueError):
         ProcessDefinition.model_validate({

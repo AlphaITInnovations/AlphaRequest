@@ -8,7 +8,7 @@ beim ANLEGEN angewandt (Momentaufnahme, wer den Antrag gestellt hat); spätere
 """
 from typing import Any, Optional
 
-from backend.schemas.process_definition import ProcessDefinition, Widget
+from backend.schemas.process_definition import FieldMode, PhaseKind, ProcessDefinition, Widget
 
 
 #: Felder, aus denen der Anzeigewert einer Directus-Relation gezogen wird
@@ -78,6 +78,26 @@ def _company_name_for_directus_id(cid: Any, companies: list) -> Optional[str]:
     return None
 
 
+def _match_option(val: Any, field: Any) -> Optional[Any]:
+    """Einen Prefill-Wert auf einen Options-Wert eines select-Feldes abbilden.
+
+    Directus liefert für ein Auswahlfeld (z. B. Anrede) evtl. das Label oder eine
+    andere Groß-/Kleinschreibung als der im Prozess hinterlegte Options-Wert –
+    dann bliebe das Dropdown leer. Hier wird der Wert unempfindlich gegen
+    Groß-/Kleinschreibung mit Options-`value` UND `label` verglichen und auf den
+    Options-`value` normalisiert. Trifft nichts (und ist kein Freitext erlaubt),
+    wird das Feld NICHT gesetzt – lieber leer als ein ungültiger Options-Wert."""
+    if val in (None, "") or not field.options:
+        return val
+    s = str(val).strip().casefold()
+    for opt in field.options:
+        if str(opt.value).strip().casefold() == s:
+            return opt.value
+        if opt.label and str(opt.label).strip().casefold() == s:
+            return opt.value
+    return val if field.allowOther else None
+
+
 def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
     """Felder mit `prefill`-Spec aus den Daten der angemeldeten Person füllen.
 
@@ -90,14 +110,26 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
     landet. Ein `company`-Widget bekommt aus der Directus-Firmen-ID den System-
     Firmennamen (Umkehr von `company_directus_id`), sonst könnte das Firmen-Dropdown
     den Wert nicht vorwählen.
+
+    **Editierbare Felder** (in der Start-Phase editable/append_only) werden NUR
+    vorbelegt, wenn noch kein Wert da ist – so bleibt eine Bearbeitung der Person
+    erhalten (Self-Service). Für read-only/hidden-Felder ist die Vorbelegung
+    autoritativ (überschreibt), damit sie manipulationssicher bleibt.
     """
     global _companies_cache
     _companies_cache = None
     out = dict(values)
     employee = user.get("employee") or {}
+    start = next((p for p in defn.phases if p.kind == PhaseKind.start),
+                 defn.phases[0] if defn.phases else None)
+    editable = {fr.ref for fr in (start.fields if start else [])
+                if fr.mode in (FieldMode.editable, FieldMode.append_only)}
     for f in defn.fields:
         pf = f.prefill
         if not pf:
+            continue
+        # Editierbares Feld mit bereits gesetztem Wert: nicht überschreiben.
+        if f.key in editable and out.get(f.key) not in (None, ""):
             continue
         src = employee if pf.source == "employee" else user
         raw = _resolve_path(src, pf.field)
@@ -107,6 +139,8 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
             val = _company_name_for_directus_id(_rel_id(raw), _companies())
         else:
             val = _display_value(raw)
+            if f.widget == Widget.select:
+                val = _match_option(val, f)
         if val is not None and val != "":
             out[f.key] = val
     return out

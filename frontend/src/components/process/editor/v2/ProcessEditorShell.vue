@@ -430,6 +430,17 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
                       <span class="font-mono">{{ PH_ERSTELLT }}</span> (Erstellzeitpunkt).
                     </p>
                   </div>
+                  <div class="md:col-span-3">
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Beschriftung des Absende-Buttons (optional)</label>
+                    <input :value="ed.draft.value.createButtonLabel ?? ''" :disabled="ed.readonly.value"
+                           class="afi w-full" maxlength="60" placeholder="Auftrag anlegen"
+                           @input="setDefinition({ createButtonLabel: ($event.target as HTMLInputElement).value || null })" />
+                    <p class="text-xs text-gray-400 mt-1">
+                      Leer → „Auftrag anlegen“. Für Self-Service-Prozesse mit nur einer Phase passt oft
+                      „Speichern“ besser.
+                    </p>
+                  </div>
                 </div>
               </EditorSection>
 

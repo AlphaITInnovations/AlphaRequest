@@ -142,8 +142,15 @@ async function loadProcess(key: string) {
     title.value = row.name
     // prefill-Felder (z. B. Antragsteller-Angaben) aus den eigenen Directus-
     // Stammdaten vorbelegen; der Server setzt sie beim Anlegen erneut autoritativ.
-    await ensureProfile()
-    values.value = applyPrefill(definition.value.fields, profile.value, {})
+    // Bevorzugt serverseitig berechnet: nur dort werden Relationen (directus-ID)
+    // und das Firmen-Dropdown (Directus-ID → Firmenname) korrekt aufgelöst. Fällt
+    // der Endpunkt aus, greift der (einfachere) Client-Spiegel als Rückfallebene.
+    try {
+      values.value = await processesApi.getCreatePrefill(key)
+    } catch {
+      await ensureProfile()
+      values.value = applyPrefill(definition.value.fields, profile.value, {})
+    }
     // Vorbelegte Directus-Felder (Kostenstelle/Niederlassung) speichern die ID –
     // die zugehörigen Labels für die read-only Anzeige nachladen (sonst rohe ID).
     try {
@@ -189,7 +196,8 @@ async function submit() {
     showToast('Bitte die markierten Felder prüfen', false)
     return
   }
-  if (!confirm('Wollen Sie diesen Auftrag erstellen?')) return
+  const speichernModus = !!definition.value.createButtonLabel
+  if (!confirm(speichernModus ? 'Angaben speichern?' : 'Wollen Sie diesen Auftrag erstellen?')) return
   submitting.value = true
   try {
     // Anhänge einsammeln (je Feld können mehrere Dateien gewählt sein).
@@ -248,7 +256,7 @@ async function submit() {
         return
       }
     }
-    showToast('Auftrag angelegt')
+    showToast(speichernModus ? 'Gespeichert' : 'Auftrag angelegt')
     // Nach dem Anlegen zur Übersicht (einheitlich mit dem Basis-Ticket).
     router.push('/dashboard')
   } finally {
@@ -440,7 +448,9 @@ onMounted(async () => {
             <button @click="submit" :disabled="submitting"
                     class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
                            disabled:opacity-40 transition">
-              {{ submitting ? 'Wird angelegt…' : 'Auftrag anlegen' }}
+              {{ submitting
+                  ? (definition.createButtonLabel ? 'Wird gespeichert…' : 'Wird angelegt…')
+                  : (definition.createButtonLabel || 'Auftrag anlegen') }}
             </button>
           </div>
         </template>

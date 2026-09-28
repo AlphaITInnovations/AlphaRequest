@@ -57,6 +57,13 @@ export async function getPublished(key: string): Promise<ProcessOut> {
   return data.data
 }
 
+/** Serverseitig berechnete Vorbelegung für den Anlege-Dialog (eigene Stammdaten).
+ *  Deckt Relationen (directus-ID) und das Firmen-Dropdown (ID→Name) korrekt ab. */
+export async function getCreatePrefill(key: string): Promise<Record<string, unknown>> {
+  const { data } = await client.get(`/processes/${encodeURIComponent(key)}/create-prefill`)
+  return (data.data?.values as Record<string, unknown>) ?? {}
+}
+
 // ── Dokument-Vorlage (.docx) je Prozess ───────────────────────────────────────
 
 export interface DocumentTemplateInfo {

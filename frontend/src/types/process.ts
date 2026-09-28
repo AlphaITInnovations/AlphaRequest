@@ -457,6 +457,9 @@ export interface ProcessDefinition {
    *  {{erstellt}} (Erstellzeitpunkt). Gesetzt → der Titel wird beim Anlegen
    *  daraus erzeugt statt manuell eingegeben. */
   titleTemplate: string | null
+  /** Beschriftung des Absende-Buttons im Anlege-Dialog. null → „Auftrag anlegen“.
+   *  Für Self-Service-Prozesse mit nur einer Phase (z. B. „Speichern“). */
+  createButtonLabel: string | null
   createPermissions: CreatePermissions
   fields: FieldDef[]
   phases: PhaseDef[]

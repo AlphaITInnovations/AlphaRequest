@@ -1293,6 +1293,10 @@ class ProcessDefinition(_Base):
     #: Startphasen-Werten und {{erstellt}} (Erstellzeitpunkt), z. B.
     #: „Onboarding Mitarbeiter:innen – {{base.first_name}} {{base.last_name}}“.
     titleTemplate: Optional[str] = None
+    #: Beschriftung des Absende-Buttons im Anlege-Dialog. Leer → Standard
+    #: („Auftrag anlegen“). Nützlich für Self-Service-Prozesse mit nur einer Phase,
+    #: bei denen „Speichern“ treffender ist als „Auftrag anlegen“.
+    createButtonLabel: Optional[str] = None
     createPermissions: CreatePermissions = Field(default_factory=CreatePermissions)
     fields: list[FieldDef] = Field(default_factory=list)
     phases: list[PhaseDef] = Field(default_factory=list)
