@@ -870,7 +870,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -896,7 +897,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -922,7 +924,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -948,7 +951,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -974,7 +978,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1000,7 +1005,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1026,7 +1032,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1052,7 +1059,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1078,7 +1086,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1104,7 +1113,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1130,7 +1140,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1156,7 +1167,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1182,7 +1194,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1208,7 +1221,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1234,7 +1248,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1260,7 +1275,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1286,7 +1302,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -3865,6 +3882,13 @@
                 "fuhrpark.car",
                 "Ja"
               ]
+            }
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN",
+            "required": true,
+            "when": {
+              "truthy": "it.software.persopro"
             }
           }
         ],
