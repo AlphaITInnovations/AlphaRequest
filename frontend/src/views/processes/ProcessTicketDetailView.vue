@@ -9,13 +9,17 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
-import type { OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
+import type { FieldDef, OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
 import type { SimFieldError, SimViewer } from '@/lib/processSim'
 import { validatePhaseCompletion, validateValues } from '@/lib/processSim'
 import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources, loadDirectusLabels } from '@/lib/processSources'
+import { fieldValueText, isEmptyValue } from '@/lib/processFieldFormat'
+import { collectDirectusIds, mergeDirectusLabels } from '@/lib/processHistoryLabels'
+import { resolveLabels } from '@/api/directus'
+import { listEvents } from '@/api/processEvents'
 import { applyComputed } from '@/lib/conditionDsl'
 import { departmentProgress, isDepartmentPending } from '@/lib/processDepartments'
 import * as ticketsApi from '@/api/processTickets'
@@ -86,6 +90,20 @@ const phase = computed(() => {
   const i = ticket.value.runtime?.current_index ?? 0
   return definition.value.phases[i] ?? null
 })
+
+const fieldByKey = computed<Record<string, FieldDef>>(() => {
+  const out: Record<string, FieldDef> = {}
+  for (const f of definition.value?.fields ?? []) out[f.key] = f
+  return out
+})
+
+/**
+ * Beantragte Änderungen für die Prüf-/Freigabe-Ansicht (alt→neu, fertig
+ * formatiert). Eine Fachabteilung sieht so, was sich gegenüber dem Bestand ändert:
+ * der alte Wert rot, der neue grün. Quelle ist der Verlauf des aktuellen Durchlaufs
+ * (die „Angaben geändert"-Einträge); Directus-IDs werden zu Klartext aufgelöst.
+ */
+const reviewChanges = ref<Record<string, { fromText: string; toText: string }>>({})
 
 /** Index der aktiven Phase – Grundlage für den Fortschritts-Stepper links. */
 const aktivIndex = computed(() => ticket.value?.runtime?.current_index ?? 0)
@@ -314,11 +332,52 @@ async function load() {
     // (Lese-/Druckansicht) auflösen und in die sources mergen. fail-soft.
     const labels = await loadDirectusLabels(definition.value, ticket.value?.values)
     sources.value = { ...sources.value, directusLabels: labels }
+    // In einer Prüf-/Freigabe-Phase den Alt→Neu-Diff aufbauen (nicht blockierend:
+    // die Seite steht schon, der Diff zieht reaktiv nach).
+    void buildReviewChanges()
   } catch (e) {
     loadError.value = errorMessage(e, 'Auftrag konnte nicht geladen werden')
   } finally {
     loading.value = false
   }
+}
+
+/** Alt→Neu je geändertem Feld für die Freigabe-Ansicht aufbauen (fail-soft). */
+async function buildReviewChanges() {
+  reviewChanges.value = {}
+  if (!isFreigabePhase.value || !definition.value || !ticket.value) return
+  try {
+    const { items } = await listEvents(id.value, { limit: 500, view: viewParams.value.view })
+    const epoch = ticket.value.runtime?.epoch ?? 0
+    const inEpoch = items.filter((e) => e.epoch === epoch)
+    // Änderungen des Durchlaufs mergen: ältester „from", jüngster „to".
+    const merged: Record<string, { from: unknown; to: unknown }> = {}
+    for (const ev of inEpoch) {
+      if (ev.action !== 'updated') continue
+      const ch = (ev.details?.changes ?? {}) as Record<string, { from?: unknown; to?: unknown }>
+      for (const [k, v] of Object.entries(ch)) {
+        if (!(k in merged)) merged[k] = { from: v?.from, to: v?.to }
+        else merged[k].to = v?.to
+      }
+    }
+    // Directus-IDs (alt+neu) zu Klartext auflösen und in die Quellen mischen.
+    const ids = collectDirectusIds(inEpoch, fieldByKey.value)
+    const hist: Record<string, Record<string, string>> = {}
+    await Promise.all(Object.entries(ids).map(async ([key, list]) => {
+      const labels = await resolveLabels(key, list)
+      if (Object.keys(labels).length) hist[key] = labels
+    }))
+    const src = mergeDirectusLabels(sources.value, hist)
+    const out: Record<string, { fromText: string; toText: string }> = {}
+    for (const [k, v] of Object.entries(merged)) {
+      const f = fieldByKey.value[k]
+      // Nur echte Änderung eines VORHANDENEN Werts zeigen (alt nicht leer) – so
+      // bleibt eine reine Neu-Eingabe (from leer) unmarkiert.
+      if (!f || isEmptyValue(v.from) || JSON.stringify(v.from) === JSON.stringify(v.to)) continue
+      out[k] = { fromText: fieldValueText(f, v.from, src), toText: fieldValueText(f, v.to, src) }
+    }
+    reviewChanges.value = out
+  } catch { /* fail-soft: dann ohne Diff, nur die aktuellen Werte */ }
 }
 
 /** Nur die Auftragswerte (und den Ticket-Stand) nachladen – ohne Lade-Overlay,
@@ -644,7 +703,7 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
               <h3 class="section-title">Alle Angaben</h3>
               <SchemaReadonlyView :definition="definition" :values="ticket.values" :viewer="viewer"
                                   :sources="sources" :ticket-id="ticket.id" :view="viewParams.view"
-                                  :exclude-keys="phaseFormKeys" />
+                                  :exclude-keys="phaseFormKeys" :changes="reviewChanges" />
             </div>
 
             <!-- Formular der aktuellen Phase (nur für die zuständige Stelle). In

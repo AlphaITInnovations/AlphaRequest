@@ -203,8 +203,8 @@ async function submit() {
     showToast('Bitte die markierten Felder prüfen', false)
     return
   }
-  const speichernModus = !!definition.value.createButtonLabel
-  if (!confirm(speichernModus ? 'Angaben speichern?' : 'Wollen Sie diesen Auftrag erstellen?')) return
+  const eigenesLabel = definition.value.createButtonLabel?.trim()
+  if (!confirm(eigenesLabel ? `${eigenesLabel}?` : 'Wollen Sie diesen Auftrag erstellen?')) return
   submitting.value = true
   try {
     // Anhänge einsammeln (je Feld können mehrere Dateien gewählt sein).
@@ -263,7 +263,7 @@ async function submit() {
         return
       }
     }
-    showToast(speichernModus ? 'Gespeichert' : 'Auftrag angelegt')
+    showToast(eigenesLabel ? 'Erledigt' : 'Auftrag angelegt')
     // Nach dem Anlegen zur Übersicht (einheitlich mit dem Basis-Ticket).
     router.push('/dashboard')
   } finally {
@@ -456,7 +456,7 @@ onMounted(async () => {
                     class="px-4 py-2 rounded-xl text-sm text-white bg-[#3EAAB8] hover:bg-[#369aa7]
                            disabled:opacity-40 transition">
               {{ submitting
-                  ? (definition.createButtonLabel ? 'Wird gespeichert…' : 'Wird angelegt…')
+                  ? (definition.createButtonLabel ? 'Wird gesendet…' : 'Wird angelegt…')
                   : (definition.createButtonLabel || 'Auftrag anlegen') }}
             </button>
           </div>
