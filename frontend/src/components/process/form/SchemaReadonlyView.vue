@@ -44,6 +44,10 @@ const props = defineProps<{
   /** Feld-Keys, die hier NICHT gezeigt werden (weil sie an anderer Stelle – z. B.
    *  im Phasen-Formular – bereits erscheinen). Verhindert Doppelanzeige. */
   excludeKeys?: string[]
+  /** Beantragte Änderungen je Feld (fertig formatiert): der alte Wert wird rot
+   *  durchgestrichen, der neue grün angezeigt. Für die Prüf-/Freigabe-Ansicht, in
+   *  der eine Fachabteilung sieht, was sich gegenüber dem Bestand ändert. */
+  changes?: Record<string, { fromText: string; toText: string }>
 }>()
 
 const catalog = computed<FieldDef[]>(() => props.definition?.fields ?? [])
@@ -151,6 +155,9 @@ const rowsOf = (f: FieldDef): Record<string, unknown>[] => collectionEntries(val
 
 const subLabel = (sf: SubField): string => subFieldLabel(sf)
 const subText = (v: unknown): string => subValueText(v)
+
+/** Änderungs-Eintrag eines Feldes (alt→neu), sofern eine Änderung beantragt wurde. */
+const changeFor = (key: string) => props.changes?.[key]
 </script>
 
 <template>
@@ -192,6 +199,22 @@ const subText = (v: unknown): string => subValueText(v)
                   </tbody>
                 </table>
               </div>
+            </ReadonlyField>
+
+            <!-- Geändertes Feld: alt (rot, durchgestrichen) → neu (grün). Sonst der
+                 normale Wert. -->
+            <ReadonlyField
+              v-else-if="changeFor(row.f.key)"
+              :label="row.f.label || row.f.key"
+              :pre="row.f.widget === 'textarea'"
+            >
+              <span class="text-red-600 dark:text-red-400 line-through decoration-red-400/60"
+                    :class="row.f.widget === 'textarea' ? 'whitespace-pre-wrap' : ''"
+              >{{ changeFor(row.f.key)!.fromText }}</span>
+              <span class="text-gray-400 px-1">→</span>
+              <span class="text-green-600 dark:text-green-400 font-medium"
+                    :class="row.f.widget === 'textarea' ? 'whitespace-pre-wrap' : ''"
+              >{{ changeFor(row.f.key)!.toText }}</span>
             </ReadonlyField>
 
             <ReadonlyField
