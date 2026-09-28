@@ -2239,7 +2239,47 @@
         }
       ],
       "constraints": [],
-      "automations": []
+      "automations": [
+        {
+          "id": "set-exit-date-in-directus",
+          "trigger": {
+            "type": "on_department_done",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          },
+          "guard": null,
+          "action": {
+            "type": "directus_write",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": null,
+            "value": null,
+            "counter": null,
+            "directus": {
+              "operation": "update",
+              "collection": "mitarbeitende",
+              "fieldMap": [
+                {
+                  "source": "base.austrittsdatum",
+                  "target": "exit_date",
+                  "value": null,
+                  "resolve": null,
+                  "when": null
+                }
+              ],
+              "idField": "base.mitarbeiter",
+              "onError": "block",
+              "matchField": null
+            },
+            "http": null,
+            "email": null,
+            "emailBody": null
+          }
+        }
+      ]
     }
   ],
   "automations": []
