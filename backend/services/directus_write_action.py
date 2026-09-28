@@ -131,6 +131,7 @@ def execute(action, row: dict, defn, phase, *, client=dc,
             new_id = created.get("id") if isinstance(created, dict) else None
             if new_id in (None, ""):
                 raise dc.DirectusError("Directus lieferte keine id für den angelegten Datensatz")
+            _invalidate_employee_cache(spec)
             engine_metrics.record_directus_write(op, "ok")
             return {"values": {id_field: str(new_id)}}
 
@@ -138,6 +139,7 @@ def execute(action, row: dict, defn, phase, *, client=dc,
             if not current_id:
                 raise dc.DirectusError(f"Keine Directus-id in „{id_field}“ – Update nicht möglich")
             client.update_item(spec.collection, current_id, build_payload(spec, values))
+            _invalidate_employee_cache(spec)
             engine_metrics.record_directus_write(op, "ok")
             return {}
 
@@ -145,6 +147,7 @@ def execute(action, row: dict, defn, phase, *, client=dc,
             if not current_id:
                 raise dc.DirectusError(f"Keine Directus-id in „{id_field}“ – Löschen nicht möglich")
             client.delete_item(spec.collection, current_id)
+            _invalidate_employee_cache(spec)
             engine_metrics.record_directus_write(op, "ok")
             return {"values": {id_field: None}}            # id zurücksetzen (Datensatz existiert nicht mehr)
     except dc.DirectusError as exc:
@@ -158,6 +161,21 @@ def execute(action, row: dict, defn, phase, *, client=dc,
         report(row, phase, spec, exc)
         return {}
     return {}
+
+
+def _invalidate_employee_cache(spec) -> None:
+    """Nach einem Schreibvorgang auf die Mitarbeitenden-Collection den Employee-
+    Lookup-Cache leeren. Ohne das zeigte die App (Anlege-Vorbelegung, Profilansicht,
+    Auth) bis zum TTL-Ablauf die ALTEN Stammdaten, obwohl Directus bereits
+    aktualisiert ist – z. B. direkt nach dem Self-Service „Meine Stammdaten
+    bearbeiten". Best effort: ein Fehler hier darf den Schreibvorgang nicht kippen."""
+    try:
+        from backend.utils.config import config
+        if spec.collection == config.DIRECTUS_EMPLOYEE_COLLECTION:
+            from backend.services import directus_employee
+            directus_employee.clear_cache()
+    except Exception:
+        logger.exception("Employee-Cache nach Directus-Schreiben nicht leerbar")
 
 
 def _blocks(spec) -> bool:

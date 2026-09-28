@@ -33,6 +33,7 @@ from backend.services import docx_fill
 from backend.services import pdf_fill
 from backend.services import template_format
 from backend.services import process_actions as pactions
+from backend.services import directus_employee
 from backend.services import process_delete as pdel
 from backend.services import process_permissions as perms
 from backend.services import process_prefill
@@ -310,6 +311,18 @@ def get_create_prefill(key: str, user: dict = Depends(get_current_user)):
     if not row or not row.get("definition"):
         raise api_error(404, ErrorCode.PROCESS_NOT_FOUND, f"Kein veröffentlichter Prozess: {key}")
     defn = ProcessDefinition.model_validate(row["definition"])
+    # Stammdaten LIVE aus Directus laden (Cache umgehen): so zeigt der Anlege-Dialog
+    # nach einer Änderung sofort den aktuellen Stand, statt bis zum Cache-TTL den
+    # Vorwert. Fail-soft: scheitert der Frisch-Abruf, gilt der (evtl. gecachte)
+    # Datensatz aus der Session.
+    email = user.get("email") or user.get("id")
+    if email:
+        try:
+            live = directus_employee.lookup_employee(email, fresh=True)
+            if live is not None:
+                user = {**user, "employee": live}
+        except directus_employee.EmployeeLookupError:
+            logger.warning("Frische Stammdaten für %s nicht ladbar – nutze Session-Stand", email)
     return DataResponse(data=CreatePrefillOut(values=process_prefill.apply_prefill(defn, {}, user)))
 
 

@@ -47,20 +47,26 @@ def lookup_employee(
     query: Callable[..., list[dict]] = directus_client.query_items,
     is_configured: Callable[[], bool] = directus_client.is_configured,
     now: Callable[[], float] = _now,
+    fresh: bool = False,
 ) -> Optional[dict]:
     """Directus-Datensatz zur E-Mail holen.
 
     Rückgabe: der Datensatz bei Treffer, None wenn es zu dieser E-Mail keinen gibt.
     Wirft EmployeeLookupError, wenn Directus nicht konfiguriert/erreichbar ist.
+
+    `fresh=True` umgeht den Cache-Treffer (holt garantiert den aktuellen Stand) –
+    z. B. beim Anlegen des Self-Service-Stammdaten-Prozesses, der die eigenen Daten
+    LIVE zeigen soll. Der frische Datensatz aktualisiert den Cache trotzdem.
     """
     raw = (email or "").strip()
     key = raw.lower()
     if not key:
         return None
 
-    hit = _cache.get(key)
-    if hit is not None and hit[1] > now():
-        return hit[0]
+    if not fresh:
+        hit = _cache.get(key)
+        if hit is not None and hit[1] > now():
+            return hit[0]
 
     if not is_configured():
         raise EmployeeLookupError("Directus ist nicht konfiguriert")

@@ -73,6 +73,23 @@ def test_cache_laeuft_nach_ttl_ab():
     assert len(calls) == 2
 
 
+def test_fresh_umgeht_cache_treffer_und_aktualisiert_ihn():
+    calls = []
+    q = _q([{"id": 7, "email": "a@b.de", "last_name": "Alt"}], calls)
+    de.lookup_employee("a@b.de", query=q, is_configured=lambda: True, now=lambda: 1000.0)
+    assert len(calls) == 1
+    # fresh=True holt trotz gültigem Cache erneut (aktueller Directus-Stand)
+    q2 = _q([{"id": 7, "email": "a@b.de", "last_name": "Neu"}], calls)
+    r = de.lookup_employee("a@b.de", query=q2, is_configured=lambda: True,
+                           now=lambda: 1050.0, fresh=True)
+    assert r["last_name"] == "Neu"
+    assert len(calls) == 2
+    # der frische Stand liegt jetzt im Cache (nächster nicht-fresh Aufruf ohne Abfrage)
+    r2 = de.lookup_employee("a@b.de", query=q2, is_configured=lambda: True, now=lambda: 1060.0)
+    assert r2["last_name"] == "Neu"
+    assert len(calls) == 2
+
+
 def test_nicht_gefunden_wird_nicht_gecacht():
     calls = []
     q = _q([], calls)

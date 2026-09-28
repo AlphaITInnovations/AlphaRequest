@@ -306,3 +306,29 @@ def test_when_bool_feld_matcht_true_text():
                                        when=DirectusWriteCondition(field="opt_in", equals="true"))])
     assert dwa.build_payload(spec, {"opt_in": True}) == {"flag": "ja"}
     assert dwa.build_payload(spec, {"opt_in": False}) == {}
+
+
+def test_execute_update_leert_employee_cache(monkeypatch):
+    """Nach einem Schreiben auf die Mitarbeitenden-Collection wird der Employee-
+    Lookup-Cache geleert – sonst zeigten Prefill/Profil/Auth bis zum TTL alte Daten."""
+    from backend.services import directus_employee
+    calls = []
+    monkeypatch.setattr(directus_employee, "clear_cache", lambda: calls.append(True))
+    spec = DirectusWriteSpec(operation=DirectusOperation.update, collection="mitarbeitende",
+                             fieldMap=[DirectusWriteBinding(source="s", target="t")],
+                             idField="stamm.directus_id")
+    action = Action(type="directus_write", directus=spec)
+    row = {"id": 1, "values": {"stamm.directus_id": "42", "s": "x"}}
+    dwa.execute(action, row, None, None, client=FakeClient())
+    assert calls == [True]
+
+
+def test_execute_fremde_collection_laesst_employee_cache(monkeypatch):
+    """Ein Schreiben auf eine ANDERE Collection rührt den Employee-Cache nicht an."""
+    from backend.services import directus_employee
+    calls = []
+    monkeypatch.setattr(directus_employee, "clear_cache", lambda: calls.append(True))
+    action = _action(DirectusOperation.update, [("s", "t")])  # collection="mitarbeiter"
+    row = {"id": 1, "values": {"mitarbeiter.directus_id": "42", "s": "x"}}
+    dwa.execute(action, row, None, None, client=FakeClient())
+    assert calls == []
