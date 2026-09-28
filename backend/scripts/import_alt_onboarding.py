@@ -36,6 +36,10 @@ ARCHIV_KEY = "onboarding-archiv"
 OLD_TYPE = "zugang-beantragen"
 _PRIO = {"low": "low", "normal": "normal", "high": "high", "urgent": "urgent", "medium": "normal"}
 
+#: Alt-Fachabteilungsname (klein) → aktueller Fachabteilungsname (klein). Das
+#: Alt-„BackOffice" ist heute die „Sekretariat GL".
+NAME_ALIASES = {"backoffice": "sekretariat gl"}
+
 
 def _flatten(d: dict, pre: str = "") -> dict:
     out: dict = {}
@@ -90,7 +94,9 @@ def _involved_group_ids(ws, name_to_id: dict, unmapped: set) -> list:
         names = {"IT", "Personalabteilung"}
     ids = []
     for n in sorted(names):
-        gid = name_to_id.get(n.strip().lower())
+        key = n.strip().lower()
+        key = NAME_ALIASES.get(key, key)
+        gid = name_to_id.get(key)
         if gid:
             if gid not in ids:
                 ids.append(gid)
