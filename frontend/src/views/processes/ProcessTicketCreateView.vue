@@ -179,11 +179,18 @@ function onValues(next: Record<string, unknown>) {
   values.value = definition.value ? applyComputed(definition.value.fields, next) : next
 }
 
-/** Fehler ohne Feldbezug (Phasen-Regeln, Server-Meldungen) – die zeigt das
- *  Formular selbst nicht an, sie brauchen eine eigene Liste. */
+/** Fehler, die das Formular selbst NICHT anzeigt, brauchen eine eigene Liste:
+ *  Phasen-Regeln (kein Feld-Bezug) UND Fehler auf Feldern, die in dieser Phase gar
+ *  nicht sichtbar sind (versteckte Felder, oder Felder anderer Phasen). Ohne das
+ *  bliebe z. B. ein Typfehler auf einem hidden-Feld völlig unsichtbar – das
+ *  Absenden schlägt dann scheinbar grundlos fehl. */
 const generalErrors = computed(() => {
-  const fieldKeys = new Set(definition.value?.fields.map((f) => f.key) ?? [])
-  return errors.value.filter((e) => !fieldKeys.has(e.path))
+  const sichtbar = new Set(
+    (startPhase.value?.fields ?? [])
+      .filter((fr) => fr.mode !== 'hidden')
+      .map((fr) => fr.ref),
+  )
+  return errors.value.filter((e) => !sichtbar.has(e.path))
 })
 
 async function submit() {

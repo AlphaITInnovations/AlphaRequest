@@ -11,6 +11,14 @@ from typing import Any, Optional
 from backend.schemas.process_definition import FieldMode, PhaseKind, ProcessDefinition, Widget
 
 
+#: Widgets, deren Wert ein String sein MUSS (das Formular/die Validierung erwarten
+#: das). Directus liefert z. B. den Primärschlüssel (`id`), eine PLZ oder die
+#: Personalnummer evtl. als Zahl – landet die roh in einem Text-Feld, verwirft der
+#: Client-Check „Text erwartet" das ganze Formular (bei einem versteckten Feld wie
+#: der Directus-ID sogar unsichtbar). Deshalb hier auf String normalisieren.
+_STRING_WIDGETS = {Widget.text, Widget.textarea, Widget.date}
+
+
 #: Felder, aus denen der Anzeigewert einer Directus-Relation gezogen wird
 #: (in dieser Reihenfolge) – wie in der Profil-Anzeige (lib/profileFields.fmtValue).
 _DISPLAY_FIELDS = ("name", "label", "title", "bezeichnung", "nummer")
@@ -142,5 +150,10 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
             if f.widget == Widget.select:
                 val = _match_option(val, f)
         if val is not None and val != "":
+            # Text-Widgets brauchen einen String – eine Directus-Zahl (id, PLZ,
+            # Personalnummer) sonst als „Text erwartet" verworfen.
+            if f.widget in _STRING_WIDGETS and isinstance(val, (int, float)) \
+                    and not isinstance(val, bool):
+                val = str(val)
             out[f.key] = val
     return out

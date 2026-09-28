@@ -189,6 +189,26 @@ def test_prefill_select_ohne_treffer_bleibt_leer():
         d, {}, {"id": "a@b", "email": "a@b", "employee": {"salutation": "keine-ahnung"}})
 
 
+def test_prefill_text_widget_zahl_wird_string():
+    """Directus liefert die id/PLZ/Personalnummer evtl. als Zahl – in einem
+    Text-Feld wird daraus ein String, sonst verwirft der Client-Check „Text
+    erwartet" das Formular (bei einem versteckten Feld sogar unsichtbar)."""
+    d = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "b.id", "widget": "text", "prefill": {"source": "employee", "field": "id"}},
+            {"key": "b.plz", "widget": "text", "prefill": {"source": "employee", "field": "zip"}},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "b.id", "mode": "hidden"},
+                               {"ref": "b.plz", "mode": "editable"}]}],
+    })
+    out = apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                               "employee": {"id": 42, "zip": 90402}})
+    assert out["b.id"] == "42" and isinstance(out["b.id"], str)
+    assert out["b.plz"] == "90402" and isinstance(out["b.plz"], str)
+
+
 def test_prefill_source_unbekannt_wird_abgewiesen():
     with pytest.raises(ValueError):
         ProcessDefinition.model_validate({

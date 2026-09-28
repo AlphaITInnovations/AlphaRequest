@@ -45,4 +45,14 @@ describe('applyPrefill (Client-Spiegel)', () => {
     expect('b.anrede' in applyPrefill([anrede], { employee: { salutation: 'weiß nicht' } }, {}))
       .toBe(false)
   })
+
+  it('macht aus einer Directus-Zahl in einem Text-Feld einen String', () => {
+    const idFeld = normalizeField({
+      key: 'b.id', widget: 'text', prefill: { source: 'employee', field: 'id' } })
+    const plz = normalizeField({
+      key: 'b.plz', widget: 'text', prefill: { source: 'employee', field: 'zip' } })
+    const out = applyPrefill([idFeld, plz], { employee: { id: 42, zip: 90402 } }, {})
+    expect(out['b.id']).toBe('42')
+    expect(out['b.plz']).toBe('90402')
+  })
 })

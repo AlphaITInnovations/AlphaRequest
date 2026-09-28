@@ -21,6 +21,9 @@ function resolvePath(obj: unknown, path: string): unknown {
 
 const DISPLAY_FIELDS = ['name', 'label', 'title', 'bezeichnung', 'nummer']
 
+/** Widgets, deren Wert ein String sein muss (Spiegel von _STRING_WIDGETS). */
+const STRING_WIDGETS = ['text', 'textarea', 'date']
+
 /** Relation (Objekt) → Name/Label, Liste → verbundene Werte, Skalar bleibt.
  *  Spiegel von process_prefill._display_value; verhindert „[object Object]". */
 function displayValue(v: unknown): unknown {
@@ -62,7 +65,12 @@ export function applyPrefill(
     const src = f.prefill.source === 'user' ? (profile ?? {}) : employee
     let val = displayValue(resolvePath(src, f.prefill.field))
     if (f.widget === 'select') val = matchOption(val, f)
-    if (val !== undefined && val !== null && val !== '') out[f.key] = val
+    if (val !== undefined && val !== null && val !== '') {
+      // Text-Widgets brauchen einen String – eine Directus-Zahl (id, PLZ,
+      // Personalnummer) würde sonst als „Text erwartet" verworfen.
+      if (typeof val === 'number' && STRING_WIDGETS.includes(f.widget)) val = String(val)
+      out[f.key] = val
+    }
   }
   return out
 }
