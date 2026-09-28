@@ -88,6 +88,44 @@ def test_prefill_ueberspringt_objekt_ohne_anzeigefeld():
     assert "b.kst" not in apply_prefill(d, {}, obj)   # kein Anzeigefeld -> nichts gesetzt
 
 
+def _rel_defn(widget, source_field, directus_source=None):
+    fld = {"key": "b.x", "widget": widget, "prefill": {"source": "employee", "field": source_field}}
+    if directus_source:
+        fld["directusSource"] = directus_source
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N", "fields": [fld],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "b.x", "mode": "editable"}]}],
+    })
+
+
+def test_prefill_directus_widget_nimmt_rohe_id():
+    """Ein directus-Dropdown braucht die ID (nicht den Anzeigenamen), damit die
+    Auswahl passt und beim Zurückschreiben die ID landet."""
+    d = _rel_defn("directus", "location", "niederlassung")
+    # fields=* liefert den FK skalar
+    assert apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                 "employee": {"location": "42"}})["b.x"] == "42"
+    # als Objekt geliefert -> dessen id
+    assert apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                 "employee": {"location": {"id": "42", "name": "Berlin"}}})["b.x"] == "42"
+
+
+def test_prefill_company_id_wird_zu_firmenname(monkeypatch):
+    """company-Widget: Directus-Firmen-ID → System-Firmenname (Umkehr von
+    company_directus_id über die je Firma hinterlegte directus_firma_id)."""
+    from backend.database import settings as st
+    monkeypatch.setattr(st, "get_companies_full", lambda: [
+        {"name": "Alpha GmbH", "directus_firma_id": "7"},
+        {"name": "Beta AG", "directus_firma_id": "9"}])
+    d = _rel_defn("company", "company")
+    assert apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                 "employee": {"company": "9"}})["b.x"] == "Beta AG"
+    # unbekannte id -> Feld bleibt leer (kein falscher Wert)
+    assert "b.x" not in apply_prefill(d, {}, {"id": "a@b", "email": "a@b",
+                                              "employee": {"company": "999"}})
+
+
 def test_prefill_source_unbekannt_wird_abgewiesen():
     with pytest.raises(ValueError):
         ProcessDefinition.model_validate({

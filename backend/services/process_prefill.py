@@ -8,7 +8,7 @@ beim ANLEGEN angewandt (Momentaufnahme, wer den Antrag gestellt hat); spätere
 """
 from typing import Any, Optional
 
-from backend.schemas.process_definition import ProcessDefinition
+from backend.schemas.process_definition import ProcessDefinition, Widget
 
 
 #: Felder, aus denen der Anzeigewert einer Directus-Relation gezogen wird
@@ -45,13 +45,54 @@ def _display_value(v: Any) -> Optional[Any]:
     return v
 
 
+def _rel_id(v: Any) -> Any:
+    """Fremdschlüssel-Wert einer Relation: bei `fields=*` liefert Directus die ID
+    skalar; wird die Relation doch als Objekt geliefert, dessen `id` nehmen."""
+    return v.get("id") if isinstance(v, dict) else v
+
+
+_companies_cache: Optional[list] = None
+
+
+def _companies() -> list:
+    """Lokale Firmen (mit `directus_firma_id`) – einmal je Aufruf-Kette geladen."""
+    global _companies_cache
+    if _companies_cache is None:
+        try:
+            from backend.database.settings import get_companies_full
+            _companies_cache = get_companies_full()
+        except Exception:
+            _companies_cache = []
+    return _companies_cache
+
+
+def _company_name_for_directus_id(cid: Any, companies: list) -> Optional[str]:
+    """Umkehr des Onboarding-Mappings: Directus-Firmen-ID → System-Firmenname
+    (über die je Firma hinterlegte `directus_firma_id`)."""
+    if cid in (None, ""):
+        return None
+    s = str(cid)
+    for c in companies:
+        if str(c.get("directus_firma_id") or "") == s:
+            return c.get("name")
+    return None
+
+
 def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
     """Felder mit `prefill`-Spec aus den Daten der angemeldeten Person füllen.
 
     source "employee" → user["employee"] (Directus-Stammdaten), source "user" →
     das Session-User-Objekt. Ein leerer/fehlender Quellwert lässt das Feld
     unangetastet (kein Überschreiben mit None).
+
+    Relations-Widgets (`directus`) übernehmen die ROH-ID (nicht den Anzeigenamen),
+    damit die Auswahl im Dropdown passt und beim Zurückschreiben wieder die ID
+    landet. Ein `company`-Widget bekommt aus der Directus-Firmen-ID den System-
+    Firmennamen (Umkehr von `company_directus_id`), sonst könnte das Firmen-Dropdown
+    den Wert nicht vorwählen.
     """
+    global _companies_cache
+    _companies_cache = None
     out = dict(values)
     employee = user.get("employee") or {}
     for f in defn.fields:
@@ -59,7 +100,13 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
         if not pf:
             continue
         src = employee if pf.source == "employee" else user
-        val = _display_value(_resolve_path(src, pf.field))
+        raw = _resolve_path(src, pf.field)
+        if f.widget == Widget.directus:
+            val: Any = _rel_id(raw)
+        elif f.widget == Widget.company and pf.source == "employee":
+            val = _company_name_for_directus_id(_rel_id(raw), _companies())
+        else:
+            val = _display_value(raw)
         if val is not None and val != "":
             out[f.key] = val
     return out
