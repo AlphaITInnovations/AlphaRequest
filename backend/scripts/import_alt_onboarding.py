@@ -203,14 +203,21 @@ def main() -> int:
         print("\nDRY-RUN – es wurde nichts geschrieben. Mit --commit ausführen.")
         return 0
 
-    # Doppelimport-Schutz + höchste bestehende id (für kollisionsfreie neue ids)
+    # Doppelimport-Schutz + höchste bestehende id (für kollisionsfreie neue ids).
+    # Der Cursor liefert je nach Konfiguration dict- ODER tuple-Zeilen – beides
+    # abfangen (Spalten daher benannt).
+    def _scalar(row):
+        if row is None:
+            return 0
+        return int(list(row.values())[0] if isinstance(row, dict) else row[0])
+
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM process_tickets WHERE process_key=%s", (ARCHIV_KEY,))
-        existing = int(cur.fetchone()[0])
-        cur.execute("SELECT COALESCE(MAX(id), 0) FROM process_tickets")
-        base = int(cur.fetchone()[0])
+        cur.execute("SELECT COUNT(*) AS n FROM process_tickets WHERE process_key=%s", (ARCHIV_KEY,))
+        existing = _scalar(cur.fetchone())
+        cur.execute("SELECT COALESCE(MAX(id), 0) AS m FROM process_tickets")
+        base = _scalar(cur.fetchone())
     finally:
         conn.close()
     if existing and not args.force:
