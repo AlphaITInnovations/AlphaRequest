@@ -6,7 +6,7 @@
   "icon": "🪪",
   "titleEditable": false,
   "titleTemplate": "Stammdaten – {{stammdaten.first_name}} {{stammdaten.last_name}}",
-  "createButtonLabel": "Speichern",
+  "createButtonLabel": "Beantragen",
   "createPermissions": {
     "everyone": true,
     "groups": [],
@@ -544,7 +544,7 @@
       "kind": "start",
       "view": "form",
       "enterStatus": null,
-      "advanceLabel": "Speichern",
+      "advanceLabel": "Beantragen",
       "grantsFullView": true,
       "responsibility": {
         "kind": "owner",
@@ -818,7 +818,7 @@
       "constraints": [],
       "automations": [
         {
-          "id": "stammdaten_direkt_archivieren",
+          "id": "stammdaten_zur_pruefung",
           "trigger": {
             "type": "on_enter",
             "after": null,
@@ -840,7 +840,299 @@
             "email": null,
             "emailBody": null
           }
+        }
+      ]
+    },
+    {
+      "key": "pruefung",
+      "label": "Prüfung",
+      "kind": "approval",
+      "view": "approval",
+      "enterStatus": null,
+      "advanceLabel": null,
+      "grantsFullView": true,
+      "responsibility": {
+        "kind": "group",
+        "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+        "user": null,
+        "fromField": null,
+        "rule": [],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
+      },
+      "approval": {
+        "question": "Stammdaten-Änderung prüfen: speichern oder ablehnen?",
+        "approveLabel": "Speichern",
+        "rejectLabel": "Ablehnen",
+        "externalLink": false,
+        "emailBody": null,
+        "linkMaxAge": "P7D",
+        "requireReason": true,
+        "decisionField": null,
+        "reasonField": null,
+        "onReject": "reject"
+      },
+      "document": null,
+      "documents": [],
+      "escalation": null,
+      "fields": [
+        {
+          "ref": "stammdaten.directus_id",
+          "mode": "hidden",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
         },
+        {
+          "ref": "stammdaten.salutation",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.first_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.last_name",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.email",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.job_title",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.position",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.company",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.cost_center",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.phone",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.mobile",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.private_mail",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.private_phone",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.personal_address",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.personal_zip",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.personal_location",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.employee_number",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "stammdaten.status",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Meine Stammdaten",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "stammdaten.salutation",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.first_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.last_name",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.email",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.job_title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.position",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.company",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.cost_center",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.mobile",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.private_mail",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.private_phone",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.personal_address",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.personal_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.personal_location",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.employee_number",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "stammdaten.status",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": [
         {
           "id": "stammdaten_speichern",
           "trigger": {
