@@ -291,7 +291,7 @@ export interface PhaseConstraint {
 // rendert die Phase wie bisher (alle Felder zweispaltig).
 
 export type LayoutWidth = 'quarter' | 'third' | 'half' | 'twothirds' | 'full'
-export type SectionVariant = 'base' | 'hr' | 'it' | 'fuhrpark' | 'marketing' | 'travel' | 'default'
+export type SectionVariant = 'base' | 'hr' | 'it' | 'software' | 'fuhrpark' | 'marketing' | 'travel' | 'default'
 export type NoteTone = 'info' | 'warning' | 'success' | 'neutral'
 
 export interface LayoutFieldItem { type: 'field'; ref: string; width: LayoutWidth }
