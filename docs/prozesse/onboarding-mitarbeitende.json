@@ -3426,7 +3426,7 @@
         {
           "type": "section",
           "title": "Software",
-          "variant": "it",
+          "variant": "software",
           "badge": null,
           "description": null,
           "collapsed": false,
@@ -4427,7 +4427,7 @@
         {
           "type": "section",
           "title": "Software",
-          "variant": "it",
+          "variant": "software",
           "badge": null,
           "description": null,
           "collapsed": false,
