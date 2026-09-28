@@ -1843,7 +1843,7 @@
         "fromField": null,
         "rule": [
           {
-            "group": "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN",
+            "group": "HIER_GRUPPEN_ID_MARKETING_EINSETZEN",
             "required": true,
             "when": null
           },
