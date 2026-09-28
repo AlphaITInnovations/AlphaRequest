@@ -33,6 +33,7 @@ export const PLACEHOLDER_GROUP_NAMES: Record<string, string> = {
   HIER_GRUPPEN_ID_REISESTELLE_EINSETZEN: 'Reisestelle',
   HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN: 'Sekretariat GL',
   HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN: 'FreigabeHerrLutz',
+  HIER_GRUPPEN_ID_SOFORTSPERRUNG_EINSETZEN: 'Sofort-Sperrung',
 }
 
 export function isGroupPlaceholder(value: string): boolean {

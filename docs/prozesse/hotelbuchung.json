@@ -901,7 +901,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "e342b490e75e4734911738b90f1134c8",
+        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -1298,7 +1298,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "e342b490e75e4734911738b90f1134c8",
+        "group": "HIER_GRUPPEN_ID_HOTELBUCHUNG_EINSETZEN",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -1717,7 +1717,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "6b3e2e0fe71c42ccaa674445a8ff4e18",
+        "group": "HIER_GRUPPEN_ID_REISESTELLE_EINSETZEN",
         "user": null,
         "fromField": null,
         "rule": [],
