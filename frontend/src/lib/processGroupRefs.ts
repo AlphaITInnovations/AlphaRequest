@@ -149,6 +149,35 @@ function replaceLeaves(node: unknown, mapping: Record<string, string>): unknown 
  * Server bei einem Platzhalter an einer Nicht-Gruppen-Stelle per Namens-Lookup
  * ANDERS als die hier getroffene Zuordnung.
  */
+/**
+ * Gruppen-Platzhalter (`HIER_..._EINSETZEN`) gegen die Fachabteilungen DIESER
+ * Installation auflösen – über den Klartext-Namen (PLACEHOLDER_GROUP_NAMES → Gruppe
+ * mit diesem Namen → deren ID). Spiegelt die serverseitige Import-Auflösung
+ * (seed_definitions.replace_placeholders) und erlaubt, eine Repo-Definition MIT
+ * Platzhaltern (gleiche Definition für dev/prod, ohne IDs) im JSON-Tab zu
+ * übernehmen: die IDs bleiben so pro Umgebung korrekt, ohne sie von Hand zu setzen
+ * und ohne den Prozess neu anzulegen (bestehende Aufträge bleiben erhalten).
+ *
+ * Echte (Nicht-Platzhalter-)IDs bleiben unangetastet. Rückgabe: die aufgelöste
+ * Definition und die Platzhalter OHNE gleichnamige Fachabteilung (unverändert
+ * gelassen – müssen manuell zugeordnet oder die Fachabteilung erst angelegt werden).
+ */
+export function resolvePlaceholdersByGroupName(
+  d: ProcessDefinition, groups: { id: string; name: string }[],
+): { definition: ProcessDefinition; unresolved: string[] } {
+  const byName = new Map(groups.map((g) => [g.name.trim().toLowerCase(), g.id]))
+  const mapping: Record<string, string> = {}
+  const unresolved = new Set<string>()
+  for (const { value } of collectGroupRefs(d)) {
+    if (!isGroupPlaceholder(value) || value in mapping) continue
+    const name = PLACEHOLDER_GROUP_NAMES[value]
+    const id = name ? byName.get(name.trim().toLowerCase()) : undefined
+    if (id) mapping[value] = id
+    else unresolved.add(value)
+  }
+  return { definition: replaceGroupRefs(d, mapping), unresolved: [...unresolved] }
+}
+
 export function replaceGroupRefs(
   d: ProcessDefinition, mapping: Record<string, string>,
 ): ProcessDefinition {
