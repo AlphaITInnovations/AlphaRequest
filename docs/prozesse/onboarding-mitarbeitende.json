@@ -4669,6 +4669,13 @@
                   "target": "job_title",
                   "value": null,
                   "resolve": null
+                },
+                {
+                  "source": null,
+                  "target": "source",
+                  "value": "alpharequest",
+                  "resolve": null,
+                  "when": null
                 }
               ],
               "idField": "it.directus_mitarbeiter_id",
