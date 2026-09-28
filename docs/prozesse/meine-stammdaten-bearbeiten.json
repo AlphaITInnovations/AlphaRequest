@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "key": "meine-stammdaten-bearbeiten",
   "name": "Meine Stammdaten bearbeiten",
-  "description": "Sieh deine in AlphaCore hinterlegten Stammdaten ein und aktualisiere sie selbst.",
+  "description": "Sieh deine in der IT hinterlegten Stammdaten ein und aktualisiere sie selbst. Änderungen wirken sich auf deine IT-Daten, deine Signatur und deine Personaldaten aus.",
   "icon": "🪪",
   "titleEditable": false,
   "titleTemplate": "Stammdaten – {{stammdaten.first_name}} {{stammdaten.last_name}}",
@@ -127,7 +127,7 @@
       "key": "stammdaten.email",
       "label": "E-Mail (dienstlich)",
       "widget": "text",
-      "help": "Verknüpft dein Konto mit Directus – nur zur Ansicht.",
+      "help": "Kann nur durch ein Ticket an die IT geändert werden.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -252,7 +252,7 @@
       "key": "stammdaten.company",
       "label": "Firma",
       "widget": "company",
-      "help": null,
+      "help": "Kann nur durch ein Ticket an die IT geändert werden.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -276,7 +276,7 @@
       "key": "stammdaten.cost_center",
       "label": "Kostenstelle",
       "widget": "directus",
-      "help": null,
+      "help": "Kann nur durch ein Ticket an die IT geändert werden.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -618,7 +618,7 @@
         },
         {
           "ref": "stammdaten.company",
-          "mode": "editable",
+          "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
@@ -626,7 +626,7 @@
         },
         {
           "ref": "stammdaten.cost_center",
-          "mode": "editable",
+          "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
@@ -811,6 +811,13 @@
               "type": "field",
               "ref": "stammdaten.status",
               "width": "half"
+            },
+            {
+              "type": "note",
+              "text": "Änderungen an den Stammdaten wirken sich auf Ihre IT-Daten, Mail-Signatur und Daten in der Personalabteilung aus. Ihre Änderungen werden von den Fachabteilungen geprüft und freigegeben.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": null
             }
           ]
         }
@@ -1186,20 +1193,6 @@
                 {
                   "source": "stammdaten.position",
                   "target": "position",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
-                },
-                {
-                  "source": "stammdaten.company",
-                  "target": "company",
-                  "value": null,
-                  "resolve": "company_directus_id",
-                  "when": null
-                },
-                {
-                  "source": "stammdaten.cost_center",
-                  "target": "cost_center",
                   "value": null,
                   "resolve": null,
                   "when": null

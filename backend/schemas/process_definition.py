@@ -884,6 +884,7 @@ class SectionVariant(str, Enum):
     base = "base"
     hr = "hr"
     it = "it"
+    software = "software"
     fuhrpark = "fuhrpark"
     marketing = "marketing"
     travel = "travel"

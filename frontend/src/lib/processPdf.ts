@@ -314,6 +314,7 @@ const VARIANT_RGB: Record<SectionVariant, RGB> = {
   base: [62, 172, 182],
   hr: [59, 130, 246],
   it: [168, 85, 247],
+  software: [99, 102, 241],
   fuhrpark: [245, 158, 11],
   marketing: [236, 72, 153],
   travel: [20, 184, 166],

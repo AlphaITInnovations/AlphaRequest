@@ -20,6 +20,7 @@ import { PHASE_KIND_LABEL, PHASE_KIND_META, PHASE_VIEW_LABEL } from '@/lib/proce
 import {
   SYSTEM_PROCESS_BLOCKED, SYSTEM_PROCESS_HINT, hasSystemReadonlyIssue, isSystemProcess,
 } from '@/lib/processSystem'
+import { PLACEHOLDER_GROUP_NAMES, resolvePlaceholdersByGroupName } from '@/lib/processGroupRefs'
 import PhaseChain from '@/components/process/editor/PhaseChain.vue'
 import PhaseInspector from '@/components/process/editor/PhaseInspector.vue'
 import FormBuilder from '@/components/process/editor/FormBuilder.vue'
@@ -140,10 +141,22 @@ watch([tab, ed.draft], () => {
 
 function applyJson() {
   try {
-    const parsed = JSON.parse(jsonText.value)
-    ed.update(normalizeDefinition(parsed))
+    const parsed = normalizeDefinition(JSON.parse(jsonText.value))
+    // Gruppen-Platzhalter (HIER_..._EINSETZEN) auf die Fachabteilungen DIESER
+    // Umgebung auflösen – so lässt sich dieselbe Repo-Definition (ohne IDs) in dev
+    // wie prod übernehmen, ohne den Prozess neu anzulegen: als neue Version
+    // veröffentlicht bleiben bestehende Aufträge erhalten, die IDs stimmen je Umgebung.
+    const { definition, unresolved } = resolvePlaceholdersByGroupName(parsed, ed.sources.groups)
+    ed.update(definition)
     jsonError.value = null
-    showToast('JSON übernommen')
+    if (unresolved.length) {
+      const namen = unresolved.map((v) => PLACEHOLDER_GROUP_NAMES[v] ?? v).join(', ')
+      showToast(`JSON übernommen – ${unresolved.length} Gruppen-Platzhalter ohne passende `
+        + `Fachabteilung: ${namen}. Bitte unter „Ablauf" die Zuständigkeit setzen `
+        + 'oder die Fachabteilung anlegen.', false)
+    } else {
+      showToast('JSON übernommen – Gruppen-Platzhalter auf diese Umgebung aufgelöst')
+    }
   } catch (e: any) {
     jsonError.value = e?.message || 'Ungültiges JSON'
   }

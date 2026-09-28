@@ -442,7 +442,7 @@ export const WIDTH_LABEL: Record<LayoutWidth, string> = {
 }
 
 export const SECTION_VARIANTS: readonly SectionVariant[] =
-  ['default', 'base', 'hr', 'it', 'fuhrpark', 'marketing', 'travel']
+  ['default', 'base', 'hr', 'it', 'software', 'fuhrpark', 'marketing', 'travel']
 
 /** Symbol + Akzentfarben je Variante (gerendert von process/form/LayoutSection.vue). */
 export const VARIANT_STYLE: Record<SectionVariant, {
@@ -457,6 +457,9 @@ export const VARIANT_STYLE: Record<SectionVariant, {
   it: { label: 'IT', icon: '💻',
     chip: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
     badge: 'bg-purple-500/15 text-purple-700 dark:text-purple-300', bar: 'bg-purple-500' },
+  software: { label: 'Software', icon: '🧩',
+    chip: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300',
+    badge: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300', bar: 'bg-indigo-500' },
   fuhrpark: { label: 'Fuhrpark', icon: '🚗',
     chip: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
     badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', bar: 'bg-amber-500' },

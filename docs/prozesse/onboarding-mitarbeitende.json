@@ -1000,7 +1000,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -1026,7 +1027,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "HIER_GRUPPEN_ID_IT_EINSETZEN",
+          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
         ]
       },
       "computed": null,
@@ -3423,8 +3425,8 @@
         },
         {
           "type": "section",
-          "title": "IT & Zugänge",
-          "variant": "it",
+          "title": "Software",
+          "variant": "software",
           "badge": null,
           "description": null,
           "collapsed": false,
@@ -3468,7 +3470,17 @@
               "type": "field",
               "ref": "it.software.zvoove_rights",
               "width": "full"
-            },
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Zugänge",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
             {
               "type": "field",
               "ref": "it.other_systems",
@@ -3865,6 +3877,13 @@
                 "fuhrpark.car",
                 "Ja"
               ]
+            }
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN",
+            "required": true,
+            "when": {
+              "truthy": "it.software.persopro"
             }
           }
         ],
@@ -4407,8 +4426,8 @@
         },
         {
           "type": "section",
-          "title": "IT & Zugänge",
-          "variant": "it",
+          "title": "Software",
+          "variant": "software",
           "badge": null,
           "description": null,
           "collapsed": false,
@@ -4452,7 +4471,17 @@
               "type": "field",
               "ref": "it.software.zvoove_rights",
               "width": "full"
-            },
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Zugänge",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
             {
               "type": "field",
               "ref": "it.other_systems",

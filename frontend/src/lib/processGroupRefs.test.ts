@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { normalizeDefinition } from './processNormalize'
 import {
-  collectGroupRefs, isGroupPlaceholder, replaceGroupRefs, unknownGroupRefs,
+  collectGroupRefs, isGroupPlaceholder, replaceGroupRefs, resolvePlaceholdersByGroupName,
+  unknownGroupRefs,
 } from './processGroupRefs'
 
 const PH_IT = 'HIER_GRUPPEN_ID_IT_EINSETZEN'
@@ -101,6 +102,27 @@ describe('unknownGroupRefs', () => {
     const letzterPlatzhalter = rows.map((r) => r.placeholder).lastIndexOf(true)
     const ersteId = rows.map((r) => r.placeholder).indexOf(false)
     expect(letzterPlatzhalter).toBeLessThan(ersteId)
+  })
+})
+
+describe('resolvePlaceholdersByGroupName', () => {
+  it('löst Platzhalter über den Gruppennamen (case-insensitiv) auf; unbekannte bleiben', () => {
+    const { definition, unresolved } = resolvePlaceholdersByGroupName(defn(), GRUPPEN)
+    // IT + Personalabteilung haben gleichnamige Gruppen → auf deren ID aufgelöst.
+    expect(definition.automations[0].action.to).toBe('group:gid-it')
+    expect(definition.fields[0].visibility?.visibleToGroups).toEqual(['gid-hr', 'gid-fp'])
+    expect(definition.phases[2].responsibility.rule.map((r) => r.group)).toEqual(['gid-it', 'gid-fp'])
+    // Sekretariat GL fehlt in GRUPPEN → Platzhalter bleibt und wird gemeldet.
+    expect(definition.phases[1].responsibility.group).toBe(PH_SGL)
+    expect(definition.createPermissions.groups).toEqual([PH_SGL])
+    expect(unresolved).toEqual([PH_SGL])
+    // Echte fremde ID (kein Platzhalter) bleibt unangetastet.
+    expect(definition.phases[1].automations[0].action.to).toBe('group:fremd-99')
+  })
+
+  it('lässt Prosa-Erwähnungen eines Platzhalters unangetastet', () => {
+    const { definition } = resolvePlaceholdersByGroupName(defn(), GRUPPEN)
+    expect(definition.fields[0].help).toContain(PH_HR)  // Hilfetext bleibt Text
   })
 })
 
