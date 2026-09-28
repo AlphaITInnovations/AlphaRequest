@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "key": "offboarding-mitarbeitende",
   "name": "Offboarding Mitarbeiter:innen",
-  "description": "Austritt von Mitarbeitenden: Antrag, Freigabe, Kündigung und Durchführung durch die Fachabteilungen.",
+  "description": "Austrittsprozess Mitarbeiter:innen",
   "icon": null,
   "titleEditable": true,
   "titleTemplate": "Offboarding Mitarbeiter:innen – {{base.mitarbeiter_vorname}} {{base.mitarbeiter_nachname}}",
   "createPermissions": {
     "everyone": false,
     "groups": [
-      "3250a01a8f234bccab8a74764be1ff31"
+      "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
     ],
     "users": [],
     "executives": true
@@ -61,6 +61,10 @@
         {
           "source": "private_city",
           "target": "base.privat_ort"
+        },
+        {
+          "source": "has_car",
+          "target": "base.dienstwagen"
         }
       ],
       "prefill": null
@@ -274,7 +278,14 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+          "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -304,7 +315,14 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+          "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -325,7 +343,14 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+          "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -346,7 +371,14 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+          "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -360,14 +392,19 @@
       "key": "base.sofortige_sperrung",
       "label": "Sofortige Sperrung",
       "widget": "checkbox",
-      "help": "Sperrung sofort ohne Datum. Nach der Freigabe wird die IT sofort per Mail zur Sperrung informiert (Timebutler, Talention u. a.).",
+      "help": null,
       "placeholder": null,
       "options": [],
       "optionsSource": null,
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -388,7 +425,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -418,7 +460,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -439,7 +486,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -452,15 +504,107 @@
     {
       "key": "base.dienstwagen",
       "label": "Dienstwagen vorhanden",
-      "widget": "checkbox",
-      "help": "Steuert, ob der Fuhrpark in der Durchführung beteiligt wird.",
+      "widget": "text",
+      "help": "Kommt aus dem Mitarbeitenden-Datensatz (Directus). Ist ein Dienstwagen vorhanden (Ja), wird der Fuhrpark in der Durchführung beteiligt.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.autorueckgabedatum",
+      "label": "Fahrzeug-Rückgabedatum",
+      "widget": "date",
+      "help": "Nur bei Dienstwagen: bis wann das Fahrzeug zurückzugeben ist (steht in der Kündigung).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.autorueckgabeniederlassung",
+      "label": "Rückgabe-Niederlassung",
+      "widget": "directus",
+      "help": "Nur bei Dienstwagen: Niederlassung, in der das Fahrzeug abzugeben ist.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": "niederlassung",
+      "directusFieldMap": [
+        {
+          "source": "name",
+          "target": "base.autorueckgabeniederlassung_name"
+        }
+      ],
+      "prefill": null
+    },
+    {
+      "key": "base.autorueckgabeniederlassung_name",
+      "label": "Rückgabe-Niederlassung (Name)",
+      "widget": "text",
+      "help": "Wird bei der Directus-Auswahl automatisch übernommen und in die Kündigung eingesetzt.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -474,7 +618,7 @@
       "key": "base.mailweiterleitung",
       "label": "Mailweiterleitung",
       "widget": "select",
-      "help": "Vorgesehene Laufzeit 30 Tage.",
+      "help": null,
       "placeholder": null,
       "options": [
         {
@@ -490,7 +634,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -511,7 +660,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -532,7 +686,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -553,7 +712,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -574,7 +738,12 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -595,13 +764,46 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
       "computed": {
         "from": null,
-        "to": null,
         "op": "template",
-        "map": null,
         "template": "Vielen Dank für Ihre Nachricht.\n\nDieses E-Mail-Postfach existiert nicht mehr. Eingehende Nachrichten werden nicht automatisch weitergeleitet.\nBitte wenden Sie sich an die Mailadresse: {{base.abwesenheit_empfaenger}}"
+      },
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "base.abwesenheit_text_ohne",
+      "label": "Abwesenheitstext (ohne Empfänger)",
+      "widget": "textarea",
+      "help": null,
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+        ]
+      },
+      "computed": {
+        "from": null,
+        "op": "template",
+        "template": "Vielen Dank für Ihre Nachricht.\n\nDieses E-Mail-Postfach existiert nicht mehr. Eingehende Nachrichten werden nicht automatisch weitergeleitet."
       },
       "overridable": false,
       "assign": null,
@@ -625,7 +827,7 @@
       "visibility": {
         "confidential": true,
         "visibleToGroups": [
-          "3250a01a8f234bccab8a74764be1ff31"
+          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
         ]
       },
       "computed": null,
@@ -641,7 +843,7 @@
       "key": "kuendigung.zustelldatum",
       "label": "Zustelldatum",
       "widget": "date",
-      "help": "Mit dem Setzen des Zustelldatums und „Ist zugestellt worden\" wird an die Fachabteilungen weitergegeben.",
+      "help": null,
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -679,6 +881,7 @@
       },
       "approval": null,
       "document": null,
+      "documents": [],
       "escalation": null,
       "fields": [
         {
@@ -855,10 +1058,46 @@
         },
         {
           "ref": "base.dienstwagen",
-          "mode": "editable",
+          "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.autorueckgabeniederlassung",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "base.dienstwagen",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "base.dienstwagen",
+              "Ja"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.autorueckgabedatum",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "base.dienstwagen",
+              "Ja"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "base.dienstwagen",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -934,6 +1173,25 @@
               },
               {
                 "truthy": "base.abwesenheit_mit_empfaenger"
+              }
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "base.abwesenheit_text_ohne",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "truthy": "base.abwesenheit_benoetigt"
+              },
+              {
+                "not": {
+                  "truthy": "base.abwesenheit_mit_empfaenger"
+                }
               }
             ]
           },
@@ -1116,22 +1374,9 @@
               "width": "half"
             },
             {
-              "type": "note",
-              "text": "Abwesenheitstext, der eingerichtet wird:\n\nVielen Dank für Ihre Nachricht.\n\nDieses E-Mail-Postfach existiert nicht mehr. Eingehende Nachrichten werden nicht automatisch weitergeleitet.",
-              "tone": "info",
-              "width": "full",
-              "visibleWhen": {
-                "and": [
-                  {
-                    "truthy": "base.abwesenheit_benoetigt"
-                  },
-                  {
-                    "not": {
-                      "truthy": "base.abwesenheit_mit_empfaenger"
-                    }
-                  }
-                ]
-              }
+              "type": "field",
+              "ref": "base.abwesenheit_text_ohne",
+              "width": "full"
             },
             {
               "type": "field",
@@ -1159,6 +1404,16 @@
               "type": "field",
               "ref": "base.dienstwagen",
               "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "base.autorueckgabeniederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.autorueckgabedatum",
+              "width": "half"
             }
           ]
         }
@@ -1185,7 +1440,8 @@
             "counter": null,
             "directus": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": null
           }
         }
       ]
@@ -1200,7 +1456,7 @@
       "grantsFullView": false,
       "responsibility": {
         "kind": "group",
-        "group": "6c3c5ff44ac942c6a9bffb0b7cd9fb35",
+        "group": "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -1212,7 +1468,7 @@
         "approveLabel": "Offboarding freigeben",
         "rejectLabel": "Ablehnen",
         "externalLink": true,
-        "emailBody": "Es liegt ein neues Offboarding zur Freigabe vor:\n\nMitarbeiter:in: {{base.mitarbeiter_vorname}} {{base.mitarbeiter_nachname}}\nNiederlassung: {{base.niederlassung}}\nKostenstelle: {{base.kostenstelle}}\nAustrittsdatum: {{base.austrittsdatum}}\nKündigungsart: {{base.kuendigungsart}}\nFreistellung: {{base.freistellung}} (ab {{base.freistellung_ab}})\nSofortige Sperrung: {{base.sofortige_sperrung}}\nMailweiterleitung: {{base.mailweiterleitung}}\nIT-Hardware: {{base.it_hardware}}\nDienstwagen: {{base.dienstwagen}}\n\nHinweise: {{base.hinweise_lutz}}\n",
+        "emailBody": "Es liegt ein neues Offboarding zur Freigabe vor:\n\nMitarbeiter:in: {{base.mitarbeiter_vorname}} {{base.mitarbeiter_nachname}}\nNiederlassung: {{base.niederlassung}}\nKostenstelle: {{base.kostenstelle}}\nAustrittsdatum: {{base.austrittsdatum}}\nKündigungsart: {{base.kuendigungsart}}\nFreistellung: {{base.freistellung}} (ab {{base.freistellung_ab}})\n\nHinweise: {{base.hinweise_lutz}}\n",
         "linkMaxAge": "P7D",
         "requireReason": true,
         "decisionField": null,
@@ -1220,7 +1476,21 @@
         "onReject": "reject"
       },
       "document": null,
-      "escalation": null,
+      "documents": [],
+      "escalation": {
+        "enabled": true,
+        "stages": [
+          {
+            "afterDays": 7,
+            "repeatDays": 7,
+            "recipients": [
+              "responsible"
+            ],
+            "message": null,
+            "raisePriority": false
+          }
+        ]
+      },
       "fields": [],
       "layout": [],
       "constraints": [],
@@ -1247,7 +1517,8 @@
             "counter": null,
             "directus": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": null
           }
         }
       ]
@@ -1258,11 +1529,11 @@
       "kind": "task",
       "view": "document",
       "enterStatus": null,
-      "advanceLabel": "Kündigung erstellt – weiter zur Zustellung",
+      "advanceLabel": "Kündigungsschreiben versendet",
       "grantsFullView": false,
       "responsibility": {
         "kind": "group",
-        "group": "3250a01a8f234bccab8a74764be1ff31",
+        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -1270,50 +1541,89 @@
         "notifyOnEnter": true
       },
       "approval": null,
-      "document": {
-        "templateHtml": "",
-        "filename": "Kündigung_{{base.mitarbeiter_nachname}}_{{base.mitarbeiter_vorname}}",
-        "title": "Kündigung",
-        "bindings": {
-          "vorname": {
-            "field": "base.mitarbeiter_vorname",
-            "offset": null
+      "document": null,
+      "documents": [
+        {
+          "key": "dokument",
+          "templateHtml": "",
+          "filename": "Kündigung_{{base.mitarbeiter_nachname}}_{{base.mitarbeiter_vorname}}",
+          "title": "Kündigung",
+          "bindings": {
+            "vorname": {
+              "field": "base.mitarbeiter_vorname",
+              "offset": null
+            },
+            "nachname": {
+              "field": "base.mitarbeiter_nachname",
+              "offset": null
+            },
+            "privat_straße_und_hausnummer": {
+              "field": "base.privat_strasse",
+              "offset": null
+            },
+            "privat_plz": {
+              "field": "base.privat_plz",
+              "offset": null
+            },
+            "privat_ort": {
+              "field": "base.privat_ort",
+              "offset": null
+            },
+            "niederlassung": {
+              "field": "base.niederlassung",
+              "offset": null
+            },
+            "austrittsdatum": {
+              "field": "base.austrittsdatum",
+              "offset": null
+            },
+            "kuendigungsart": {
+              "field": "base.kuendigungsart",
+              "offset": null
+            },
+            "aktuelles_datum": {
+              "field": "@today",
+              "offset": null
+            },
+            "autorueckgabedatum": {
+              "field": "base.autorueckgabedatum",
+              "offset": null
+            },
+            "autorueckgabeniederlassung": {
+              "field": "base.autorueckgabeniederlassung_name",
+              "offset": null
+            }
           },
-          "nachname": {
-            "field": "base.mitarbeiter_nachname",
-            "offset": null
-          },
-          "privat_straße_und_hausnummer": {
-            "field": "base.privat_strasse",
-            "offset": null
-          },
-          "privat_plz": {
-            "field": "base.privat_plz",
-            "offset": null
-          },
-          "privat_ort": {
-            "field": "base.privat_ort",
-            "offset": null
-          },
-          "niederlassung": {
-            "field": "base.niederlassung",
-            "offset": null
-          },
-          "austrittsdatum": {
-            "field": "base.austrittsdatum",
-            "offset": null
-          },
-          "kuendigungsart": {
-            "field": "base.kuendigungsart",
-            "offset": null
-          },
-          "aktuelles_datum": {
-            "field": "@today",
-            "offset": null
+          "sections": {
+            "freistellung": {
+              "==": [
+                "base.freistellung",
+                "ja"
+              ]
+            },
+            "firmenwagen": {
+              "==": [
+                "base.dienstwagen",
+                "Ja"
+              ]
+            }
           }
         }
+      ],
+      "escalation": {
+        "enabled": true,
+        "stages": [
+          {
+            "afterDays": 7,
+            "repeatDays": 7,
+            "recipients": [
+              "responsible"
+            ],
+            "message": null,
+            "raisePriority": false
+          }
+        ]
       },
-      "escalation": null,
       "fields": [],
       "layout": [],
       "constraints": [],
@@ -1332,17 +1642,16 @@
           },
           "action": {
             "type": "notify",
-            "to": null,
-            "recipients": [
-              "group:b66f749021c34618a8b8aca13ed4328c"
-            ],
-            "template": null,
+            "to": "group:HIER_GRUPPEN_ID_SOFORTSPERRUNG_EINSETZEN",
+            "recipients": null,
+            "template": "Sofort-Sperrung",
             "field": null,
             "value": null,
             "counter": null,
             "directus": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": "Für diese Person wurde die sofortige Sperrung aller Zugänge angefordert. Bitte umgehend nach Erhalt dieser Mail sperren.\n\nMitarbeiter:in: {{base.mitarbeiter_vorname}} {{base.mitarbeiter_nachname}}\nAustrittsdatum: {{base.austrittsdatum}}\n\nBitte alle relevanten Systeme sperren (u. a. Timebutler, Talention, Microsoft 365) sowie die weiteren im Auftrag hinterlegten IT-Maßnahmen prüfen. Über den Button unten gelangen Sie direkt zum Auftrag."
           }
         }
       ]
@@ -1353,11 +1662,11 @@
       "kind": "task",
       "view": "form",
       "enterStatus": null,
-      "advanceLabel": "Ist zugestellt worden",
+      "advanceLabel": "Kündigungsschreiben zugestellt",
       "grantsFullView": false,
       "responsibility": {
         "kind": "group",
-        "group": "3250a01a8f234bccab8a74764be1ff31",
+        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -1366,181 +1675,30 @@
       },
       "approval": null,
       "document": null,
+      "documents": [],
       "escalation": {
         "enabled": true,
         "stages": [
           {
-            "afterDays": 4,
-            "repeatDays": null,
+            "afterDays": 5,
+            "repeatDays": 2,
             "recipients": [
               "responsible"
             ],
-            "message": "Erinnerung: Kündigung zustellen und Zustellung bestätigen (Tag 4).",
-            "raisePriority": false
-          },
-          {
-            "afterDays": 6,
-            "repeatDays": null,
-            "recipients": [
-              "responsible"
-            ],
-            "message": "Erinnerung: Kündigung zustellen und Zustellung bestätigen (Tag 6).",
-            "raisePriority": false
-          },
-          {
-            "afterDays": 8,
-            "repeatDays": null,
-            "recipients": [
-              "responsible"
-            ],
-            "message": "Erinnerung: Kündigung zustellen und Zustellung bestätigen (Tag 8).",
+            "message": null,
             "raisePriority": false
           }
         ]
       },
       "fields": [
         {
-          "ref": "base.mitarbeiter_vorname",
+          "ref": "base.mitarbeiter",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
           "editableWhen": null
         },
-        {
-          "ref": "base.mitarbeiter_nachname",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
-          "ref": "base.austrittsdatum",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
-          "ref": "base.kuendigungsart",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
-          "ref": "kuendigung.zustelldatum",
-          "mode": "editable",
-          "required": true,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        }
-      ],
-      "layout": [
-        {
-          "type": "section",
-          "title": "Kündigung",
-          "variant": "base",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "base.mitarbeiter_vorname",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.mitarbeiter_nachname",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.austrittsdatum",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "base.kuendigungsart",
-              "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Zustellung",
-          "variant": "default",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "note",
-              "text": "Einziger Status-Button: „Ist zugestellt worden\". Erst mit gesetztem Zustelldatum wird an die Fachabteilungen weitergegeben (harte Sperre). Ab dem Eintritt in diese Phase erinnern Mails an Tag 4, 6 und 8.",
-              "tone": "warning",
-              "width": "full",
-              "visibleWhen": null
-            },
-            {
-              "type": "field",
-              "ref": "kuendigung.zustelldatum",
-              "width": "half"
-            }
-          ]
-        }
-      ],
-      "constraints": [],
-      "automations": []
-    },
-    {
-      "key": "durchfuehrung",
-      "label": "Durchführung durch Fachabteilungen",
-      "kind": "review",
-      "view": "review",
-      "enterStatus": null,
-      "advanceLabel": null,
-      "grantsFullView": false,
-      "responsibility": {
-        "kind": "departments",
-        "group": null,
-        "user": null,
-        "fromField": null,
-        "rule": [
-          {
-            "group": "HIER_GRUPPEN_ID_MARKETING_EINSETZEN",
-            "required": true,
-            "when": null
-          },
-          {
-            "group": "7c88310d535140359d4b021d3754193f",
-            "required": true,
-            "when": null
-          },
-          {
-            "group": "b66f749021c34618a8b8aca13ed4328c",
-            "required": true,
-            "when": null
-          },
-          {
-            "group": "8b71e13442814e519068cf3fce470559",
-            "required": true,
-            "when": {
-              "truthy": "base.dienstwagen"
-            }
-          }
-        ],
-        "resetOnDescriptionChange": false,
-        "notifyOnEnter": true
-      },
-      "approval": null,
-      "document": null,
-      "escalation": null,
-      "fields": [
         {
           "ref": "base.mitarbeiter_vorname",
           "mode": "readonly",
@@ -1574,6 +1732,212 @@
           "editableWhen": null
         },
         {
+          "ref": "base.vorgesetzter",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.austrittsdatum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "kuendigung.zustelldatum",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        }
+      ],
+      "layout": [
+        {
+          "type": "section",
+          "title": "Mitarbeiter:in",
+          "variant": "base",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_vorname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter_nachname",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.niederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.kostenstelle",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.vorgesetzter",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.austrittsdatum",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Zustellung",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "note",
+              "text": "Mit Abschluss der Phase bestätige ich verbindlich, dass das Kündigungsschreiben zugestellt worden ist.",
+              "tone": "info",
+              "width": "full",
+              "visibleWhen": null
+            },
+            {
+              "type": "field",
+              "ref": "kuendigung.zustelldatum",
+              "width": "half"
+            }
+          ]
+        }
+      ],
+      "constraints": [],
+      "automations": []
+    },
+    {
+      "key": "durchfuehrung",
+      "label": "Durchführung durch Fachabteilungen",
+      "kind": "review",
+      "view": "review",
+      "enterStatus": null,
+      "advanceLabel": null,
+      "grantsFullView": false,
+      "responsibility": {
+        "kind": "departments",
+        "group": null,
+        "user": null,
+        "fromField": null,
+        "rule": [
+          {
+            "group": "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "required": true,
+            "when": null
+          },
+          {
+            "group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+            "required": true,
+            "when": {
+              "==": [
+                "base.dienstwagen",
+                "Ja"
+              ]
+            }
+          }
+        ],
+        "resetOnDescriptionChange": false,
+        "notifyOnEnter": true
+      },
+      "approval": null,
+      "document": null,
+      "documents": [],
+      "escalation": {
+        "enabled": true,
+        "stages": [
+          {
+            "afterDays": 7,
+            "repeatDays": 7,
+            "recipients": [
+              "responsible"
+            ],
+            "message": null,
+            "raisePriority": false
+          }
+        ]
+      },
+      "fields": [
+        {
+          "ref": "base.mitarbeiter",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mitarbeiter_vorname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.mitarbeiter_nachname",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.niederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.kostenstelle",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.vorgesetzter",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
           "ref": "base.austrittsdatum",
           "mode": "readonly",
           "required": false,
@@ -1591,6 +1955,14 @@
         },
         {
           "ref": "base.freistellung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.freistellung_ab",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -1630,14 +2002,6 @@
           "editableWhen": null
         },
         {
-          "ref": "base.dienstwagen",
-          "mode": "readonly",
-          "required": false,
-          "requiredWhen": null,
-          "visibleWhen": null,
-          "editableWhen": null
-        },
-        {
           "ref": "base.abwesenheit_benoetigt",
           "mode": "readonly",
           "required": false,
@@ -1662,6 +2026,25 @@
           "editableWhen": null
         },
         {
+          "ref": "base.abwesenheit_text_ohne",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "truthy": "base.abwesenheit_benoetigt"
+              },
+              {
+                "not": {
+                  "truthy": "base.abwesenheit_mit_empfaenger"
+                }
+              }
+            ]
+          },
+          "editableWhen": null
+        },
+        {
           "ref": "base.abwesenheit_text",
           "mode": "readonly",
           "required": false,
@@ -1677,17 +2060,46 @@
             ]
           },
           "editableWhen": null
+        },
+        {
+          "ref": "base.dienstwagen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.autorueckgabeniederlassung",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "base.autorueckgabedatum",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
         }
       ],
       "layout": [
         {
           "type": "section",
-          "title": "Austritt",
+          "title": "Mitarbeiter:in",
           "variant": "base",
           "badge": null,
           "description": null,
           "collapsed": false,
           "items": [
+            {
+              "type": "field",
+              "ref": "base.mitarbeiter",
+              "width": "half"
+            },
             {
               "type": "field",
               "ref": "base.mitarbeiter_vorname",
@@ -1710,9 +2122,24 @@
             },
             {
               "type": "field",
-              "ref": "base.austrittsdatum",
+              "ref": "base.vorgesetzter",
               "width": "half"
             },
+            {
+              "type": "field",
+              "ref": "base.austrittsdatum",
+              "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Kündigung & Freistellung",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
             {
               "type": "field",
               "ref": "base.kuendigungsart",
@@ -1722,12 +2149,17 @@
               "type": "field",
               "ref": "base.freistellung",
               "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.freistellung_ab",
+              "width": "half"
             }
           ]
         },
         {
           "type": "section",
-          "title": "IT & Maßnahmen",
+          "title": "Sperrung & IT",
           "variant": "it",
           "badge": null,
           "description": null,
@@ -1755,11 +2187,6 @@
             },
             {
               "type": "field",
-              "ref": "base.dienstwagen",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "base.abwesenheit_benoetigt",
               "width": "half"
             },
@@ -1775,8 +2202,38 @@
             },
             {
               "type": "field",
+              "ref": "base.abwesenheit_text_ohne",
+              "width": "full"
+            },
+            {
+              "type": "field",
               "ref": "base.abwesenheit_text",
               "width": "full"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Fuhrpark",
+          "variant": "fuhrpark",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "base.dienstwagen",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.autorueckgabeniederlassung",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "base.autorueckgabedatum",
+              "width": "half"
             }
           ]
         }
