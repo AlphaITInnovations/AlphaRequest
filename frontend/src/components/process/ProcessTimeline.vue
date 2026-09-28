@@ -29,6 +29,8 @@ import {
 import { EMPTY_TEXT, fieldValueText, isEmptyValue } from '@/lib/processFieldFormat'
 import type { FieldDef, OptionSources } from '@/types/process'
 import { errorMessage } from '@/lib/processErrors'
+import { resolveLabels } from '@/api/directus'
+import { collectDirectusIds, mergeDirectusLabels } from '@/lib/processHistoryLabels'
 
 const props = withDefaults(defineProps<{
   ticketId: number
@@ -71,6 +73,30 @@ const fieldByKey = computed<Record<string, FieldDef>>(() => {
   for (const f of props.fields ?? []) out[f.key] = f
   return out
 })
+
+/**
+ * Directus-Labels für die im VERLAUF vorkommenden IDs (alt UND neu). `props.sources`
+ * kennt nur die aktuellen Werte des Auftrags; ein geänderter directus-Wert würde
+ * seinen alten Stand sonst als rohe ID zeigen. Wird nach dem Laden aufgelöst und mit
+ * den Quell-Labels zusammengeführt (die aktuellen haben Vorrang).
+ */
+const historyLabels = ref<Record<string, Record<string, string>>>({})
+
+const mergedSources = computed<OptionSources | undefined>(
+  () => mergeDirectusLabels(props.sources, historyLabels.value))
+
+/** Die im Verlauf vorkommenden directus-IDs zu Klartext auflösen (je Quelle
+ *  gebündelt, fail-soft). */
+async function loadHistoryDirectusLabels() {
+  const bySource = collectDirectusIds(items.value, fieldByKey.value)
+  if (!Object.keys(bySource).length) { historyLabels.value = {}; return }
+  const out: Record<string, Record<string, string>> = {}
+  await Promise.all(Object.entries(bySource).map(async ([key, ids]) => {
+    const labels = await resolveLabels(key, ids)
+    if (Object.keys(labels).length) out[key] = labels
+  }))
+  historyLabels.value = out
+}
 
 /**
  * Neueste zuerst – der Server liefert chronologisch aufsteigend.
@@ -155,7 +181,7 @@ function changeRows(ev: ProcessEvent): ChangeRow[] {
     const ch = changes[key] ?? {}
     const complex = !!field && (field.widget === 'collection' || field.widget === 'attachment')
     const fmt = (v: unknown) => (field
-      ? fieldValueText(field, v, props.sources)
+      ? fieldValueText(field, v, mergedSources.value)
       : (v === null || v === undefined || v === '' ? EMPTY_TEXT : String(v)))
     return {
       key,
@@ -188,6 +214,9 @@ async function load() {
   try {
     const res = await listEvents(props.ticketId, { limit: 500, view: props.view })
     items.value = res.items
+    // Directus-IDs aus dem Verlauf zu Labels auflösen (nicht blockierend: die Liste
+    // steht schon, die Labels ziehen reaktiv nach).
+    loadHistoryDirectusLabels()
   } catch (e) {
     fehler.value = errorMessage(e, 'Verlauf konnte nicht geladen werden')
   } finally {
