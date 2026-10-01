@@ -117,6 +117,58 @@ def test_pass2_phase_constraint():
     assert any(e["code"] == "CONSTRAINT" for e in errs)
 
 
+def _defn_attachment():
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "position", "widget": "select",
+             "options": [{"value": "werkstudium", "label": "WS"}, {"value": "fest", "label": "Fest"}]},
+            {"key": "doc.cv", "widget": "attachment"},
+            {"key": "doc.imm", "widget": "attachment"},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [
+                        {"ref": "position"},
+                        {"ref": "doc.cv", "required": True},
+                        {"ref": "doc.imm", "required": False,
+                         "requiredWhen": {"==": ["position", "werkstudium"]},
+                         "visibleWhen": {"==": ["position", "werkstudium"]}},
+                    ]}],
+    })
+
+
+def test_pass2_attachments_skipped_without_param():
+    """Ohne `attachment_keys` bleiben Anhang-Felder übersprungen (Alt-Verhalten) –
+    ein Pflicht-Anhang blockiert den Abschluss dann NICHT."""
+    d = _defn_attachment()
+    assert pv.validate_phase_completion(d, d.phases[0], {"position": "fest"}) == []
+
+
+def test_pass2_required_attachment_missing():
+    d = _defn_attachment()
+    # Pflicht-Lebenslauf (doc.cv) ohne Datei → REQUIRED; doc.imm nur bei werkstudium.
+    errs = pv.validate_phase_completion(d, d.phases[0], {"position": "fest"}, attachment_keys=set())
+    codes = {(e["path"], e["code"]) for e in errs}
+    assert ("doc.cv", "REQUIRED") in codes
+    assert ("doc.imm", "REQUIRED") not in codes          # nicht sichtbar bei fest
+
+
+def test_pass2_conditional_attachment_required_when_werkstudium():
+    d = _defn_attachment()
+    errs = pv.validate_phase_completion(d, d.phases[0], {"position": "werkstudium"},
+                                        attachment_keys=set())
+    codes = {(e["path"], e["code"]) for e in errs}
+    assert ("doc.cv", "REQUIRED") in codes
+    assert ("doc.imm", "REQUIRED") in codes              # werkstudium → immatrikulation pflicht
+
+
+def test_pass2_required_attachment_satisfied_by_uploaded_key():
+    d = _defn_attachment()
+    errs = pv.validate_phase_completion(d, d.phases[0], {"position": "werkstudium"},
+                                        attachment_keys={"doc.cv", "doc.imm"})
+    assert errs == []                                    # beide Dateien vorhanden
+
+
 # ── Runtime ─────────────────────────────────────────────────────────────────
 
 def test_initial_runtime():

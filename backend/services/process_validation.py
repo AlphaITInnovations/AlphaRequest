@@ -161,17 +161,31 @@ def _check_constraints(f: FieldDef, val: Any) -> list[dict]:
 
 # ── Pass 2: Phasen-Abschluss ──────────────────────────────────────────────────
 
-def validate_phase_completion(defn: ProcessDefinition, phase: PhaseDef, values: dict) -> list[dict]:
+def validate_phase_completion(defn: ProcessDefinition, phase: PhaseDef, values: dict,
+                              *, attachment_keys: set | None = None) -> list[dict]:
+    """Pflichtangaben + Constraints beim Phasen-Abschluss.
+
+    `attachment_keys` = Feld-Schlüssel, an denen bereits eine Datei hängt. Nur wenn
+    dieser Satz übergeben wird, werden PFLICHT-ANHÄNGE geprüft (ein Pflicht-Anhang-
+    Feld ohne Datei → Fehler). Ohne den Parameter (None) bleiben Anhang-Felder
+    übersprungen wie bisher – ein Anhang speichert nichts in `values`, also ließe
+    sich dort sonst nie ein „required" erfüllen."""
     errors: list[dict] = []
     fmap = {f.key: f for f in defn.fields}
     for fr in phase.fields:
         if fr.mode == FieldMode.hidden:
             continue
-        # Anhang-Felder speichern nichts in `values` (die Dateien liegen als
-        # eigene Entität vor) – ein „required" ließe sich hier nie erfüllen und
-        # würde den Phasen-Abschluss dauerhaft blockieren. Deshalb überspringen.
         f = fmap.get(fr.ref)
         if f is not None and f.widget == Widget.attachment:
+            # Ohne angeforderte Anhang-Prüfung (None) überspringen; sonst gegen die
+            # tatsächlich hochgeladenen Dateien (attachment_keys) prüfen.
+            if attachment_keys is None:
+                continue
+            if fr.visibleWhen is not None and not evaluate(fr.visibleWhen, values):
+                continue
+            required = fr.required or (fr.requiredWhen is not None and evaluate(fr.requiredWhen, values))
+            if required and fr.ref not in attachment_keys:
+                errors.append(_err(fr.ref, "REQUIRED", "Pflicht-Anlage fehlt"))
             continue
         if fr.visibleWhen is not None and not evaluate(fr.visibleWhen, values):
             continue  # nicht sichtbar → nicht pflicht

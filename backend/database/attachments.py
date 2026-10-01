@@ -177,6 +177,23 @@ def list_for_ticket(ticket_id: int, *, include_versions: bool = False,
         conn.close()
 
 
+def present_field_keys(entity_type: str, entity_id: int) -> set:
+    """Feld-Schlüssel, an denen aktuell (nicht gelöscht) mindestens eine Datei hängt –
+    Grundlage der Pflicht-Anhang-Prüfung beim Phasen-Abschluss. Allgemeine Anhänge
+    (field_key IS NULL) zählen hier nicht, da sie keinem Pflichtfeld zugeordnet sind."""
+    conn = get_connection()
+    try:
+        rows = _fetchall(
+            conn,
+            "SELECT DISTINCT field_key FROM attachments "
+            "WHERE entity_type=%s AND ticket_id=%s AND deleted_at IS NULL AND is_current=1 "
+            "AND field_key IS NOT NULL",
+            (entity_type, entity_id))
+        return {r["field_key"] for r in rows}
+    finally:
+        conn.close()
+
+
 def count_for_field(entity_type: str, entity_id: int, field_key: Optional[str]) -> int:
     """Anzahl aktueller (nicht gelöschter) Anhänge an EINEM Feld einer Entität.
 

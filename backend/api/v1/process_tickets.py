@@ -738,7 +738,10 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         # Vor dem automatischen Weiterschalten die Pflichtangaben der Startphase
         # prüfen: `create` prüft nur die Wert-FORM, nicht den Phasen-Abschluss.
         # Ohne das könnte ein Auftrag unvollständig in die nächste Phase rutschen.
-        offen = pv.validate_phase_completion(defn, start_phase, values)
+        # autoStart heißt: der Client hat KEINE Dateien → leerer Anhang-Satz, ein
+        # Pflicht-Anhang schlägt hier bewusst fehl (der Datei-Pfad läuft über
+        # autoStart=false: anlegen → hochladen → :advance).
+        offen = pv.validate_phase_completion(defn, start_phase, values, attachment_keys=set())
         if offen:
             raise api_error(422, ErrorCode.VALIDATION_FAILED,
                             "Pflichtangaben fehlen", fields=offen)
@@ -1689,6 +1692,20 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     return DataResponse(data=_out(row, defn, ctx, user, gids))
 
 
+def _phase_attachment_keys(defn, phase, ticket_id):
+    """`None`, wenn die Phase keine Anhang-Felder führt – dann wird keine Anhang-
+    Pflicht geprüft UND keine DB-Abfrage ausgelöst. Sonst die Feld-Schlüssel, an
+    denen am Ticket aktuell mindestens eine Datei hängt (für die Pflicht-Prüfung)."""
+    from backend.schemas.process_definition import Widget
+    fmap = {f.key: f for f in defn.fields}
+    has_att = any(fmap.get(fr.ref) is not None and fmap[fr.ref].widget == Widget.attachment
+                  for fr in phase.fields)
+    if not has_att:
+        return None
+    from backend.database import attachments as att_db
+    return att_db.present_field_keys(att_db.ENTITY_PROCESS_TICKET, ticket_id)
+
+
 @router.post("/process-tickets/{ticket_id}:advance", response_model=DataResponse[ProcessTicketOut])
 def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     row = store.get(ticket_id)
@@ -1704,7 +1721,10 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
     if phase is None:
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Keine aktive Phase")
 
-    errs = pv.validate_phase_completion(defn, phase, values)
+    # Pflicht-Anhänge nur abfragen, wenn die Phase überhaupt Anhang-Felder führt –
+    # sonst sparen wir die DB-Abfrage (und berühren den DB-freien Pfad nicht).
+    att_keys = _phase_attachment_keys(defn, phase, ticket_id)
+    errs = pv.validate_phase_completion(defn, phase, values, attachment_keys=att_keys)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Phase kann nicht abgeschlossen werden", fields=errs)
 
