@@ -317,6 +317,8 @@ export function blankDocument(key = 'dokument'): DocumentSpec {
     title: 'Dokument',
     bindings: {},
     sections: {},
+    companyTemplate: null,
+    companyField: null,
   }
 }
 

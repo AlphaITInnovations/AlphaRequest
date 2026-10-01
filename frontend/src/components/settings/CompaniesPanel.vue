@@ -5,6 +5,7 @@ import { useToast } from '@/composables/useToast'
 import { useSaver } from '@/composables/settingsSave'
 import { useDetailNav } from '@/composables/useDetailNav'
 import SettingsList from '@/components/settings/SettingsList.vue'
+import CompanyDocumentsEditor from '@/components/settings/CompanyDocumentsEditor.vue'
 
 const { showToast } = useToast()
 
@@ -22,6 +23,9 @@ interface CompanyItem {
 const companies = ref<CompanyItem[]>([])
 const snapshot  = ref('')
 const loading   = ref(true)
+/** Serverseitig gespeicherte Firmennamen – nur für diese lassen sich Dokument-
+ *  Vorlagen verwalten (sie hängen am Namen). Neu/umbenannt → erst speichern. */
+const savedNames = ref<Set<string>>(new Set())
 const { selected, open, back } = useDetailNav(() => companies.value.length)
 
 function mapCompany(c: any): CompanyItem {
@@ -46,6 +50,7 @@ async function loadCompanies() {
     const { data } = await client.get('/settings/companies')
     companies.value = (data.data.companies ?? []).map(mapCompany)
     snapshot.value = serialize(companies.value)
+    savedNames.value = new Set(companies.value.map(c => c.name))
   } finally {
     loading.value = false
   }
@@ -121,6 +126,7 @@ async function saveCompanies() {
     const { data } = await client.put('/settings/companies', { companies: payload })
     companies.value = (data.data.companies ?? []).map(mapCompany)
     snapshot.value = serialize(companies.value)
+    savedNames.value = new Set(companies.value.map(c => c.name))
     back()
     showToast('Gespeichert', true)
   } catch (e: any) {
@@ -216,6 +222,12 @@ onMounted(loadCompanies)
           <p class="text-xs text-gray-400 mt-1">
             Basis der automatischen Firmenmail: vorname.nachname@domain.
           </p>
+        </div>
+
+        <div class="pt-1 border-t border-gray-100 dark:border-white/10">
+          <CompanyDocumentsEditor
+            :company="savedNames.has(companies[selected].name.trim()) ? companies[selected].name.trim() : ''"
+            :ready="!!companies[selected].name.trim() && savedNames.has(companies[selected].name.trim())" />
         </div>
 
         <div v-if="companies[selected].pnr_shared_with" class="flex flex-wrap items-center gap-2 text-xs pt-1">

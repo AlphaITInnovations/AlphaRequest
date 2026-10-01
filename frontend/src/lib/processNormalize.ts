@@ -321,6 +321,8 @@ function normDocument(v: any): DocumentSpec | null {
     title: String(v.title ?? 'Dokument'),
     bindings,
     sections,
+    companyTemplate: str(v.companyTemplate),
+    companyField: str(v.companyField),
   }
 }
 

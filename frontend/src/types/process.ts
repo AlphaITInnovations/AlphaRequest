@@ -366,6 +366,12 @@ export interface DocumentSpec {
   /** Bedingte Passagen: `name → Bedingung` (Condition-DSL). In der .docx umschließt
    *  `{{#if:name}} … {{/if}}` den Absatz; ist die Bedingung falsch, entfällt er. */
   sections: Record<string, Condition>
+  /** Firmenabhängige Vorlage: statt einer fest hochgeladenen .docx wird die Vorlage
+   *  der im Auftrag gewählten Firma geladen. `companyTemplate` = Name der Firmen-
+   *  Vorlage (z. B. „Arbeitsvertrag"), `companyField` = Prozess-Feld (widget=company)
+   *  mit der Firma. Beide zusammen oder beide null. */
+  companyTemplate: string | null
+  companyField: string | null
 }
 
 /** Eine Marker-Zuordnung: `field` ist ein Katalog-Feldschlüssel oder die
