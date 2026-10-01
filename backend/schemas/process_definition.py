@@ -1364,12 +1364,22 @@ class ProcessDefinition(_Base):
                 if fr.ref not in catalog:
                     raise ValueError(f"Phase „{p.key}“: fieldRef „{fr.ref}“ ist nicht im Feld-Katalog")
 
-        # Dokument-Phasen mit Firmen-Vorlage: companyField muss ein Katalog-Feld sein.
+        # Dokument-Phasen mit Firmen-Vorlage: companyField muss ein Katalog-Feld vom
+        # Typ `company` sein (es hält den Firmennamen, über den die Firmen-Vorlage
+        # aufgelöst wird). Ohne diese Prüfung ließe sich über den JSON-Import ein
+        # beliebiges Feld eintragen → zur Laufzeit keine/falsche Vorlage.
+        feld_je_key = {f.key: f for f in self.fields}
         for p in self.phases:
             for d in p.documents:
-                if d.companyField and d.companyField not in catalog:
+                if not d.companyField:
+                    continue
+                f = feld_je_key.get(d.companyField)
+                if f is None:
                     raise ValueError(f"Phase „{p.key}“.documents[{d.key or '?'}]: companyField "
                                      f"„{d.companyField}“ ist nicht im Feld-Katalog")
+                if f.widget != Widget.company:
+                    raise ValueError(f"Phase „{p.key}“.documents[{d.key or '?'}]: companyField "
+                                     f"„{d.companyField}“ muss ein Firmen-Feld (widget=company) sein")
 
         # Layout: darf nur Felder platzieren, die die Phase auch führt, und jedes
         # höchstens einmal (sonst stünde ein Feld doppelt im Formular).

@@ -413,6 +413,25 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                 "hat keinen eigenen Personalnummern-Bereich.",
             )
 
+    # Firmen-Vorlagen hängen am NAMEN (keine stabile ID): eine Firma mit hinterlegten
+    # Dokument-Vorlagen darf nicht spurlos gelöscht/umbenannt werden, sonst zeigt der
+    # Prozess ins Leere und Arbeitsvertrag/Kündigung ließen sich nicht mehr erzeugen.
+    # Umbenennen = alter Name verschwindet → gleiche Sperre.
+    new_names = {c["name"] for c in cleaned}
+    for old in old_companies:
+        old_name = (old.get("name") or "").strip()
+        if not old_name or old_name in new_names:
+            continue
+        tpls = ctpl_db.list_for_company(old_name)
+        if tpls:
+            namen = ", ".join(f"„{t['name']}“" for t in tpls)
+            raise HTTPException(
+                409,
+                f"„{old_name}“ hat noch hinterlegte Dokument-Vorlagen ({namen}). "
+                "Bitte diese Vorlagen zuerst entfernen, bevor die Firma gelöscht "
+                "oder umbenannt wird.",
+            )
+
     try:
         set_companies_full(cleaned)
     except Exception as e:
@@ -467,6 +486,17 @@ def _require_known_company(company: str) -> str:
     return c
 
 
+def _content_disposition(filename: str) -> str:
+    """Content-Disposition mit ASCII-Fallback + RFC-5987 filename* – Starlette
+    kodiert Header als latin-1, ein Umlaut/Gedankenstrich im Dateinamen würde sonst
+    einen 500 werfen."""
+    import urllib.parse
+    fn = (filename or "Dokument").replace('"', "")
+    ascii_name = fn.encode("ascii", "replace").decode("ascii")
+    quoted = urllib.parse.quote(fn)
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"
+
+
 @router.get("/settings/companies/{company}/documents")
 def list_company_documents(company: str, user: dict = Depends(get_current_user)):
     """Benannte Dokument-Vorlagen einer Firma (Verwaltung im Companies-Panel)."""
@@ -485,6 +515,8 @@ async def upload_company_document(company: str, name: str = Query(...),
     tpl_name = (name or "").strip()
     if not tpl_name:
         raise HTTPException(422, "Vorlagen-Name fehlt")
+    if len(tpl_name) > 150:                       # Spalte ist VARCHAR(150)
+        raise HTTPException(422, "Vorlagen-Name zu lang (max. 150 Zeichen)")
     fname = (file.filename or "").lower()
     if not (fname.endswith(".docx") or fname.endswith(".pdf")):
         raise HTTPException(422, "Nur Word- (.docx) oder PDF-Dateien werden als Vorlage unterstützt")
@@ -493,20 +525,32 @@ async def upload_company_document(company: str, name: str = Query(...),
         stored_path, size, _sha = storage.save_stream(file.file, max_bytes=max_bytes)
     except storage.FileTooLarge:
         raise HTTPException(413, f"Datei zu groß (max. {config.MAX_UPLOAD_MB} MB)")
-    # Lesbarkeit prüfen – sonst Blob gleich wieder entfernen.
+    # Lesbarkeit UND Parsebarkeit prüfen (echte .docx/PDF mit lesbaren Markern) –
+    # detect() allein wirft nie; ohne find_placeholders fiele eine kaputte Datei erst
+    # beim Erzeugen im Onboarding als 500 auf. Bei Fehler Blob gleich wieder entfernen.
     from pathlib import Path
     try:
         data = Path(storage.full_path(stored_path)).read_bytes()
         fmt = template_format.detect(data)
+        if template_format.is_pdf(data):
+            from backend.services import pdf_fill
+            pdf_fill.find_placeholders(data)
+        else:
+            from backend.services import docx_fill
+            docx_fill.find_placeholders(data)
     except Exception:
         storage.delete(stored_path)
         raise HTTPException(422, "Die Datei ließ sich nicht als Word- (.docx) oder PDF-Vorlage lesen")
     old = ctpl_db.get_template(c, tpl_name)
-    ctpl_db.set_template(company=c, name=tpl_name, stored_path=stored_path,
-                         original_filename=file.filename or tpl_name,
-                         content_type=file.content_type, size_bytes=size,
-                         uploaded_by_id=user.get("id"),
-                         uploaded_by_name=user.get("displayName") or user.get("email"))
+    try:
+        ctpl_db.set_template(company=c, name=tpl_name, stored_path=stored_path,
+                             original_filename=file.filename or tpl_name,
+                             content_type=file.content_type, size_bytes=size,
+                             uploaded_by_id=user.get("id"),
+                             uploaded_by_name=user.get("displayName") or user.get("email"))
+    except Exception:
+        storage.delete(stored_path)               # DB-Fehler → neuen Blob nicht verwaisen lassen
+        raise
     if old and old.get("stored_path") and old["stored_path"] != stored_path:
         storage.delete(old["stored_path"])
     _audit(user, "company_template_uploaded",
@@ -528,9 +572,9 @@ def download_company_document(company: str, name: str, user: dict = Depends(get_
         raise HTTPException(500, "Die hinterlegte Vorlage ist nicht lesbar")
     mime = ("application/pdf" if template_format.is_pdf(data)
             else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-    fn = (row.get("original_filename") or name).replace('"', "")
     return Response(content=data, media_type=mime,
-                    headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+                    headers={"Content-Disposition": _content_disposition(
+                        row.get("original_filename") or name)})
 
 
 @router.delete("/settings/companies/{company}/documents/{name}")

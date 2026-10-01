@@ -41,7 +41,8 @@ export async function deleteCompanyDocument(company: string, name: string): Prom
   await client.delete(`${base(company)}/${encodeURIComponent(name)}`)
 }
 
-/** Download-URL (für einen direkten Link/Button). */
+/** Download-URL für einen direkten <a href> (KEIN axios → baseURL /api/v1 selbst
+ *  voranstellen, sonst landet der Link im SPA-Router statt an der API). */
 export function companyDocumentDownloadUrl(company: string, name: string): string {
-  return `${base(company)}/${encodeURIComponent(name)}/download`
+  return `/api/v1${base(company)}/${encodeURIComponent(name)}/download`
 }

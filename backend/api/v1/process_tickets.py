@@ -1452,7 +1452,24 @@ def _preview_defn_doc(body: "DocumentPreviewRequest"):
     return defn, docphase, doc
 
 
-def _preview_template_bytes(key: str, docphase, doc) -> bytes:
+def _preview_template_bytes(key: str, docphase, doc, values: dict) -> bytes:
+    # Firmenabhängig (doc.companyTemplate): dieselbe Auflösung wie im echten Export –
+    # die Vorlage der in der Simulation gewählten Firma, NICHT eine (bei company-Mode
+    # gar nicht vorhandene) phasenfeste Vorlage.
+    if getattr(doc, "companyTemplate", None) and getattr(doc, "companyField", None):
+        company = (values or {}).get(doc.companyField)
+        if not company:
+            raise api_error(409, "TEMPLATE_MISSING",
+                            f"Bitte in den Simulations-Werten eine Firma im Feld "
+                            f"„{doc.companyField}“ wählen – dann wird deren Vorlage "
+                            f"„{doc.companyTemplate}“ angezeigt.")
+        from backend.database import company_templates as ctpl_db
+        tpl = ctpl_db.get_template(str(company), doc.companyTemplate)
+        if tpl is None:
+            raise api_error(409, "TEMPLATE_MISSING",
+                            f"Für „{company}“ ist keine Vorlage „{doc.companyTemplate}“ "
+                            "hinterlegt. Bitte in den Firmen-Einstellungen hochladen.")
+        return _read_template_bytes(tpl)
     from backend.database import process_templates as tpl_db
     tpl = tpl_db.get_template(key, docphase.key, doc.key)
     if tpl is None:
@@ -1474,7 +1491,7 @@ def preview_document_fields(key: str, body: DocumentPreviewRequest,
     values = body.values or {}
     from backend.services import docx_fill, pdf_fill, template_format
     from backend.services import mail_template as mt
-    tpl_bytes = _preview_template_bytes(key, docphase, doc)
+    tpl_bytes = _preview_template_bytes(key, docphase, doc, values)
     tpl_format = template_format.detect(tpl_bytes)
     markers = (pdf_fill.find_placeholders(tpl_bytes) if tpl_format == template_format.PDF
                else docx_fill.find_placeholders(tpl_bytes))
@@ -1536,7 +1553,7 @@ def preview_document_export(key: str, body: DocumentPreviewRequest,
         return mt.format_value(values.get(token))
 
     name = _safe_filename(body.filename or mt.substitute((doc.filename or "") or "Dokument", _resolve))
-    tpl_bytes = _preview_template_bytes(key, docphase, doc)
+    tpl_bytes = _preview_template_bytes(key, docphase, doc, values)
 
     if template_format.detect(tpl_bytes) == template_format.PDF:
         pdf = pdf_fill.fill_pdf(tpl_bytes, fill_values)

@@ -111,7 +111,13 @@ async function loadTemplate() {
   }
 }
 onMounted(() => { loadTemplate(); loadCompanies() })
-watch(() => `${props.processKey} ${props.index} ${props.phaseKey} ${props.doc.key}`, loadTemplate)
+watch(() => `${props.processKey} ${props.index} ${props.phaseKey} ${props.doc.key}`, () => {
+  loadTemplate()
+  // Der Editor wird bei einem Phasenwechsel wiederverwendet (zwei Dokument-Phasen
+  // teilen oft den doc.key „dokument"). Ohne Resync bliebe der Modus des vorigen
+  // Dokuments „kleben" und ein Tippen würde das falsche Dokument umschalten.
+  companyMode.value = !!(props.doc.companyTemplate || props.doc.companyField)
+})
 watch(() => `${companyMode.value}|${props.doc.companyTemplate}|${refCompany.value}`, loadCompanyMarkers,
       { immediate: true })
 
