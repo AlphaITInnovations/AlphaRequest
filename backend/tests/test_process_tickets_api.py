@@ -1443,3 +1443,31 @@ def test_create_ohne_eingaben_kein_leerer_angaben_eintrag(client, monkeypatch):
     client.post("/process-tickets", json={"processKey": "demo", "values": {}})
     assert pt.events.CREATED in [a for a, _ in calls]
     assert pt.events.UPDATED not in [a for a, _ in calls]
+
+
+def test_load_template_row_firmenvorlage(monkeypatch):
+    """Firmenabhängiges Dokument: die Vorlage kommt aus den Einstellungen der im
+    Auftrag gewählten Firma (company_templates), nicht aus der Prozess-Phase."""
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    from backend.database import company_templates as ctpl
+    calls = {}
+    def fake_get(company, name):
+        calls["args"] = (company, name)
+        return {"stored_path": "x", "original_filename": "AV.docx"}
+    monkeypatch.setattr(ctpl, "get_template", fake_get)
+    doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
+    docphase = SimpleNamespace(key="vertrag")
+    row = {"process_key": "onb", "values": {"base.company": "Alpha GmbH"}, "id": 1}
+    tpl = pt._load_template_row(row, docphase, doc)
+    assert tpl == {"stored_path": "x", "original_filename": "AV.docx"}
+    assert calls["args"] == ("Alpha GmbH", "Arbeitsvertrag")
+
+
+def test_load_template_row_firmenvorlage_ohne_firma():
+    """Keine Firma gewählt → keine Vorlage (statt falscher)."""
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
+    docphase = SimpleNamespace(key="vertrag")
+    assert pt._load_template_row({"process_key": "onb", "values": {}, "id": 1}, docphase, doc) is None

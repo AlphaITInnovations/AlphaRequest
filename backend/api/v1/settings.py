@@ -1,15 +1,18 @@
 import re
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Query, Response, UploadFile
 from pydantic import BaseModel
 from typing import Optional
 
 from backend.core.dependencies import get_current_user
 from backend.database.groups import get_groups, save_groups
 from backend.database.settings import (
-    get_companies_full, set_companies_full,
+    get_companies, get_companies_full, set_companies_full,
     get_process_order, set_process_order,
 )
+from backend.database import company_templates as ctpl_db
+from backend.services import attachment_storage as storage
+from backend.services import template_format
 from backend.database.users import (
     list_users, set_user_role, get_user,
     add_extra_permission, remove_extra_permission, set_extra_permissions,
@@ -426,6 +429,120 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                details={"created": created, "deleted": deleted, "modified": modified})
 
     return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
+
+
+# ── Firmen-Dokument-Vorlagen (.docx/PDF je Firma, nach Name) ──────────────────
+#
+# Firmenabhängige Dokumente (Arbeitsvertrag, Kündigung …): je Firma beliebig viele
+# benannte Vorlagen. Ein Prozess-Dokument verweist nur über den NAMEN; welche Datei
+# gefüllt wird, entscheidet die im Auftrag gewählte Firma (siehe DocumentSpec
+# .companyTemplate/.companyField + process_tickets._load_template_row).
+
+def _ctpl_info(row: dict) -> dict:
+    """Metadaten einer Firmen-Vorlage + erkanntes Format und gefundene {{marker}}."""
+    from pathlib import Path
+    info = {"name": row["name"], "filename": row.get("original_filename"),
+            "size": row.get("size_bytes"),
+            "uploaded_at": (row["uploaded_at"].isoformat()
+                            if hasattr(row.get("uploaded_at"), "isoformat") else row.get("uploaded_at")),
+            "uploaded_by": row.get("uploaded_by_name"), "format": None, "placeholders": []}
+    try:
+        data = Path(storage.full_path(row["stored_path"])).read_bytes()
+        info["format"] = template_format.detect(data)
+        if template_format.is_pdf(data):
+            from backend.services import pdf_fill
+            info["placeholders"] = pdf_fill.find_placeholders(data)
+        else:
+            from backend.services import docx_fill
+            info["placeholders"] = docx_fill.find_placeholders(data)
+    except Exception:
+        logger.warning("Firmen-Vorlage „%s/%s“ nicht lesbar", row.get("company"), row.get("name"))
+    return info
+
+
+def _require_known_company(company: str) -> str:
+    c = (company or "").strip()
+    if c not in get_companies():
+        raise HTTPException(404, f"Unbekannte Firma: {company}")
+    return c
+
+
+@router.get("/settings/companies/{company}/documents")
+def list_company_documents(company: str, user: dict = Depends(get_current_user)):
+    """Benannte Dokument-Vorlagen einer Firma (Verwaltung im Companies-Panel)."""
+    require_admin(user)
+    c = _require_known_company(company)
+    return DataResponse(data={"documents": [_ctpl_info(r) for r in ctpl_db.list_for_company(c)]})
+
+
+@router.post("/settings/companies/{company}/documents")
+async def upload_company_document(company: str, name: str = Query(...),
+                                  file: UploadFile = File(...),
+                                  user: dict = Depends(get_current_user)):
+    """Vorlage (.docx/PDF) unter einem Namen für eine Firma hochladen/ersetzen."""
+    require_admin(user)
+    c = _require_known_company(company)
+    tpl_name = (name or "").strip()
+    if not tpl_name:
+        raise HTTPException(422, "Vorlagen-Name fehlt")
+    fname = (file.filename or "").lower()
+    if not (fname.endswith(".docx") or fname.endswith(".pdf")):
+        raise HTTPException(422, "Nur Word- (.docx) oder PDF-Dateien werden als Vorlage unterstützt")
+    max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
+    try:
+        stored_path, size, _sha = storage.save_stream(file.file, max_bytes=max_bytes)
+    except storage.FileTooLarge:
+        raise HTTPException(413, f"Datei zu groß (max. {config.MAX_UPLOAD_MB} MB)")
+    # Lesbarkeit prüfen – sonst Blob gleich wieder entfernen.
+    from pathlib import Path
+    try:
+        data = Path(storage.full_path(stored_path)).read_bytes()
+        fmt = template_format.detect(data)
+    except Exception:
+        storage.delete(stored_path)
+        raise HTTPException(422, "Die Datei ließ sich nicht als Word- (.docx) oder PDF-Vorlage lesen")
+    old = ctpl_db.get_template(c, tpl_name)
+    ctpl_db.set_template(company=c, name=tpl_name, stored_path=stored_path,
+                         original_filename=file.filename or tpl_name,
+                         content_type=file.content_type, size_bytes=size,
+                         uploaded_by_id=user.get("id"),
+                         uploaded_by_name=user.get("displayName") or user.get("email"))
+    if old and old.get("stored_path") and old["stored_path"] != stored_path:
+        storage.delete(old["stored_path"])
+    _audit(user, "company_template_uploaded",
+           summary=f"Firmen-Vorlage „{tpl_name}“ für „{c}“ hochgeladen ({fmt}, {size} B)",
+           details={"company": c, "name": tpl_name, "format": fmt})
+    return DataResponse(data=_ctpl_info(ctpl_db.get_template(c, tpl_name)))
+
+
+@router.get("/settings/companies/{company}/documents/{name}/download")
+def download_company_document(company: str, name: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    row = ctpl_db.get_template((company or "").strip(), (name or "").strip())
+    if not row:
+        raise HTTPException(404, "Keine Vorlage hinterlegt")
+    from pathlib import Path
+    try:
+        data = Path(storage.full_path(row["stored_path"])).read_bytes()
+    except Exception:
+        raise HTTPException(500, "Die hinterlegte Vorlage ist nicht lesbar")
+    mime = ("application/pdf" if template_format.is_pdf(data)
+            else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    fn = (row.get("original_filename") or name).replace('"', "")
+    return Response(content=data, media_type=mime,
+                    headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+
+
+@router.delete("/settings/companies/{company}/documents/{name}")
+def delete_company_document(company: str, name: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    row = ctpl_db.delete_template((company or "").strip(), (name or "").strip())
+    if row and row.get("stored_path"):
+        storage.delete(row["stored_path"])
+    _audit(user, "company_template_deleted",
+           summary=f"Firmen-Vorlage „{name}“ für „{company}“ entfernt",
+           details={"company": (company or "").strip(), "name": (name or "").strip()})
+    return DataResponse(data={"exists": False})
 
 
 # ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────

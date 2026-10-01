@@ -1044,6 +1044,22 @@ class DocumentSpec(_Base):
     #: ist die Bedingung falsch, entfällt der ganze Passus. Leer = keine
     #: Bedingungen (die Vorlage füllt wie bisher).
     sections: dict[str, dict] = Field(default_factory=dict)
+    #: FIRMENABHÄNGIGE Vorlage: statt einer fest je (Prozess, Phase) hochgeladenen
+    #: .docx wird die Vorlage zur Laufzeit aus den Einstellungen der im Auftrag
+    #: gewählten Firma geladen. `companyTemplate` = der NAME der Firmen-Vorlage
+    #: (z. B. „Arbeitsvertrag"), `companyField` = das Prozess-Feld (widget=company),
+    #: das die Firma hält. Beide zusammen oder keins; Marker/Bedingungen/Dateiname
+    #: bleiben hier (eine Konvention je Vorlagen-Typ, für alle Firmen gleich).
+    companyTemplate: Optional[str] = None
+    companyField: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check_company_source(self) -> "DocumentSpec":
+        if bool(self.companyTemplate) != bool(self.companyField):
+            raise ValueError(
+                f"documents.{self.key or '?'}: `companyTemplate` und `companyField` müssen "
+                f"zusammen gesetzt sein (Firmen-Vorlage nach Name + Firmen-Feld).")
+        return self
 
     @field_validator("bindings", mode="before")
     @classmethod
@@ -1347,6 +1363,13 @@ class ProcessDefinition(_Base):
             for fr in p.fields:
                 if fr.ref not in catalog:
                     raise ValueError(f"Phase „{p.key}“: fieldRef „{fr.ref}“ ist nicht im Feld-Katalog")
+
+        # Dokument-Phasen mit Firmen-Vorlage: companyField muss ein Katalog-Feld sein.
+        for p in self.phases:
+            for d in p.documents:
+                if d.companyField and d.companyField not in catalog:
+                    raise ValueError(f"Phase „{p.key}“.documents[{d.key or '?'}]: companyField "
+                                     f"„{d.companyField}“ ist nicht im Feld-Katalog")
 
         # Layout: darf nur Felder platzieren, die die Phase auch führt, und jedes
         # höchstens einmal (sonst stünde ein Feld doppelt im Formular).

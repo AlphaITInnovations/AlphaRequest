@@ -1192,12 +1192,22 @@ def _pick_document(docphase, document_key):
 
 
 def _load_template_row(row, docphase, doc):
-    """Die Vorlage je (Prozess, Phase, Dokument) laden – `None`, falls keine
-    hinterlegt. Fehler beim Lookup schlucken (still auf „keine Vorlage" degradieren)."""
-    from backend.database import process_templates as tpl_db
+    """Die zu füllende Vorlage laden – `None`, falls keine hinterlegt.
+
+    Firmenabhängig (doc.companyTemplate): die .docx der im Auftrag gewählten Firma
+    (values[doc.companyField]) mit diesem Namen aus den Firmen-Einstellungen; sonst
+    die fest je (Prozess, Phase, Dokument) hochgeladene Vorlage. Fehler beim Lookup
+    schlucken (still auf „keine Vorlage" degradieren)."""
     if docphase is None or doc is None or not row.get("process_key"):
         return None
     try:
+        if getattr(doc, "companyTemplate", None) and getattr(doc, "companyField", None):
+            company = (row.get("values") or {}).get(doc.companyField)
+            if not company:
+                return None
+            from backend.database import company_templates as ctpl_db
+            return ctpl_db.get_template(str(company), doc.companyTemplate)
+        from backend.database import process_templates as tpl_db
         return tpl_db.get_template(row["process_key"], docphase.key, doc.key)
     except Exception:
         logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", row.get("id"))
