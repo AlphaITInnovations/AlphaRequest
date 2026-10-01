@@ -1451,16 +1451,39 @@ def test_load_template_row_firmenvorlage(monkeypatch):
     from types import SimpleNamespace
     from backend.api.v1 import process_tickets as pt
     from backend.database import company_templates as ctpl
+    from backend.database import settings as settings_db
     calls = {}
     def fake_get(company, name):
         calls["args"] = (company, name)
         return {"stored_path": "x", "original_filename": "AV.docx"}
     monkeypatch.setattr(ctpl, "get_template", fake_get)
+    # Keine Übernahme → Quelle = gewählte Firma.
+    monkeypatch.setattr(settings_db, "template_source_company", lambda n: n)
     doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
     docphase = SimpleNamespace(key="vertrag")
     row = {"process_key": "onb", "values": {"base.company": "Alpha GmbH"}, "id": 1}
     tpl = pt._load_template_row(row, docphase, doc)
     assert tpl == {"stored_path": "x", "original_filename": "AV.docx"}
+    assert calls["args"] == ("Alpha GmbH", "Arbeitsvertrag")
+
+
+def test_load_template_row_firmenvorlage_uebernommen(monkeypatch):
+    """Übernimmt die gewählte Firma Vorlagen von einer anderen
+    (documents_shared_with), wird aus DEREN Bestand geladen."""
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    from backend.database import company_templates as ctpl
+    from backend.database import settings as settings_db
+    calls = {}
+    monkeypatch.setattr(ctpl, "get_template",
+                        lambda company, name: calls.setdefault("args", (company, name)))
+    # Beta übernimmt die Vorlagen von Alpha GmbH.
+    monkeypatch.setattr(settings_db, "template_source_company",
+                        lambda n: "Alpha GmbH" if n == "Beta GmbH" else n)
+    doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
+    docphase = SimpleNamespace(key="vertrag")
+    row = {"process_key": "onb", "values": {"base.company": "Beta GmbH"}, "id": 1}
+    pt._load_template_row(row, docphase, doc)
     assert calls["args"] == ("Alpha GmbH", "Arbeitsvertrag")
 
 

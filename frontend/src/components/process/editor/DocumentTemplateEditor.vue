@@ -78,8 +78,8 @@ async function loadCompanyMarkers() {
   companyPlaceholders.value = []
   if (!companyMode.value || !props.doc.companyTemplate || !refCompany.value) return
   try {
-    const list = await listCompanyDocuments(refCompany.value)
-    const match = list.find((d) => d.name === props.doc.companyTemplate)
+    const { documents } = await listCompanyDocuments(refCompany.value)
+    const match = documents.find((d) => d.name === props.doc.companyTemplate)
     companyPlaceholders.value = match?.placeholders ?? []
   } catch { companyPlaceholders.value = [] }
 }

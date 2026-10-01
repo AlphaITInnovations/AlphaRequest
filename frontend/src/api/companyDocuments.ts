@@ -15,13 +15,25 @@ export interface CompanyDocument {
   placeholders: string[]
 }
 
+export interface CompanyDocumentList {
+  documents: CompanyDocument[]
+  /** Nicht-null: diese Firma übernimmt die Vorlagen der genannten Firma (read-only). */
+  shared_from: string | null
+}
+
 function base(company: string): string {
   return `/settings/companies/${encodeURIComponent(company)}/documents`
 }
 
-export async function listCompanyDocuments(company: string): Promise<CompanyDocument[]> {
-  const { data } = await client.get(base(company))
-  return (data.data?.documents as CompanyDocument[]) ?? []
+export async function listCompanyDocuments(
+  company: string, opts: { own?: boolean } = {},
+): Promise<CompanyDocumentList> {
+  // own=1 umgeht die Übernahme-Auflösung und liefert den EIGENEN Bestand der Firma.
+  const { data } = await client.get(base(company), opts.own ? { params: { own: 1 } } : undefined)
+  return {
+    documents: (data.data?.documents as CompanyDocument[]) ?? [],
+    shared_from: (data.data?.shared_from as string | null) ?? null,
+  }
 }
 
 export async function uploadCompanyDocument(

@@ -1206,7 +1206,10 @@ def _load_template_row(row, docphase, doc):
             if not company:
                 return None
             from backend.database import company_templates as ctpl_db
-            return ctpl_db.get_template(str(company), doc.companyTemplate)
+            from backend.database.settings import template_source_company
+            # Übernimmt die gewählte Firma Vorlagen von einer anderen, aus DEREN Bestand.
+            src = template_source_company(str(company))
+            return ctpl_db.get_template(src, doc.companyTemplate)
         from backend.database import process_templates as tpl_db
         return tpl_db.get_template(row["process_key"], docphase.key, doc.key)
     except Exception:
@@ -1464,10 +1467,14 @@ def _preview_template_bytes(key: str, docphase, doc, values: dict) -> bytes:
                             f"„{doc.companyField}“ wählen – dann wird deren Vorlage "
                             f"„{doc.companyTemplate}“ angezeigt.")
         from backend.database import company_templates as ctpl_db
-        tpl = ctpl_db.get_template(str(company), doc.companyTemplate)
+        from backend.database.settings import template_source_company
+        src = template_source_company(str(company))
+        tpl = ctpl_db.get_template(src, doc.companyTemplate)
         if tpl is None:
+            woher = (f"„{company}“ (übernimmt von „{src}“)" if src != str(company)
+                     else f"„{company}“")
             raise api_error(409, "TEMPLATE_MISSING",
-                            f"Für „{company}“ ist keine Vorlage „{doc.companyTemplate}“ "
+                            f"Für {woher} ist keine Vorlage „{doc.companyTemplate}“ "
                             "hinterlegt. Bitte in den Firmen-Einstellungen hochladen.")
         return _read_template_bytes(tpl)
     from backend.database import process_templates as tpl_db

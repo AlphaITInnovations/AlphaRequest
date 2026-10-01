@@ -113,7 +113,8 @@ def normalize_company(item) -> dict:
     if isinstance(item, str):
         return {"name": item.strip(), "pnr_from": None, "pnr_to": None,
                 "pnr_current": None, "pnr_warned": False, "mandant": None,
-                "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
+                "pnr_shared_with": None, "directus_firma_id": None, "domain": None,
+                "documents_shared_with": None}
     if isinstance(item, dict):
         return {
             "name": str(item.get("name", "")).strip(),
@@ -129,10 +130,14 @@ def normalize_company(item) -> dict:
             # E-Mail-Domain der Firma – Basis für die automatische Firmenmail
             # (vorname.nachname@domain). Ohne führendes @, klein.
             "domain": (_str_or_none(item.get("domain")) or "").lower().lstrip("@") or None,
+            # Übernimmt die Dokument-Vorlagen dieser Firma (eigene werden dann nicht
+            # genutzt) – unabhängig vom geteilten Personalnummern-Zähler.
+            "documents_shared_with": _str_or_none(item.get("documents_shared_with")),
         }
     return {"name": "", "pnr_from": None, "pnr_to": None,
             "pnr_current": None, "pnr_warned": False, "mandant": None,
-            "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
+            "pnr_shared_with": None, "directus_firma_id": None, "domain": None,
+            "documents_shared_with": None}
 
 
 def get_companies_full() -> List[dict]:
@@ -203,6 +208,26 @@ def set_companies_full(companies: List[dict]) -> None:
 def set_companies(companies: List[str]) -> None:
     """Nur Namen setzen (Altpfad) – bestehende Bereiche/Zähler bleiben erhalten."""
     set_companies_full([{"name": n} for n in companies])
+
+
+def template_source_company(name: str) -> str:
+    """Firma, aus deren Dokument-Vorlagen gefüllt wird: i. d. R. die Firma selbst,
+    oder – falls sie Vorlagen von einer anderen übernimmt (documents_shared_with) –
+    die Zielfirma. Nur EIN Hop (Ketten sind beim Speichern ausgeschlossen).
+
+    Der Vergleich ist case-insensitiv und gibt den KANONISCHEN Namen zurück, damit
+    die Auflösung zur (ebenfalls case-insensitiven) DB-Spalte
+    company_document_templates.company passt – ein abweichend geschriebener
+    Auftragswert überspringt den Übernahme-Hop sonst stillschweigend.
+    Unbekannte Firma → Eingabe unverändert zurück."""
+    want = (name or "").strip()
+    if not want:
+        return want
+    wf = want.casefold()
+    for c in get_companies_full():
+        if c["name"].casefold() == wf:
+            return c.get("documents_shared_with") or c["name"]
+    return want
 
 
 # ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────

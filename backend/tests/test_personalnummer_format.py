@@ -53,6 +53,7 @@ class TestNormalizeCompany:
             "name": "AlphaConsult", "pnr_from": None, "pnr_to": None,
             "pnr_current": None, "pnr_warned": False, "mandant": None,
             "pnr_shared_with": None, "directus_firma_id": None, "domain": None,
+            "documents_shared_with": None,
         }
 
     def test_full_dict_keeps_leading_zeros(self):

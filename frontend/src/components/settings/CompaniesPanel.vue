@@ -17,6 +17,7 @@ interface CompanyItem {
   pnr_shared_with: string | null
   directus_firma_id: string | null
   domain: string | null
+  documents_shared_with: string | null
   pnr_current: number | null
   pnr_warned: boolean
 }
@@ -33,6 +34,7 @@ function mapCompany(c: any): CompanyItem {
     name: c?.name ?? '', pnr_from: c?.pnr_from ?? null, pnr_to: c?.pnr_to ?? null,
     mandant: c?.mandant ?? null, pnr_shared_with: c?.pnr_shared_with ?? null,
     directus_firma_id: c?.directus_firma_id ?? null, domain: c?.domain ?? null,
+    documents_shared_with: c?.documents_shared_with ?? null,
     pnr_current: c?.pnr_current ?? null, pnr_warned: !!c?.pnr_warned,
   }
 }
@@ -41,6 +43,7 @@ function serialize(list: CompanyItem[]): string {
     name: c.name, pnr_from: c.pnr_from, pnr_to: c.pnr_to,
     mandant: c.mandant, pnr_shared_with: c.pnr_shared_with,
     directus_firma_id: c.directus_firma_id, domain: c.domain,
+    documents_shared_with: c.documents_shared_with,
   })))
 }
 
@@ -59,7 +62,7 @@ async function loadCompanies() {
 function addCompany() {
   companies.value.push({ name: '', pnr_from: null, pnr_to: null, mandant: null,
                          pnr_shared_with: null, directus_firma_id: null, domain: null,
-                         pnr_current: null, pnr_warned: false })
+                         documents_shared_with: null, pnr_current: null, pnr_warned: false })
   open(companies.value.length - 1)
 }
 function removeCompany(idx: number) {
@@ -72,6 +75,16 @@ function removeCompany(idx: number) {
 function shareTargets(c: CompanyItem): CompanyItem[] {
   return companies.value.filter(o =>
     o !== c && o.name.trim() && !o.pnr_shared_with && (o.pnr_from ?? '').trim() && (o.pnr_to ?? '').trim())
+}
+/** Firmen, von denen Dokument-Vorlagen übernommen werden können: nicht man selbst,
+ *  benannt und selbst keine Übernehmerin (keine Ketten). */
+function docShareTargets(c: CompanyItem): CompanyItem[] {
+  return companies.value.filter(o => o !== c && o.name.trim() && !o.documents_shared_with)
+}
+/** Übernimmt eine andere Firma die Vorlagen von c? Dann darf c nicht selbst übernehmen
+ *  (würde eine verbotene Kette erzeugen). */
+function isDocSource(c: CompanyItem): boolean {
+  return companies.value.some(o => o !== c && o.documents_shared_with === c.name)
 }
 function sourceOf(c: CompanyItem): CompanyItem | null {
   if (!c.pnr_shared_with) return null
@@ -122,6 +135,7 @@ async function saveCompanies() {
       pnr_shared_with: c.pnr_shared_with || null,
       directus_firma_id: (c.directus_firma_id ?? '').trim() || null,
       domain: (c.domain ?? '').trim().toLowerCase().replace(/^@/, '') || null,
+      documents_shared_with: c.documents_shared_with || null,
     }))
     const { data } = await client.put('/settings/companies', { companies: payload })
     companies.value = (data.data.companies ?? []).map(mapCompany)
@@ -224,10 +238,28 @@ onMounted(loadCompanies)
           </p>
         </div>
 
-        <div class="pt-1 border-t border-gray-100 dark:border-white/10">
+        <div class="pt-1 border-t border-gray-100 dark:border-white/10 space-y-3">
+          <div>
+            <label class="lbl">Dokument-Vorlagen</label>
+            <select v-model="companies[selected].documents_shared_with" class="set-input w-full"
+                    :disabled="isDocSource(companies[selected])">
+              <option :value="null">Eigene Vorlagen</option>
+              <option v-for="o in docShareTargets(companies[selected])" :key="o.name" :value="o.name">
+                Übernimmt Vorlagen von „{{ o.name }}“
+              </option>
+            </select>
+            <p v-if="isDocSource(companies[selected])" class="text-xs text-gray-400 mt-1">
+              Andere Firmen übernehmen die Vorlagen dieser Firma – sie kann daher nicht selbst übernehmen.
+            </p>
+            <p v-else class="text-xs text-gray-400 mt-1">
+              Mehrere Firmen können sich dieselben Vorlagen teilen (z. B. ein gemeinsamer Arbeitsvertrag) –
+              dann wird beim Erzeugen die Datei der gewählten Quelle gefüllt.
+            </p>
+          </div>
           <CompanyDocumentsEditor
             :company="savedNames.has(companies[selected].name.trim()) ? companies[selected].name.trim() : ''"
-            :ready="!!companies[selected].name.trim() && savedNames.has(companies[selected].name.trim())" />
+            :ready="!!companies[selected].name.trim() && savedNames.has(companies[selected].name.trim())"
+            :shared-with="companies[selected].documents_shared_with" />
         </div>
 
         <div v-if="companies[selected].pnr_shared_with" class="flex flex-wrap items-center gap-2 text-xs pt-1">

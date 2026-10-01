@@ -8,7 +8,7 @@ from backend.core.dependencies import get_current_user
 from backend.database.groups import get_groups, save_groups
 from backend.database.settings import (
     get_companies, get_companies_full, set_companies_full,
-    get_process_order, set_process_order,
+    get_process_order, set_process_order, template_source_company,
 )
 from backend.database import company_templates as ctpl_db
 from backend.services import attachment_storage as storage
@@ -157,7 +157,8 @@ def _diff_companies(old_list, new_list):
     deleted = [n for n in old_by if n not in new_by]
     modified = []
     fields = [("pnr_from", "Von"), ("pnr_to", "Bis"), ("mandant", "Mandant"),
-              ("pnr_shared_with", "geteilt mit"), ("directus_firma_id", "alphacore-Firmen-ID")]
+              ("pnr_shared_with", "geteilt mit"), ("directus_firma_id", "alphacore-Firmen-ID"),
+              ("documents_shared_with", "Vorlagen von")]
     for name, nc in new_by.items():
         oc = old_by.get(name)
         if not oc:
@@ -337,6 +338,8 @@ class CompanyItem(BaseModel):
     directus_firma_id: Optional[str] = None
     # E-Mail-Domain der Firma (Basis der automatischen Firmenmail), optional.
     domain: Optional[str] = None
+    # Übernimmt die Dokument-Vorlagen dieser Firma (dann keine eigenen genutzt).
+    documents_shared_with: Optional[str] = None
     # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
     pnr_current: Optional[int] = None
     pnr_warned: bool = False
@@ -372,6 +375,9 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         shared = (c.pnr_shared_with or "").strip() or None
         firma_id = (c.directus_firma_id or "").strip() or None
         dom = (c.domain or "").strip().lower().lstrip("@") or None
+        docs_from = (c.documents_shared_with or "").strip() or None
+        if docs_from and docs_from.casefold() == name.casefold():
+            raise HTTPException(422, f"„{name}“: kann die Dokument-Vorlagen nicht von sich selbst übernehmen.")
 
         if shared:
             # Teilt den Zähler → kein eigener Bereich.
@@ -381,6 +387,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                 "name": name, "pnr_from": None, "pnr_to": None,
                 "mandant": mandant, "pnr_shared_with": shared,
                 "directus_firma_id": firma_id, "domain": dom,
+                "documents_shared_with": docs_from,
             })
             continue
 
@@ -398,6 +405,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
             "name": name, "pnr_from": pf, "pnr_to": pt,
             "mandant": mandant, "pnr_shared_with": None,
             "directus_firma_id": firma_id, "domain": dom,
+            "documents_shared_with": docs_from,
         })
 
     if not cleaned:
@@ -411,6 +419,39 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                 422,
                 f"„{c['name']}“: teilt den Zähler mit „{c['pnr_shared_with']}“, aber diese Firma "
                 "hat keinen eigenen Personalnummern-Bereich.",
+            )
+
+    # Übernommene Dokument-Vorlagen: Ziel muss existieren und darf NICHT selbst
+    # übernehmen (keine Ketten – die Auflösung macht nur EINEN Hop).
+    by_name = {c["name"]: c for c in cleaned}
+    for c in cleaned:
+        src = c["documents_shared_with"]
+        if not src:
+            continue
+        target = by_name.get(src)
+        if target is None:
+            raise HTTPException(
+                422,
+                f"„{c['name']}“: übernimmt die Dokument-Vorlagen von „{src}“, aber diese "
+                "Firma gibt es nicht.",
+            )
+        if target["documents_shared_with"]:
+            raise HTTPException(
+                422,
+                f"„{c['name']}“: „{src}“ übernimmt selbst Vorlagen von „{target['documents_shared_with']}“ "
+                "– Vorlagen lassen sich nicht über mehrere Firmen weiterreichen. Bitte direkt "
+                "die Firma mit den eigenen Vorlagen wählen.",
+            )
+        # Eine übernehmende Firma hat KEINE eigenen Vorlagen (sonst lägen unsichtbare
+        # „schlafende“ Vorlagen in der DB, die Umbenennen/Löschen blockieren und bei
+        # Namens-Kollision statt der übernommenen gefüllt würden). Erst entfernen.
+        own = ctpl_db.list_for_company(c["name"])
+        if own:
+            namen = ", ".join(f"„{t['name']}“" for t in own)
+            raise HTTPException(
+                422,
+                f"„{c['name']}“ hat noch eigene Dokument-Vorlagen ({namen}). Bitte diese "
+                f"zuerst entfernen, dann lassen sich die Vorlagen von „{src}“ übernehmen.",
             )
 
     # Firmen-Vorlagen hängen am NAMEN (keine stabile ID): eine Firma mit hinterlegten
@@ -498,11 +539,19 @@ def _content_disposition(filename: str) -> str:
 
 
 @router.get("/settings/companies/{company}/documents")
-def list_company_documents(company: str, user: dict = Depends(get_current_user)):
-    """Benannte Dokument-Vorlagen einer Firma (Verwaltung im Companies-Panel)."""
+def list_company_documents(company: str, own: bool = Query(False),
+                           user: dict = Depends(get_current_user)):
+    """Benannte Dokument-Vorlagen einer Firma (Verwaltung im Companies-Panel).
+    Übernimmt die Firma Vorlagen von einer anderen, werden DEREN Vorlagen geliefert
+    (read-only); `shared_from` nennt die Quelle. `own=1` umgeht die Auflösung und
+    liefert den EIGENEN Bestand – der Editor prüft damit vor dem Übernehmen auf noch
+    vorhandene eigene Vorlagen."""
     require_admin(user)
     c = _require_known_company(company)
-    return DataResponse(data={"documents": [_ctpl_info(r) for r in ctpl_db.list_for_company(c)]})
+    src = c if own else template_source_company(c)
+    shared_from = None if own else (src if src != c else None)
+    return DataResponse(data={"documents": [_ctpl_info(r) for r in ctpl_db.list_for_company(src)],
+                              "shared_from": shared_from})
 
 
 @router.post("/settings/companies/{company}/documents")
@@ -512,6 +561,13 @@ async def upload_company_document(company: str, name: str = Query(...),
     """Vorlage (.docx/PDF) unter einem Namen für eine Firma hochladen/ersetzen."""
     require_admin(user)
     c = _require_known_company(company)
+    src = template_source_company(c)
+    if src != c:
+        raise HTTPException(
+            409,
+            f"„{c}“ übernimmt die Dokument-Vorlagen von „{src}“. Bitte dort hochladen "
+            "oder diese Firma zuerst auf eigene Vorlagen umstellen.",
+        )
     tpl_name = (name or "").strip()
     if not tpl_name:
         raise HTTPException(422, "Vorlagen-Name fehlt")
@@ -562,7 +618,11 @@ async def upload_company_document(company: str, name: str = Query(...),
 @router.get("/settings/companies/{company}/documents/{name}/download")
 def download_company_document(company: str, name: str, user: dict = Depends(get_current_user)):
     require_admin(user)
-    row = ctpl_db.get_template((company or "").strip(), (name or "").strip())
+    # Übernimmt die Firma Vorlagen von einer anderen, aus DEREN Bestand laden – wie
+    # die Liste/Füll-Logik; sonst zeigt die Liste die Quell-Datei, der Download aber
+    # ginge an den (leeren) eigenen Bestand → 404.
+    src = template_source_company((company or "").strip())
+    row = ctpl_db.get_template(src, (name or "").strip())
     if not row:
         raise HTTPException(404, "Keine Vorlage hinterlegt")
     from pathlib import Path
