@@ -11,13 +11,14 @@
  * bietet dort das Entfernen an. Die Anzeige richtet sich nach der NOCH NICHT
  * gespeicherten Auswahl (sharedWith-Prop), nicht nach dem DB-Stand.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import type { CompanyDocument } from '@/api/companyDocuments'
 import {
   companyDocumentDownloadUrl, deleteCompanyDocument,
   listCompanyDocuments, uploadCompanyDocument,
 } from '@/api/companyDocuments'
+import { listTemplateLabels } from '@/api/templateLabels'
 
 const props = defineProps<{
   company: string
@@ -35,11 +36,18 @@ const docs = ref<CompanyDocument[]>([])
  *  das Speichern und müssen zuerst entfernt werden. */
 const ownLeftover = ref<CompanyDocument[]>([])
 const loading = ref(false)
+/** Gewählter Vorlagen-TYP für den Upload (kein Freitext – aus der Typen-Liste). */
 const newName = ref('')
+/** Registrierte Vorlagen-Typen (Dropdown-Quelle). */
+const labelNames = ref<string[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 
 const inherits = computed(() => !!props.sharedWith)
+
+onMounted(async () => {
+  try { labelNames.value = (await listTemplateLabels()).map(l => l.name) } catch { labelNames.value = [] }
+})
 
 async function reload() {
   if (!props.ready || !props.company) { docs.value = []; ownLeftover.value = []; return }
@@ -69,7 +77,7 @@ async function reload() {
 watch(() => [props.company, props.ready, props.sharedWith], reload, { immediate: true })
 
 function pick() {
-  if (!newName.value.trim()) { showToast('Bitte zuerst einen Vorlagen-Namen angeben', false); return }
+  if (!newName.value.trim()) { showToast('Bitte zuerst einen Vorlagen-Typ wählen', false); return }
   fileInput.value?.click()
 }
 
@@ -166,15 +174,23 @@ const dlUrl = (name: string) => companyDocumentDownloadUrl(props.company, name)
         „{{ sharedWith }}“ hat noch keine Vorlagen hinterlegt.
       </p>
 
-      <div v-if="!inherits" class="flex items-center gap-2">
-        <input v-model="newName" placeholder="Vorlagen-Name (z. B. Arbeitsvertrag)"
-               class="set-input flex-1" :disabled="uploading" />
-        <button type="button" @click="pick" :disabled="uploading"
-                class="btn-secondary text-sm whitespace-nowrap disabled:opacity-40">
-          {{ uploading ? 'Lädt…' : '+ Vorlage hochladen' }}
-        </button>
-        <input ref="fileInput" type="file" accept=".docx,.pdf" class="hidden" @change="onFile" />
-      </div>
+      <template v-if="!inherits">
+        <p v-if="!labelNames.length" class="text-xs text-amber-600 dark:text-amber-400">
+          Es sind noch keine Vorlagen-Typen angelegt. Bitte zuerst unter
+          Einstellungen → Vorlagen-Typen einen Typ (z. B. „Arbeitsvertrag“) anlegen.
+        </p>
+        <div v-else class="flex items-center gap-2">
+          <select v-model="newName" class="set-input flex-1" :disabled="uploading">
+            <option value="">— Vorlagen-Typ wählen —</option>
+            <option v-for="t in labelNames" :key="t" :value="t">{{ t }}</option>
+          </select>
+          <button type="button" @click="pick" :disabled="uploading || !newName"
+                  class="btn-secondary text-sm whitespace-nowrap disabled:opacity-40">
+            {{ uploading ? 'Lädt…' : '+ Vorlage hochladen' }}
+          </button>
+          <input ref="fileInput" type="file" accept=".docx,.pdf" class="hidden" @change="onFile" />
+        </div>
+      </template>
     </template>
   </div>
 </template>

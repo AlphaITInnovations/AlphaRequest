@@ -230,6 +230,88 @@ def template_source_company(name: str) -> str:
     return want
 
 
+# ── Dokument-Vorlagen-Typen (Labels) ──────────────────────────────────────────
+#
+# Firmen-Dokumente werden über einen TYP referenziert (z. B. „Arbeitsvertrag").
+# Alle Firmen-Vorlagen desselben Typs MÜSSEN denselben {{Platzhalter}}-Satz tragen,
+# weil die Marker→Feld-Zuordnung EINMAL je Prozess-Dokument gilt (für alle Firmen).
+# Der kanonische Satz (`placeholders`) wird beim ersten Upload erfasst und bei
+# weiteren Uploads erzwungen (harte Prüfung). None = noch nicht festgelegt.
+# Gespeichert als Setting DOCUMENT_TEMPLATE_LABELS (JSON, keine eigene Tabelle).
+
+def _normalize_label(item) -> dict:
+    if isinstance(item, str):
+        return {"name": item.strip(), "placeholders": None}
+    if isinstance(item, dict):
+        ph = item.get("placeholders")
+        ph = [str(p) for p in ph] if isinstance(ph, list) else None
+        return {"name": str(item.get("name", "")).strip(), "placeholders": ph}
+    return {"name": "", "placeholders": None}
+
+
+def get_template_labels() -> List[dict]:
+    """Alle Vorlagen-Typen [{name, placeholders|None}] (dedupliziert nach Name,
+    case-insensitiv)."""
+    val = settings_get("DOCUMENT_TEMPLATE_LABELS", [])
+    if not isinstance(val, list):
+        return []
+    out: List[dict] = []
+    seen = set()
+    for item in val:
+        c = _normalize_label(item)
+        key = c["name"].casefold()
+        if c["name"] and key not in seen:
+            seen.add(key)
+            out.append(c)
+    return out
+
+
+def get_template_label_names() -> List[str]:
+    return [l["name"] for l in get_template_labels()]
+
+
+def get_template_label(name: str) -> Optional[dict]:
+    """Einen Typ case-insensitiv finden (kanonischer Eintrag inkl. Baseline)."""
+    wf = (name or "").strip().casefold()
+    if not wf:
+        return None
+    for l in get_template_labels():
+        if l["name"].casefold() == wf:
+            return l
+    return None
+
+
+def set_template_labels(names: List[str]) -> List[dict]:
+    """Typ-Liste setzen (nur Namen vom Client). Die kanonischen Platzhalter-Sätze
+    bestehender Typen bleiben erhalten (nach Name, case-insensitiv)."""
+    prev = {l["name"].casefold(): l for l in get_template_labels()}
+    out: List[dict] = []
+    seen = set()
+    for n in names or []:
+        name = str(n).strip()
+        key = name.casefold()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        old = prev.get(key)
+        out.append({"name": name, "placeholders": old["placeholders"] if old else None})
+    settings_set("DOCUMENT_TEMPLATE_LABELS", out)
+    return out
+
+
+def set_template_label_baseline(name: str, placeholders: Optional[List[str]]) -> None:
+    """Kanonischen Platzhalter-Satz eines Typs setzen/zurücksetzen (None = leeren).
+    Legt den Typ NICHT an – nur ein bestehender Typ wird aktualisiert."""
+    labels = get_template_labels()
+    wf = (name or "").strip().casefold()
+    for l in labels:
+        if l["name"].casefold() == wf:
+            l["placeholders"] = ([str(p) for p in placeholders]
+                                 if placeholders is not None else None)
+            settings_set("DOCUMENT_TEMPLATE_LABELS", labels)
+            return
+
+
 # ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────
 #
 # Liste von Prozess-Schlüsseln in gewünschter Reihenfolge. NUR eine Sortier-

@@ -15,8 +15,7 @@ import {
   deleteDocumentTemplate, getDocumentTemplate, uploadDocumentTemplate,
   type DocumentTemplateInfo,
 } from '@/api/processes'
-import { listCompanyDocuments } from '@/api/companyDocuments'
-import { client } from '@/api/client'
+import { listTemplateLabels, type TemplateLabel } from '@/api/templateLabels'
 import { errorMessage } from '@/lib/processErrors'
 import { useToast } from '@/composables/useToast'
 import ConditionEditor from './ConditionEditor.vue'
@@ -42,11 +41,10 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const formatLabel = computed(() => (template.value?.format === 'pdf' ? 'PDF' : 'Word (.docx)'))
 
-// ── Firmen-Vorlage (nach Name) vs. feste Hochlade-Vorlage ─────────────────────
+// ── Firmen-Vorlage (nach Vorlagen-TYP) vs. feste Hochlade-Vorlage ─────────────
 const companyMode = ref<boolean>(!!(props.doc.companyTemplate || props.doc.companyField))
-const companies = ref<string[]>([])
-const refCompany = ref<string>('')           // Firma, aus deren Vorlage die Marker geladen werden
-const companyPlaceholders = ref<string[]>([])
+/** Registrierte Vorlagen-Typen (Dropdown + kanonischer Marker-Satz je Typ). */
+const labels = ref<TemplateLabel[]>([])
 
 /** Felder, die eine Firma halten (widget=company) – Quelle fürs companyField. */
 const companyFields = computed(() =>
@@ -57,31 +55,24 @@ const companyFields = computed(() =>
 const companyHalfSet = computed(() =>
   companyMode.value && (!!props.doc.companyTemplate !== !!props.doc.companyField))
 
-/** Platzhalter: im Hochlade-Modus aus der Datei, im Firmen-Modus aus einer
- *  Referenz-Firma PLUS den bereits zugeordneten Markern (Konvention je Typ). */
+/** Kanonischer Platzhalter-Satz des gewählten Typs (bei allen Firmen gleich – hart
+ *  geprüft beim Upload). null = Typ hat noch keine Vorlage. */
+const typeLabel = computed(() =>
+  labels.value.find((l) => l.name === props.doc.companyTemplate) ?? null)
+const typePlaceholders = computed<string[]>(() => typeLabel.value?.placeholders ?? [])
+/** Gespeicherter Typ, den es (nach Löschen/Umbenennen) nicht mehr gibt. */
+const typeUnknown = computed(() =>
+  !!props.doc.companyTemplate && labels.value.length > 0 && !typeLabel.value)
+
+/** Platzhalter: im Hochlade-Modus aus der Datei, im Firmen-Modus aus dem Typ PLUS
+ *  den bereits zugeordneten Markern (eine Zuordnung je Typ für alle Firmen). */
 const placeholders = computed<string[]>(() => {
   if (!companyMode.value) return template.value?.placeholders ?? []
-  return [...new Set([...companyPlaceholders.value, ...Object.keys(props.doc.bindings ?? {})])]
+  return [...new Set([...typePlaceholders.value, ...Object.keys(props.doc.bindings ?? {})])]
 })
 
-async function loadCompanies() {
-  try {
-    const { data } = await client.get('/settings/companies')
-    companies.value = ((data.data?.companies ?? []) as any[]).map((c) => c.name).filter(Boolean)
-    if (companyMode.value && !refCompany.value && companies.value.length) {
-      refCompany.value = companies.value[0]
-    }
-  } catch { companies.value = [] }
-}
-
-async function loadCompanyMarkers() {
-  companyPlaceholders.value = []
-  if (!companyMode.value || !props.doc.companyTemplate || !refCompany.value) return
-  try {
-    const { documents } = await listCompanyDocuments(refCompany.value)
-    const match = documents.find((d) => d.name === props.doc.companyTemplate)
-    companyPlaceholders.value = match?.placeholders ?? []
-  } catch { companyPlaceholders.value = [] }
+async function loadLabels() {
+  try { labels.value = await listTemplateLabels() } catch { labels.value = [] }
 }
 
 function setCompanyMode(on: boolean) {
@@ -90,7 +81,6 @@ function setCompanyMode(on: boolean) {
   if (on) {
     emit('update', { companyTemplate: props.doc.companyTemplate ?? '',
                      companyField: props.doc.companyField ?? (companyFields.value[0]?.key ?? '') })
-    if (!refCompany.value && companies.value.length) refCompany.value = companies.value[0]
   } else {
     emit('update', { companyTemplate: null, companyField: null })
   }
@@ -110,7 +100,7 @@ async function loadTemplate() {
     tplLoading.value = false
   }
 }
-onMounted(() => { loadTemplate(); loadCompanies() })
+onMounted(() => { loadTemplate(); loadLabels() })
 watch(() => `${props.processKey} ${props.index} ${props.phaseKey} ${props.doc.key}`, () => {
   loadTemplate()
   // Der Editor wird bei einem Phasenwechsel wiederverwendet (zwei Dokument-Phasen
@@ -118,8 +108,6 @@ watch(() => `${props.processKey} ${props.index} ${props.phaseKey} ${props.doc.ke
   // Dokuments „kleben" und ein Tippen würde das falsche Dokument umschalten.
   companyMode.value = !!(props.doc.companyTemplate || props.doc.companyField)
 })
-watch(() => `${companyMode.value}|${props.doc.companyTemplate}|${refCompany.value}`, loadCompanyMarkers,
-      { immediate: true })
 
 function pickFile() { fileInput.value?.click() }
 
@@ -325,7 +313,8 @@ const uploadedAtLabel = computed(() => {
       </template>
     </template>
 
-    <!-- FIRMEN-MODUS: die Datei kommt je gewählter Firma aus den Firmen-Einstellungen. -->
+    <!-- FIRMEN-MODUS: die Datei kommt je gewählter Firma aus den Firmen-Einstellungen,
+         gewählt wird nur der Vorlagen-TYP. -->
     <div v-else class="space-y-2 rounded-xl border border-gray-200 dark:border-white/10 p-3">
       <div class="grid md:grid-cols-2 gap-3">
         <div>
@@ -340,26 +329,33 @@ const uploadedAtLabel = computed(() => {
           </p>
         </div>
         <div>
-          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Vorlagen-Name (je Firma)</label>
-          <input :value="doc.companyTemplate ?? ''" :disabled="readonly" class="afi w-full text-sm"
-                 placeholder="z. B. Arbeitsvertrag"
-                 @input="emit('update', { companyTemplate: ($event.target as HTMLInputElement).value })" />
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Vorlagen-Typ</label>
+          <select :value="doc.companyTemplate ?? ''" :disabled="readonly" class="afi w-full text-sm"
+                  @change="emit('update', { companyTemplate: ($event.target as HTMLSelectElement).value })">
+            <option value="">— Vorlagen-Typ wählen —</option>
+            <option v-for="l in labels" :key="l.name" :value="l.name">{{ l.name }}</option>
+            <!-- Gespeicherter, aber nicht mehr vorhandener Typ bleibt sichtbar/korrigierbar. -->
+            <option v-if="typeUnknown" :value="doc.companyTemplate">{{ doc.companyTemplate }} (nicht mehr vorhanden)</option>
+          </select>
+          <p v-if="!labels.length" class="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+            Keine Vorlagen-Typen angelegt – unter Einstellungen → Vorlagen-Typen erstellen.
+          </p>
+          <p v-else-if="typeUnknown" class="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+            Diesen Vorlagen-Typ gibt es nicht mehr – bitte neu wählen.
+          </p>
+          <p v-else-if="doc.companyTemplate && !typeLabel?.placeholders" class="text-[11px] text-gray-400 mt-1">
+            Für diesen Typ ist noch keine Firmen-Vorlage hochgeladen – Platzhalter erscheinen nach dem ersten Upload.
+          </p>
         </div>
       </div>
       <p v-if="companyHalfSet" class="text-[11px] text-amber-600 dark:text-amber-400">
-        Firmen-Feld und Vorlagen-Name müssen beide gesetzt sein.
+        Firmen-Feld und Vorlagen-Typ müssen beide gesetzt sein.
       </p>
       <p class="text-[11px] text-gray-400">
-        Die .docx/PDF kommt beim Erzeugen aus den Einstellungen der gewählten Firma (Vorlage mit diesem
-        Namen). Vorlagen werden unter Einstellungen → Firmen hinterlegt.
+        Die .docx/PDF kommt beim Erzeugen aus den Einstellungen der gewählten Firma (Vorlage dieses Typs).
+        Alle Firmen-Vorlagen eines Typs haben dieselben {{ PH_HINT }}-Platzhalter; die Zuordnung unten gilt
+        für alle Firmen.
       </p>
-      <div v-if="companies.length" class="flex items-center gap-2 text-xs">
-        <span class="text-gray-400 whitespace-nowrap">Marker laden aus Firma:</span>
-        <select v-model="refCompany" class="afi text-sm !py-1">
-          <option v-for="c in companies" :key="c" :value="c">{{ c }}</option>
-        </select>
-        <span class="text-gray-400 whitespace-nowrap">({{ companyPlaceholders.length }} gefunden)</span>
-      </div>
     </div>
 
     <!-- Zuordnung + bedingte Passagen: in beiden Modi, sobald Marker bekannt sind. -->
@@ -391,8 +387,8 @@ const uploadedAtLabel = computed(() => {
         </div>
         <p v-else class="text-sm text-gray-400 italic">
           <template v-if="companyMode">
-            Noch keine Marker bekannt – eine Firmen-Vorlage mit diesem Namen hochladen bzw.
-            oben eine Referenz-Firma wählen.
+            Noch keine Marker bekannt – oben einen Vorlagen-Typ wählen und für diesen Typ
+            (in einer Firma) eine Vorlage hochladen.
           </template>
           <template v-else>In dieser Vorlage wurden keine {{ PH_HINT }}-Platzhalter gefunden.</template>
         </p>

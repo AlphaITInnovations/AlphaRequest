@@ -15,13 +15,14 @@ import AttachmentsPanel from '@/components/settings/AttachmentsPanel.vue'
 import ProcessesPanel from '@/components/settings/ProcessesPanel.vue'
 import ProcessOrderPanel from '@/components/settings/ProcessOrderPanel.vue'
 import DirectusSourcesPanel from '@/components/settings/DirectusSourcesPanel.vue'
+import DocumentTemplateTypesPanel from '@/components/settings/DocumentTemplateTypesPanel.vue'
 
 // „permissions" (Erstellrechte je Auftragstyp) ist entfallen: wer einen Auftrag
 // anlegen darf, steht heute als `createPermissions` IN der Prozess-Definition und
 // wird im Prozess-Editor gepflegt. Ein zweiter Rechte-Bildschirm hier hätte auf
 // nichts mehr gewirkt. Ein Deep-Link ?section=permissions landet über die
 // Whitelist-Prüfung unten auf „general".
-const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'app-users', 'testmail', 'audit', 'attachments', 'processes', 'process-order', 'directus-sources'] as const
+const SECTIONS = ['general', 'microsoft', 'session', 'sessions', 'companies', 'groups', 'app-users', 'testmail', 'audit', 'attachments', 'processes', 'process-order', 'directus-sources', 'doc-template-types'] as const
 type Section = typeof SECTIONS[number]
 
 const route  = useRoute()
@@ -50,6 +51,7 @@ const nav = [
   { key: 'processes',   label: 'Prozesse',           group: 'Organisation' },
   { key: 'process-order', label: 'Reihenfolge Prozesse', group: 'Organisation' },
   { key: 'directus-sources', label: 'Directus-Quellen', group: 'Organisation' },
+  { key: 'doc-template-types', label: 'Vorlagen-Typen',  group: 'Organisation' },
   { key: 'app-users',   label: 'Nutzende & Rollen',  group: 'Berechtigungen' },
   { key: 'testmail',    label: 'Testmail',           group: 'Kommunikation' },
 ] as const
@@ -138,6 +140,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
           <ProcessesPanel          v-else-if="active === 'processes'" />
           <ProcessOrderPanel       v-else-if="active === 'process-order'" />
           <DirectusSourcesPanel    v-else-if="active === 'directus-sources'" />
+          <DocumentTemplateTypesPanel v-else-if="active === 'doc-template-types'" />
           <TestMailPanel           v-else-if="active === 'testmail'" />
         </div>
 
