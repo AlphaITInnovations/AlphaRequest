@@ -16,6 +16,7 @@ import type {
   ProcessDefinition,
 } from '@/types/process'
 import { colSpanClass, resolveLayout } from '@/lib/processLayout'
+import { matchOption } from '@/lib/processPrefill'
 import type { RenderedField, SimFieldError, SimViewer } from '@/lib/processSim'
 import LayoutSection from './LayoutSection.vue'
 import LayoutDecoration from './LayoutDecoration.vue'
@@ -118,6 +119,13 @@ function coerceForTarget(targetKey: string, v: unknown): unknown {
   if (scalar === null) return null
   const tf = props.definition?.fields.find((f) => f.key === targetKey)
   if (tf?.widget === 'number') { const n = Number(scalar); return Number.isNaN(n) ? null : n }
+  if (tf?.widget === 'select') {
+    // Auswahl-Ziel case-insensitiv auf den Options-Wert abbilden (wie der Server-
+    // Snapshot/Prefill), sonst bliebe das Dropdown bei abweichender Groß-/Klein-
+    // schreibung oder einem gelieferten Label leer. Kein Treffer → null (leer).
+    const mapped = matchOption(scalar, tf)
+    return mapped === undefined ? null : mapped
+  }
   return String(scalar)
 }
 

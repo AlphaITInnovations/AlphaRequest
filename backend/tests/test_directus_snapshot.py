@@ -154,3 +154,35 @@ def test_company_target_unknown_id_becomes_none(monkeypatch):
                              get_source=lambda k: _MA_SRC,
                              query=lambda *a, **k: [{"email": "x@y.de", "company": 999}])
     assert out["firma"] is None
+
+
+# ── Auswahl-Feld (widget=select): Directus-Wert case-insensitiv auf Option ────
+
+def _defn_select():
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "ma", "widget": "directus", "directusSource": "mitarbeitende",
+             "directusFieldMap": [{"source": "salutation", "target": "anrede"}]},
+            {"key": "anrede", "widget": "select",
+             "options": [{"value": "Herr"}, {"value": "Frau"}, {"value": "Divers"}]}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "ma"}, {"ref": "anrede", "mode": "editable"}]}],
+    })
+
+
+def test_select_target_maps_case_insensitively():
+    # Directus liefert „herr" (Kleinschreibung) → Option-Wert „Herr" (wie Prefill).
+    out = ds.apply_snapshots(_defn_select(), {"ma": "x@y.de"}, {},
+                             get_source=lambda k: _MA_SRC,
+                             query=lambda *a, **k: [{"email": "x@y.de", "salutation": "herr"}])
+    assert out["anrede"] == "Herr"
+
+
+def test_select_target_unknown_value_becomes_none():
+    # Kein passender Options-Wert und kein Freitext → Feld bleibt ungesetzt (None),
+    # statt einen ungültigen Wert ins Dropdown zu schreiben.
+    out = ds.apply_snapshots(_defn_select(), {"ma": "x@y.de"}, {},
+                             get_source=lambda k: _MA_SRC,
+                             query=lambda *a, **k: [{"email": "x@y.de", "salutation": "mx"}])
+    assert out["anrede"] is None

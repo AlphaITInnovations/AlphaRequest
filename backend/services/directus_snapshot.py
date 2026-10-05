@@ -22,9 +22,11 @@ from backend.database import directus_sources as sources_db
 from backend.database.settings import get_companies_full
 from backend.schemas.process_definition import ProcessDefinition, Widget
 from backend.services import directus_client as dc
-# Umkehr-Helfer (Directus-Firmen-ID → System-Firmenname) – EINE Quelle der Wahrheit,
-# dieselbe Zuordnung wie beim Onboarding-Prefill.
-from backend.services.process_prefill import _company_name_for_directus_id, _rel_id
+# Umkehr-Helfer (Directus-Firmen-ID → System-Firmenname) + Options-Abgleich –
+# EINE Quelle der Wahrheit, dieselbe Zuordnung/Logik wie beim Onboarding-Prefill.
+from backend.services.process_prefill import (
+    _company_name_for_directus_id, _match_option, _rel_id,
+)
 from backend.utils.logger import logger
 
 
@@ -44,6 +46,26 @@ def _coerce(value: Any, widget: Optional[Widget]) -> Any:
         except (TypeError, ValueError):
             return None
     return str(value)
+
+
+def coerce_for_target(raw: Any, field: Any, *, companies: list) -> Any:
+    """Einen Directus-Rohwert auf das Ziel-FELD abbilden – zentral für Snapshot
+    UND directus_fill, damit beide Pfade identisch füllen:
+
+    - Firmen-Feld (widget=company): Directus-Firmen-ID (skalar oder Relation
+      {id,…}) → System-Firmenname (Umkehr des Onboarding-Mappings).
+    - Auswahl-Feld (widget=select): case-insensitiv auf den Options-`value`
+      (bzw. `label`) abbilden – sonst bliebe das Dropdown bei abweichender
+      Groß-/Kleinschreibung oder einem gelieferten Label leer (dieselbe Logik wie
+      der Prefill, `_match_option`; z. B. Anrede „herr" → Option „Herr").
+    - sonst: skalar coercen (Zahl/String, Bool→„Ja"/„Nein").
+    """
+    widget = getattr(field, "widget", None) if field is not None else None
+    if widget == Widget.company:
+        return _company_name_for_directus_id(_rel_id(raw), companies)
+    if widget == Widget.select:
+        return _match_option(_coerce(raw, Widget.select), field)
+    return _coerce(raw, widget)
 
 
 def fetch_source_record(src: dict, key_value: Any, extra_sources: list, *,
@@ -75,6 +97,7 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
         return values
     stored = stored or {}
     widget_by_key = {f.key: f.widget for f in defn.fields}
+    field_by_key = {f.key: f for f in defn.fields}
     out = dict(values)
 
     # Firmen-Felder (widget=company) als Snapshot-Ziel: Directus liefert die Firmen-ID,
@@ -118,11 +141,7 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
             continue
         for b in f.directusFieldMap:
             raw = sources_db.resolve_path(rec, b.source)
-            if widget_by_key.get(b.target) == Widget.company:
-                # Directus-Firmen-ID (skalar ODER Relation {id,…}) → System-Firmenname.
-                out[b.target] = _company_name_for_directus_id(_rel_id(raw), companies)
-            else:
-                out[b.target] = _coerce(raw, widget_by_key.get(b.target))
+            out[b.target] = coerce_for_target(raw, field_by_key.get(b.target), companies=companies)
     return out
 
 

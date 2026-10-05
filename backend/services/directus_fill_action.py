@@ -29,9 +29,6 @@ from backend.database import directus_sources as sources_db
 from backend.schemas.process_definition import ProcessDefinition, Widget
 from backend.services import directus_client as dc
 from backend.services import directus_snapshot as snapshot
-# Umkehr-Helfer (Directus-Firmen-ID → System-Firmenname) – EINE Quelle der
-# Wahrheit, dieselbe Zuordnung wie beim Onboarding-Prefill und beim Snapshot.
-from backend.services.process_prefill import _company_name_for_directus_id, _rel_id
 from backend.utils.logger import logger
 
 
@@ -61,6 +58,7 @@ def execute(action, row: dict, defn: ProcessDefinition, phase, *,
         return {}
 
     widget_by_key = {f.key: f.widget for f in defn.fields}
+    field_by_key = {f.key: f for f in defn.fields}
     _company_targets = any(widget_by_key.get(b.target) == Widget.company for b in spec.fieldMap)
     companies: list = []
     if _company_targets:
@@ -91,9 +89,8 @@ def execute(action, row: dict, defn: ProcessDefinition, phase, *,
     out: dict = {}
     for b in spec.fieldMap:
         raw = sources_db.resolve_path(rec, b.source)
-        if widget_by_key.get(b.target) == Widget.company:
-            # Directus-Firmen-ID (skalar ODER Relation {id,…}) → System-Firmenname.
-            out[b.target] = _company_name_for_directus_id(_rel_id(raw), companies)
-        else:
-            out[b.target] = snapshot._coerce(raw, widget_by_key.get(b.target))
+        # Zentrale Abbildung (Firma id→Name, select case-insensitiv, sonst coerce) –
+        # identisch zum Snapshot (directus_snapshot.coerce_for_target).
+        out[b.target] = snapshot.coerce_for_target(raw, field_by_key.get(b.target),
+                                                    companies=companies)
     return {"values": out} if out else {}
