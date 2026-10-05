@@ -23,7 +23,7 @@ from backend.services.microsoft_auth import (
 from backend.services.microsoft_graph import get_user_profile
 from backend.services import directus_employee
 from backend.database.audit_log import record_audit
-from backend.database.sessions import upsert_session, delete_session
+from backend.database.sessions import upsert_session, delete_session, get_session
 from backend.utils.config import config
 from backend.utils.logger import logger
 
@@ -147,11 +147,35 @@ def check_session(user: dict = Depends(check_session_only)):
 
 # ── Login-Flow ─────────────────────────────────────────────────────────────────
 
+def _session_is_live(session) -> bool:
+    """Ist die Cookie-Session serverseitig NOCH gültig? Nur dann darf /start-auth
+    kurzschließen. Ein Cookie mit `user` allein genügt NICHT: nach Server-Neustart
+    (boot_id passt nicht) oder Admin-Force-Logout (Server-Row weg) ist die Session
+    tot, trägt aber weiter `user`. Fail-open bei DB-Hänger (wie _check_session_store),
+    damit ein kurzer Ausfall einen gültigen Login nicht abwürgt."""
+    if not session.get("user") or session.get("boot_id") != SERVER_BOOT_ID:
+        return False
+    sid = session.get("sid")
+    if not sid:
+        return False
+    try:
+        return get_session(sid) is not None
+    except Exception:
+        logger.exception("Session-Store-Check in /start-auth fehlgeschlagen – fail-open")
+        return True
+
+
 @router.get("/start-auth", include_in_schema=False)
 async def start_auth(request: Request):
     record_login_attempt()
-    if request.session.get("user"):
+    # Nur eine WIRKLICH gültige Session kurzschließen. Eine tote Session (Neustart /
+    # Force-Logout) trägt zwar noch `user` im Cookie – früher bounced /start-auth sie
+    # endlos zur Frontend-URL (die dann 401t), und erst /logout (das den Cookie leert)
+    # brach den Zwischenzustand. Jetzt: toten Cookie verwerfen und sauber neu anmelden.
+    if _session_is_live(request.session):
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
+    if request.session.get("user"):
+        request.session.clear()   # toten Cookie wegräumen, bevor der OAuth-Flow startet
     auth_url = initiate_auth_flow(request)
     return RedirectResponse(auth_url)
 
