@@ -91,3 +91,45 @@ def test_gate_aus_directus_down_kein_raise(cfg):
     u = _user()
     dep.enforce_employee_link(u)
     assert u["employee"] is None
+
+
+# ── Login-Audit: Directus-Zuordnung sichtbar machen (auth._employee_link_audit) ──
+
+def _patch_auth_lookup(monkeypatch, *, rec=None, error=False):
+    from backend.api.v1 import auth
+    def fake(email):
+        if error:
+            raise directus_employee.EmployeeLookupError("Directus nicht erreichbar")
+        return rec
+    monkeypatch.setattr(auth.directus_employee, "lookup_employee", fake)
+    return auth
+
+
+def test_login_audit_treffer_ohne_sonderhinweis(monkeypatch):
+    auth = _patch_auth_lookup(monkeypatch, rec={"id": 5})
+    summary, details = auth._employee_link_audit("user@x.de")
+    assert summary is None
+    assert details == {"directus_employee": "zugeordnet"}
+
+
+def test_login_audit_kein_treffer_nennt_email(monkeypatch):
+    auth = _patch_auth_lookup(monkeypatch, rec=None)
+    summary, details = auth._employee_link_audit("Falsch@Alpha.org")
+    assert summary and "Falsch@Alpha.org" in summary
+    assert details["directus_employee"] == "kein_treffer"
+    assert details["email"] == "Falsch@Alpha.org"
+
+
+def test_login_audit_directus_fehler(monkeypatch):
+    auth = _patch_auth_lookup(monkeypatch, error=True)
+    summary, details = auth._employee_link_audit("user@x.de")
+    assert summary and "nicht prüfbar" in summary
+    assert details["directus_employee"] == "fehler"
+    assert "Directus nicht erreichbar" in details["error"]
+
+
+def test_login_audit_ohne_email():
+    from backend.api.v1 import auth
+    summary, details = auth._employee_link_audit("")
+    assert summary and "ohne E-Mail" in summary
+    assert details == {"directus_employee": "keine_email"}

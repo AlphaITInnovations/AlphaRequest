@@ -21,6 +21,7 @@ from backend.services.microsoft_auth import (
     initiate_auth_flow, acquire_token_by_auth_code,
 )
 from backend.services.microsoft_graph import get_user_profile
+from backend.services import directus_employee
 from backend.database.audit_log import record_audit
 from backend.database.sessions import upsert_session, delete_session
 from backend.utils.config import config
@@ -32,6 +33,35 @@ def _client_ip(request: Request) -> str | None:
         return request.client.host if request.client else None
     except Exception:
         return None
+
+
+def _employee_link_audit(email: str) -> tuple[str | None, dict]:
+    """Status der Directus-Mitarbeiter-Zuordnung für den Login-Audit-Eintrag.
+
+    Treffer → kein Sonder-Hinweis (details nur „zugeordnet"); KEIN Treffer oder
+    Directus nicht erreichbar → sprechende `summary`, damit eine Anmeldung, die
+    danach am Mitarbeiter-Gate (enforce_employee_link) scheitert, nicht als leerer
+    „Login"-Eintrag ohne Grund dasteht. Die eigentliche Sperre bleibt im Gate (pro
+    Request, bewusst ohne Audit – sonst Spam); hier genügt der eine Login-Eintrag.
+    Wirft nie – der Audit darf den Login nicht kippen."""
+    mail = (email or "").strip()
+    if not mail:
+        return ("Anmeldung ohne E-Mail – keine Directus-Zuordnung möglich",
+                {"directus_employee": "keine_email"})
+    try:
+        rec = directus_employee.lookup_employee(mail)
+    except directus_employee.EmployeeLookupError as e:
+        return ("Directus-Zuordnung beim Login nicht prüfbar – Directus nicht "
+                "erreichbar/konfiguriert (Break-Glass nur für Admins/Allowlist)",
+                {"directus_employee": "fehler", "email": mail, "error": str(e)[:300]})
+    except Exception as e:                      # defensiv: Audit darf den Login nie kippen
+        logger.exception("Directus-Zuordnung beim Login-Audit fehlgeschlagen")
+        return (None, {"directus_employee": "unbekannt", "email": mail, "error": str(e)[:300]})
+    if rec is None:
+        return (f"Kein Directus-Mitarbeiter-Datensatz zur E-Mail „{mail}“ – Konto kann erst "
+                "arbeiten, wenn die E-Mail in alphacore korrekt hinterlegt ist",
+                {"directus_employee": "kein_treffer", "email": mail})
+    return (None, {"directus_employee": "zugeordnet"})
 
 router = APIRouter()
 
@@ -266,9 +296,14 @@ async def auth_callback(request: Request):
             logger.exception("Session-Registrierung fehlgeschlagen (sid=%s)", sid)
 
         record_login_success()
+        # Directus-Zuordnung EINMAL beim Login prüfen und ins Audit schreiben – sonst
+        # bleibt eine Anmeldung, die anschließend am Mitarbeiter-Gate scheitert (z. B.
+        # E-Mail in alphacore falsch), ein leerer „Login"-Eintrag ohne Grund.
+        link_summary, link_details = _employee_link_audit(user_payload["email"])
         record_audit(action="login", actor_id=user_payload["id"],
                      actor_name=user_payload["displayName"] or "", entity_type="auth",
-                     entity_id=user_payload["id"], ip=_client_ip(request))
+                     entity_id=user_payload["id"], summary=link_summary,
+                     details=link_details, ip=_client_ip(request))
 
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
 
