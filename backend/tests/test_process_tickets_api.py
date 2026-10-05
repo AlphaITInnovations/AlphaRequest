@@ -1475,8 +1475,10 @@ def test_load_template_row_firmenvorlage_uebernommen(monkeypatch):
     from backend.database import company_templates as ctpl
     from backend.database import settings as settings_db
     calls = {}
-    monkeypatch.setattr(ctpl, "get_template",
-                        lambda company, name: calls.setdefault("args", (company, name)))
+    def fake_get(company, name):
+        calls["args"] = (company, name)
+        return {"stored_path": "y", "original_filename": "AV.docx"}
+    monkeypatch.setattr(ctpl, "get_template", fake_get)
     # Beta übernimmt die Vorlagen von Alpha GmbH.
     monkeypatch.setattr(settings_db, "template_source_company",
                         lambda n: "Alpha GmbH" if n == "Beta GmbH" else n)

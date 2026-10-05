@@ -501,15 +501,28 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
 # .companyTemplate/.companyField + process_tickets._load_template_row).
 
 def _ctpl_info(row: dict) -> dict:
-    """Metadaten einer Firmen-Vorlage + erkanntes Format und gefundene {{marker}}."""
+    """Metadaten einer Firmen-Vorlage + erkanntes Format und gefundene {{marker}}.
+
+    Verweis-Zeile (ref_company gesetzt, keine eigene Datei): Format/Platzhalter werden
+    aus der VERWIESENEN Datei der Ziel-Firma gelesen, damit der Editor die echten
+    Angaben zeigt; `ref_company` nennt die Quelle."""
     from pathlib import Path
+    ref = row.get("ref_company")
     info = {"name": row["name"], "filename": row.get("original_filename"),
             "size": row.get("size_bytes"),
             "uploaded_at": (row["uploaded_at"].isoformat()
                             if hasattr(row.get("uploaded_at"), "isoformat") else row.get("uploaded_at")),
-            "uploaded_by": row.get("uploaded_by_name"), "format": None, "placeholders": []}
+            "uploaded_by": row.get("uploaded_by_name"), "format": None, "placeholders": [],
+            "ref_company": ref or None}
+    # Für eine Verweis-Zeile die Ziel-Datei als Quelle für Format/Platzhalter nehmen.
+    src_row = ctpl_db.get_template(ref, row["name"]) if ref else row
+    if not (src_row and src_row.get("stored_path")):
+        return info
+    if ref:
+        info["filename"] = src_row.get("original_filename")
+        info["size"] = src_row.get("size_bytes")
     try:
-        data = Path(storage.full_path(row["stored_path"])).read_bytes()
+        data = Path(storage.full_path(src_row["stored_path"])).read_bytes()
         info["format"] = template_format.detect(data)
         if template_format.is_pdf(data):
             from backend.services import pdf_fill
@@ -518,7 +531,7 @@ def _ctpl_info(row: dict) -> dict:
             from backend.services import docx_fill
             info["placeholders"] = docx_fill.find_placeholders(data)
     except Exception:
-        logger.warning("Firmen-Vorlage „%s/%s“ nicht lesbar", row.get("company"), row.get("name"))
+        logger.warning("Firmen-Vorlage „%s/%s“ nicht lesbar", src_row.get("company"), src_row.get("name"))
     return info
 
 
@@ -561,12 +574,15 @@ class TemplateLabelsIn(BaseModel):
 
 
 def _company_usage_cf() -> dict[str, list[str]]:
-    """casefold(Typname) → Firmen mit einer Vorlage dieses Typs. Case-insensitiv,
+    """casefold(Typname) → Firmen mit einer EIGENEN Datei dieses Typs. Case-insensitiv,
     weil die DB-Spalte company_document_templates.name case-insensitiv vergleicht,
-    die Typ-Namen aber abweichend geschrieben sein können (Altbestand)."""
+    die Typ-Namen aber abweichend geschrieben sein können (Altbestand). Verweis-Zeilen
+    (ref_company, keine eigene Datei) zählen NICHT – so sind das zugleich genau die
+    Firmen, auf die ein Pro-Dokument-Verweis dieses Typs zeigen darf."""
     out: dict[str, list[str]] = {}
     for r in ctpl_db.list_all():
-        out.setdefault(r["name"].casefold(), []).append(r["company"])
+        if r.get("stored_path"):
+            out.setdefault(r["name"].casefold(), []).append(r["company"])
     return out
 
 
@@ -773,15 +789,63 @@ async def upload_company_document(company: str, name: str = Query(...),
     return DataResponse(data=_ctpl_info(ctpl_db.get_template(c, tpl_name)))
 
 
+class DocumentReferenceIn(BaseModel):
+    ref_company: str
+
+
+@router.put("/settings/companies/{company}/documents/{name}/reference")
+def reference_company_document(company: str, name: str, payload: DocumentReferenceIn,
+                               user: dict = Depends(get_current_user)):
+    """Für EINEN Vorlagen-Typ dieser Firma auf die gleichnamige Datei einer ANDEREN
+    Firma verweisen – statt einer eigenen Datei (Pro-Dokument-Verweis, analog zum
+    Teilen der Personalnummern). Genau EIN Sprung: das Ziel muss eine eigene Datei
+    dieses Typs haben (kein Verweis-auf-Verweis)."""
+    require_admin(user)
+    c = _require_known_company(company)
+    src = template_source_company(c)
+    if src != c:
+        raise HTTPException(
+            409, f"„{c}“ übernimmt bereits alle Vorlagen von „{src}“. Bitte diese Firma "
+                 "zuerst auf eigene Vorlagen umstellen, dann lässt sich je Typ verweisen.")
+    _seed_labels_if_empty()
+    label = get_template_label(name)
+    if label is None:
+        raise HTTPException(
+            422, f"„{(name or '').strip()}“ ist kein bekannter Vorlagen-Typ. Bitte den Typ "
+                 "zuerst unter Einstellungen → Vorlagen-Typen anlegen.")
+    tpl_name = label["name"]
+    ref = (payload.ref_company or "").strip()
+    if not ref or ref not in get_companies():
+        raise HTTPException(422, f"Unbekannte Ziel-Firma: „{ref}“")
+    if ref.casefold() == c.casefold():
+        raise HTTPException(422, "Eine Firma kann nicht auf sich selbst verweisen.")
+    target = ctpl_db.get_template(ref, tpl_name)
+    if target and target.get("ref_company"):
+        raise HTTPException(
+            422, f"„{ref}“ verweist für „{tpl_name}“ selbst weiter – Verweise lassen sich "
+                 "nicht verketten. Bitte direkt die Firma mit der eigenen Datei wählen.")
+    if not (target and target.get("stored_path")):
+        raise HTTPException(
+            422, f"„{ref}“ hat keine eigene Vorlage „{tpl_name}“, auf die verwiesen werden "
+                 "könnte. Dort zuerst hochladen.")
+    old = ctpl_db.get_template(c, tpl_name)
+    ctpl_db.set_reference(c, tpl_name, ref)
+    if old and old.get("stored_path"):
+        storage.delete(old["stored_path"])        # bisherige eigene Datei → durch Verweis ersetzt
+    _audit(user, "company_template_referenced",
+           summary=f"Firmen-Vorlage „{tpl_name}“ für „{c}“ verweist nun auf „{ref}“",
+           details={"company": c, "name": tpl_name, "ref_company": ref})
+    return DataResponse(data=_ctpl_info(ctpl_db.get_template(c, tpl_name)))
+
+
 @router.get("/settings/companies/{company}/documents/{name}/download")
 def download_company_document(company: str, name: str, user: dict = Depends(get_current_user)):
     require_admin(user)
-    # Übernimmt die Firma Vorlagen von einer anderen, aus DEREN Bestand laden – wie
-    # die Liste/Füll-Logik; sonst zeigt die Liste die Quell-Datei, der Download aber
-    # ginge an den (leeren) eigenen Bestand → 404.
-    src = template_source_company((company or "").strip())
-    row = ctpl_db.get_template(src, (name or "").strip())
-    if not row:
+    # Firmenweite Übernahme (documents_shared_with) UND Pro-Dokument-Verweis
+    # (ref_company) auflösen – wie die Liste/Füll-Logik; sonst zeigt die Liste die
+    # Quell-/Verweis-Datei, der Download aber ginge ins Leere → 404.
+    row = ctpl_db.resolve_company_template((company or "").strip(), (name or "").strip())
+    if not row or not row.get("stored_path"):
         raise HTTPException(404, "Keine Vorlage hinterlegt")
     from pathlib import Path
     try:
@@ -807,7 +871,7 @@ def delete_company_document(company: str, name: str, user: dict = Depends(get_cu
     # vergleichen – die DB-Spalte tut es auch, Typ-Namen können abweichend geschrieben
     # sein (Altbestand); sonst würde die Baseline trotz noch vorhandener Vorlage geleert.
     cf = tpl_name.casefold()
-    if not any(r["name"].casefold() == cf for r in ctpl_db.list_all()):
+    if not any(r["name"].casefold() == cf and r.get("stored_path") for r in ctpl_db.list_all()):
         set_template_label_baseline(tpl_name, None)
     _audit(user, "company_template_deleted",
            summary=f"Firmen-Vorlage „{name}“ für „{company}“ entfernt",

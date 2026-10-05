@@ -13,6 +13,9 @@ export interface CompanyDocument {
   uploaded_by: string | null
   format: 'docx' | 'pdf' | null
   placeholders: string[]
+  /** Nicht-null: diese Vorlage ist ein VERWEIS auf die gleichnamige Datei dieser Firma
+   *  (keine eigene Datei; Format/Platzhalter stammen aus der Ziel-Datei). */
+  ref_company: string | null
 }
 
 export interface CompanyDocumentList {
@@ -51,6 +54,16 @@ export async function uploadCompanyDocument(
 
 export async function deleteCompanyDocument(company: string, name: string): Promise<void> {
   await client.delete(`${base(company)}/${encodeURIComponent(name)}`)
+}
+
+/** Diesen Vorlagen-Typ dieser Firma auf die Datei einer ANDEREN Firma verweisen
+ *  lassen (statt einer eigenen Datei). Ein Sprung – das Ziel muss die Datei besitzen. */
+export async function referenceCompanyDocument(
+  company: string, name: string, refCompany: string,
+): Promise<CompanyDocument> {
+  const { data } = await client.put(
+    `${base(company)}/${encodeURIComponent(name)}/reference`, { ref_company: refCompany })
+  return data.data
 }
 
 /** Download-URL für einen direkten <a href> (KEIN axios → baseURL /api/v1 selbst

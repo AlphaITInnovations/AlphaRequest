@@ -16,9 +16,9 @@ import { useToast } from '@/composables/useToast'
 import type { CompanyDocument } from '@/api/companyDocuments'
 import {
   companyDocumentDownloadUrl, deleteCompanyDocument,
-  listCompanyDocuments, uploadCompanyDocument,
+  listCompanyDocuments, referenceCompanyDocument, uploadCompanyDocument,
 } from '@/api/companyDocuments'
-import { listTemplateLabels } from '@/api/templateLabels'
+import { listTemplateLabels, type TemplateLabel } from '@/api/templateLabels'
 
 const props = defineProps<{
   company: string
@@ -38,16 +38,34 @@ const ownLeftover = ref<CompanyDocument[]>([])
 const loading = ref(false)
 /** Gewählter Vorlagen-TYP für den Upload (kein Freitext – aus der Typen-Liste). */
 const newName = ref('')
-/** Registrierte Vorlagen-Typen (Dropdown-Quelle). */
-const labelNames = ref<string[]>([])
+/** Gewählte Ziel-Firma für einen Pro-Dokument-Verweis des aktuell gewählten Typs. */
+const refTarget = ref('')
+/** Registrierte Vorlagen-Typen inkl. der Firmen, die je Typ eine eigene Datei haben. */
+const labels = ref<TemplateLabel[]>([])
+const labelNames = computed(() => labels.value.map(l => l.name))
 const fileInput = ref<HTMLInputElement | null>(null)
+/** Separater (verborgener) Datei-Dialog + Ziel-Typ für „Ersetzen" einer Zeile. */
+const replaceInput = ref<HTMLInputElement | null>(null)
+const replaceName = ref('')
 const uploading = ref(false)
 
 const inherits = computed(() => !!props.sharedWith)
 
-onMounted(async () => {
-  try { labelNames.value = (await listTemplateLabels()).map(l => l.name) } catch { labelNames.value = [] }
+/** Firmen, auf die der aktuell gewählte Typ verweisen darf: alle mit eigener Datei
+ *  dieses Typs, außer dieser Firma selbst. */
+const refTargets = computed<string[]>(() => {
+  const label = labels.value.find(l => l.name === newName.value)
+  if (!label) return []
+  const self = props.company.trim().toLowerCase()
+  return label.companies.filter(co => co.trim().toLowerCase() !== self)
 })
+
+watch(newName, () => { refTarget.value = '' })
+
+onMounted(reloadLabels)
+async function reloadLabels() {
+  try { labels.value = await listTemplateLabels() } catch { labels.value = [] }
+}
 
 async function reload() {
   if (!props.ready || !props.company) { docs.value = []; ownLeftover.value = []; return }
@@ -81,22 +99,64 @@ function pick() {
   fileInput.value?.click()
 }
 
+/** Datei hochladen/ersetzen (Upsert je (Firma, Typ)); der Server prüft Format und
+ *  den kanonischen Platzhalter-Satz des Typs. Gibt true bei Erfolg. */
+async function doUpload(name: string, file: File): Promise<boolean> {
+  uploading.value = true
+  try {
+    await uploadCompanyDocument(props.company, name, file)
+    showToast(`Vorlage „${name}“ gespeichert`, true)
+    await Promise.all([reload(), reloadLabels()])
+    return true
+  } catch (err: any) {
+    showToast(err?.response?.data?.detail || err?.response?.data?.error?.message
+      || 'Hochladen fehlgeschlagen', false)
+    return false
+  } finally {
+    uploading.value = false
+  }
+}
+
 async function onFile(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file) return
   const name = newName.value.trim()
-  if (!name) return
+  if (!file || !name) return
+  if (await doUpload(name, file)) newName.value = ''
+}
+
+/** „Ersetzen" einer bestehenden Vorlage: Datei für GENAU diesen Typ neu hochladen. */
+function startReplace(name: string) {
+  replaceName.value = name
+  replaceInput.value?.click()
+}
+
+async function onReplaceFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  const name = replaceName.value
+  replaceName.value = ''
+  if (!file || !name) return
+  await doUpload(name, file)
+}
+
+/** Den gewählten Typ auf die Datei einer anderen Firma verweisen lassen. */
+async function setReference() {
+  const name = newName.value.trim()
+  if (!name) { showToast('Bitte zuerst einen Vorlagen-Typ wählen', false); return }
+  if (!refTarget.value) { showToast('Bitte eine Ziel-Firma wählen', false); return }
   uploading.value = true
   try {
-    await uploadCompanyDocument(props.company, name, file)
+    await referenceCompanyDocument(props.company, name, refTarget.value)
+    showToast(`„${name}“ verweist nun auf „${refTarget.value}“`, true)
     newName.value = ''
-    showToast(`Vorlage „${name}“ gespeichert`, true)
-    await reload()
+    refTarget.value = ''
+    await Promise.all([reload(), reloadLabels()])
   } catch (err: any) {
     showToast(err?.response?.data?.detail || err?.response?.data?.error?.message
-      || 'Hochladen fehlgeschlagen', false)
+      || 'Verweis konnte nicht gesetzt werden', false)
   } finally {
     uploading.value = false
   }
@@ -106,7 +166,7 @@ async function remove(name: string) {
   if (!confirm(`Vorlage „${name}“ wirklich entfernen?`)) return
   try {
     await deleteCompanyDocument(props.company, name)
-    await reload()
+    await Promise.all([reload(), reloadLabels()])
   } catch {
     showToast('Entfernen fehlgeschlagen', false)
   }
@@ -160,35 +220,61 @@ const dlUrl = (name: string) => companyDocumentDownloadUrl(props.company, name)
             class="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-white/10
                    bg-gray-50 dark:bg-white/[0.03] px-3 py-2">
           <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ d.name }}</span>
+          <span v-if="d.ref_company"
+                class="text-[11px] px-1.5 py-0.5 rounded-full bg-[#3EAAB8]/15 text-[#3EAAB8] whitespace-nowrap">
+            🔗 von {{ d.ref_company }}
+          </span>
           <span class="text-[11px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 uppercase">
             {{ d.format || '—' }}
           </span>
           <span class="text-xs text-gray-400 truncate min-w-0 flex-1">{{ d.filename }}</span>
           <a :href="dlUrl(d.name)" class="text-xs text-[#3EAAB8] hover:underline whitespace-nowrap">Download</a>
+          <button v-if="!inherits && !d.ref_company" type="button" @click="startReplace(d.name)" :disabled="uploading"
+                  class="text-xs text-[#3EAAB8] hover:underline whitespace-nowrap disabled:opacity-40">Ersetzen</button>
           <button v-if="!inherits" type="button" @click="remove(d.name)"
-                  class="text-xs text-red-500 hover:text-red-600 hover:underline whitespace-nowrap">Entfernen</button>
+                  class="text-xs text-red-500 hover:text-red-600 hover:underline whitespace-nowrap">{{ d.ref_company ? 'Verweis lösen' : 'Entfernen' }}</button>
         </li>
       </ul>
       <p v-else-if="!loading && !inherits" class="text-xs text-gray-400 italic mb-2">Noch keine Vorlagen hinterlegt.</p>
       <p v-else-if="!loading && inherits" class="text-xs text-gray-400 italic mb-2">
         „{{ sharedWith }}“ hat noch keine Vorlagen hinterlegt.
       </p>
+      <!-- Verborgener Datei-Dialog für „Ersetzen" (eine Zeile neu hochladen). -->
+      <input ref="replaceInput" type="file" accept=".docx,.pdf" class="hidden" @change="onReplaceFile" />
 
       <template v-if="!inherits">
         <p v-if="!labelNames.length" class="text-xs text-amber-600 dark:text-amber-400">
           Es sind noch keine Vorlagen-Typen angelegt. Bitte zuerst unter
           Einstellungen → Vorlagen-Typen einen Typ (z. B. „Arbeitsvertrag“) anlegen.
         </p>
-        <div v-else class="flex items-center gap-2">
-          <select v-model="newName" class="set-input flex-1" :disabled="uploading">
-            <option value="">— Vorlagen-Typ wählen —</option>
-            <option v-for="t in labelNames" :key="t" :value="t">{{ t }}</option>
-          </select>
-          <button type="button" @click="pick" :disabled="uploading || !newName"
-                  class="btn-secondary text-sm whitespace-nowrap disabled:opacity-40">
-            {{ uploading ? 'Lädt…' : '+ Vorlage hochladen' }}
-          </button>
-          <input ref="fileInput" type="file" accept=".docx,.pdf" class="hidden" @change="onFile" />
+        <div v-else class="space-y-2">
+          <div class="flex items-center gap-2">
+            <select v-model="newName" class="set-input flex-1" :disabled="uploading">
+              <option value="">— Vorlagen-Typ wählen —</option>
+              <option v-for="t in labelNames" :key="t" :value="t">{{ t }}</option>
+            </select>
+            <button type="button" @click="pick" :disabled="uploading || !newName"
+                    class="btn-secondary text-sm whitespace-nowrap disabled:opacity-40">
+              {{ uploading ? 'Lädt…' : '+ Vorlage hochladen' }}
+            </button>
+            <input ref="fileInput" type="file" accept=".docx,.pdf" class="hidden" @change="onFile" />
+          </div>
+          <!-- Pro-Dokument-Verweis: statt einer eigenen Datei auf die Datei einer anderen
+               Firma verweisen (nur Firmen, die diesen Typ selbst hinterlegt haben). -->
+          <div v-if="newName && refTargets.length"
+               class="flex items-center gap-2 pl-1 text-sm text-gray-500 dark:text-gray-400">
+            <span class="whitespace-nowrap">oder von Firma übernehmen:</span>
+            <select v-model="refTarget" class="set-input flex-1" :disabled="uploading">
+              <option value="">— Firma wählen —</option>
+              <option v-for="co in refTargets" :key="co" :value="co">{{ co }}</option>
+            </select>
+            <button type="button" @click="setReference" :disabled="uploading || !refTarget"
+                    class="btn-secondary text-sm whitespace-nowrap disabled:opacity-40">🔗 Verweis setzen</button>
+          </div>
+          <p v-else-if="newName" class="text-xs text-gray-400 pl-1">
+            Für „{{ newName }}“ hat noch keine andere Firma eine eigene Vorlage – zum Verweisen
+            muss die Quell-Firma die Datei zuerst hochladen.
+          </p>
         </div>
       </template>
     </template>
