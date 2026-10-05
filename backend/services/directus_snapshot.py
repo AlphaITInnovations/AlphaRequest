@@ -19,8 +19,12 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from backend.database import directus_sources as sources_db
+from backend.database.settings import get_companies_full
 from backend.schemas.process_definition import ProcessDefinition, Widget
 from backend.services import directus_client as dc
+# Umkehr-Helfer (Directus-Firmen-ID → System-Firmenname) – EINE Quelle der Wahrheit,
+# dieselbe Zuordnung wie beim Onboarding-Prefill.
+from backend.services.process_prefill import _company_name_for_directus_id, _rel_id
 from backend.utils.logger import logger
 
 
@@ -52,6 +56,14 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
     stored = stored or {}
     widget_by_key = {f.key: f.widget for f in defn.fields}
     out = dict(values)
+
+    # Firmen-Felder (widget=company) als Snapshot-Ziel: Directus liefert die Firmen-ID,
+    # die über das in den Settings hinterlegte directus_firma_id auf den System-
+    # Firmennamen gemappt werden muss (Umkehr des Onboarding-Mappings) – nicht-Admins
+    # kommen clientseitig nicht an diese Zuordnung, daher serverseitig hier.
+    _company_targets = any(widget_by_key.get(b.target) == Widget.company
+                           for f in fields for b in f.directusFieldMap)
+    companies = get_companies_full() if _company_targets else []
 
     for f in fields:
         cur = out.get(f.key)
@@ -93,8 +105,12 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
                            "Zielfelder unverändert gelassen", f.key, cur, src.get("collection"))
             continue
         for b in f.directusFieldMap:
-            out[b.target] = _coerce(sources_db.resolve_path(rec, b.source),
-                                    widget_by_key.get(b.target))
+            raw = sources_db.resolve_path(rec, b.source)
+            if widget_by_key.get(b.target) == Widget.company:
+                # Directus-Firmen-ID (skalar ODER Relation {id,…}) → System-Firmenname.
+                out[b.target] = _company_name_for_directus_id(_rel_id(raw), companies)
+            else:
+                out[b.target] = _coerce(raw, widget_by_key.get(b.target))
     return out
 
 
