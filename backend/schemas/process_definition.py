@@ -122,6 +122,12 @@ class ActionType(str, Enum):
     company_email = "company_email"
     #: Datensatz in Directus anlegen/ändern/löschen (services/directus_write).
     directus_write = "directus_write"
+    #: Stammdaten aus Directus NACHLADEN (services/directus_fill): holt bei
+    #: Phaseneintritt einen Datensatz anhand eines Schlüsselfelds und füllt
+    #: Zielfelder. Erlaubt datenschutzkonformes, verzögertes Laden
+    #: personenbezogener Daten erst in einer späteren Phase (nicht schon beim
+    #: Anlegen – anders als der Snapshot beim Speichern eines directus-Felds).
+    directus_fill = "directus_fill"
     #: Beliebiger ausgehender HTTP-/API-Aufruf (services/http_action). URL, Header
     #: und Body dürfen {{feld.key}}-Platzhalter aus den Auftragswerten tragen.
     http_request = "http_request"
@@ -664,6 +670,53 @@ class DirectusWriteSpec(_Base):
     matchField: Optional[str] = None
 
 
+class DirectusFillBinding(_Base):
+    """Eine Feld-Zuordnung fürs LESEN aus Directus (Aktion directus_fill):
+    Directus-Feld `source` → Prozess-Feld `target`.
+
+    Firmen-Ziele (widget=company) werden – wie beim Snapshot – automatisch von
+    der Directus-Firmen-ID auf den System-Firmennamen aufgelöst (anhand des
+    Ziel-Widgets, kein eigenes `resolve` nötig)."""
+    source: str
+    target: str
+
+    @model_validator(mode="after")
+    def _binding_rules(self) -> "DirectusFillBinding":
+        if not str(self.source).strip():
+            raise ValueError("directus_fill-Zuordnung braucht ein Directus-Quellfeld (`source`)")
+        if not str(self.target).strip():
+            raise ValueError("directus_fill-Zuordnung braucht ein Prozess-Zielfeld (`target`)")
+        return self
+
+
+class DirectusFillSpec(_Base):
+    """Konfiguration der Aktion `directus_fill`.
+
+    Holt EINEN Directus-Datensatz aus `source` (Quellen-Schlüssel wie bei einem
+    directus-Feld) anhand des Prozess-Felds `keyField` – dessen Wert wird gegen
+    das Wert-Feld der Quelle gematcht – und schreibt die gemappten Zielfelder.
+
+    Anders als der Snapshot (läuft beim SPEICHERN eines directus-Felds) feuert
+    dies als Automation bei Phaseneintritt: so lassen sich personenbezogene
+    Daten DATENSCHUTZKONFORM erst in einer späteren Phase laden statt schon beim
+    Anlegen. Best-effort: ist die Quelle/Directus nicht erreichbar oder der
+    Datensatz nicht auffindbar, bleiben die Ziele unverändert (die Phase schaltet
+    trotzdem weiter)."""
+    source: str
+    keyField: str
+    fieldMap: list[DirectusFillBinding] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _spec_rules(self) -> "DirectusFillSpec":
+        if not self.source.strip():
+            raise ValueError("directus_fill: `source` (Directus-Quelle) fehlt")
+        if not self.keyField.strip():
+            raise ValueError("directus_fill: `keyField` (Prozess-Feld mit dem Suchwert) fehlt")
+        if not self.fieldMap:
+            raise ValueError("directus_fill erfordert mindestens eine Feld-Zuordnung")
+        return self
+
+
 #: Obergrenze für den Aufruf-Timeout (Sekunden) – schützt Motor/Scheduler vor
 #: einer hängenden Gegenstelle. Default bewusst kurz.
 _HTTP_MAX_TIMEOUT = 60
@@ -744,6 +797,7 @@ class Action(_Base):
     value: Optional[Any] = None
     counter: Optional[str] = None    # bei assign_sequence
     directus: Optional[DirectusWriteSpec] = None   # bei directus_write
+    directusFill: Optional[DirectusFillSpec] = None  # bei directus_fill
     http: Optional[HttpRequestSpec] = None         # bei http_request
     email: Optional[EmailSpec] = None              # bei company_email
     #: Freitext-Mailkörper für notify/escalate – mit `{{feld.key}}`-Platzhaltern
@@ -756,6 +810,8 @@ class Action(_Base):
         t = self.type
         if t != ActionType.directus_write and self.directus is not None:
             raise ValueError("`directus` ist nur bei action directus_write erlaubt")
+        if t != ActionType.directus_fill and self.directusFill is not None:
+            raise ValueError("`directusFill` ist nur bei action directus_fill erlaubt")
         if t != ActionType.http_request and self.http is not None:
             raise ValueError("`http` ist nur bei action http_request erlaubt")
         if t != ActionType.company_email and self.email is not None:
@@ -779,6 +835,9 @@ class Action(_Base):
             if d.operation in (DirectusOperation.create, DirectusOperation.update) and not d.fieldMap:
                 raise ValueError(f"action directus_write ({d.operation.value}) erfordert "
                                  "mindestens eine Feld-Zuordnung")
+        if t == ActionType.directus_fill and self.directusFill is None:
+            raise ValueError("action directus_fill erfordert `directusFill` "
+                             "(Quelle, Schlüsselfeld, Feld-Zuordnung)")
         if t.value in UNIMPLEMENTED_ACTIONS:
             raise ValueError(f"action „{t.value}“ ist noch nicht implementiert und "
                              f"kann daher nicht veröffentlicht werden")
@@ -1627,6 +1686,31 @@ class ProcessDefinition(_Base):
                         raise ValueError(
                             f"automation[{a.id}].directus.matchField: „{d.matchField}“ darf kein "
                             "fester Wert sein (der Suchschlüssel muss aus einem Prozess-Feld kommen)")
+            if a.action.type == ActionType.directus_fill and a.action.directusFill:
+                df = a.action.directusFill
+                # Schlüssel- und Zielfelder sind PROZESS-Felder (müssen im Katalog
+                # stehen); `source` ist dagegen ein Directus-Feldname (zur Laufzeit
+                # best-effort aufgelöst, wie beim Snapshot – hier nicht geprüft).
+                _need(df.keyField, f"automation[{a.id}].directusFill.keyField")
+                # Das Schlüsselfeld liefert den (skalaren) Suchwert. Ein Anhang/
+                # Wiederholgruppe trägt eine Liste/Objekt und würde gegen das
+                # valueField NIE matchen → stiller No-op zur Laufzeit (analog zur
+                # idField-Sperre bei directus_write).
+                if wid_by_key.get(df.keyField) in (Widget.collection, Widget.attachment):
+                    raise ValueError(
+                        f"automation[{a.id}].directusFill.keyField: „{df.keyField}“ "
+                        f"(widget={wid_by_key[df.keyField].value}) kann keinen Suchwert "
+                        "liefern – ein einfaches Feld (Text/Directus-Auswahl) verwenden")
+                for j, b in enumerate(df.fieldMap):
+                    _need(b.target, f"automation[{a.id}].directusFill.fieldMap[{j}].target")
+                    # Ein Ziel == keyField überschriebe den Suchschlüssel mit den
+                    # geholten Daten; beim nächsten Phaseneintritt fände der Lookup
+                    # nichts mehr. Wie der Snapshot (b.target == f.key) ausschließen.
+                    if b.target == df.keyField:
+                        raise ValueError(
+                            f"automation[{a.id}].directusFill.fieldMap[{j}].target: "
+                            f"„{b.target}“ ist zugleich das Schlüsselfeld – das Nachladen "
+                            "würde den Suchwert überschreiben. Ein anderes Zielfeld wählen.")
 
         # on_department_done: nur als PHASEN-Automation einer Fachabteilungs-Phase,
         # und die Gruppe muss eine Fachabteilung genau dieser Phase sein.

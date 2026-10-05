@@ -46,6 +46,26 @@ def _coerce(value: Any, widget: Optional[Widget]) -> Any:
     return str(value)
 
 
+def fetch_source_record(src: dict, key_value: Any, extra_sources: list, *,
+                        query: Callable[..., list] = dc.query_items) -> Optional[dict]:
+    """Hole EINEN Directus-Datensatz aus der (bereits aufgelösten) Quelle `src`,
+    dessen Wert-Feld `key_value` entspricht. Gibt den Datensatz oder None zurück
+    (None = kein Treffer). `extra_sources` sind zusätzlich benötigte Feldpfade
+    (z. B. Snapshot-/Fill-Quellen) über die Standard-Felder der Quelle hinaus.
+
+    `_in` statt `_eq`: der Wert wird IMMER als String gespeichert; ein `_eq`
+    gegen einen numerischen Primärschlüssel (id) trifft je nach Directus/
+    Spaltentyp nicht, während `_in` (genau wie das funktionierende Label-
+    Auflösen) den Wert zuverlässig matcht. Wirft dc.DirectusError, wenn Directus
+    nicht erreichbar ist – der Aufrufer behandelt das best-effort."""
+    base = sources_db.query_fields(src)
+    want = base + [s for s in extra_sources if s not in base]
+    eq = {src["valueField"]: {"_in": [key_value]}}
+    flt = {"_and": [src["filter"], eq]} if src.get("filter") else eq
+    recs = query(src["collection"], fields=want, filter=flt, limit=1)
+    return recs[0] if recs else None
+
+
 def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict], *,
                     get_source: Callable[[str], Optional[dict]] = sources_db.get,
                     query: Callable[..., list] = dc.query_items) -> dict:
@@ -80,21 +100,13 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
                            f.directusSource, f.key)
             continue
 
-        base = sources_db.query_fields(src)
-        want = base + [b.source for b in f.directusFieldMap if b.source not in base]
-        # `_in` statt `_eq`: der Wert wird IMMER als String gespeichert; ein `_eq`
-        # gegen einen numerischen Primärschlüssel (id) trifft je nach Directus/
-        # Spaltentyp nicht, während `_in` (genau wie das Label-Auflösen, das
-        # funktioniert) den Wert zuverlässig matcht.
-        eq = {src["valueField"]: {"_in": [cur]}}
-        flt = {"_and": [src["filter"], eq]} if src.get("filter") else eq
         try:
-            recs = query(src["collection"], fields=want, filter=flt, limit=1)
+            rec = fetch_source_record(src, cur, [b.source for b in f.directusFieldMap],
+                                      query=query)
         except dc.DirectusError as exc:
             logger.warning("Directus-Snapshot für %s=%r fehlgeschlagen: %s", f.key, cur, exc)
             continue
 
-        rec = recs[0] if recs else None
         if rec is None:
             # Schlüssel gesetzt, aber KEIN Datensatz gefunden (z. B. Typ-/Quelle-
             # Mismatch beim valueField oder ein Directus-Hänger). Die Zielfelder

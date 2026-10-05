@@ -12,7 +12,7 @@
  */
 import type {
   Action, ApprovalOnReject, ApprovalSpec, Automation, Condition, CreatePermissions,
-  DirectusWriteSpec, HttpRequestSpec, EmailSpec, LayoutItem,
+  DirectusWriteSpec, DirectusFillSpec, DirectusFillBinding, HttpRequestSpec, EmailSpec, LayoutItem,
   DocumentSpec, LayoutSection, DepartmentRule, FieldConstraints, FieldDef, FieldRef,
   FieldVisibility, PhaseConstraint, PhaseDef, ProcessDefinition, Responsibility,
   StaticOption, SubField, Trigger, EscalationSpec, EscalationStage,
@@ -211,6 +211,18 @@ function normDirectusWrite(v: any): DirectusWriteSpec | null {
   }
 }
 
+function normDirectusFill(v: any): DirectusFillSpec | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return {
+    source: String(v.source ?? ''),
+    keyField: String(v.keyField ?? ''),
+    fieldMap: arr(v.fieldMap).map((b: any): DirectusFillBinding => ({
+      source: String(b?.source ?? ''),
+      target: String(b?.target ?? ''),
+    })),
+  }
+}
+
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
 function normHttpRequest(v: any): HttpRequestSpec | null {
@@ -256,6 +268,7 @@ function normAction(v: any): Action {
     value: v?.value === undefined ? null : v.value,
     counter: str(v?.counter),
     directus: normDirectusWrite(v?.directus),
+    directusFill: normDirectusFill(v?.directusFill),
     http: normHttpRequest(v?.http),
     email: normEmailSpec(v?.email),
     emailBody: str(v?.emailBody),

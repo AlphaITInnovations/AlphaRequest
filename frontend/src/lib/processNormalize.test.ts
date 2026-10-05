@@ -89,7 +89,7 @@ describe('normalizeDefinition', () => {
       automations: [{ id: 'a', trigger: { type: 'on_enter' },
         action: { type: 'notify', to: 'owner', process: 'alt' } }] })
     expect(Object.keys(d.automations[0].action).sort())
-      .toEqual(['counter', 'directus', 'email', 'emailBody', 'field', 'http', 'recipients', 'template', 'to', 'type', 'value'])
+      .toEqual(['counter', 'directus', 'directusFill', 'email', 'emailBody', 'field', 'http', 'recipients', 'template', 'to', 'type', 'value'])
   })
 
   it('normalisiert einen API-Aufruf (http_request) mit Defaults', () => {
@@ -109,6 +109,23 @@ describe('normalizeDefinition', () => {
     const d = normalizeDefinition({ key: 'k', name: 'N',
       automations: [{ id: 'c', trigger: { type: 'on_enter' }, action: { type: 'notify', to: 'owner' } }] })
     expect(d.automations[0].action.http).toBeNull()
+  })
+
+  it('normalisiert ein Stammdaten-Nachladen (directus_fill) verlustfrei', () => {
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      automations: [{ id: 'f', trigger: { type: 'on_enter' },
+        action: { type: 'directus_fill', directusFill: { source: 'mitarbeitende',
+          keyField: 'base.ma', fieldMap: [{ source: 'personal_address', target: 'base.strasse' }] } } }] })
+    const df = d.automations[0].action.directusFill!
+    expect(df.source).toBe('mitarbeitende')
+    expect(df.keyField).toBe('base.ma')
+    expect(df.fieldMap).toEqual([{ source: 'personal_address', target: 'base.strasse' }])
+  })
+
+  it('lässt directusFill null, wenn die Aktion kein Nachladen ist', () => {
+    const d = normalizeDefinition({ key: 'k', name: 'N',
+      automations: [{ id: 'c', trigger: { type: 'on_enter' }, action: { type: 'notify', to: 'owner' } }] })
+    expect(d.automations[0].action.directusFill).toBeNull()
   })
 
   it('ergänzt die einzig erlaubte assign.action', () => {

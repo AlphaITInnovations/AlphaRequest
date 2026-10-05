@@ -14,7 +14,8 @@
  */
 import { computed, ref, watch } from 'vue'
 import type {
-  Action, ActionType, Automation, DirectusOperation, DirectusWriteBinding, DirectusWriteSpec,
+  Action, ActionType, Automation, DirectusFillBinding, DirectusFillSpec, DirectusOperation,
+  DirectusWriteBinding, DirectusWriteSpec,
   EmailSpec, HttpHeader, HttpMethod, HttpRequestSpec, Trigger, TriggerType,
 } from '@/types/process'
 import {
@@ -79,7 +80,8 @@ const PRIORITY_LABEL: Record<string, string> = {
 const blankTrigger = (): Trigger => ({ type: 'on_enter', after: null, repeat: null, field: null, group: null })
 const blankAction = (): Action => ({
   type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
-  value: null, counter: null, directus: null, http: null, email: null, emailBody: null,
+  value: null, counter: null, directus: null, directusFill: null, http: null, email: null,
+  emailBody: null,
 })
 // Platzhalter mit {{…}} als gebundener String – im Template-Attribut würde Vue die
 // Mustaches sonst als (verbotene) Attribut-Interpolation deuten.
@@ -123,6 +125,7 @@ const blankDirectus = (): DirectusWriteSpec => ({
   operation: 'create', collection: '', fieldMap: [], idField: '',
   onError: 'continue', matchField: null,
 })
+const blankDirectusFill = (): DirectusFillSpec => ({ source: '', keyField: '', fieldMap: [] })
 const blankHttp = (): HttpRequestSpec => ({
   method: 'POST', url: '', headers: [], body: null, contentType: null,
   timeoutSeconds: 10, onError: 'continue',
@@ -189,6 +192,24 @@ function onTriggerType(t: TriggerType) {
     group: t === 'on_department_done'
       ? (a.value.trigger.group ?? (deptGroups.value[0]?.id ?? null)) : null,
   })
+}
+
+// ── Directus-Nachladen (directus_fill) ──────────────────────────────────────
+function patchDirectusFill(p: Partial<DirectusFillSpec>) {
+  patchAction({ directusFill: { ...(a.value.action.directusFill ?? blankDirectusFill()), ...p } })
+}
+function addDfMap() {
+  const cur = a.value.action.directusFill ?? blankDirectusFill()
+  patchDirectusFill({ fieldMap: [...cur.fieldMap, { source: '', target: '' }] })
+}
+function removeDfMap(i: number) {
+  const cur = a.value.action.directusFill ?? blankDirectusFill()
+  patchDirectusFill({ fieldMap: cur.fieldMap.filter((_, j) => j !== i) })
+}
+function setDfMap(i: number, part: 'source' | 'target', value: string) {
+  const cur = a.value.action.directusFill ?? blankDirectusFill()
+  patchDirectusFill({ fieldMap: cur.fieldMap.map(
+    (b, j): DirectusFillBinding => (j === i ? { ...b, [part]: value } : b)) })
 }
 
 // ── Directus-Schreiben ──────────────────────────────────────────────────────
@@ -317,10 +338,14 @@ function onActionType(t: ActionType) {
   // nach einem Typwechsel und der Dirty-Vergleich schlägt dauerhaft an.
   const next: Action = {
     type: t, to: null, recipients: null, template: null, field: null,
-    value: null, counter: null, directus: null, http: null, email: null, emailBody: null,
+    value: null, counter: null, directus: null, directusFill: null, http: null, email: null,
+    emailBody: null,
   }
   if (t === 'directus_write') {
     next.directus = cur.directus ?? blankDirectus()
+  }
+  if (t === 'directus_fill') {
+    next.directusFill = cur.directusFill ?? blankDirectusFill()
   }
   if (t === 'http_request') {
     next.http = cur.http ?? blankHttp()
@@ -820,6 +845,82 @@ watch(dwCollection, (c) => {
           Schreibt live nach Directus. Das braucht einen Directus-Token mit Schreibrechten
           (env DIRECTUS_WRITE_TOKEN oder Schreibrecht des Lese-Tokens). Fehler blockieren den
           Auftrag nicht – sie landen im Verlauf und als Mail an die Fehler-Empfänger:in.
+        </p>
+      </template>
+
+      <!-- Stammdaten aus Directus nachladen (directus_fill) -->
+      <template v-else-if="a.action.type === 'directus_fill'">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl">Directus-Quelle</label>
+            <input
+              class="afi w-full"
+              placeholder="z. B. mitarbeitende"
+              :value="a.action.directusFill?.source ?? ''"
+              @input="patchDirectusFill({ source: val($event) })"
+            />
+            <p class="text-xs text-gray-400 mt-1">Schlüssel einer eingerichteten Directus-Quelle.</p>
+          </div>
+          <div>
+            <label class="lbl">Schlüsselfeld (Suchwert)</label>
+            <select
+              class="afi w-full"
+              :value="a.action.directusFill?.keyField ?? ''"
+              @change="patchDirectusFill({ keyField: val($event) || '' })"
+            >
+              <option value="">Feld wählen…</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+              <option
+                v-if="a.action.directusFill?.keyField && !keys.includes(a.action.directusFill.keyField)"
+                :value="a.action.directusFill.keyField"
+              >
+                {{ a.action.directusFill.keyField }} (unbekannt)
+              </option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Sein Wert wird gegen das Wert-Feld der Quelle gematcht.</p>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="lbl mb-0">Feld-Zuordnungen (Directus → Prozess)</label>
+            <button type="button" class="text-xs underline" @click="addDfMap">+ Zuordnung</button>
+          </div>
+          <div
+            v-for="(b, i) in (a.action.directusFill?.fieldMap ?? [])"
+            :key="i"
+            class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] gap-2 mb-2 items-start"
+          >
+            <input
+              class="afi w-full"
+              placeholder="Directus-Feld, z. B. personal_address"
+              :value="b.source"
+              @input="setDfMap(i, 'source', val($event))"
+            />
+            <select
+              class="afi w-full"
+              :value="b.target"
+              @change="setDfMap(i, 'target', val($event) || '')"
+            >
+              <option value="">Ziel-Feld wählen…</option>
+              <option v-for="k in keys" :key="k" :value="k">{{ fieldText(k) }}</option>
+              <option v-if="b.target && !keys.includes(b.target)" :value="b.target">
+                {{ b.target }} (unbekannt)
+              </option>
+            </select>
+            <button type="button" class="afi !px-0 text-gray-400 hover:text-red-500"
+                    title="Zuordnung entfernen" @click="removeDfMap(i)">✕</button>
+          </div>
+          <p v-if="!(a.action.directusFill?.fieldMap ?? []).length" class="text-xs text-gray-400">
+            Noch keine Zuordnung – mindestens eine ist nötig.
+          </p>
+        </div>
+
+        <p class="text-xs text-gray-400">
+          Lädt die Daten erst beim Eintritt in diese Phase aus Directus nach (nicht schon beim
+          Anlegen). So lassen sich personenbezogene Daten datenschutzkonform erst dort laden, wo
+          die zuständige Stelle sie sehen darf. Firmen-Zielfelder werden automatisch von der
+          Firmen-ID auf den Namen aufgelöst. Fehler blockieren den Auftrag nicht.
         </p>
       </template>
 
