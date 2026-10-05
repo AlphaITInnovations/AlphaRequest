@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { normalizeField } from './processNormalize'
-import { applyPrefill } from './processPrefill'
+import { applyPrefill, matchOption } from './processPrefill'
 
 /** Client-Spiegel von services/process_prefill – nur die Anzeige beim Anlegen
  *  (autoritativ setzt der Server; der Anlege-Dialog nutzt bevorzugt den Endpunkt
@@ -63,5 +63,28 @@ describe('applyPrefill (Client-Spiegel)', () => {
     expect(applyPrefill([f], { employee: { location: 8080 } }, {})['b.nl']).toBe('8080')
     expect(applyPrefill([f], { employee: { location: { id: 42, name: 'Berlin' } } }, {})['b.nl'])
       .toBe('42')
+  })
+})
+
+/** matchOption ist exportiert, weil auch das Live-Auto-Fill der directus-Auswahl
+ *  (SchemaForm coerceForTarget) ein select-Ziel case-insensitiv vorwählen muss. */
+describe('matchOption (geteilt mit dem directus-Live-Fill)', () => {
+  const anrede = normalizeField({
+    key: 'b.anrede', widget: 'select',
+    options: [{ value: 'Herr' }, { value: 'Frau' }, { value: 'Divers' }] })
+
+  it('bildet case-insensitiv auf den Options-Wert ab', () => {
+    expect(matchOption('herr', anrede)).toBe('Herr')
+    expect(matchOption('FRAU', anrede)).toBe('Frau')
+  })
+
+  it('bildet ein Label auf den Options-Wert ab', () => {
+    const f = normalizeField({
+      key: 'b.anrede', widget: 'select', options: [{ value: 'm', label: 'Herr' }] })
+    expect(matchOption('herr', f)).toBe('m')
+  })
+
+  it('gibt undefined ohne Treffer (und ohne allowOther)', () => {
+    expect(matchOption('unbekannt', anrede)).toBeUndefined()
   })
 })

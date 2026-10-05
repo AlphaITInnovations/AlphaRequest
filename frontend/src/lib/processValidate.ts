@@ -811,6 +811,52 @@ export function validateDefinition(
         }
       }
     }
+    if (ac.type === 'directus_fill') {
+      // Stammdaten-Nachladen: Quelle + Schlüsselfeld + mind. eine Zuordnung;
+      // Schlüssel- und Zielfelder sind PROZESS-Felder (müssen im Katalog stehen),
+      // `source` ist ein Directus-Feldname (zur Laufzeit aufgelöst) – spiegelt die
+      // Server-Regeln (schemas/process_definition DirectusFillSpec + Zwei-Pass).
+      const df = ac.directusFill
+      if (!df) {
+        out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Nachlade-Konfiguration fehlt.'))
+      } else {
+        if (!df.source?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Directus-Quelle fehlt.'))
+        }
+        if (!df.keyField?.trim()) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Schlüsselfeld fehlt.'))
+        } else if (!catalog.has(df.keyField)) {
+          out.push(err(`${path}.action`, anchor, 'UNKNOWN_REF',
+            `Schlüsselfeld „${df.keyField}" gibt es nicht.`))
+        } else if (['collection', 'attachment'].includes(widgetByKey.get(df.keyField) ?? '')) {
+          // Nicht-skalares Schlüsselfeld (Liste/Objekt) würde nie matchen – stiller
+          // No-op zur Laufzeit; spiegelt die Server-Regel.
+          out.push(err(`${path}.action`, anchor, 'INVALID',
+            'Das Schlüsselfeld muss ein einfaches Feld sein (kein Anhang/Wiederholgruppe).'))
+        }
+        if (!df.fieldMap?.length) {
+          out.push(err(`${path}.action`, anchor, 'REQUIRED', 'Mindestens eine Feld-Zuordnung nötig.'))
+        }
+        ;(df.fieldMap ?? []).forEach((b, j) => {
+          if (!b.source?.trim()) {
+            out.push(err(`${path}.action.directusFill.${j}`, anchor, 'REQUIRED',
+              'Directus-Quellfeld fehlt.'))
+          }
+          if (!b.target?.trim()) {
+            out.push(err(`${path}.action.directusFill.${j}`, anchor, 'REQUIRED',
+              'Prozess-Zielfeld fehlt.'))
+          } else if (!catalog.has(b.target)) {
+            out.push(err(`${path}.action.directusFill.${j}`, anchor, 'UNKNOWN_REF',
+              `Ziel-Feld „${b.target}" gibt es nicht.`))
+          } else if (b.target === df.keyField) {
+            // Ziel == Schlüsselfeld überschriebe den Suchwert (spiegelt Server-Regel).
+            out.push(err(`${path}.action.directusFill.${j}`, anchor, 'INVALID',
+              `„${b.target}" ist zugleich das Schlüsselfeld – das Nachladen würde den `
+              + 'Suchwert überschreiben. Ein anderes Zielfeld wählen.'))
+          }
+        })
+      }
+    }
     if (ac.type === 'company_email') {
       // Firmenmail wird beim Verlassen der Phase gebildet und gegen Directus geprüft;
       // bei Konflikt blockiert der Server die Phase (spiegelt die Server-Regeln).

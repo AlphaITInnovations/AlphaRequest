@@ -33,8 +33,8 @@ export type TriggerType = 'on_enter' | 'on_exit' | 'on_field_change' | 'timer' |
 export type DirectusOperation = 'create' | 'update' | 'delete'
 export type ActionType =
   | 'notify' | 'escalate' | 'set_field' | 'set_priority' | 'set_status'
-  | 'assign_sequence' | 'auto_advance' | 'directus_write' | 'http_request'
-  | 'company_email'
+  | 'assign_sequence' | 'auto_advance' | 'directus_write' | 'directus_fill'
+  | 'http_request' | 'company_email'
 
 /** Genau EIN Operator-Key pro Objekt – Shapes siehe lib/conditionDsl.ts. */
 export type Condition = Record<string, any>
@@ -212,6 +212,23 @@ export interface DirectusWriteSpec {
   matchField?: string | null
 }
 
+/** directus_fill: Directus-Quellfeld → Prozess-Zielfeld (LESEN). Firmen-Ziele
+ *  (widget=company) werden automatisch von der Firmen-ID auf den Namen aufgelöst. */
+export interface DirectusFillBinding {
+  source: string
+  target: string
+}
+
+/** directus_fill: lädt bei Phaseneintritt EINEN Directus-Datensatz anhand von
+ *  `keyField` (Wert = valueField der Quelle) nach und füllt die Zielfelder. */
+export interface DirectusFillSpec {
+  /** Directus-Quelle (Schlüssel wie bei einem directus-Feld). */
+  source: string
+  /** Prozess-Feld mit dem Suchwert. */
+  keyField: string
+  fieldMap: DirectusFillBinding[]
+}
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 export type HttpRequestOnError = 'continue' | 'block'
 
@@ -248,6 +265,8 @@ export interface Action {
   counter: string | null
   /** Bei type='directus_write': Schreib-Konfiguration. */
   directus: DirectusWriteSpec | null
+  /** Bei type='directus_fill': Stammdaten-Nachlade-Konfiguration. */
+  directusFill?: DirectusFillSpec | null
   /** Bei type='http_request': API-Aufruf-Konfiguration. */
   http: HttpRequestSpec | null
   /** Bei type='company_email': Auto-Firmenmail + Directus-Eindeutigkeits-Config. */
@@ -366,6 +385,12 @@ export interface DocumentSpec {
   /** Bedingte Passagen: `name → Bedingung` (Condition-DSL). In der .docx umschließt
    *  `{{#if:name}} … {{/if}}` den Absatz; ist die Bedingung falsch, entfällt er. */
   sections: Record<string, Condition>
+  /** Firmenabhängige Vorlage: statt einer fest hochgeladenen .docx wird die Vorlage
+   *  der im Auftrag gewählten Firma geladen. `companyTemplate` = Name der Firmen-
+   *  Vorlage (z. B. „Arbeitsvertrag"), `companyField` = Prozess-Feld (widget=company)
+   *  mit der Firma. Beide zusammen oder beide null. */
+  companyTemplate: string | null
+  companyField: string | null
 }
 
 /** Eine Marker-Zuordnung: `field` ist ein Katalog-Feldschlüssel oder die

@@ -1,15 +1,20 @@
 import re
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Query, Response, UploadFile
 from pydantic import BaseModel
 from typing import Optional
 
 from backend.core.dependencies import get_current_user
 from backend.database.groups import get_groups, save_groups
 from backend.database.settings import (
-    get_companies_full, set_companies_full,
-    get_process_order, set_process_order,
+    get_companies, get_companies_full, set_companies_full,
+    get_process_order, set_process_order, template_source_company,
+    get_template_labels, get_template_label, set_template_labels,
+    set_template_label_baseline,
 )
+from backend.database import company_templates as ctpl_db
+from backend.services import attachment_storage as storage
+from backend.services import template_format
 from backend.database.users import (
     list_users, set_user_role, get_user,
     add_extra_permission, remove_extra_permission, set_extra_permissions,
@@ -154,7 +159,8 @@ def _diff_companies(old_list, new_list):
     deleted = [n for n in old_by if n not in new_by]
     modified = []
     fields = [("pnr_from", "Von"), ("pnr_to", "Bis"), ("mandant", "Mandant"),
-              ("pnr_shared_with", "geteilt mit"), ("directus_firma_id", "alphacore-Firmen-ID")]
+              ("pnr_shared_with", "geteilt mit"), ("directus_firma_id", "alphacore-Firmen-ID"),
+              ("documents_shared_with", "Vorlagen von")]
     for name, nc in new_by.items():
         oc = old_by.get(name)
         if not oc:
@@ -334,6 +340,8 @@ class CompanyItem(BaseModel):
     directus_firma_id: Optional[str] = None
     # E-Mail-Domain der Firma (Basis der automatischen Firmenmail), optional.
     domain: Optional[str] = None
+    # Übernimmt die Dokument-Vorlagen dieser Firma (dann keine eigenen genutzt).
+    documents_shared_with: Optional[str] = None
     # Nur beim GET befüllt (Anzeige) – wird beim PUT ignoriert / aus dem Bestand bewahrt.
     pnr_current: Optional[int] = None
     pnr_warned: bool = False
@@ -369,6 +377,9 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
         shared = (c.pnr_shared_with or "").strip() or None
         firma_id = (c.directus_firma_id or "").strip() or None
         dom = (c.domain or "").strip().lower().lstrip("@") or None
+        docs_from = (c.documents_shared_with or "").strip() or None
+        if docs_from and docs_from.casefold() == name.casefold():
+            raise HTTPException(422, f"„{name}“: kann die Dokument-Vorlagen nicht von sich selbst übernehmen.")
 
         if shared:
             # Teilt den Zähler → kein eigener Bereich.
@@ -378,6 +389,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                 "name": name, "pnr_from": None, "pnr_to": None,
                 "mandant": mandant, "pnr_shared_with": shared,
                 "directus_firma_id": firma_id, "domain": dom,
+                "documents_shared_with": docs_from,
             })
             continue
 
@@ -395,6 +407,7 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
             "name": name, "pnr_from": pf, "pnr_to": pt,
             "mandant": mandant, "pnr_shared_with": None,
             "directus_firma_id": firma_id, "domain": dom,
+            "documents_shared_with": docs_from,
         })
 
     if not cleaned:
@@ -408,6 +421,58 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                 422,
                 f"„{c['name']}“: teilt den Zähler mit „{c['pnr_shared_with']}“, aber diese Firma "
                 "hat keinen eigenen Personalnummern-Bereich.",
+            )
+
+    # Übernommene Dokument-Vorlagen: Ziel muss existieren und darf NICHT selbst
+    # übernehmen (keine Ketten – die Auflösung macht nur EINEN Hop).
+    by_name = {c["name"]: c for c in cleaned}
+    for c in cleaned:
+        src = c["documents_shared_with"]
+        if not src:
+            continue
+        target = by_name.get(src)
+        if target is None:
+            raise HTTPException(
+                422,
+                f"„{c['name']}“: übernimmt die Dokument-Vorlagen von „{src}“, aber diese "
+                "Firma gibt es nicht.",
+            )
+        if target["documents_shared_with"]:
+            raise HTTPException(
+                422,
+                f"„{c['name']}“: „{src}“ übernimmt selbst Vorlagen von „{target['documents_shared_with']}“ "
+                "– Vorlagen lassen sich nicht über mehrere Firmen weiterreichen. Bitte direkt "
+                "die Firma mit den eigenen Vorlagen wählen.",
+            )
+        # Eine übernehmende Firma hat KEINE eigenen Vorlagen (sonst lägen unsichtbare
+        # „schlafende“ Vorlagen in der DB, die Umbenennen/Löschen blockieren und bei
+        # Namens-Kollision statt der übernommenen gefüllt würden). Erst entfernen.
+        own = ctpl_db.list_for_company(c["name"])
+        if own:
+            namen = ", ".join(f"„{t['name']}“" for t in own)
+            raise HTTPException(
+                422,
+                f"„{c['name']}“ hat noch eigene Dokument-Vorlagen ({namen}). Bitte diese "
+                f"zuerst entfernen, dann lassen sich die Vorlagen von „{src}“ übernehmen.",
+            )
+
+    # Firmen-Vorlagen hängen am NAMEN (keine stabile ID): eine Firma mit hinterlegten
+    # Dokument-Vorlagen darf nicht spurlos gelöscht/umbenannt werden, sonst zeigt der
+    # Prozess ins Leere und Arbeitsvertrag/Kündigung ließen sich nicht mehr erzeugen.
+    # Umbenennen = alter Name verschwindet → gleiche Sperre.
+    new_names = {c["name"] for c in cleaned}
+    for old in old_companies:
+        old_name = (old.get("name") or "").strip()
+        if not old_name or old_name in new_names:
+            continue
+        tpls = ctpl_db.list_for_company(old_name)
+        if tpls:
+            namen = ", ".join(f"„{t['name']}“" for t in tpls)
+            raise HTTPException(
+                409,
+                f"„{old_name}“ hat noch hinterlegte Dokument-Vorlagen ({namen}). "
+                "Bitte diese Vorlagen zuerst entfernen, bevor die Firma gelöscht "
+                "oder umbenannt wird.",
             )
 
     try:
@@ -426,6 +491,328 @@ def set_companies_endpoint(payload: CompaniesIn, user: dict = Depends(get_curren
                details={"created": created, "deleted": deleted, "modified": modified})
 
     return DataResponse(data=CompaniesOut(companies=[CompanyItem(**c) for c in get_companies_full()]))
+
+
+# ── Firmen-Dokument-Vorlagen (.docx/PDF je Firma, nach Name) ──────────────────
+#
+# Firmenabhängige Dokumente (Arbeitsvertrag, Kündigung …): je Firma beliebig viele
+# benannte Vorlagen. Ein Prozess-Dokument verweist nur über den NAMEN; welche Datei
+# gefüllt wird, entscheidet die im Auftrag gewählte Firma (siehe DocumentSpec
+# .companyTemplate/.companyField + process_tickets._load_template_row).
+
+def _ctpl_info(row: dict) -> dict:
+    """Metadaten einer Firmen-Vorlage + erkanntes Format und gefundene {{marker}}."""
+    from pathlib import Path
+    info = {"name": row["name"], "filename": row.get("original_filename"),
+            "size": row.get("size_bytes"),
+            "uploaded_at": (row["uploaded_at"].isoformat()
+                            if hasattr(row.get("uploaded_at"), "isoformat") else row.get("uploaded_at")),
+            "uploaded_by": row.get("uploaded_by_name"), "format": None, "placeholders": []}
+    try:
+        data = Path(storage.full_path(row["stored_path"])).read_bytes()
+        info["format"] = template_format.detect(data)
+        if template_format.is_pdf(data):
+            from backend.services import pdf_fill
+            info["placeholders"] = pdf_fill.find_placeholders(data)
+        else:
+            from backend.services import docx_fill
+            info["placeholders"] = docx_fill.find_placeholders(data)
+    except Exception:
+        logger.warning("Firmen-Vorlage „%s/%s“ nicht lesbar", row.get("company"), row.get("name"))
+    return info
+
+
+def _require_known_company(company: str) -> str:
+    c = (company or "").strip()
+    if c not in get_companies():
+        raise HTTPException(404, f"Unbekannte Firma: {company}")
+    return c
+
+
+def _content_disposition(filename: str) -> str:
+    """Content-Disposition mit ASCII-Fallback + RFC-5987 filename* – Starlette
+    kodiert Header als latin-1, ein Umlaut/Gedankenstrich im Dateinamen würde sonst
+    einen 500 werfen."""
+    import urllib.parse
+    fn = (filename or "Dokument").replace('"', "")
+    ascii_name = fn.encode("ascii", "replace").decode("ascii")
+    quoted = urllib.parse.quote(fn)
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"
+
+
+# ── Dokument-Vorlagen-Typen (Labels) ──────────────────────────────────────────
+#
+# Verwaltete Liste der Vorlagen-Typen (Arbeitsvertrag, Kündigung …). Firmen laden
+# ihre Vorlagen je Typ hoch; der Prozess referenziert den Typ. Pro Typ EIN
+# kanonischer {{Platzhalter}}-Satz (beim ersten Upload erfasst, danach erzwungen).
+
+class TemplateLabelOut(BaseModel):
+    name: str
+    placeholders: Optional[list[str]] = None   # kanonischer Satz (None = noch offen)
+    companies: list[str] = []                   # Firmen mit einer Vorlage dieses Typs
+
+
+class TemplateLabelsOut(BaseModel):
+    labels: list[TemplateLabelOut]
+
+
+class TemplateLabelsIn(BaseModel):
+    labels: list[str]
+
+
+def _company_usage_cf() -> dict[str, list[str]]:
+    """casefold(Typname) → Firmen mit einer Vorlage dieses Typs. Case-insensitiv,
+    weil die DB-Spalte company_document_templates.name case-insensitiv vergleicht,
+    die Typ-Namen aber abweichend geschrieben sein können (Altbestand)."""
+    out: dict[str, list[str]] = {}
+    for r in ctpl_db.list_all():
+        out.setdefault(r["name"].casefold(), []).append(r["company"])
+    return out
+
+
+def _labels_with_usage() -> list[TemplateLabelOut]:
+    by_cf = _company_usage_cf()
+    return [TemplateLabelOut(name=l["name"], placeholders=l.get("placeholders"),
+                             companies=sorted(by_cf.get(l["name"].casefold(), [])))
+            for l in get_template_labels()]
+
+
+def _types_used_by_processes() -> dict[str, list[str]]:
+    """casefold(Typname) → veröffentlichte Prozesse, die ihn als companyTemplate
+    referenzieren. Verhindert das Löschen/Umbenennen eines noch verdrahteten Typs."""
+    from backend.database import process_definitions as pdef_db
+    out: dict[str, list[str]] = {}
+    try:
+        rows = pdef_db.list_published_catalog(include_definition=True)
+    except Exception:
+        return out
+    for row in rows:
+        defn = row.get("definition") or {}
+        for ph in defn.get("phases", []) or []:
+            for d in (ph.get("documents") or []):
+                ct = (d.get("companyTemplate") or "").strip()
+                if ct:
+                    keys = out.setdefault(ct.casefold(), [])
+                    if row.get("key") and row["key"] not in keys:
+                        keys.append(row["key"])
+    return out
+
+
+def _seed_labels_if_empty() -> None:
+    """Einmalige Migration: früher per Freitext hochgeladene Vorlagen-Namen als Typen
+    übernehmen, damit Bestands-Vorlagen nach der Umstellung weiter als Typ auswählbar
+    sind. Idempotent – läuft nur, solange noch kein Typ registriert ist.
+
+    Bewusst OHNE automatische Baseline: bei Altbestand können die Dateien mehrerer
+    Firmen unter demselben Namen abweichende Platzhalter haben – ein aus EINER Datei
+    gegriffener Satz wäre willkürlich. Die Baseline pegelt sich beim nächsten Upload
+    je Typ ein (und erzwingt dann Gleichheit)."""
+    if get_template_labels():
+        return
+    # Nach Name case-insensitiv deduplizieren (DB erlaubt case-Varianten je Firma);
+    # die erste gesehene Schreibweise wird kanonisch.
+    seen: set[str] = set()
+    names: list[str] = []
+    for r in ctpl_db.list_all():
+        if r["name"].casefold() not in seen:
+            seen.add(r["name"].casefold())
+            names.append(r["name"])
+    if names:
+        set_template_labels(names)
+
+
+@router.get("/settings/document-template-labels", response_model=DataResponse[TemplateLabelsOut])
+def get_template_labels_endpoint(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    _seed_labels_if_empty()
+    return DataResponse(data=TemplateLabelsOut(labels=_labels_with_usage()))
+
+
+@router.put("/settings/document-template-labels", response_model=DataResponse[TemplateLabelsOut])
+def set_template_labels_endpoint(payload: TemplateLabelsIn, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    for n in payload.labels:
+        if len(str(n).strip()) > 150:             # Vorlagen-Name-Spalte ist VARCHAR(150)
+            raise HTTPException(422, f"Typ-Name zu lang (max. 150 Zeichen): „{str(n).strip()[:60]}…“")
+    old = {l["name"] for l in get_template_labels()}
+    new_cf = {str(n).strip().casefold() for n in payload.labels if str(n).strip()}
+    # Einen Typ, der noch GENUTZT wird, nicht entfernen/umbenennen (sonst zeigen
+    # Prozess-Dokumente ins Leere und die Firmen-Vorlagen würden verwaisen). Genutzt =
+    # eine Firma hat eine Vorlage ODER ein veröffentlichter Prozess referenziert ihn.
+    in_use = _company_usage_cf()
+    proc_use = _types_used_by_processes()
+    for name in old:
+        cf = name.casefold()
+        if cf in new_cf:
+            continue
+        if in_use.get(cf):
+            firmen = ", ".join(f"„{c}“" for c in sorted(in_use[cf]))
+            raise HTTPException(
+                409,
+                f"Vorlagen-Typ „{name}“ wird noch von {firmen} genutzt. Bitte zuerst dort "
+                "die Vorlagen entfernen, bevor der Typ gelöscht oder umbenannt wird.")
+        if proc_use.get(cf):
+            prozesse = ", ".join(f"„{k}“" for k in sorted(proc_use[cf]))
+            raise HTTPException(
+                409,
+                f"Vorlagen-Typ „{name}“ wird noch von Prozess(en) {prozesse} verwendet. "
+                "Bitte dort erst den Typ im Dokument ändern/entfernen, dann lässt er sich löschen.")
+    labels = set_template_labels(payload.labels)
+    created = sorted(l["name"] for l in labels if l["name"] not in old)
+    deleted = sorted(n for n in old if n.casefold() not in new_cf)
+    if created or deleted:
+        parts = [f"„{n}“ angelegt" for n in created] + [f"„{n}“ entfernt" for n in deleted]
+        _audit(user, "template_labels_changed", entity_type="settings",
+               entity_id="document_template_labels",
+               summary=_summary(parts, "Vorlagen-Typen"),
+               details={"created": created, "deleted": deleted})
+    return DataResponse(data=TemplateLabelsOut(labels=_labels_with_usage()))
+
+
+@router.get("/settings/companies/{company}/documents")
+def list_company_documents(company: str, own: bool = Query(False),
+                           user: dict = Depends(get_current_user)):
+    """Benannte Dokument-Vorlagen einer Firma (Verwaltung im Companies-Panel).
+    Übernimmt die Firma Vorlagen von einer anderen, werden DEREN Vorlagen geliefert
+    (read-only); `shared_from` nennt die Quelle. `own=1` umgeht die Auflösung und
+    liefert den EIGENEN Bestand – der Editor prüft damit vor dem Übernehmen auf noch
+    vorhandene eigene Vorlagen."""
+    require_admin(user)
+    c = _require_known_company(company)
+    src = c if own else template_source_company(c)
+    shared_from = None if own else (src if src != c else None)
+    return DataResponse(data={"documents": [_ctpl_info(r) for r in ctpl_db.list_for_company(src)],
+                              "shared_from": shared_from})
+
+
+@router.post("/settings/companies/{company}/documents")
+async def upload_company_document(company: str, name: str = Query(...),
+                                  file: UploadFile = File(...),
+                                  user: dict = Depends(get_current_user)):
+    """Vorlage (.docx/PDF) eines Vorlagen-TYPS für eine Firma hochladen/ersetzen.
+
+    Der Name muss ein registrierter Typ sein (Dropdown, kein Freitext). Alle Firmen-
+    Vorlagen desselben Typs müssen denselben {{Platzhalter}}-Satz haben – der erste
+    Upload legt ihn fest, weitere werden dagegen geprüft (422 mit Diff)."""
+    require_admin(user)
+    c = _require_known_company(company)
+    src = template_source_company(c)
+    if src != c:
+        raise HTTPException(
+            409,
+            f"„{c}“ übernimmt die Dokument-Vorlagen von „{src}“. Bitte dort hochladen "
+            "oder diese Firma zuerst auf eigene Vorlagen umstellen.",
+        )
+    # Name muss ein registrierter Vorlagen-Typ sein; kanonische Schreibweise nutzen.
+    _seed_labels_if_empty()                       # Bestands-Namen einmalig als Typen übernehmen
+    label = get_template_label(name)
+    if label is None:
+        raise HTTPException(
+            422, f"„{(name or '').strip()}“ ist kein bekannter Vorlagen-Typ. Bitte den Typ "
+                 "zuerst unter Einstellungen → Vorlagen-Typen anlegen.")
+    tpl_name = label["name"]
+    fname = (file.filename or "").lower()
+    if not (fname.endswith(".docx") or fname.endswith(".pdf")):
+        raise HTTPException(422, "Nur Word- (.docx) oder PDF-Dateien werden als Vorlage unterstützt")
+    max_bytes = config.MAX_UPLOAD_MB * 1024 * 1024
+    try:
+        stored_path, size, _sha = storage.save_stream(file.file, max_bytes=max_bytes)
+    except storage.FileTooLarge:
+        raise HTTPException(413, f"Datei zu groß (max. {config.MAX_UPLOAD_MB} MB)")
+    # Lesbarkeit UND Parsebarkeit prüfen (echte .docx/PDF mit lesbaren Markern) –
+    # detect() allein wirft nie; ohne find_placeholders fiele eine kaputte Datei erst
+    # beim Erzeugen im Onboarding als 500 auf. Bei Fehler Blob gleich wieder entfernen.
+    from pathlib import Path
+    try:
+        data = Path(storage.full_path(stored_path)).read_bytes()
+        fmt = template_format.detect(data)
+        if template_format.is_pdf(data):
+            from backend.services import pdf_fill
+            markers = pdf_fill.find_placeholders(data)
+        else:
+            from backend.services import docx_fill
+            markers = docx_fill.find_placeholders(data)
+    except Exception:
+        storage.delete(stored_path)
+        raise HTTPException(422, "Die Datei ließ sich nicht als Word- (.docx) oder PDF-Vorlage lesen")
+    # Harte Platzhalter-Prüfung gegen den kanonischen Satz des Typs. Baseline None →
+    # dieser Upload legt sie fest (unten nach erfolgreichem Speichern).
+    baseline = label.get("placeholders")
+    if baseline is not None and set(markers) != set(baseline):
+        storage.delete(stored_path)
+        fehlt = sorted(set(baseline) - set(markers))
+        extra = sorted(set(markers) - set(baseline))
+        teile = []
+        if fehlt:
+            teile.append("fehlt: " + ", ".join("{{%s}}" % m for m in fehlt))
+        if extra:
+            teile.append("zusätzlich: " + ", ".join("{{%s}}" % m for m in extra))
+        raise HTTPException(
+            422,
+            f"Die Platzhalter weichen vom Typ „{tpl_name}“ ab ({'; '.join(teile)}). "
+            "Alle Firmen-Vorlagen eines Typs müssen dieselben {{Platzhalter}} haben. "
+            "Datei anpassen – oder den Marker-Satz des Typs ändern (dazu zuerst alle "
+            "vorhandenen Vorlagen dieses Typs entfernen).")
+    old = ctpl_db.get_template(c, tpl_name)
+    try:
+        ctpl_db.set_template(company=c, name=tpl_name, stored_path=stored_path,
+                             original_filename=file.filename or tpl_name,
+                             content_type=file.content_type, size_bytes=size,
+                             uploaded_by_id=user.get("id"),
+                             uploaded_by_name=user.get("displayName") or user.get("email"))
+    except Exception:
+        storage.delete(stored_path)               # DB-Fehler → neuen Blob nicht verwaisen lassen
+        raise
+    if old and old.get("stored_path") and old["stored_path"] != stored_path:
+        storage.delete(old["stored_path"])
+    if baseline is None:                          # erster Upload → kanonischen Satz festlegen
+        set_template_label_baseline(tpl_name, list(markers))
+    _audit(user, "company_template_uploaded",
+           summary=f"Firmen-Vorlage „{tpl_name}“ für „{c}“ hochgeladen ({fmt}, {size} B)",
+           details={"company": c, "name": tpl_name, "format": fmt})
+    return DataResponse(data=_ctpl_info(ctpl_db.get_template(c, tpl_name)))
+
+
+@router.get("/settings/companies/{company}/documents/{name}/download")
+def download_company_document(company: str, name: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    # Übernimmt die Firma Vorlagen von einer anderen, aus DEREN Bestand laden – wie
+    # die Liste/Füll-Logik; sonst zeigt die Liste die Quell-Datei, der Download aber
+    # ginge an den (leeren) eigenen Bestand → 404.
+    src = template_source_company((company or "").strip())
+    row = ctpl_db.get_template(src, (name or "").strip())
+    if not row:
+        raise HTTPException(404, "Keine Vorlage hinterlegt")
+    from pathlib import Path
+    try:
+        data = Path(storage.full_path(row["stored_path"])).read_bytes()
+    except Exception:
+        raise HTTPException(500, "Die hinterlegte Vorlage ist nicht lesbar")
+    mime = ("application/pdf" if template_format.is_pdf(data)
+            else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    return Response(content=data, media_type=mime,
+                    headers={"Content-Disposition": _content_disposition(
+                        row.get("original_filename") or name)})
+
+
+@router.delete("/settings/companies/{company}/documents/{name}")
+def delete_company_document(company: str, name: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    tpl_name = (name or "").strip()
+    row = ctpl_db.delete_template((company or "").strip(), tpl_name)
+    if row and row.get("stored_path"):
+        storage.delete(row["stored_path"])
+    # War das die LETZTE Vorlage dieses Typs? Dann den kanonischen Platzhalter-Satz
+    # freigeben, damit sich der Typ neu einpegeln (Marker ändern) lässt. Case-insensitiv
+    # vergleichen – die DB-Spalte tut es auch, Typ-Namen können abweichend geschrieben
+    # sein (Altbestand); sonst würde die Baseline trotz noch vorhandener Vorlage geleert.
+    cf = tpl_name.casefold()
+    if not any(r["name"].casefold() == cf for r in ctpl_db.list_all()):
+        set_template_label_baseline(tpl_name, None)
+    _audit(user, "company_template_deleted",
+           summary=f"Firmen-Vorlage „{name}“ für „{company}“ entfernt",
+           details={"company": (company or "").strip(), "name": tpl_name})
+    return DataResponse(data={"exists": False})
 
 
 # ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────

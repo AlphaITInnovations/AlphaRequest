@@ -113,7 +113,8 @@ def normalize_company(item) -> dict:
     if isinstance(item, str):
         return {"name": item.strip(), "pnr_from": None, "pnr_to": None,
                 "pnr_current": None, "pnr_warned": False, "mandant": None,
-                "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
+                "pnr_shared_with": None, "directus_firma_id": None, "domain": None,
+                "documents_shared_with": None}
     if isinstance(item, dict):
         return {
             "name": str(item.get("name", "")).strip(),
@@ -129,10 +130,14 @@ def normalize_company(item) -> dict:
             # E-Mail-Domain der Firma – Basis für die automatische Firmenmail
             # (vorname.nachname@domain). Ohne führendes @, klein.
             "domain": (_str_or_none(item.get("domain")) or "").lower().lstrip("@") or None,
+            # Übernimmt die Dokument-Vorlagen dieser Firma (eigene werden dann nicht
+            # genutzt) – unabhängig vom geteilten Personalnummern-Zähler.
+            "documents_shared_with": _str_or_none(item.get("documents_shared_with")),
         }
     return {"name": "", "pnr_from": None, "pnr_to": None,
             "pnr_current": None, "pnr_warned": False, "mandant": None,
-            "pnr_shared_with": None, "directus_firma_id": None, "domain": None}
+            "pnr_shared_with": None, "directus_firma_id": None, "domain": None,
+            "documents_shared_with": None}
 
 
 def get_companies_full() -> List[dict]:
@@ -203,6 +208,108 @@ def set_companies_full(companies: List[dict]) -> None:
 def set_companies(companies: List[str]) -> None:
     """Nur Namen setzen (Altpfad) – bestehende Bereiche/Zähler bleiben erhalten."""
     set_companies_full([{"name": n} for n in companies])
+
+
+def template_source_company(name: str) -> str:
+    """Firma, aus deren Dokument-Vorlagen gefüllt wird: i. d. R. die Firma selbst,
+    oder – falls sie Vorlagen von einer anderen übernimmt (documents_shared_with) –
+    die Zielfirma. Nur EIN Hop (Ketten sind beim Speichern ausgeschlossen).
+
+    Der Vergleich ist case-insensitiv und gibt den KANONISCHEN Namen zurück, damit
+    die Auflösung zur (ebenfalls case-insensitiven) DB-Spalte
+    company_document_templates.company passt – ein abweichend geschriebener
+    Auftragswert überspringt den Übernahme-Hop sonst stillschweigend.
+    Unbekannte Firma → Eingabe unverändert zurück."""
+    want = (name or "").strip()
+    if not want:
+        return want
+    wf = want.casefold()
+    for c in get_companies_full():
+        if c["name"].casefold() == wf:
+            return c.get("documents_shared_with") or c["name"]
+    return want
+
+
+# ── Dokument-Vorlagen-Typen (Labels) ──────────────────────────────────────────
+#
+# Firmen-Dokumente werden über einen TYP referenziert (z. B. „Arbeitsvertrag").
+# Alle Firmen-Vorlagen desselben Typs MÜSSEN denselben {{Platzhalter}}-Satz tragen,
+# weil die Marker→Feld-Zuordnung EINMAL je Prozess-Dokument gilt (für alle Firmen).
+# Der kanonische Satz (`placeholders`) wird beim ersten Upload erfasst und bei
+# weiteren Uploads erzwungen (harte Prüfung). None = noch nicht festgelegt.
+# Gespeichert als Setting DOCUMENT_TEMPLATE_LABELS (JSON, keine eigene Tabelle).
+
+def _normalize_label(item) -> dict:
+    if isinstance(item, str):
+        return {"name": item.strip(), "placeholders": None}
+    if isinstance(item, dict):
+        ph = item.get("placeholders")
+        ph = [str(p) for p in ph] if isinstance(ph, list) else None
+        return {"name": str(item.get("name", "")).strip(), "placeholders": ph}
+    return {"name": "", "placeholders": None}
+
+
+def get_template_labels() -> List[dict]:
+    """Alle Vorlagen-Typen [{name, placeholders|None}] (dedupliziert nach Name,
+    case-insensitiv)."""
+    val = settings_get("DOCUMENT_TEMPLATE_LABELS", [])
+    if not isinstance(val, list):
+        return []
+    out: List[dict] = []
+    seen = set()
+    for item in val:
+        c = _normalize_label(item)
+        key = c["name"].casefold()
+        if c["name"] and key not in seen:
+            seen.add(key)
+            out.append(c)
+    return out
+
+
+def get_template_label_names() -> List[str]:
+    return [l["name"] for l in get_template_labels()]
+
+
+def get_template_label(name: str) -> Optional[dict]:
+    """Einen Typ case-insensitiv finden (kanonischer Eintrag inkl. Baseline)."""
+    wf = (name or "").strip().casefold()
+    if not wf:
+        return None
+    for l in get_template_labels():
+        if l["name"].casefold() == wf:
+            return l
+    return None
+
+
+def set_template_labels(names: List[str]) -> List[dict]:
+    """Typ-Liste setzen (nur Namen vom Client). Die kanonischen Platzhalter-Sätze
+    bestehender Typen bleiben erhalten (nach Name, case-insensitiv)."""
+    prev = {l["name"].casefold(): l for l in get_template_labels()}
+    out: List[dict] = []
+    seen = set()
+    for n in names or []:
+        name = str(n).strip()
+        key = name.casefold()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        old = prev.get(key)
+        out.append({"name": name, "placeholders": old["placeholders"] if old else None})
+    settings_set("DOCUMENT_TEMPLATE_LABELS", out)
+    return out
+
+
+def set_template_label_baseline(name: str, placeholders: Optional[List[str]]) -> None:
+    """Kanonischen Platzhalter-Satz eines Typs setzen/zurücksetzen (None = leeren).
+    Legt den Typ NICHT an – nur ein bestehender Typ wird aktualisiert."""
+    labels = get_template_labels()
+    wf = (name or "").strip().casefold()
+    for l in labels:
+        if l["name"].casefold() == wf:
+            l["placeholders"] = ([str(p) for p in placeholders]
+                                 if placeholders is not None else None)
+            settings_set("DOCUMENT_TEMPLATE_LABELS", labels)
+            return
 
 
 # ── Prozess-Anzeigereihenfolge (Katalog „Neues Prozess-Ticket") ───────────────

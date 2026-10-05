@@ -15,6 +15,7 @@ from backend.database.process_sequences import PROCESS_SEQUENCE_CLAIMS_DDL
 from backend.database.process_templates import (
     PROCESS_TEMPLATES_DDL, PROCESS_TEMPLATES_MIGRATIONS,
 )
+from backend.database.company_templates import COMPANY_TEMPLATES_DDL
 from backend.database.process_timer_fires import (
     PROCESS_TIMER_FIRES_DDL, PROCESS_TIMER_FIRES_MIGRATIONS,
 )
@@ -39,6 +40,7 @@ def init_db():
         _exec(conn, PROCESS_TIMER_FIRES_DDL)
         _exec(conn, PROCESS_SEQUENCE_CLAIMS_DDL)
         _exec(conn, PROCESS_TEMPLATES_DDL)
+        _exec(conn, COMPANY_TEMPLATES_DDL)
         conn.commit()
         logger.info("All tables ready")
     finally:

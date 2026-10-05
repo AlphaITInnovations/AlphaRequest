@@ -644,3 +644,44 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(errorCount(validateDefinition(d))).toBe(0)
   })
 })
+
+describe('validateDefinition – directus_fill', () => {
+  const fillDefn = (fill: Record<string, unknown>, extraFields: Array<Record<string, unknown>> = []) => defn({
+    fields: [{ key: 'base.ma', widget: 'directus', directusSource: 'mitarbeitende' },
+      { key: 'base.strasse', widget: 'text' }, ...extraFields],
+    phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+      fields: [{ ref: 'base.ma' }, { ref: 'base.strasse', mode: 'readonly' }],
+      automations: [{ id: 'f', trigger: { type: 'on_enter' },
+        action: { type: 'directus_fill', directusFill: fill } }] }],
+  })
+
+  it('akzeptiert ein wohlgeformtes directus_fill', () => {
+    const d = fillDefn({ source: 'mitarbeitende', keyField: 'base.ma',
+      fieldMap: [{ source: 'personal_address', target: 'base.strasse' }] })
+    expect(errorCount(validateDefinition(d))).toBe(0)
+  })
+
+  it('verlangt Quelle, Schlüsselfeld und mind. eine Zuordnung', () => {
+    const d = fillDefn({ source: '', keyField: '', fieldMap: [] })
+    expect(codes(d).filter((c) => c === 'REQUIRED').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('meldet ein unbekanntes Schlüsselfeld', () => {
+    const d = fillDefn({ source: 'mitarbeitende', keyField: 'base.ghost',
+      fieldMap: [{ source: 'personal_address', target: 'base.strasse' }] })
+    expect(codes(d)).toContain('UNKNOWN_REF')
+  })
+
+  it('lehnt ein Ziel == Schlüsselfeld ab (überschriebe den Suchwert)', () => {
+    const d = fillDefn({ source: 'mitarbeitende', keyField: 'base.ma',
+      fieldMap: [{ source: 'email', target: 'base.ma' }] })
+    expect(codes(d)).toContain('INVALID')
+  })
+
+  it('lehnt ein nicht-skalares Schlüsselfeld (Anhang) ab', () => {
+    const d = fillDefn({ source: 'mitarbeitende', keyField: 'base.anhang',
+      fieldMap: [{ source: 'personal_address', target: 'base.strasse' }] },
+    [{ key: 'base.anhang', widget: 'attachment' }])
+    expect(codes(d)).toContain('INVALID')
+  })
+})

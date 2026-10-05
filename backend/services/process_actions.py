@@ -407,6 +407,9 @@ def run_action(action: Action, row: dict, defn: ProcessDefinition, phase: Option
     elif t == ActionType.directus_write:
         from backend.services import directus_write_action as dwa
         changes = dwa.execute(action, row, defn, phase)
+    elif t == ActionType.directus_fill:
+        from backend.services import directus_fill_action as dfa
+        changes = dfa.execute(action, row, defn, phase)
     elif t == ActionType.http_request:
         from backend.services import http_action
         changes = http_action.execute(action, row, defn, phase)

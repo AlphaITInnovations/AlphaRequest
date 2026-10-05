@@ -19,8 +19,14 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from backend.database import directus_sources as sources_db
+from backend.database.settings import get_companies_full
 from backend.schemas.process_definition import ProcessDefinition, Widget
 from backend.services import directus_client as dc
+# Umkehr-Helfer (Directus-Firmen-ID → System-Firmenname) + Options-Abgleich –
+# EINE Quelle der Wahrheit, dieselbe Zuordnung/Logik wie beim Onboarding-Prefill.
+from backend.services.process_prefill import (
+    _company_name_for_directus_id, _match_option, _rel_id,
+)
 from backend.utils.logger import logger
 
 
@@ -42,6 +48,46 @@ def _coerce(value: Any, widget: Optional[Widget]) -> Any:
     return str(value)
 
 
+def coerce_for_target(raw: Any, field: Any, *, companies: list) -> Any:
+    """Einen Directus-Rohwert auf das Ziel-FELD abbilden – zentral für Snapshot
+    UND directus_fill, damit beide Pfade identisch füllen:
+
+    - Firmen-Feld (widget=company): Directus-Firmen-ID (skalar oder Relation
+      {id,…}) → System-Firmenname (Umkehr des Onboarding-Mappings).
+    - Auswahl-Feld (widget=select): case-insensitiv auf den Options-`value`
+      (bzw. `label`) abbilden – sonst bliebe das Dropdown bei abweichender
+      Groß-/Kleinschreibung oder einem gelieferten Label leer (dieselbe Logik wie
+      der Prefill, `_match_option`; z. B. Anrede „herr" → Option „Herr").
+    - sonst: skalar coercen (Zahl/String, Bool→„Ja"/„Nein").
+    """
+    widget = getattr(field, "widget", None) if field is not None else None
+    if widget == Widget.company:
+        return _company_name_for_directus_id(_rel_id(raw), companies)
+    if widget == Widget.select:
+        return _match_option(_coerce(raw, Widget.select), field)
+    return _coerce(raw, widget)
+
+
+def fetch_source_record(src: dict, key_value: Any, extra_sources: list, *,
+                        query: Callable[..., list] = dc.query_items) -> Optional[dict]:
+    """Hole EINEN Directus-Datensatz aus der (bereits aufgelösten) Quelle `src`,
+    dessen Wert-Feld `key_value` entspricht. Gibt den Datensatz oder None zurück
+    (None = kein Treffer). `extra_sources` sind zusätzlich benötigte Feldpfade
+    (z. B. Snapshot-/Fill-Quellen) über die Standard-Felder der Quelle hinaus.
+
+    `_in` statt `_eq`: der Wert wird IMMER als String gespeichert; ein `_eq`
+    gegen einen numerischen Primärschlüssel (id) trifft je nach Directus/
+    Spaltentyp nicht, während `_in` (genau wie das funktionierende Label-
+    Auflösen) den Wert zuverlässig matcht. Wirft dc.DirectusError, wenn Directus
+    nicht erreichbar ist – der Aufrufer behandelt das best-effort."""
+    base = sources_db.query_fields(src)
+    want = base + [s for s in extra_sources if s not in base]
+    eq = {src["valueField"]: {"_in": [key_value]}}
+    flt = {"_and": [src["filter"], eq]} if src.get("filter") else eq
+    recs = query(src["collection"], fields=want, filter=flt, limit=1)
+    return recs[0] if recs else None
+
+
 def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict], *,
                     get_source: Callable[[str], Optional[dict]] = sources_db.get,
                     query: Callable[..., list] = dc.query_items) -> dict:
@@ -51,7 +97,16 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
         return values
     stored = stored or {}
     widget_by_key = {f.key: f.widget for f in defn.fields}
+    field_by_key = {f.key: f for f in defn.fields}
     out = dict(values)
+
+    # Firmen-Felder (widget=company) als Snapshot-Ziel: Directus liefert die Firmen-ID,
+    # die über das in den Settings hinterlegte directus_firma_id auf den System-
+    # Firmennamen gemappt werden muss (Umkehr des Onboarding-Mappings) – nicht-Admins
+    # kommen clientseitig nicht an diese Zuordnung, daher serverseitig hier.
+    _company_targets = any(widget_by_key.get(b.target) == Widget.company
+                           for f in fields for b in f.directusFieldMap)
+    companies = get_companies_full() if _company_targets else []
 
     for f in fields:
         cur = out.get(f.key)
@@ -68,21 +123,13 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
                            f.directusSource, f.key)
             continue
 
-        base = sources_db.query_fields(src)
-        want = base + [b.source for b in f.directusFieldMap if b.source not in base]
-        # `_in` statt `_eq`: der Wert wird IMMER als String gespeichert; ein `_eq`
-        # gegen einen numerischen Primärschlüssel (id) trifft je nach Directus/
-        # Spaltentyp nicht, während `_in` (genau wie das Label-Auflösen, das
-        # funktioniert) den Wert zuverlässig matcht.
-        eq = {src["valueField"]: {"_in": [cur]}}
-        flt = {"_and": [src["filter"], eq]} if src.get("filter") else eq
         try:
-            recs = query(src["collection"], fields=want, filter=flt, limit=1)
+            rec = fetch_source_record(src, cur, [b.source for b in f.directusFieldMap],
+                                      query=query)
         except dc.DirectusError as exc:
             logger.warning("Directus-Snapshot für %s=%r fehlgeschlagen: %s", f.key, cur, exc)
             continue
 
-        rec = recs[0] if recs else None
         if rec is None:
             # Schlüssel gesetzt, aber KEIN Datensatz gefunden (z. B. Typ-/Quelle-
             # Mismatch beim valueField oder ein Directus-Hänger). Die Zielfelder
@@ -93,8 +140,8 @@ def apply_snapshots(defn: ProcessDefinition, values: dict, stored: Optional[dict
                            "Zielfelder unverändert gelassen", f.key, cur, src.get("collection"))
             continue
         for b in f.directusFieldMap:
-            out[b.target] = _coerce(sources_db.resolve_path(rec, b.source),
-                                    widget_by_key.get(b.target))
+            raw = sources_db.resolve_path(rec, b.source)
+            out[b.target] = coerce_for_target(raw, field_by_key.get(b.target), companies=companies)
     return out
 
 

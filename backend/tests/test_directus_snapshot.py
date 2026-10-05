@@ -104,3 +104,85 @@ def test_source_filter_merged_into_lookup():
 
     ds.apply_snapshots(_defn(), {"kst": "1"}, {}, get_source=lambda k: src, query=query)
     assert calls["kw"]["filter"] == {"_and": [{"aktiv": {"_eq": True}}, {"nummer": {"_in": ["1"]}}]}
+
+
+# ── Firmen-Feld (widget=company): Directus-Firmen-ID → System-Firmenname ──────
+
+def _defn_company():
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "ma", "widget": "directus", "directusSource": "mitarbeitende",
+             "directusFieldMap": [{"source": "company", "target": "firma"}]},
+            {"key": "firma", "widget": "company"}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "ma"}, {"ref": "firma", "mode": "readonly"}]}],
+    })
+
+
+_MA_SRC = {"key": "mitarbeitende", "label": "MA", "collection": "mitarbeitende",
+           "valueField": "email", "labelTemplate": "{{email}}", "fields": [],
+           "filter": None, "sort": [], "limit": 200}
+
+
+def _companies_patch(monkeypatch):
+    monkeypatch.setattr(ds, "get_companies_full", lambda: [
+        {"name": "Alpha GmbH", "directus_firma_id": "42"},
+        {"name": "Beta GmbH", "directus_firma_id": "7"}])
+
+
+def test_company_target_scalar_id_resolves_to_name(monkeypatch):
+    _companies_patch(monkeypatch)
+    out = ds.apply_snapshots(_defn_company(), {"ma": "x@y.de"}, {},
+                             get_source=lambda k: _MA_SRC,
+                             query=lambda *a, **k: [{"email": "x@y.de", "company": 42}])
+    assert out["firma"] == "Alpha GmbH"
+
+
+def test_company_target_relation_object_resolves_to_name(monkeypatch):
+    _companies_patch(monkeypatch)
+    out = ds.apply_snapshots(_defn_company(), {"ma": "x@y.de"}, {},
+                             get_source=lambda k: _MA_SRC,
+                             query=lambda *a, **k: [{"email": "x@y.de",
+                                                     "company": {"id": 7, "name": "egal"}}])
+    assert out["firma"] == "Beta GmbH"
+
+
+def test_company_target_unknown_id_becomes_none(monkeypatch):
+    _companies_patch(monkeypatch)
+    out = ds.apply_snapshots(_defn_company(), {"ma": "x@y.de"}, {},
+                             get_source=lambda k: _MA_SRC,
+                             query=lambda *a, **k: [{"email": "x@y.de", "company": 999}])
+    assert out["firma"] is None
+
+
+# ── Auswahl-Feld (widget=select): Directus-Wert case-insensitiv auf Option ────
+
+def _defn_select():
+    return ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "ma", "widget": "directus", "directusSource": "mitarbeitende",
+             "directusFieldMap": [{"source": "salutation", "target": "anrede"}]},
+            {"key": "anrede", "widget": "select",
+             "options": [{"value": "Herr"}, {"value": "Frau"}, {"value": "Divers"}]}],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "ma"}, {"ref": "anrede", "mode": "editable"}]}],
+    })
+
+
+def test_select_target_maps_case_insensitively():
+    # Directus liefert „herr" (Kleinschreibung) → Option-Wert „Herr" (wie Prefill).
+    out = ds.apply_snapshots(_defn_select(), {"ma": "x@y.de"}, {},
+                             get_source=lambda k: _MA_SRC,
+                             query=lambda *a, **k: [{"email": "x@y.de", "salutation": "herr"}])
+    assert out["anrede"] == "Herr"
+
+
+def test_select_target_unknown_value_becomes_none():
+    # Kein passender Options-Wert und kein Freitext → Feld bleibt ungesetzt (None),
+    # statt einen ungültigen Wert ins Dropdown zu schreiben.
+    out = ds.apply_snapshots(_defn_select(), {"ma": "x@y.de"}, {},
+                             get_source=lambda k: _MA_SRC,
+                             query=lambda *a, **k: [{"email": "x@y.de", "salutation": "mx"}])
+    assert out["anrede"] is None

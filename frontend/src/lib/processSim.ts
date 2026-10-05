@@ -221,9 +221,16 @@ export function validateValues(
   return errs
 }
 
-/** Pass 2: Kann die Phase abgeschlossen werden? */
+/** Pass 2: Kann die Phase abgeschlossen werden?
+ *
+ *  `attachmentKeys` = Feld-Schlüssel, an denen schon eine Datei hängt (beim Anlegen:
+ *  die ausgewählten, noch nicht hochgeladenen Dateien). Nur wenn dieser Satz
+ *  übergeben wird, werden PFLICHT-ANLAGEN geprüft; ohne ihn bleiben Anhang-Felder
+ *  übersprungen (sie speichern nichts in `values`, sonst wäre das Formular nie
+ *  absendbar). */
 export function validatePhaseCompletion(
   defn: ProcessDefinition, phase: PhaseDef, values: Record<string, unknown>,
+  attachmentKeys?: Set<string>,
 ): SimFieldError[] {
   const errs: SimFieldError[] = []
   const byKey = new Map(defn.fields.map((f) => [f.key, f]))
@@ -231,10 +238,16 @@ export function validatePhaseCompletion(
     if (ref.mode === 'hidden') continue
     const f = byKey.get(ref.ref)
     if (!f) continue
-    // Anhang-Felder speichern NICHTS in `values` (die Dateien liegen separat) –
-    // ein „Pflicht"-Häkchen ließe sich hier nie erfüllen und würde das Formular
-    // unabsendbar machen. Deshalb nicht über den Wert erzwingen.
-    if (f.widget === 'attachment') continue
+    if (f.widget === 'attachment') {
+      if (!attachmentKeys) continue        // Anhang-Prüfung nicht angefordert
+      if (ref.visibleWhen && !evaluate(ref.visibleWhen as Condition, values)) continue
+      const reqAtt = ref.required
+        || (!!ref.requiredWhen && evaluate(ref.requiredWhen as Condition, values))
+      if (reqAtt && !attachmentKeys.has(ref.ref)) {
+        errs.push({ path: ref.ref, code: 'REQUIRED', message: 'Pflicht-Anlage fehlt' })
+      }
+      continue
+    }
     if (ref.visibleWhen && !evaluate(ref.visibleWhen as Condition, values)) continue
     const required = ref.required
       || (!!ref.requiredWhen && evaluate(ref.requiredWhen as Condition, values))

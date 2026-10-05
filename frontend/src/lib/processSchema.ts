@@ -45,7 +45,7 @@ export const TRIGGER_TYPES = ['on_enter', 'on_exit', 'on_field_change', 'timer',
 
 export const ACTION_TYPES: readonly ActionType[] = [
   'notify', 'escalate', 'set_field', 'set_priority', 'set_status', 'assign_sequence',
-  'auto_advance', 'directus_write', 'http_request', 'company_email',
+  'auto_advance', 'directus_write', 'directus_fill', 'http_request', 'company_email',
 ]
 
 /**
@@ -224,6 +224,7 @@ export const ACTION_LABEL: Record<string, string> = {
   auto_advance: 'Automatisch weiterschalten',
   assign_sequence: 'Nummer aus Nummernkreis vergeben',
   directus_write: 'In Directus schreiben',
+  directus_fill: 'Stammdaten aus Directus nachladen',
   http_request: 'API-Aufruf (HTTP)',
   company_email: 'Firmenmail bilden & prüfen',
 }
@@ -317,6 +318,8 @@ export function blankDocument(key = 'dokument'): DocumentSpec {
     title: 'Dokument',
     bindings: {},
     sections: {},
+    companyTemplate: null,
+    companyField: null,
   }
 }
 
@@ -405,7 +408,8 @@ export function blankAutomation(id: string): Automation {
     trigger: { type: 'on_enter', after: null, repeat: null, field: null, group: null },
     guard: null,
     action: { type: 'notify', to: 'responsible', recipients: null, template: null, field: null,
-      value: null, counter: null, directus: null, http: null, email: null, emailBody: null },
+      value: null, counter: null, directus: null, directusFill: null, http: null, email: null,
+      emailBody: null },
   }
 }
 

@@ -1443,3 +1443,101 @@ def test_create_ohne_eingaben_kein_leerer_angaben_eintrag(client, monkeypatch):
     client.post("/process-tickets", json={"processKey": "demo", "values": {}})
     assert pt.events.CREATED in [a for a, _ in calls]
     assert pt.events.UPDATED not in [a for a, _ in calls]
+
+
+def test_load_template_row_firmenvorlage(monkeypatch):
+    """Firmenabhängiges Dokument: die Vorlage kommt aus den Einstellungen der im
+    Auftrag gewählten Firma (company_templates), nicht aus der Prozess-Phase."""
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    from backend.database import company_templates as ctpl
+    from backend.database import settings as settings_db
+    calls = {}
+    def fake_get(company, name):
+        calls["args"] = (company, name)
+        return {"stored_path": "x", "original_filename": "AV.docx"}
+    monkeypatch.setattr(ctpl, "get_template", fake_get)
+    # Keine Übernahme → Quelle = gewählte Firma.
+    monkeypatch.setattr(settings_db, "template_source_company", lambda n: n)
+    doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
+    docphase = SimpleNamespace(key="vertrag")
+    row = {"process_key": "onb", "values": {"base.company": "Alpha GmbH"}, "id": 1}
+    tpl = pt._load_template_row(row, docphase, doc)
+    assert tpl == {"stored_path": "x", "original_filename": "AV.docx"}
+    assert calls["args"] == ("Alpha GmbH", "Arbeitsvertrag")
+
+
+def test_load_template_row_firmenvorlage_uebernommen(monkeypatch):
+    """Übernimmt die gewählte Firma Vorlagen von einer anderen
+    (documents_shared_with), wird aus DEREN Bestand geladen."""
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    from backend.database import company_templates as ctpl
+    from backend.database import settings as settings_db
+    calls = {}
+    monkeypatch.setattr(ctpl, "get_template",
+                        lambda company, name: calls.setdefault("args", (company, name)))
+    # Beta übernimmt die Vorlagen von Alpha GmbH.
+    monkeypatch.setattr(settings_db, "template_source_company",
+                        lambda n: "Alpha GmbH" if n == "Beta GmbH" else n)
+    doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
+    docphase = SimpleNamespace(key="vertrag")
+    row = {"process_key": "onb", "values": {"base.company": "Beta GmbH"}, "id": 1}
+    pt._load_template_row(row, docphase, doc)
+    assert calls["args"] == ("Alpha GmbH", "Arbeitsvertrag")
+
+
+def test_load_template_row_firmenvorlage_ohne_firma():
+    """Keine Firma gewählt → keine Vorlage (statt falscher)."""
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
+    docphase = SimpleNamespace(key="vertrag")
+    assert pt._load_template_row({"process_key": "onb", "values": {}, "id": 1}, docphase, doc) is None
+
+
+# ── Firmen-Vorlage fehlt → sprechende Absage (_assert_company_template_or_message) ──
+
+def test_assert_company_template_missing_names_company_and_type():
+    import pytest
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Kündigung", companyField="base.firma", key="dokument")
+    row = {"values": {"base.firma": "Alpha GmbH"}}
+    with pytest.raises(HTTPException) as ei:
+        pt._assert_company_template_or_message(row, doc, None)
+    assert ei.value.status_code == 409
+    assert ei.value.detail["code"] == "COMPANY_TEMPLATE_MISSING"
+    assert "Alpha GmbH" in ei.value.detail["message"]
+    assert "Kündigung" in ei.value.detail["message"]
+    assert "manuell" in ei.value.detail["message"]
+
+
+def test_assert_company_template_missing_no_company_chosen():
+    import pytest
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Kündigung", companyField="base.firma", key="dokument")
+    with pytest.raises(HTTPException) as ei:
+        pt._assert_company_template_or_message({"values": {}}, doc, None)
+    assert ei.value.status_code == 409
+    assert "keine Firma" in ei.value.detail["message"]
+
+
+def test_assert_company_template_noop_when_present():
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Kündigung", companyField="base.firma", key="d")
+    # tpl vorhanden → kein Raise
+    pt._assert_company_template_or_message({"values": {"base.firma": "A"}}, doc,
+                                           {"stored_path": "x"})
+
+
+def test_assert_company_template_noop_for_fixed_template_doc():
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    # Dokument ohne companyTemplate (feste Vorlage) → Funktion tut nichts, auch bei tpl None
+    doc = SimpleNamespace(companyTemplate=None, companyField=None, key="d")
+    pt._assert_company_template_or_message({"values": {}}, doc, None)

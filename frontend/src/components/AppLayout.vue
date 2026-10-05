@@ -61,25 +61,47 @@ function navigate(path: string) {
 }
 
 // ── Fehler melden / Feedback ───────────────────────────────────────────────
+const FEEDBACK_MAX_FILES = 10
 const showFeedback    = ref(false)
 const feedbackText    = ref('')
+const feedbackFiles   = ref<File[]>([])
+const feedbackFileInput = ref<HTMLInputElement | null>(null)
 const feedbackSending = ref(false)
 const feedbackSent    = ref(false)
 
 function openFeedback() {
   feedbackText.value = ''
+  feedbackFiles.value = []
   feedbackSent.value = false
   showFeedback.value = true
   mobileOpen.value = false
+}
+function pickFeedbackFiles() {
+  feedbackFileInput.value?.click()
+}
+function onFeedbackFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  const chosen = Array.from(input.files ?? [])
+  input.value = ''   // dieselbe Datei erneut wählbar machen
+  if (chosen.length) feedbackFiles.value = [...feedbackFiles.value, ...chosen].slice(0, FEEDBACK_MAX_FILES)
+}
+function removeFeedbackFile(i: number) {
+  feedbackFiles.value.splice(i, 1)
 }
 async function submitFeedback() {
   if (!feedbackText.value.trim()) return
   feedbackSending.value = true
   try {
-    await client.post('/feedback', { message: feedbackText.value.trim(), page: route.fullPath })
+    const form = new FormData()
+    form.append('message', feedbackText.value.trim())
+    form.append('page', route.fullPath)
+    for (const f of feedbackFiles.value) form.append('files', f)
+    // Content-Type NICHT setzen – der Browser ergänzt die multipart-Boundary.
+    await client.post('/feedback', form, { headers: { 'Content-Type': undefined } })
     feedbackSent.value = true
-  } catch {
-    alert('Fehlerbericht konnte nicht gesendet werden. Bitte später erneut versuchen.')
+  } catch (e: any) {
+    alert(e?.response?.data?.error?.message || e?.response?.data?.detail
+      || 'Fehlerbericht konnte nicht gesendet werden. Bitte später erneut versuchen.')
   } finally {
     feedbackSending.value = false
   }
@@ -449,21 +471,50 @@ defineProps<{ title?: string }>()
       <div v-if="showFeedback"
            class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
            @click.self="showFeedback = false">
-        <div class="bg-white dark:bg-[#1C2535] rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
+        <div class="bg-white dark:bg-[#1C2535] rounded-2xl shadow-xl p-6 w-full max-w-2xl mx-4 space-y-4">
           <div>
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Fehler melden / Feedback</h2>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Beschreibe kurz das Problem oder dein Feedback.
+              Beschreibe das Problem oder dein Feedback – gerne ausführlich. Anlagen (z. B. Screenshots) möglich.
             </p>
           </div>
 
           <template v-if="!feedbackSent">
             <textarea
-              v-model="feedbackText" rows="5" autofocus
-              placeholder="Was ist passiert? Was hast du erwartet?"
-              class="w-full rounded-xl border border-gray-200 dark:border-white/10 px-3.5 py-2.5 text-sm
+              v-model="feedbackText" rows="14" autofocus
+              placeholder="Was ist passiert? Was hast du erwartet? Welche Schritte führen dazu?"
+              class="w-full min-h-[16rem] rounded-xl border border-gray-200 dark:border-white/10 px-3.5 py-2.5 text-sm
                      bg-white dark:bg-[#263040] text-gray-900 dark:text-gray-100
-                     placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
+                     placeholder-gray-400 resize-y focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30" />
+
+            <!-- Anlagen -->
+            <div class="space-y-2">
+              <input ref="feedbackFileInput" type="file" multiple class="hidden" @change="onFeedbackFiles" />
+              <button type="button" @click="pickFeedbackFiles"
+                      :disabled="feedbackFiles.length >= FEEDBACK_MAX_FILES"
+                      class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-xl border border-gray-200
+                             dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5
+                             disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                Anlage hinzufügen
+              </button>
+              <ul v-if="feedbackFiles.length" class="space-y-1">
+                <li v-for="(f, i) in feedbackFiles" :key="i"
+                    class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200
+                           rounded-lg bg-gray-50 dark:bg-white/[0.04] px-3 py-1.5">
+                  <span class="truncate flex-1 min-w-0">{{ f.name }}</span>
+                  <button type="button" @click="removeFeedbackFile(i)"
+                          class="text-gray-400 hover:text-red-500 shrink-0" title="Entfernen">✕</button>
+                </li>
+              </ul>
+              <p class="text-xs text-gray-400">
+                Bis {{ FEEDBACK_MAX_FILES }} Anlagen, insgesamt max. ca. 2,5 MB.
+              </p>
+            </div>
+
             <div class="flex justify-end gap-3">
               <button @click="showFeedback = false"
                       class="px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10

@@ -6,6 +6,7 @@ import UserSelect from '@/components/UserSelect.vue'
 import { useToast } from '@/composables/useToast'
 import { useSaver } from '@/composables/settingsSave'
 import { useDetailNav } from '@/composables/useDetailNav'
+import { downloadJson, readJsonFile, dateStamp, extractList } from '@/lib/settingsTransfer'
 import SettingsList from '@/components/settings/SettingsList.vue'
 
 const { showToast } = useToast()
@@ -98,6 +99,62 @@ async function saveGroups() {
 const dirty = computed(() => serialize(groups.value) !== snapshot.value)
 const { setSaving } = useSaver({ dirty, save: saveGroups, reset: () => loadGroups() })
 
+// ── Export / Import (JSON) ───────────────────────────────────────────────────
+// Export lädt die aktuelle Liste als JSON herunter (inkl. id, damit ein Re-Import
+// in dieselbe Umgebung die Gruppen aktualisiert statt zu löschen+neu-anzulegen).
+// Import ersetzt die bearbeitete Liste; geprüft wird beim bestehenden „Speichern"
+// (Pflichtgruppen-/Referenz-Schutz greift dort).
+const importInput = ref<HTMLInputElement | null>(null)
+
+function mapGroup(g: any): Group {
+  return {
+    id: typeof g?.id === 'string' && g.id ? g.id : `tmp_${++tmpSeq}`,
+    name: g?.name ?? '',
+    members: Array.isArray(g?.members) ? g.members.map((m: any) => String(m)) : [],
+    distributions: Array.isArray(g?.distributions) ? g.distributions.map((m: any) => String(m)) : [],
+    hidden: !!g?.hidden,
+    required: false,   // serverseitig neu abgeleitet
+  }
+}
+
+function exportGroups() {
+  downloadJson(`fachabteilungen-${dateStamp()}.json`, {
+    kind: 'alpharequest:fachabteilungen',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    groups: groups.value.map(g => ({
+      id: g.id, name: g.name, members: g.members, distributions: g.distributions, hidden: !!g.hidden,
+    })),
+  })
+}
+
+async function onImport(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''   // gleiche Datei erneut wählbar machen
+  if (!file) return
+  try {
+    const list = extractList(await readJsonFile(file), 'groups', 'alpharequest:fachabteilungen')
+    if (!list.every(x => x && typeof x === 'object')) throw new Error('Unerwartetes Format der Fachabteilungs-Liste.')
+    // `required` ist serverseitig abgeleitet (Pflichtname ODER von einem Prozess
+    // referenziert) – aus der Datei NICHT übernehmbar. Den aktuellen Stand (per id
+    // und Name) mitführen, damit das 🔒-Lock der Pflichtgruppen nicht verloren geht.
+    const req = new Map<string, boolean>()
+    for (const g of groups.value) {
+      if (g.required) { req.set('id:' + g.id, true); req.set('name:' + g.name.trim().toLowerCase(), true) }
+    }
+    groups.value = list.map(g => {
+      const mapped = mapGroup(g)
+      mapped.required = req.get('id:' + mapped.id) || req.get('name:' + mapped.name.trim().toLowerCase()) || false
+      return mapped
+    })
+    back()
+    showToast(`${groups.value.length} Fachabteilung(en) importiert – bitte prüfen und speichern.`, true)
+  } catch (err: any) {
+    showToast(err?.message || 'Import fehlgeschlagen.', false)
+  }
+}
+
 onMounted(loadGroups)
 </script>
 
@@ -107,6 +164,11 @@ onMounted(loadGroups)
                   add-label="+ Fachabteilung hinzufügen" search-placeholder="Fachabteilung suchen…"
                   empty-text="Noch keine Fachabteilungen." :filter-text="(g) => g.name"
                   @add="addGroup" @select="open">
+      <template #actions>
+        <button @click="exportGroups" :disabled="loading || groups.length === 0" class="btn-secondary">Export</button>
+        <button @click="importInput?.click()" :disabled="loading" class="btn-secondary">Import</button>
+        <input ref="importInput" type="file" accept="application/json,.json" class="hidden" @change="onImport" />
+      </template>
       <template #row="{ item }">
         <span class="flex-1 min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ item.name || 'Unbenannt' }}</span>
         <span v-if="item.required" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 whitespace-nowrap">🔒 Pflicht</span>

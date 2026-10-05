@@ -1,10 +1,34 @@
 """Reine Merge-Logik merge_companies (kein DB-Zugriff)."""
 
-from backend.database.settings import merge_companies, normalize_company
+from backend.database import settings as settings_db
+from backend.database.settings import merge_companies, normalize_company, template_source_company
 
 
 def existing(*dicts):
     return [normalize_company(d) for d in dicts]
+
+
+class TestTemplateSourceCompany:
+    def _firms(self, monkeypatch, firms):
+        monkeypatch.setattr(settings_db, "get_companies_full",
+                            lambda: [normalize_company(f) for f in firms])
+
+    def test_resolves_one_hop(self, monkeypatch):
+        self._firms(monkeypatch, [{"name": "Alpha GmbH"},
+                                  {"name": "Beta GmbH", "documents_shared_with": "Alpha GmbH"}])
+        assert template_source_company("Beta GmbH") == "Alpha GmbH"
+
+    def test_case_insensitive_and_canonical(self, monkeypatch):
+        # Abweichende Groß-/Kleinschreibung im Auftragswert darf den Hop nicht überspringen.
+        self._firms(monkeypatch, [{"name": "Alpha GmbH"},
+                                  {"name": "Beta GmbH", "documents_shared_with": "Alpha GmbH"}])
+        assert template_source_company("beta gmbh") == "Alpha GmbH"
+        # Eigene Firma → kanonischer Name (nicht der abweichend geschriebene Input).
+        assert template_source_company("alpha GMBH") == "Alpha GmbH"
+
+    def test_unknown_company_unchanged(self, monkeypatch):
+        self._firms(monkeypatch, [{"name": "Alpha GmbH"}])
+        assert template_source_company("Gamma GmbH") == "Gamma GmbH"
 
 
 class TestMergeCompanies:
@@ -64,3 +88,19 @@ class TestMergeCompanies:
     def test_empty_name_skipped(self):
         merged = merge_companies([{"name": "  "}, {"name": "A", "pnr_from": "1", "pnr_to": "9"}], [])
         assert [c["name"] for c in merged] == ["A"]
+
+    def test_documents_shared_with_roundtrips(self):
+        merged = merge_companies([{"name": "B", "documents_shared_with": "A"}], [])
+        assert merged[0]["documents_shared_with"] == "A"
+
+    def test_documents_shared_with_defaults_none(self):
+        assert normalize_company({"name": "A"})["documents_shared_with"] is None
+        assert normalize_company("A")["documents_shared_with"] is None
+
+    def test_documents_sharing_independent_of_counter(self):
+        # Eigener Nummernbereich UND Vorlagen-Übernahme sind getrennte Achsen.
+        merged = merge_companies(
+            [{"name": "B", "pnr_from": "1", "pnr_to": "9", "documents_shared_with": "A"}], [])
+        b = merged[0]
+        assert b["documents_shared_with"] == "A"
+        assert b["pnr_from"] == "1" and b["pnr_to"] == "9"   # Bereich bleibt erhalten

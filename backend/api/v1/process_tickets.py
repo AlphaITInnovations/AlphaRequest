@@ -738,7 +738,10 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
         # Vor dem automatischen Weiterschalten die Pflichtangaben der Startphase
         # prüfen: `create` prüft nur die Wert-FORM, nicht den Phasen-Abschluss.
         # Ohne das könnte ein Auftrag unvollständig in die nächste Phase rutschen.
-        offen = pv.validate_phase_completion(defn, start_phase, values)
+        # autoStart heißt: der Client hat KEINE Dateien → leerer Anhang-Satz, ein
+        # Pflicht-Anhang schlägt hier bewusst fehl (der Datei-Pfad läuft über
+        # autoStart=false: anlegen → hochladen → :advance).
+        offen = pv.validate_phase_completion(defn, start_phase, values, attachment_keys=set())
         if offen:
             raise api_error(422, ErrorCode.VALIDATION_FAILED,
                             "Pflichtangaben fehlen", fields=offen)
@@ -1192,12 +1195,25 @@ def _pick_document(docphase, document_key):
 
 
 def _load_template_row(row, docphase, doc):
-    """Die Vorlage je (Prozess, Phase, Dokument) laden – `None`, falls keine
-    hinterlegt. Fehler beim Lookup schlucken (still auf „keine Vorlage" degradieren)."""
-    from backend.database import process_templates as tpl_db
+    """Die zu füllende Vorlage laden – `None`, falls keine hinterlegt.
+
+    Firmenabhängig (doc.companyTemplate): die .docx der im Auftrag gewählten Firma
+    (values[doc.companyField]) mit diesem Namen aus den Firmen-Einstellungen; sonst
+    die fest je (Prozess, Phase, Dokument) hochgeladene Vorlage. Fehler beim Lookup
+    schlucken (still auf „keine Vorlage" degradieren)."""
     if docphase is None or doc is None or not row.get("process_key"):
         return None
     try:
+        if getattr(doc, "companyTemplate", None) and getattr(doc, "companyField", None):
+            company = (row.get("values") or {}).get(doc.companyField)
+            if not company:
+                return None
+            from backend.database import company_templates as ctpl_db
+            from backend.database.settings import template_source_company
+            # Übernimmt die gewählte Firma Vorlagen von einer anderen, aus DEREN Bestand.
+            src = template_source_company(str(company))
+            return ctpl_db.get_template(src, doc.companyTemplate)
+        from backend.database import process_templates as tpl_db
         return tpl_db.get_template(row["process_key"], docphase.key, doc.key)
     except Exception:
         logger.exception("Vorlage-Lookup für #%s fehlgeschlagen", row.get("id"))
@@ -1264,6 +1280,26 @@ def _read_template_bytes(tpl) -> bytes:
         raise api_error(500, "TEMPLATE_UNREADABLE", "Die hinterlegte Vorlage ist nicht lesbar")
 
 
+def _assert_company_template_or_message(row, doc, tpl) -> None:
+    """Erwartet das Dokument eine FIRMEN-Vorlage (doc.companyTemplate), ist aber für
+    die im Auftrag gewählte Firma keine hinterlegt, dann mit sprechender Meldung
+    verweigern (Firma nennen, auf manuelle Erstellung hinweisen) statt der generischen
+    „im Prozess-Editor hochladen"-Meldung. Für feste Vorlagen (kein companyTemplate)
+    tut die Funktion nichts – der Aufrufer behandelt `tpl is None` dann wie bisher."""
+    if tpl is not None or not getattr(doc, "companyTemplate", None):
+        return
+    typ = doc.companyTemplate
+    company = (row.get("values") or {}).get(getattr(doc, "companyField", None))
+    if not company:
+        raise api_error(409, "COMPANY_TEMPLATE_MISSING",
+                        f"Es ist keine Firma gewählt – die Vorlage „{typ}“ lässt sich nicht "
+                        "zuordnen. Bitte das Dokument manuell erstellen.")
+    raise api_error(409, "COMPANY_TEMPLATE_MISSING",
+                    f"Für „{company}“ ist keine „{typ}“-Vorlage hinterlegt. Bitte in den "
+                    f"Firmen-Einstellungen eine „{typ}“-Vorlage für „{company}“ hinterlegen – "
+                    "oder das Dokument manuell erstellen.")
+
+
 @router.get("/process-tickets/{ticket_id}/document:fields")
 def document_fields(ticket_id: int, document: str = "", user: dict = Depends(get_current_user)):
     """Marker der Vorlage (eines Dokuments) + vorausgefüllte (sichtbarkeits-
@@ -1284,6 +1320,7 @@ def document_fields(ticket_id: int, document: str = "", user: dict = Depends(get
     if defn is None or docphase is None or doc is None:
         raise api_error(409, "TEMPLATE_MISSING", "Diese Phase hat kein solches Dokument.")
     tpl = _load_template_row(row, docphase, doc)
+    _assert_company_template_or_message(row, doc, tpl)   # Firmen-Vorlage fehlt → klare Absage
     if tpl is None:
         raise api_error(409, "TEMPLATE_MISSING",
                         "Für dieses Dokument ist keine Vorlage hinterlegt. "
@@ -1347,6 +1384,13 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
     docphase = _pick_docphase(defn, row.get("runtime"))
     doc = _pick_document(docphase, body.document or "")
     tpl = _load_template_row(row, docphase, doc)
+
+    # Firmen-Vorlage erwartet, aber für die gewählte Firma keine da → KEIN stiller
+    # HTML-Fallback, sondern klare Absage (Firma nennen, manuell erstellen). Zugriff
+    # vorher prüfen (wie der HTML-Zweig), damit die Meldung nichts an Unbefugte verrät.
+    if tpl is None and getattr(doc, "companyTemplate", None):
+        _assert_view(row, defn, user)
+        _assert_company_template_or_message(row, doc, tpl)
 
     if tpl is not None and docphase is not None and doc is not None:
         values, catalog, bindings = _docx_fill_prep(row, defn, doc, user)
@@ -1442,7 +1486,28 @@ def _preview_defn_doc(body: "DocumentPreviewRequest"):
     return defn, docphase, doc
 
 
-def _preview_template_bytes(key: str, docphase, doc) -> bytes:
+def _preview_template_bytes(key: str, docphase, doc, values: dict) -> bytes:
+    # Firmenabhängig (doc.companyTemplate): dieselbe Auflösung wie im echten Export –
+    # die Vorlage der in der Simulation gewählten Firma, NICHT eine (bei company-Mode
+    # gar nicht vorhandene) phasenfeste Vorlage.
+    if getattr(doc, "companyTemplate", None) and getattr(doc, "companyField", None):
+        company = (values or {}).get(doc.companyField)
+        if not company:
+            raise api_error(409, "TEMPLATE_MISSING",
+                            f"Bitte in den Simulations-Werten eine Firma im Feld "
+                            f"„{doc.companyField}“ wählen – dann wird deren Vorlage "
+                            f"„{doc.companyTemplate}“ angezeigt.")
+        from backend.database import company_templates as ctpl_db
+        from backend.database.settings import template_source_company
+        src = template_source_company(str(company))
+        tpl = ctpl_db.get_template(src, doc.companyTemplate)
+        if tpl is None:
+            woher = (f"„{company}“ (übernimmt von „{src}“)" if src != str(company)
+                     else f"„{company}“")
+            raise api_error(409, "TEMPLATE_MISSING",
+                            f"Für {woher} ist keine Vorlage „{doc.companyTemplate}“ "
+                            "hinterlegt. Bitte in den Firmen-Einstellungen hochladen.")
+        return _read_template_bytes(tpl)
     from backend.database import process_templates as tpl_db
     tpl = tpl_db.get_template(key, docphase.key, doc.key)
     if tpl is None:
@@ -1464,7 +1529,7 @@ def preview_document_fields(key: str, body: DocumentPreviewRequest,
     values = body.values or {}
     from backend.services import docx_fill, pdf_fill, template_format
     from backend.services import mail_template as mt
-    tpl_bytes = _preview_template_bytes(key, docphase, doc)
+    tpl_bytes = _preview_template_bytes(key, docphase, doc, values)
     tpl_format = template_format.detect(tpl_bytes)
     markers = (pdf_fill.find_placeholders(tpl_bytes) if tpl_format == template_format.PDF
                else docx_fill.find_placeholders(tpl_bytes))
@@ -1526,7 +1591,7 @@ def preview_document_export(key: str, body: DocumentPreviewRequest,
         return mt.format_value(values.get(token))
 
     name = _safe_filename(body.filename or mt.substitute((doc.filename or "") or "Dokument", _resolve))
-    tpl_bytes = _preview_template_bytes(key, docphase, doc)
+    tpl_bytes = _preview_template_bytes(key, docphase, doc, values)
 
     if template_format.detect(tpl_bytes) == template_format.PDF:
         pdf = pdf_fill.fill_pdf(tpl_bytes, fill_values)
@@ -1655,6 +1720,20 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
     return DataResponse(data=_out(row, defn, ctx, user, gids))
 
 
+def _phase_attachment_keys(defn, phase, ticket_id):
+    """`None`, wenn die Phase keine Anhang-Felder führt – dann wird keine Anhang-
+    Pflicht geprüft UND keine DB-Abfrage ausgelöst. Sonst die Feld-Schlüssel, an
+    denen am Ticket aktuell mindestens eine Datei hängt (für die Pflicht-Prüfung)."""
+    from backend.schemas.process_definition import Widget
+    fmap = {f.key: f for f in defn.fields}
+    has_att = any(fmap.get(fr.ref) is not None and fmap[fr.ref].widget == Widget.attachment
+                  for fr in phase.fields)
+    if not has_att:
+        return None
+    from backend.database import attachments as att_db
+    return att_db.present_field_keys(att_db.ENTITY_PROCESS_TICKET, ticket_id)
+
+
 @router.post("/process-tickets/{ticket_id}:advance", response_model=DataResponse[ProcessTicketOut])
 def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user)):
     row = store.get(ticket_id)
@@ -1670,7 +1749,10 @@ def advance_process_ticket(ticket_id: int, user: dict = Depends(get_current_user
     if phase is None:
         raise api_error(409, ErrorCode.PROCESS_INVALID_STATE, "Keine aktive Phase")
 
-    errs = pv.validate_phase_completion(defn, phase, values)
+    # Pflicht-Anhänge nur abfragen, wenn die Phase überhaupt Anhang-Felder führt –
+    # sonst sparen wir die DB-Abfrage (und berühren den DB-freien Pfad nicht).
+    att_keys = _phase_attachment_keys(defn, phase, ticket_id)
+    errs = pv.validate_phase_completion(defn, phase, values, attachment_keys=att_keys)
     if errs:
         raise api_error(422, ErrorCode.VALIDATION_FAILED, "Phase kann nicht abgeschlossen werden", fields=errs)
 

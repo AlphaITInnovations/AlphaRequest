@@ -15,6 +15,7 @@ import {
   deleteDocumentTemplate, getDocumentTemplate, uploadDocumentTemplate,
   type DocumentTemplateInfo,
 } from '@/api/processes'
+import { listTemplateLabels, type TemplateLabel } from '@/api/templateLabels'
 import { errorMessage } from '@/lib/processErrors'
 import { useToast } from '@/composables/useToast'
 import ConditionEditor from './ConditionEditor.vue'
@@ -38,8 +39,52 @@ const tplLoading = ref(false)
 const tplBusy = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
-const placeholders = computed(() => template.value?.placeholders ?? [])
 const formatLabel = computed(() => (template.value?.format === 'pdf' ? 'PDF' : 'Word (.docx)'))
+
+// ── Firmen-Vorlage (nach Vorlagen-TYP) vs. feste Hochlade-Vorlage ─────────────
+const companyMode = ref<boolean>(!!(props.doc.companyTemplate || props.doc.companyField))
+/** Registrierte Vorlagen-Typen (Dropdown + kanonischer Marker-Satz je Typ). */
+const labels = ref<TemplateLabel[]>([])
+
+/** Felder, die eine Firma halten (widget=company) – Quelle fürs companyField. */
+const companyFields = computed(() =>
+  (props.catalog ?? []).filter((f) => f.widget === 'company' && f.key)
+    .map((f) => ({ key: f.key, label: f.label || f.key })))
+
+/** Genau EINE der beiden Angaben gesetzt → ungültig (beide zusammen nötig). */
+const companyHalfSet = computed(() =>
+  companyMode.value && (!!props.doc.companyTemplate !== !!props.doc.companyField))
+
+/** Kanonischer Platzhalter-Satz des gewählten Typs (bei allen Firmen gleich – hart
+ *  geprüft beim Upload). null = Typ hat noch keine Vorlage. */
+const typeLabel = computed(() =>
+  labels.value.find((l) => l.name === props.doc.companyTemplate) ?? null)
+const typePlaceholders = computed<string[]>(() => typeLabel.value?.placeholders ?? [])
+/** Gespeicherter Typ, den es (nach Löschen/Umbenennen) nicht mehr gibt. */
+const typeUnknown = computed(() =>
+  !!props.doc.companyTemplate && labels.value.length > 0 && !typeLabel.value)
+
+/** Platzhalter: im Hochlade-Modus aus der Datei, im Firmen-Modus aus dem Typ PLUS
+ *  den bereits zugeordneten Markern (eine Zuordnung je Typ für alle Firmen). */
+const placeholders = computed<string[]>(() => {
+  if (!companyMode.value) return template.value?.placeholders ?? []
+  return [...new Set([...typePlaceholders.value, ...Object.keys(props.doc.bindings ?? {})])]
+})
+
+async function loadLabels() {
+  try { labels.value = await listTemplateLabels() } catch { labels.value = [] }
+}
+
+function setCompanyMode(on: boolean) {
+  if (on === companyMode.value) return
+  companyMode.value = on
+  if (on) {
+    emit('update', { companyTemplate: props.doc.companyTemplate ?? '',
+                     companyField: props.doc.companyField ?? (companyFields.value[0]?.key ?? '') })
+  } else {
+    emit('update', { companyTemplate: null, companyField: null })
+  }
+}
 
 // Die Vorlage liegt je (Prozess, PHASE, DOKUMENT) → alle drei Schlüssel nötig.
 const templateReady = computed(() => !!props.processKey && !!props.phaseKey && !!props.doc.key)
@@ -55,8 +100,14 @@ async function loadTemplate() {
     tplLoading.value = false
   }
 }
-onMounted(loadTemplate)
-watch(() => `${props.processKey} ${props.index} ${props.phaseKey} ${props.doc.key}`, loadTemplate)
+onMounted(() => { loadTemplate(); loadLabels() })
+watch(() => `${props.processKey} ${props.index} ${props.phaseKey} ${props.doc.key}`, () => {
+  loadTemplate()
+  // Der Editor wird bei einem Phasenwechsel wiederverwendet (zwei Dokument-Phasen
+  // teilen oft den doc.key „dokument"). Ohne Resync bliebe der Modus des vorigen
+  // Dokuments „kleben" und ein Tippen würde das falsche Dokument umschalten.
+  companyMode.value = !!(props.doc.companyTemplate || props.doc.companyField)
+})
 
 function pickFile() { fileInput.value?.click() }
 
@@ -208,26 +259,38 @@ const uploadedAtLabel = computed(() => {
               title="Dokument entfernen" @click="emit('remove')">✕</button>
     </div>
 
-    <p v-if="!templateReady" class="text-sm text-amber-600 dark:text-amber-400">
-      Bitte den Prozess speichern und der Phase einen Schlüssel geben – danach
-      lässt sich die Vorlage hochladen.
-    </p>
+    <!-- Vorlagen-Quelle: feste Hochlade-Vorlage ODER firmenabhängig (nach Name). -->
+    <div v-if="!readonly" class="flex flex-wrap items-center gap-2">
+      <span class="text-xs text-gray-500 dark:text-gray-400">Vorlage:</span>
+      <button type="button" @click="setCompanyMode(false)"
+              class="text-xs px-2.5 py-1 rounded-lg transition"
+              :class="!companyMode ? 'bg-[#3EAAB8] text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300'">
+        Hochladen (fest)
+      </button>
+      <button type="button" @click="setCompanyMode(true)"
+              class="text-xs px-2.5 py-1 rounded-lg transition"
+              :class="companyMode ? 'bg-[#3EAAB8] text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300'">
+        Firmen-Vorlage (nach Name)
+      </button>
+    </div>
 
-    <template v-else>
-      <input ref="fileInput" type="file" accept=".docx,.pdf" class="hidden" @change="onFilePicked" />
-
-      <p v-if="tplLoading" class="text-sm text-gray-400 italic">Vorlage wird geladen …</p>
-
-      <div v-else-if="!template?.exists"
-           class="rounded-xl border border-dashed border-gray-300 dark:border-white/15 px-4 py-6 text-center">
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">Noch keine Vorlage hinterlegt.</p>
-        <button v-if="!readonly" class="btn-primary text-sm" :disabled="tplBusy" @click="pickFile">
-          {{ tplBusy ? 'Lädt hoch …' : '.docx- oder PDF-Vorlage hochladen' }}
-        </button>
-      </div>
-
-      <div v-else class="space-y-3">
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200
+    <!-- HOCHLADE-MODUS: feste Vorlage je (Prozess, Phase, Dokument). -->
+    <template v-if="!companyMode">
+      <p v-if="!templateReady" class="text-sm text-amber-600 dark:text-amber-400">
+        Bitte den Prozess speichern und der Phase einen Schlüssel geben – danach
+        lässt sich die Vorlage hochladen.
+      </p>
+      <template v-else>
+        <input ref="fileInput" type="file" accept=".docx,.pdf" class="hidden" @change="onFilePicked" />
+        <p v-if="tplLoading" class="text-sm text-gray-400 italic">Vorlage wird geladen …</p>
+        <div v-else-if="!template?.exists"
+             class="rounded-xl border border-dashed border-gray-300 dark:border-white/15 px-4 py-6 text-center">
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">Noch keine Vorlage hinterlegt.</p>
+          <button v-if="!readonly" class="btn-primary text-sm" :disabled="tplBusy" @click="pickFile">
+            {{ tplBusy ? 'Lädt hoch …' : '.docx- oder PDF-Vorlage hochladen' }}
+          </button>
+        </div>
+        <div v-else class="flex items-center justify-between gap-3 rounded-xl border border-gray-200
                     dark:border-white/10 px-4 py-3">
           <div class="min-w-0">
             <p class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
@@ -247,7 +310,56 @@ const uploadedAtLabel = computed(() => {
                     title="Vorlage entfernen" @click="removeTemplate">✕</button>
           </div>
         </div>
+      </template>
+    </template>
 
+    <!-- FIRMEN-MODUS: die Datei kommt je gewählter Firma aus den Firmen-Einstellungen,
+         gewählt wird nur der Vorlagen-TYP. -->
+    <div v-else class="space-y-2 rounded-xl border border-gray-200 dark:border-white/10 p-3">
+      <div class="grid md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Firmen-Feld</label>
+          <select :value="doc.companyField ?? ''" :disabled="readonly" class="afi w-full text-sm"
+                  @change="emit('update', { companyField: ($event.target as HTMLSelectElement).value })">
+            <option value="">— Feld mit der Firma wählen —</option>
+            <option v-for="f in companyFields" :key="f.key" :value="f.key">{{ f.label }}</option>
+          </select>
+          <p v-if="!companyFields.length" class="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+            Kein Feld vom Typ „Firma“ im Prozess – zuerst anlegen.
+          </p>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Vorlagen-Typ</label>
+          <select :value="doc.companyTemplate ?? ''" :disabled="readonly" class="afi w-full text-sm"
+                  @change="emit('update', { companyTemplate: ($event.target as HTMLSelectElement).value })">
+            <option value="">— Vorlagen-Typ wählen —</option>
+            <option v-for="l in labels" :key="l.name" :value="l.name">{{ l.name }}</option>
+            <!-- Gespeicherter, aber nicht mehr vorhandener Typ bleibt sichtbar/korrigierbar. -->
+            <option v-if="typeUnknown" :value="doc.companyTemplate">{{ doc.companyTemplate }} (nicht mehr vorhanden)</option>
+          </select>
+          <p v-if="!labels.length" class="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+            Keine Vorlagen-Typen angelegt – unter Einstellungen → Vorlagen-Typen erstellen.
+          </p>
+          <p v-else-if="typeUnknown" class="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+            Diesen Vorlagen-Typ gibt es nicht mehr – bitte neu wählen.
+          </p>
+          <p v-else-if="doc.companyTemplate && !typeLabel?.placeholders" class="text-[11px] text-gray-400 mt-1">
+            Für diesen Typ ist noch keine Firmen-Vorlage hochgeladen – Platzhalter erscheinen nach dem ersten Upload.
+          </p>
+        </div>
+      </div>
+      <p v-if="companyHalfSet" class="text-[11px] text-amber-600 dark:text-amber-400">
+        Firmen-Feld und Vorlagen-Typ müssen beide gesetzt sein.
+      </p>
+      <p class="text-[11px] text-gray-400">
+        Die .docx/PDF kommt beim Erzeugen aus den Einstellungen der gewählten Firma (Vorlage dieses Typs).
+        Alle Firmen-Vorlagen eines Typs haben dieselben {{ PH_HINT }}-Platzhalter; die Zuordnung unten gilt
+        für alle Firmen.
+      </p>
+    </div>
+
+    <!-- Zuordnung + bedingte Passagen: in beiden Modi, sobald Marker bekannt sind. -->
+    <div v-if="companyMode || template?.exists" class="space-y-3">
         <div v-if="placeholders.length" class="space-y-2">
           <label class="block text-xs text-gray-500 dark:text-gray-400">Platzhalter zuordnen</label>
           <div v-for="m in placeholders" :key="m" class="space-y-1">
@@ -274,7 +386,11 @@ const uploadedAtLabel = computed(() => {
           </div>
         </div>
         <p v-else class="text-sm text-gray-400 italic">
-          In dieser Vorlage wurden keine {{ PH_HINT }}-Platzhalter gefunden.
+          <template v-if="companyMode">
+            Noch keine Marker bekannt – oben einen Vorlagen-Typ wählen und für diesen Typ
+            (in einer Firma) eine Vorlage hochladen.
+          </template>
+          <template v-else>In dieser Vorlage wurden keine {{ PH_HINT }}-Platzhalter gefunden.</template>
         </p>
 
         <!-- Bedingte Passagen: {{#if:NAME}} … {{/if}} -->
@@ -306,6 +422,5 @@ const uploadedAtLabel = computed(() => {
           </div>
         </div>
       </div>
-    </template>
   </div>
 </template>

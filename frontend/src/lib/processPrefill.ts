@@ -43,8 +43,10 @@ function displayValue(v: unknown): unknown {
 
 /** Prefill-Wert eines select-Feldes auf einen Options-Wert abbilden (Directus
  *  liefert evtl. Label/andere Schreibweise). Spiegel von _match_option; ohne
- *  Treffer (und ohne allowOther) undefined → das Feld bleibt leer statt ungültig. */
-function matchOption(val: unknown, f: FieldDef): unknown {
+ *  Treffer (und ohne allowOther) undefined → das Feld bleibt leer statt ungültig.
+ *  Exportiert, weil auch das Live-Auto-Fill der directus-Auswahl (SchemaForm
+ *  coerceForTarget) ein select-Ziel so vorwählen muss. */
+export function matchOption(val: unknown, f: FieldDef): unknown {
   if (val === undefined || val === null || val === '' || !f.options?.length) return val
   const s = String(val).trim().toLocaleLowerCase()
   for (const opt of f.options) {

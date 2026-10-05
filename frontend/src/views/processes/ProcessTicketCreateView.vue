@@ -197,7 +197,14 @@ async function submit() {
   if (!definition.value || !startPhase.value) return
   // Client-Vorprüfung (der Server prüft erneut und ist maßgeblich)
   const shapeErrors = validateValues(definition.value, values.value)
-  const requiredErrors = validatePhaseCompletion(definition.value, startPhase.value, values.value)
+  // Anhang-Felder gegen die bereits gewählten (noch nicht hochgeladenen) Dateien
+  // prüfen – so greift „Pflicht-Anlage" schon im Anlege-Formular.
+  const pendingKeys = new Set(
+    Object.entries(pendingAttachments.value).filter(([, fs]) => fs.length > 0).map(([k]) => k),
+  )
+  const requiredErrors = validatePhaseCompletion(
+    definition.value, startPhase.value, values.value, pendingKeys,
+  )
   errors.value = [...shapeErrors, ...requiredErrors]
   if (errors.value.length) {
     showToast('Bitte die markierten Felder prüfen', false)

@@ -21,8 +21,9 @@ from backend.services.microsoft_auth import (
     initiate_auth_flow, acquire_token_by_auth_code,
 )
 from backend.services.microsoft_graph import get_user_profile
+from backend.services import directus_employee
 from backend.database.audit_log import record_audit
-from backend.database.sessions import upsert_session, delete_session
+from backend.database.sessions import upsert_session, delete_session, get_session
 from backend.utils.config import config
 from backend.utils.logger import logger
 
@@ -32,6 +33,35 @@ def _client_ip(request: Request) -> str | None:
         return request.client.host if request.client else None
     except Exception:
         return None
+
+
+def _employee_link_audit(email: str) -> tuple[str | None, dict]:
+    """Status der Directus-Mitarbeiter-Zuordnung für den Login-Audit-Eintrag.
+
+    Treffer → kein Sonder-Hinweis (details nur „zugeordnet"); KEIN Treffer oder
+    Directus nicht erreichbar → sprechende `summary`, damit eine Anmeldung, die
+    danach am Mitarbeiter-Gate (enforce_employee_link) scheitert, nicht als leerer
+    „Login"-Eintrag ohne Grund dasteht. Die eigentliche Sperre bleibt im Gate (pro
+    Request, bewusst ohne Audit – sonst Spam); hier genügt der eine Login-Eintrag.
+    Wirft nie – der Audit darf den Login nicht kippen."""
+    mail = (email or "").strip()
+    if not mail:
+        return ("Anmeldung ohne E-Mail – keine Directus-Zuordnung möglich",
+                {"directus_employee": "keine_email"})
+    try:
+        rec = directus_employee.lookup_employee(mail)
+    except directus_employee.EmployeeLookupError as e:
+        return ("Directus-Zuordnung beim Login nicht prüfbar – Directus nicht "
+                "erreichbar/konfiguriert (Break-Glass nur für Admins/Allowlist)",
+                {"directus_employee": "fehler", "email": mail, "error": str(e)[:300]})
+    except Exception as e:                      # defensiv: Audit darf den Login nie kippen
+        logger.exception("Directus-Zuordnung beim Login-Audit fehlgeschlagen")
+        return (None, {"directus_employee": "unbekannt", "email": mail, "error": str(e)[:300]})
+    if rec is None:
+        return (f"Kein Directus-Mitarbeiter-Datensatz zur E-Mail „{mail}“ – Konto kann erst "
+                "arbeiten, wenn die E-Mail in alphacore korrekt hinterlegt ist",
+                {"directus_employee": "kein_treffer", "email": mail})
+    return (None, {"directus_employee": "zugeordnet"})
 
 router = APIRouter()
 
@@ -117,11 +147,35 @@ def check_session(user: dict = Depends(check_session_only)):
 
 # ── Login-Flow ─────────────────────────────────────────────────────────────────
 
+def _session_is_live(session) -> bool:
+    """Ist die Cookie-Session serverseitig NOCH gültig? Nur dann darf /start-auth
+    kurzschließen. Ein Cookie mit `user` allein genügt NICHT: nach Server-Neustart
+    (boot_id passt nicht) oder Admin-Force-Logout (Server-Row weg) ist die Session
+    tot, trägt aber weiter `user`. Fail-open bei DB-Hänger (wie _check_session_store),
+    damit ein kurzer Ausfall einen gültigen Login nicht abwürgt."""
+    if not session.get("user") or session.get("boot_id") != SERVER_BOOT_ID:
+        return False
+    sid = session.get("sid")
+    if not sid:
+        return False
+    try:
+        return get_session(sid) is not None
+    except Exception:
+        logger.exception("Session-Store-Check in /start-auth fehlgeschlagen – fail-open")
+        return True
+
+
 @router.get("/start-auth", include_in_schema=False)
 async def start_auth(request: Request):
     record_login_attempt()
-    if request.session.get("user"):
+    # Nur eine WIRKLICH gültige Session kurzschließen. Eine tote Session (Neustart /
+    # Force-Logout) trägt zwar noch `user` im Cookie – früher bounced /start-auth sie
+    # endlos zur Frontend-URL (die dann 401t), und erst /logout (das den Cookie leert)
+    # brach den Zwischenzustand. Jetzt: toten Cookie verwerfen und sauber neu anmelden.
+    if _session_is_live(request.session):
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
+    if request.session.get("user"):
+        request.session.clear()   # toten Cookie wegräumen, bevor der OAuth-Flow startet
     auth_url = initiate_auth_flow(request)
     return RedirectResponse(auth_url)
 
@@ -266,9 +320,14 @@ async def auth_callback(request: Request):
             logger.exception("Session-Registrierung fehlgeschlagen (sid=%s)", sid)
 
         record_login_success()
+        # Directus-Zuordnung EINMAL beim Login prüfen und ins Audit schreiben – sonst
+        # bleibt eine Anmeldung, die anschließend am Mitarbeiter-Gate scheitert (z. B.
+        # E-Mail in alphacore falsch), ein leerer „Login"-Eintrag ohne Grund.
+        link_summary, link_details = _employee_link_audit(user_payload["email"])
         record_audit(action="login", actor_id=user_payload["id"],
                      actor_name=user_payload["displayName"] or "", entity_type="auth",
-                     entity_id=user_payload["id"], ip=_client_ip(request))
+                     entity_id=user_payload["id"], summary=link_summary,
+                     details=link_details, ip=_client_ip(request))
 
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
 
