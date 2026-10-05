@@ -4,6 +4,7 @@ import { client } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useSaver } from '@/composables/settingsSave'
 import { useDetailNav } from '@/composables/useDetailNav'
+import { downloadJson, readJsonFile, dateStamp, extractList } from '@/lib/settingsTransfer'
 import SettingsList from '@/components/settings/SettingsList.vue'
 import CompanyDocumentsEditor from '@/components/settings/CompanyDocumentsEditor.vue'
 
@@ -30,12 +31,18 @@ const savedNames = ref<Set<string>>(new Set())
 const { selected, open, back } = useDetailNav(() => companies.value.length)
 
 function mapCompany(c: any): CompanyItem {
+  // Text-Felder hart zu String|null zwingen: ein importiertes (ggf. handgeschriebenes)
+  // JSON darf hier eine Zahl liefern (z. B. "pnr_from": 100) – sonst würfe
+  // saveCompanies später bei (…).trim() eine unbehandelte Ausnahme (stiller Fehler).
+  const s = (v: any): string | null => (v === null || v === undefined || v === '' ? null : String(v))
   return {
-    name: c?.name ?? '', pnr_from: c?.pnr_from ?? null, pnr_to: c?.pnr_to ?? null,
-    mandant: c?.mandant ?? null, pnr_shared_with: c?.pnr_shared_with ?? null,
-    directus_firma_id: c?.directus_firma_id ?? null, domain: c?.domain ?? null,
-    documents_shared_with: c?.documents_shared_with ?? null,
-    pnr_current: c?.pnr_current ?? null, pnr_warned: !!c?.pnr_warned,
+    name: c?.name == null ? '' : String(c.name),
+    pnr_from: s(c?.pnr_from), pnr_to: s(c?.pnr_to),
+    mandant: s(c?.mandant), pnr_shared_with: s(c?.pnr_shared_with),
+    directus_firma_id: s(c?.directus_firma_id), domain: s(c?.domain),
+    documents_shared_with: s(c?.documents_shared_with),
+    pnr_current: typeof c?.pnr_current === 'number' ? c.pnr_current : null,
+    pnr_warned: !!c?.pnr_warned,
   }
 }
 function serialize(list: CompanyItem[]): string {
@@ -153,6 +160,40 @@ async function saveCompanies() {
 const dirty = computed(() => serialize(companies.value) !== snapshot.value)
 const { setSaving } = useSaver({ dirty, save: saveCompanies, reset: () => loadCompanies() })
 
+// ── Export / Import (JSON) ───────────────────────────────────────────────────
+// Export lädt die aktuelle Liste als JSON herunter; Import ersetzt die bearbeitete
+// Liste und überlässt die eigentliche Prüfung dem bestehenden „Speichern" (PUT).
+const importInput = ref<HTMLInputElement | null>(null)
+
+function exportCompanies() {
+  downloadJson(`firmen-${dateStamp()}.json`, {
+    kind: 'alpharequest:companies',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    companies: companies.value.map(c => ({
+      name: c.name, pnr_from: c.pnr_from, pnr_to: c.pnr_to, mandant: c.mandant,
+      pnr_shared_with: c.pnr_shared_with, directus_firma_id: c.directus_firma_id,
+      domain: c.domain, documents_shared_with: c.documents_shared_with,
+    })),
+  })
+}
+
+async function onImport(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''   // gleiche Datei erneut wählbar machen
+  if (!file) return
+  try {
+    const list = extractList(await readJsonFile(file), 'companies', 'alpharequest:companies')
+    if (!list.every(x => x && typeof x === 'object')) throw new Error('Unerwartetes Format der Firmen-Liste.')
+    companies.value = list.map(mapCompany)
+    back()
+    showToast(`${companies.value.length} Firma(en) importiert – bitte prüfen und speichern.`, true)
+  } catch (err: any) {
+    showToast(err?.message || 'Import fehlgeschlagen.', false)
+  }
+}
+
 onMounted(loadCompanies)
 </script>
 
@@ -162,6 +203,11 @@ onMounted(loadCompanies)
                   add-label="+ Firma hinzufügen" search-placeholder="Firma suchen…"
                   empty-text="Noch keine Firmen vorhanden." :filter-text="(c) => c.name"
                   @add="addCompany" @select="open">
+      <template #actions>
+        <button @click="exportCompanies" :disabled="loading || companies.length === 0" class="btn-secondary">Export</button>
+        <button @click="importInput?.click()" :disabled="loading" class="btn-secondary">Import</button>
+        <input ref="importInput" type="file" accept="application/json,.json" class="hidden" @change="onImport" />
+      </template>
       <template #hint>
         <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20
                     px-4 py-3 text-sm text-amber-800 dark:text-amber-200 mb-3">

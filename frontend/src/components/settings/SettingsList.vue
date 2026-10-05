@@ -29,7 +29,10 @@ const filtered = computed(() => {
         <h2 class="section-title mb-0">{{ title }}</h2>
         <span class="text-xs text-gray-400">{{ items.length }}</span>
       </div>
-      <button v-if="addLabel" @click="emit('add')" class="btn-primary">{{ addLabel }}</button>
+      <div class="flex items-center gap-2">
+        <slot name="actions" />
+        <button v-if="addLabel" @click="emit('add')" class="btn-primary">{{ addLabel }}</button>
+      </div>
     </div>
 
     <slot name="hint" />
