@@ -1494,3 +1494,50 @@ def test_load_template_row_firmenvorlage_ohne_firma():
     doc = SimpleNamespace(companyTemplate="Arbeitsvertrag", companyField="base.company", key="av")
     docphase = SimpleNamespace(key="vertrag")
     assert pt._load_template_row({"process_key": "onb", "values": {}, "id": 1}, docphase, doc) is None
+
+
+# ── Firmen-Vorlage fehlt → sprechende Absage (_assert_company_template_or_message) ──
+
+def test_assert_company_template_missing_names_company_and_type():
+    import pytest
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Kündigung", companyField="base.firma", key="dokument")
+    row = {"values": {"base.firma": "Alpha GmbH"}}
+    with pytest.raises(HTTPException) as ei:
+        pt._assert_company_template_or_message(row, doc, None)
+    assert ei.value.status_code == 409
+    assert ei.value.detail["code"] == "COMPANY_TEMPLATE_MISSING"
+    assert "Alpha GmbH" in ei.value.detail["message"]
+    assert "Kündigung" in ei.value.detail["message"]
+    assert "manuell" in ei.value.detail["message"]
+
+
+def test_assert_company_template_missing_no_company_chosen():
+    import pytest
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Kündigung", companyField="base.firma", key="dokument")
+    with pytest.raises(HTTPException) as ei:
+        pt._assert_company_template_or_message({"values": {}}, doc, None)
+    assert ei.value.status_code == 409
+    assert "keine Firma" in ei.value.detail["message"]
+
+
+def test_assert_company_template_noop_when_present():
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    doc = SimpleNamespace(companyTemplate="Kündigung", companyField="base.firma", key="d")
+    # tpl vorhanden → kein Raise
+    pt._assert_company_template_or_message({"values": {"base.firma": "A"}}, doc,
+                                           {"stored_path": "x"})
+
+
+def test_assert_company_template_noop_for_fixed_template_doc():
+    from types import SimpleNamespace
+    from backend.api.v1 import process_tickets as pt
+    # Dokument ohne companyTemplate (feste Vorlage) → Funktion tut nichts, auch bei tpl None
+    doc = SimpleNamespace(companyTemplate=None, companyField=None, key="d")
+    pt._assert_company_template_or_message({"values": {}}, doc, None)

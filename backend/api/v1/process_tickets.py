@@ -1280,6 +1280,26 @@ def _read_template_bytes(tpl) -> bytes:
         raise api_error(500, "TEMPLATE_UNREADABLE", "Die hinterlegte Vorlage ist nicht lesbar")
 
 
+def _assert_company_template_or_message(row, doc, tpl) -> None:
+    """Erwartet das Dokument eine FIRMEN-Vorlage (doc.companyTemplate), ist aber für
+    die im Auftrag gewählte Firma keine hinterlegt, dann mit sprechender Meldung
+    verweigern (Firma nennen, auf manuelle Erstellung hinweisen) statt der generischen
+    „im Prozess-Editor hochladen"-Meldung. Für feste Vorlagen (kein companyTemplate)
+    tut die Funktion nichts – der Aufrufer behandelt `tpl is None` dann wie bisher."""
+    if tpl is not None or not getattr(doc, "companyTemplate", None):
+        return
+    typ = doc.companyTemplate
+    company = (row.get("values") or {}).get(getattr(doc, "companyField", None))
+    if not company:
+        raise api_error(409, "COMPANY_TEMPLATE_MISSING",
+                        f"Es ist keine Firma gewählt – die Vorlage „{typ}“ lässt sich nicht "
+                        "zuordnen. Bitte das Dokument manuell erstellen.")
+    raise api_error(409, "COMPANY_TEMPLATE_MISSING",
+                    f"Für „{company}“ ist keine „{typ}“-Vorlage hinterlegt. Bitte in den "
+                    f"Firmen-Einstellungen eine „{typ}“-Vorlage für „{company}“ hinterlegen – "
+                    "oder das Dokument manuell erstellen.")
+
+
 @router.get("/process-tickets/{ticket_id}/document:fields")
 def document_fields(ticket_id: int, document: str = "", user: dict = Depends(get_current_user)):
     """Marker der Vorlage (eines Dokuments) + vorausgefüllte (sichtbarkeits-
@@ -1300,6 +1320,7 @@ def document_fields(ticket_id: int, document: str = "", user: dict = Depends(get
     if defn is None or docphase is None or doc is None:
         raise api_error(409, "TEMPLATE_MISSING", "Diese Phase hat kein solches Dokument.")
     tpl = _load_template_row(row, docphase, doc)
+    _assert_company_template_or_message(row, doc, tpl)   # Firmen-Vorlage fehlt → klare Absage
     if tpl is None:
         raise api_error(409, "TEMPLATE_MISSING",
                         "Für dieses Dokument ist keine Vorlage hinterlegt. "
@@ -1363,6 +1384,13 @@ def export_ticket_document(ticket_id: int, body: DocumentExportRequest,
     docphase = _pick_docphase(defn, row.get("runtime"))
     doc = _pick_document(docphase, body.document or "")
     tpl = _load_template_row(row, docphase, doc)
+
+    # Firmen-Vorlage erwartet, aber für die gewählte Firma keine da → KEIN stiller
+    # HTML-Fallback, sondern klare Absage (Firma nennen, manuell erstellen). Zugriff
+    # vorher prüfen (wie der HTML-Zweig), damit die Meldung nichts an Unbefugte verrät.
+    if tpl is None and getattr(doc, "companyTemplate", None):
+        _assert_view(row, defn, user)
+        _assert_company_template_or_message(row, doc, tpl)
 
     if tpl is not None and docphase is not None and doc is not None:
         values, catalog, bindings = _docx_fill_prep(row, defn, doc, user)
