@@ -481,10 +481,10 @@ def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
 
 def _use_external_relay() -> bool:
     """Externer Relay nur, wenn VOLLSTÄNDIG konfiguriert (sonst zeigten die Links
-    ins Leere). Spiegelt approval_poller.is_configured ohne Import-Zyklus."""
-    return bool(config.APPROVAL_BASE_URL and config.APPROVAL_PRIVATE_KEY_PATH
-                and config.APPROVAL_API_KEY and config.APPROVAL_ISSUER
-                and config.APPROVAL_AUDIENCE)
+    ins Leere). Spiegelt approval_poller.is_configured ohne Import-Zyklus – der
+    Signierschlüssel kommt immer (DB oder Datei), zählt also NICHT zum Schalter."""
+    return bool(config.APPROVAL_BASE_URL and config.APPROVAL_API_KEY
+                and config.APPROVAL_ISSUER and config.APPROVAL_AUDIENCE)
 
 
 def _approval_buttons_html(approve_url: str, reject_url: str,

@@ -12,13 +12,18 @@ Vertrag (mit AlphaApprove abgestimmt):
 """
 from __future__ import annotations
 
+import base64
+import os
 import time
 from typing import Any, Callable
 
 import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 from backend.utils.config import config
+from backend.utils.logger import logger
 
 MAX_TTL_SECONDS = 7 * 24 * 3600
 MAX_TOKEN_LEN = 4096
@@ -31,15 +36,50 @@ class TokenInvalid(Exception):
     """Dauerhaft unbrauchbarer Token (Signatur/iss/aud/Form/abgelaufen)."""
 
 
+#: settings-Schlüssel, unter dem der PEM-Privatschlüssel in der DB liegt. Klartext –
+#: wie alle anderen Secrets der App (die DB ist ohnehin die Vertrauensgrenze: wer sie
+#: hat, kann Freigaben auch direkt setzen). Mit SECRET_KEY hat er NICHTS zu tun.
+_SIGNING_KEY_SETTING = "approval_signing_key_pem"
+
 _private_key_cache: Any = None
 
 
+def _generate_pem() -> str:
+    """Neues Ed25519-Paar als unverschlüsseltes PKCS8-PEM (wie gen_approval_key.py)."""
+    key = Ed25519PrivateKey.generate()
+    return key.private_bytes(serialization.Encoding.PEM,
+                             serialization.PrivateFormat.PKCS8,
+                             serialization.NoEncryption()).decode()
+
+
+def _file_mode() -> bool:
+    """Datei-Modus (Override): APPROVAL_PRIVATE_KEY_PATH gesetzt UND Datei vorhanden.
+    Sonst DB-Modus (Schlüssel im settings-Store, wird bei Bedarf erzeugt)."""
+    path = config.APPROVAL_PRIVATE_KEY_PATH
+    return bool(path) and os.path.exists(path)
+
+
+def _load_from_db():
+    """PEM aus dem settings-Store laden; fehlt er, EINMALIG erzeugen und ablegen."""
+    from backend.database.settings import settings_get, settings_set
+    pem = settings_get(_SIGNING_KEY_SETTING)
+    if not pem:
+        pem = _generate_pem()
+        settings_set(_SIGNING_KEY_SETTING, pem)
+        logger.info("Freigabe-Signierschlüssel neu erzeugt und in settings gespeichert")
+    return load_pem_private_key(pem.encode(), password=None)
+
+
 def _private_key():
-    """Ed25519-Privatschlüssel aus APPROVAL_PRIVATE_KEY_PATH (einmal geladen)."""
+    """Ed25519-Privatschlüssel (einmal je Prozess geladen). Vorrang: Datei-Override
+    (APPROVAL_PRIVATE_KEY_PATH), sonst persistenter DB-Schlüssel."""
     global _private_key_cache
     if _private_key_cache is None:
-        with open(config.APPROVAL_PRIVATE_KEY_PATH, "rb") as f:
-            _private_key_cache = load_pem_private_key(f.read(), password=None)
+        if _file_mode():
+            with open(config.APPROVAL_PRIVATE_KEY_PATH, "rb") as f:
+                _private_key_cache = load_pem_private_key(f.read(), password=None)
+        else:
+            _private_key_cache = _load_from_db()
     return _private_key_cache
 
 
@@ -47,6 +87,41 @@ def public_key():
     """Der zugehörige Public Key – auch der Worker verifiziert damit (derselbe wie
     auf AlphaApprove)."""
     return _private_key().public_key()
+
+
+def public_key_b64() -> str:
+    """Public Key als base64(Raw) – exakt der `APPROVE_PUBLIC_KEY=…`-Wert für
+    AlphaApprove (zum Anzeigen/Kopieren in den Einstellungen)."""
+    raw = _private_key().public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    return base64.b64encode(raw).decode()
+
+
+def key_source() -> str:
+    """„file“ (Datei-Override) oder „db“ (persistenter settings-Schlüssel)."""
+    return "file" if _file_mode() else "db"
+
+
+def ensure_key() -> None:
+    """Beim Start aufrufen: stellt sicher, dass ein Signierschlüssel existiert (im
+    DB-Modus wird er bei Bedarf erzeugt). Im Datei-Modus passiert nichts weiter."""
+    _private_key()
+
+
+def regenerate_key() -> str:
+    """Neuen Signierschlüssel erzeugen, in der DB ablegen, Cache zurücksetzen und den
+    neuen Public Key (base64) zurückgeben. Macht ALLE bereits verschickten Links
+    ungültig. Nur im DB-Modus – im Datei-Modus muss die Datei getauscht werden."""
+    global _private_key_cache
+    if _file_mode():
+        raise RuntimeError(
+            "Schlüssel kommt aus APPROVAL_PRIVATE_KEY_PATH (Datei) – Rotation dort "
+            "vornehmen, nicht über die DB.")
+    from backend.database.settings import settings_set
+    pem = _generate_pem()
+    settings_set(_SIGNING_KEY_SETTING, pem)
+    _private_key_cache = load_pem_private_key(pem.encode(), password=None)
+    return public_key_b64()
 
 
 def make_external_token(ticket_id: int, action: str, phase_key: str, epoch: int,

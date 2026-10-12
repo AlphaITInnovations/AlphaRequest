@@ -242,9 +242,24 @@ def _quarantine(decision: dict, reason: str) -> None:
 
 
 def is_configured() -> bool:
-    return bool(config.APPROVAL_BASE_URL and config.APPROVAL_PRIVATE_KEY_PATH
-                and config.APPROVAL_API_KEY and config.APPROVAL_ISSUER
-                and config.APPROVAL_AUDIENCE)
+    # Der Signierschlüssel kommt immer (DB-Schlüssel wird bei Bedarf erzeugt, oder
+    # Datei-Override) – darum zählt APPROVAL_PRIVATE_KEY_PATH NICHT mehr zum Schalter.
+    return bool(config.APPROVAL_BASE_URL and config.APPROVAL_API_KEY
+                and config.APPROVAL_ISSUER and config.APPROVAL_AUDIENCE)
+
+
+def _live_verifier():
+    """Verifizierer, der den AKTUELLEN Public Key je Token auflöst (nicht einmal beim
+    Start einfriert). So greift eine Schlüssel-Rotation über die Einstellungen sofort,
+    ohne App-Neustart – alte Links werden danach korrekt als ungültig verworfen, neue
+    (mit dem neuen Key signierte) verifizieren."""
+    iss, aud = config.APPROVAL_ISSUER, config.APPROVAL_AUDIENCE
+    grace = int(config.APPROVAL_MAX_PICKUP_DELAY)
+
+    def verify(token: str) -> dict:
+        return make_verifier(approval_jwt.public_key(), iss, aud,
+                             clock_leeway=30, pickup_grace=grace)(token)
+    return verify
 
 
 def start_worker() -> Optional[threading.Thread]:
@@ -255,9 +270,7 @@ def start_worker() -> Optional[threading.Thread]:
         return None
     import requests
 
-    verify = make_verifier(approval_jwt.public_key(), config.APPROVAL_ISSUER,
-                           config.APPROVAL_AUDIENCE, clock_leeway=30,
-                           pickup_grace=int(config.APPROVAL_MAX_PICKUP_DELAY))
+    verify = _live_verifier()
     base = config.APPROVAL_BASE_URL.rstrip("/")
 
     def loop():

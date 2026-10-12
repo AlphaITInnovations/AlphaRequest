@@ -331,6 +331,22 @@ def test_process_batch_permanent_mit_gescheiterter_fehlerablage_retry(key):
     assert ack == [] and retry == [1]
 
 
+def test_live_verifier_folgt_der_rotation(key, monkeypatch):
+    """Der Worker-Verifizierer löst den AKTUELLEN Public Key je Token auf: nach einer
+    Rotation wird der alte Token ungültig, ein mit dem neuen Key signierter gilt –
+    ohne App-Neustart."""
+    monkeypatch.setattr(aj.config, "APPROVAL_MAX_PICKUP_DELAY", 3600)
+    v = ap._live_verifier()
+    t_alt = aj.make_external_token(7, "approve", "freigabe", 0, ttl_seconds=3600)
+    assert v(t_alt)["tid"] == 7
+    # „Rotation": neuer Schlüssel im Cache.
+    monkeypatch.setattr(aj, "_private_key_cache", Ed25519PrivateKey.generate())
+    with pytest.raises(aj.TokenInvalid):
+        v(t_alt)                                     # mit altem Key signiert → ungültig
+    t_neu = aj.make_external_token(8, "reject", "freigabe", 0, ttl_seconds=3600)
+    assert v(t_neu)["tid"] == 8                       # mit neuem Key signiert → gültig
+
+
 # ── Reales Anwenden über den geteilten Kern ──────────────────────────────────
 
 @pytest.fixture
