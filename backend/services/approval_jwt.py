@@ -41,6 +41,12 @@ class TokenInvalid(Exception):
 #: hat, kann Freigaben auch direkt setzen). Mit SECRET_KEY hat er NICHTS zu tun.
 _SIGNING_KEY_SETTING = "approval_signing_key_pem"
 
+#: Beim Rotieren wandert der bisherige Key hierher ({"pem":…, "since":<epoch>}). Der
+#: Verifier akzeptiert ihn NEBEN dem aktuellen noch bis zur maximalen Token-Laufzeit
+#: (7 Tage), damit bereits verschickte Links nach einer Rotation nicht still verloren
+#: gehen. SIGNIERT wird immer nur mit dem AKTUELLEN.
+_PREV_KEY_SETTING = "approval_signing_key_prev"
+
 _private_key_cache: Any = None
 
 
@@ -97,6 +103,38 @@ def public_key_b64() -> str:
     return base64.b64encode(raw).decode()
 
 
+def _prev_public_within_window():
+    """Vorherigen Public Key laden, SOLANGE das Rotations-Fenster (max. Token-
+    Laufzeit) offen ist – danach ist jeder damit signierte Token ohnehin abgelaufen.
+    Best effort: scheitert das Laden, None (nur der aktuelle Key gilt dann)."""
+    try:
+        from backend.database.settings import settings_get
+        blob = settings_get(_PREV_KEY_SETTING)
+        if not isinstance(blob, dict):
+            return None
+        pem, since = blob.get("pem"), blob.get("since")
+        if not pem or not isinstance(since, (int, float)):
+            return None
+        if time.time() - since > MAX_TTL_SECONDS:
+            return None
+        return load_pem_private_key(pem.encode(), password=None).public_key()
+    except Exception:
+        logger.exception("Vorherigen Freigabe-Public-Key nicht ladbar")
+        return None
+
+
+def public_keys_for_verify() -> list:
+    """Die zum Prüfen akzeptierten Public Keys: immer der aktuelle, im Datei-freien
+    DB-Modus zusätzlich der vorherige (Übergangsfenster nach einer Rotation). Reihen-
+    folge: aktueller zuerst."""
+    keys = [_private_key().public_key()]
+    if not _file_mode():
+        prev = _prev_public_within_window()
+        if prev is not None:
+            keys.append(prev)
+    return keys
+
+
 def key_source() -> str:
     """„file“ (Datei-Override) oder „db“ (persistenter settings-Schlüssel)."""
     return "file" if _file_mode() else "db"
@@ -110,14 +148,19 @@ def ensure_key() -> None:
 
 def regenerate_key() -> str:
     """Neuen Signierschlüssel erzeugen, in der DB ablegen, Cache zurücksetzen und den
-    neuen Public Key (base64) zurückgeben. Macht ALLE bereits verschickten Links
-    ungültig. Nur im DB-Modus – im Datei-Modus muss die Datei getauscht werden."""
+    neuen Public Key (base64) zurückgeben. Der BISHERIGE Key wird als Vorgänger
+    aufbewahrt, damit bereits verschickte Links im Übergangsfenster (max. Token-
+    Laufzeit) weiter verifizieren – sonst gingen angeklickte alte Links still verloren.
+    Nur im DB-Modus – im Datei-Modus muss die Datei getauscht werden."""
     global _private_key_cache
     if _file_mode():
         raise RuntimeError(
             "Schlüssel kommt aus APPROVAL_PRIVATE_KEY_PATH (Datei) – Rotation dort "
             "vornehmen, nicht über die DB.")
-    from backend.database.settings import settings_set
+    from backend.database.settings import settings_get, settings_set
+    old = settings_get(_SIGNING_KEY_SETTING)
+    if old:
+        settings_set(_PREV_KEY_SETTING, {"pem": old, "since": int(time.time())})
     pem = _generate_pem()
     settings_set(_SIGNING_KEY_SETTING, pem)
     _private_key_cache = load_pem_private_key(pem.encode(), password=None)

@@ -253,16 +253,22 @@ def is_configured() -> bool:
 
 
 def _live_verifier():
-    """Verifizierer, der den AKTUELLEN Public Key je Token auflöst (nicht einmal beim
-    Start einfriert). So greift eine Schlüssel-Rotation über die Einstellungen sofort,
-    ohne App-Neustart – alte Links werden danach korrekt als ungültig verworfen, neue
-    (mit dem neuen Key signierte) verifizieren."""
+    """Verifizierer, der die AKTUELL akzeptierten Public Keys je Token auflöst (nicht
+    einmal beim Start einfriert). So greift eine Rotation über die Einstellungen sofort,
+    ohne App-Neustart. Akzeptiert wird der aktuelle UND – im Übergangsfenster nach einer
+    Rotation – der vorherige Key, damit bereits verschickte, noch gültige Links nicht
+    still in der Fehlerablage landen. Signiert wird immer nur mit dem aktuellen."""
     iss, aud = config.APPROVAL_ISSUER, config.APPROVAL_AUDIENCE
     grace = int(config.APPROVAL_MAX_PICKUP_DELAY)
 
     def verify(token: str) -> dict:
-        return make_verifier(approval_jwt.public_key(), iss, aud,
-                             clock_leeway=30, pickup_grace=grace)(token)
+        last: Optional[Exception] = None
+        for pub in approval_jwt.public_keys_for_verify():
+            try:
+                return make_verifier(pub, iss, aud, clock_leeway=30, pickup_grace=grace)(token)
+            except TokenInvalid as exc:
+                last = exc                              # evtl. mit anderem Key signiert → nächsten versuchen
+        raise last if last is not None else TokenInvalid("kein Signierschlüssel verfügbar")
     return verify
 
 

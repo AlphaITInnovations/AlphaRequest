@@ -1,6 +1,8 @@
 """DB-gestützter Signierschlüssel: Erzeugung bei Bedarf, Persistenz über Neustart,
-Rotation und Datei-Override (ohne echte DB – settings-Store wird gefaked)."""
+Rotation (mit Übergangsschlüssel) und Datei-Override (ohne echte DB – settings-Store
+wird gefaked)."""
 import base64
+import time
 
 import pytest
 from cryptography.hazmat.primitives import serialization as s
@@ -48,6 +50,23 @@ def test_regenerate_tauscht_key(db):
     pub2 = aj.regenerate_key()
     assert pub1 != pub2
     assert aj.public_key_b64() == pub2                  # Cache UND DB zeigen den neuen
+
+
+def test_rotation_bewahrt_vorherigen_key_im_fenster(db):
+    old_pub = aj.public_key_b64()
+    new_pub = aj.regenerate_key()
+    assert new_pub != old_pub
+    assert aj._PREV_KEY_SETTING in db                   # Vorgänger abgelegt
+    raws = [base64.b64encode(k.public_bytes(s.Encoding.Raw, s.PublicFormat.Raw)).decode()
+            for k in aj.public_keys_for_verify()]
+    assert len(raws) == 2 and old_pub in raws and new_pub in raws   # beide akzeptiert
+
+
+def test_vorheriger_key_ausserhalb_fensters_entfaellt(db):
+    aj.public_key_b64()
+    aj.regenerate_key()
+    db[aj._PREV_KEY_SETTING]["since"] = int(time.time()) - (aj.MAX_TTL_SECONDS + 10)
+    assert len(aj.public_keys_for_verify()) == 1       # Fenster zu → nur noch der aktuelle
 
 
 def test_datei_override_hat_vorrang(db, monkeypatch, tmp_path):

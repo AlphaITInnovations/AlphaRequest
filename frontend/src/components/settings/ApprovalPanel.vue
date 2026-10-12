@@ -63,14 +63,16 @@ async function runTest() {
 }
 
 async function rotateKey() {
-  if (!confirm('Neuen Signierschlüssel erzeugen?\n\nAlle bereits verschickten Freigabe-Links werden damit ungültig. '
-    + 'Danach den neuen Public Key in AlphaApprove hinterlegen.')) return
+  if (!confirm('Neuen Signierschlüssel erzeugen?\n\n'
+    + 'Bereits verschickte Links bleiben noch bis zu 7 Tage gültig (Übergangsfenster).\n\n'
+    + 'WICHTIG: Danach sofort den neuen Public Key in AlphaApprove eintragen und dort neu '
+    + 'starten – bis dahin zeigen NEUE Links auf AlphaApprove „Link ungültig".')) return
   rotating.value = true
   try {
     const { data } = await client.post('/settings/approval/regenerate-key')
     if (info.value) info.value.publicKey = data.data.publicKey
     test.value = null
-    showToast('Neuer Schlüssel erzeugt – Public Key in AlphaApprove aktualisieren')
+    showToast('Neuer Schlüssel erzeugt – jetzt den Public Key in AlphaApprove eintragen und neu starten')
   } catch (e: any) {
     showToast(e?.response?.data?.error?.message ?? e?.response?.data?.detail ?? 'Rotation fehlgeschlagen', false)
   } finally {
@@ -198,8 +200,10 @@ onMounted(load)
       <div class="card-section space-y-3">
         <label class="lbl">Schlüssel neu erzeugen</label>
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          Erzeugt ein neues Schlüsselpaar. <strong>Alle bereits verschickten Freigabe-Links werden ungültig</strong>,
-          und der neue Public Key muss in AlphaApprove hinterlegt werden.
+          Erzeugt ein neues Schlüsselpaar. Bereits verschickte Links bleiben noch
+          <strong>bis zu 7 Tage</strong> gültig (Übergangsfenster). Danach <strong>sofort</strong>
+          den neuen Public Key oben in AlphaApprove eintragen und dort neu starten –
+          bis dahin zeigen <strong>neue</strong> Links auf AlphaApprove „Link ungültig".
         </p>
         <button v-if="info.canRegenerate" @click="rotateKey" :disabled="rotating"
                 class="px-4 py-2 rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-60">

@@ -332,19 +332,42 @@ def test_process_batch_permanent_mit_gescheiterter_fehlerablage_retry(key):
 
 
 def test_live_verifier_folgt_der_rotation(key, monkeypatch):
-    """Der Worker-Verifizierer löst den AKTUELLEN Public Key je Token auf: nach einer
-    Rotation wird der alte Token ungültig, ein mit dem neuen Key signierter gilt –
-    ohne App-Neustart."""
+    """Der Worker-Verifizierer löst den AKTUELLEN Public Key je Token auf (ohne App-
+    Neustart). Hier ein reiner Cache-Tausch OHNE hinterlegten Vorgänger → der alte Token
+    gilt nicht mehr, ein mit dem neuen Key signierter schon."""
     monkeypatch.setattr(aj.config, "APPROVAL_MAX_PICKUP_DELAY", 3600)
     v = ap._live_verifier()
     t_alt = aj.make_external_token(7, "approve", "freigabe", 0, ttl_seconds=3600)
     assert v(t_alt)["tid"] == 7
-    # „Rotation": neuer Schlüssel im Cache.
+    # „Rotation" ohne Vorgänger: neuer Schlüssel nur im Cache, kein prev in der DB.
     monkeypatch.setattr(aj, "_private_key_cache", Ed25519PrivateKey.generate())
     with pytest.raises(aj.TokenInvalid):
         v(t_alt)                                     # mit altem Key signiert → ungültig
     t_neu = aj.make_external_token(8, "reject", "freigabe", 0, ttl_seconds=3600)
     assert v(t_neu)["tid"] == 8                       # mit neuem Key signiert → gültig
+
+
+def test_live_verifier_akzeptiert_vorherigen_key_nach_rotation(monkeypatch):
+    """Echte Rotation über regenerate_key(): ein mit dem ALTEN Key signierter, noch
+    gültiger Link verifiziert weiter (über den aufbewahrten Vorgänger) – sonst ginge die
+    angeklickte Entscheidung still verloren."""
+    import backend.database.settings as dbsettings
+    store: dict = {}
+    monkeypatch.setattr(dbsettings, "settings_get", lambda k, d=None: store.get(k, d))
+    monkeypatch.setattr(dbsettings, "settings_set", lambda k, v: store.__setitem__(k, v))
+    monkeypatch.setattr(aj, "_private_key_cache", None)
+    monkeypatch.setattr(aj.config, "APPROVAL_PRIVATE_KEY_PATH", "")
+    monkeypatch.setattr(aj.config, "APPROVAL_ISSUER", ISS)
+    monkeypatch.setattr(aj.config, "APPROVAL_AUDIENCE", AUD)
+    monkeypatch.setattr(aj.config, "APPROVAL_MAX_PICKUP_DELAY", 3600)
+
+    aj.public_key_b64()                                  # aktuellen Key in der DB anlegen
+    t_alt = aj.make_external_token(7, "approve", "freigabe", 0, ttl_seconds=3600)   # alter Key
+    aj.regenerate_key()                                  # alt → Vorgänger, neu → aktuell
+    v = ap._live_verifier()
+    assert v(t_alt)["tid"] == 7                           # über den Vorgänger verifiziert
+    t_neu = aj.make_external_token(8, "reject", "freigabe", 0, ttl_seconds=3600)    # neuer Key
+    assert v(t_neu)["tid"] == 8                           # aktueller Key gilt weiter
 
 
 # ── Reales Anwenden über den geteilten Kern ──────────────────────────────────
