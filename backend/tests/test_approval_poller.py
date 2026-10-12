@@ -26,8 +26,9 @@ def key(monkeypatch):
     return k
 
 
-def _verify(k, leeway=30):
-    return aj.make_verifier(k.public_key(), ISS, AUD, leeway)
+def _verify(k, *, clock_leeway=30, pickup_grace=0):
+    return aj.make_verifier(k.public_key(), ISS, AUD,
+                            clock_leeway=clock_leeway, pickup_grace=pickup_grace)
 
 
 def decision(k, did, *, tid=1, act="approve", phase="freigabe", epoch=0, ttl=3600,
@@ -79,7 +80,7 @@ def test_ungueltiges_token_quarantaene(key):
     d = decision(key, 1)
     d["token"] = d["token"][:-3] + ("AAA" if d["token"][-3:] != "AAA" else "BBB")
     q = []
-    ack, retry = ap.process_batch([d], _verify(key, leeway=0), lambda c, dd: None,
+    ack, retry = ap.process_batch([d], _verify(key, clock_leeway=0), lambda c, dd: None,
                                   lambda dd, why: q.append(why))
     assert ack == [1] and retry == [] and q
 
@@ -89,7 +90,7 @@ def test_abgelaufen_blockiert_die_anderen_nicht(key):
     darf die übrigen nicht aufhalten."""
     applied, q = [], []
     ack, retry = ap.process_batch([expired(key, 1, tid=1), decision(key, 2, tid=2)],
-                                  _verify(key, leeway=0),
+                                  _verify(key, clock_leeway=0),
                                   lambda c, d: applied.append(c["tid"]),
                                   lambda d, w: q.append(d["tid"]))
     assert applied == [2] and q == [1] and ack == [1, 2] and retry == []
@@ -106,16 +107,21 @@ class _Resp:
     def json(self):
         return self._d
 
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
 
 class FakeApprove:
     """Minimale AlphaApprove-Attrappe: /pending liefert Unbestätigte, /ack konsumiert."""
     def __init__(self):
-        self.q, self.consumed, self.ack_fails, self.bad_status = [], set(), 0, 0
+        self.q, self.consumed = [], set()
+        self.ack_fails, self.ack_bad, self.bad_status = 0, 0, 0
 
     def add(self, d):
         self.q.append(d)
 
-    def get(self, url, headers=None, timeout=None):
+    def get(self, url, params=None, headers=None, timeout=None):
         if self.bad_status:
             r = _Resp({"error": "overloaded"})      # 5xx MIT JSON-Körper (rutscht sonst durch)
             r.status_code = self.bad_status
@@ -124,9 +130,14 @@ class FakeApprove:
         return _Resp({"decisions": pend, "cursor": max([d["id"] for d in self.q], default=0)})
 
     def post(self, url, json=None, headers=None, timeout=None):
-        if self.ack_fails > 0:
+        if self.ack_fails > 0:                       # Verbindung weg (Exception)
             self.ack_fails -= 1
             raise ConnectionError("ack weg")
+        if self.ack_bad > 0:                         # 5xx-Status (kein Exception)
+            self.ack_bad -= 1
+            r = _Resp({"error": "overloaded"})
+            r.status_code = 500
+            return r
         for i in (json or {}).get("ids", []):
             self.consumed.add(i)
         return _Resp({})
@@ -197,6 +208,127 @@ def test_run_ack_fehlschlag_liefert_erneut(key):
            lambda d, w: None, wait=0, backoff=0, should_stop=_cycles(3), sleep=lambda _: None)
     # Trotz ACK-Fehlschlag am Ende konsumiert (wurde erneut geliefert + geackt).
     assert 1 in srv.consumed
+
+
+# ── B2/B3/B4: Cursor läuft weiter, wachsender Backoff, ACK-Status, Fehlerablage ─
+
+class PagedApprove:
+    """AlphaApprove-Attrappe MIT Cursor: /pending liefert höchstens `page` Einträge
+    mit id > after. So lässt sich prüfen, dass eine blockierte erste Seite spätere
+    Einträge nicht aufhält."""
+    def __init__(self, page=2):
+        self.items, self.consumed, self.page = [], set(), page
+
+    def add(self, d):
+        self.items.append(d)
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        after = (params or {}).get("after", 0)
+        pend = [d for d in self.items if d["id"] > after and d["id"] not in self.consumed]
+        page = pend[:self.page]
+        cursor = page[-1]["id"] if page else after
+        return _Resp({"decisions": page, "cursor": cursor})
+
+    def post(self, url, json=None, headers=None, timeout=None):
+        for i in (json or {}).get("ids", []):
+            self.consumed.add(i)
+        return _Resp({})
+
+
+class _Clock:
+    """Virtuelle Uhr: sleep() rückt die Zeit vor, damit fällige Wiederholungen
+    deterministisch (ohne echtes Warten) erreichbar werden."""
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+def test_run_cursor_laeuft_weiter_blockierte_seite_haelt_spaetere_nicht_auf(key):
+    """B2: die volle erste Seite (1+2) schlägt dauerhaft fehl; Eintrag 3 dahinter muss
+    trotzdem angewendet+bestätigt werden, 1+2 bleiben unbestätigt, ihre Abstände
+    wachsen (1 s → 2 s → 4 s …)."""
+    srv = PagedApprove(page=2)
+    for i in (1, 2, 3):
+        srv.add(decision(key, i, tid=i))
+    clk = _Clock()
+    attempts1 = []
+
+    def apply(c, d):
+        if c["tid"] == 1:
+            attempts1.append(clk.t)
+        if c["tid"] in (1, 2):
+            raise ConnectionError("DB weg")           # vorübergehend gemeldet → Wiederholung
+
+    ap.run(srv, "", "k", _verify(key), apply, lambda d, w: None,
+           wait=5, backoff=1, should_stop=_cycles(60), sleep=clk.sleep, clock=clk)
+
+    assert 3 in srv.consumed                           # hinter der blockierten Seite, trotzdem erledigt
+    assert 1 not in srv.consumed and 2 not in srv.consumed
+    gaps = [b - a for a, b in zip(attempts1, attempts1[1:])]
+    assert len(gaps) >= 3 and all(y > x for x, y in zip(gaps, gaps[1:]))   # wachsend
+
+
+def test_run_wachsende_wiederholung_bis_erfolg(key):
+    """B2: 1+2 scheitern nur beim ERSTEN Versuch, 3 sofort ok → am Ende alle drei
+    angewendet; 1+2 genau zweimal versucht."""
+    srv = PagedApprove(page=2)
+    for i in (1, 2, 3):
+        srv.add(decision(key, i, tid=i))
+    clk = _Clock()
+    attempts = {}
+
+    def apply(c, d):
+        t = c["tid"]
+        attempts[t] = attempts.get(t, 0) + 1
+        if t in (1, 2) and attempts[t] == 1:
+            raise ConnectionError("einmalig weg")
+
+    ap.run(srv, "", "k", _verify(key), apply, lambda d, w: None,
+           wait=5, backoff=1, should_stop=_cycles(60), sleep=clk.sleep, clock=clk)
+
+    assert srv.consumed == {1, 2, 3}
+    assert attempts[1] == 2 and attempts[2] == 2
+
+
+def test_run_ack_500_drosselt_und_bestaetigt_nach_erholung(key):
+    """B3: /ack mit 5xx-Status gilt NICHT als gesendet → Backoff statt Hot-Loop, und
+    nach Erholung wird idempotent bestätigt."""
+    srv = FakeApprove()
+    srv.ack_bad = 1                                    # der erste /ack liefert 500
+    srv.add(decision(key, 1, tid=1))
+    slept = []
+    ap.run(srv, "", "k", _verify(key), lambda c, d: None, lambda d, w: None,
+           wait=0, backoff=4, should_stop=_cycles(4), sleep=lambda s: slept.append(s))
+    assert 4 in slept
+    assert 1 in srv.consumed
+
+
+def test_process_batch_fehlerablage_scheitert_landet_in_retry(key):
+    """B4: scheitert die Fehlerablage (Audit kurz weg), darf der Eintrag NICHT bestätigt
+    werden – er kommt in retry."""
+    def boom(d, why):
+        raise RuntimeError("Audit kurz weg")
+    d = decision(key, 1)
+    d["token"] = d["token"][:-3] + ("AAA" if d["token"][-3:] != "AAA" else "BBB")   # ungültig
+    ack, retry = ap.process_batch([d], _verify(key, clock_leeway=0), lambda c, dd: None, boom)
+    assert ack == [] and retry == [1]
+
+
+def test_process_batch_permanent_mit_gescheiterter_fehlerablage_retry(key):
+    """B4: auch ein dauerhaft unbrauchbarer Eintrag wird nur bestätigt, wenn die
+    Fehlerablage geklappt hat – sonst retry statt spurlos verloren."""
+    def boom(d, why):
+        raise RuntimeError("Audit weg")
+
+    def apply(c, d):
+        raise ap.PermanentError("Auftrag zu")
+    ack, retry = ap.process_batch([decision(key, 1)], _verify(key), apply, boom)
+    assert ack == [] and retry == [1]
 
 
 # ── Reales Anwenden über den geteilten Kern ──────────────────────────────────

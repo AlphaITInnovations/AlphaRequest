@@ -119,46 +119,66 @@ def _envelope_matches(decision: dict, claims: dict) -> bool:
 
 def process_batch(decisions, verify: Callable[[str], dict], apply, quarantine):
     """Jeden Eintrag EINZELN: verifizieren → Hülle abgleichen → anwenden. Gibt
-    (ack_ids, retry_ids). Ein kaputter Eintrag blockiert die anderen NICHT."""
+    (ack_ids, retry_ids). Ein Eintrag wird NUR bestätigt, wenn er angewendet ODER
+    nachweislich in der Fehlerablage gelandet ist – scheitert die Fehlerablage (Audit
+    kurz weg), kommt er in retry statt verloren bestätigt zu werden. Ein kaputter
+    Eintrag blockiert die anderen NICHT."""
     ack, retry = [], []
+
+    def to_quarantine(d, reason: str) -> None:
+        try:
+            quarantine(d, reason)
+            ack.append(d.get("id"))
+        except Exception:
+            logger.exception("Fehlerablage für %s fehlgeschlagen – später erneut", d.get("id"))
+            retry.append(d.get("id"))
+
     for d in decisions:
-        did = d.get("id")
         try:
             claims = verify(d.get("token", ""))
         except Exception as exc:                    # Signatur/iss/aud/Form/abgelaufen
-            quarantine(d, f"Token ungültig: {exc}")
-            ack.append(did)
+            to_quarantine(d, f"Token ungültig: {exc}")
             continue
         if not _envelope_matches(d, claims):
-            quarantine(d, "Hülle weicht vom Token ab (tid/act/phase/epoch)")
-            ack.append(did)
+            to_quarantine(d, "Hülle weicht vom Token ab (tid/act/phase/epoch)")
             continue
         try:
             apply(claims, d)
-            ack.append(did)
+            ack.append(d.get("id"))
         except PermanentError as exc:
-            quarantine(d, str(exc))
-            ack.append(did)
+            to_quarantine(d, str(exc))
         except Exception:                           # vorübergehend (DB/Deadlock/rev)
-            logger.exception("Externe Freigabe %s vorübergehend fehlgeschlagen", did)
-            retry.append(did)
+            logger.exception("Externe Freigabe %s vorübergehend fehlgeschlagen", d.get("id"))
+            retry.append(d.get("id"))
     return ack, retry
 
 
 # ── Long-Poll-Schleife ────────────────────────────────────────────────────────
 
 def run(client, base: str, api_key: str, verify, apply, quarantine, *,
-        wait: int = 30, backoff: int = 5, should_stop: Optional[Callable[[], bool]] = None,
-        sleep: Callable[[float], None] = time.sleep) -> None:
-    """Dauerschleife: abholen → verarbeiten → bestätigen. `after=0` fragt immer den
-    kompletten unbestätigten Rückstau ab (Long-Poll blockiert, wenn nichts offen
-    ist); so kommen vorübergehend fehlgeschlagene Einträge erneut, ohne dass ein
-    advancender Cursor sie überspringt."""
+        wait: int = 30, backoff: int = 5, max_backoff: int = 300,
+        should_stop: Optional[Callable[[], bool]] = None,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic) -> None:
+    """Dauerschleife: abholen → verarbeiten → bestätigen.
+
+    Der Cursor (`after`) läuft AUCH bei Fehlern weiter – AlphaApprove liefert höchstens
+    100 Einträge je Abruf; blieben die ersten 100 offen stecken, würde alles dahinter
+    nie verarbeitet. Fehlgeschlagene Einträge bekommen stattdessen eine eigene,
+    wachsende Wartezeit (5 s, 10 s, 20 s … bis max_backoff). Erst wenn eine
+    Wiederholung fällig ist und der Vorlauf leer bleibt, wird der Cursor auf 0 gesetzt,
+    um die fälligen Einträge erneut zu holen. Nach einem Neustart beginnt der Cursor
+    bei 0, damit alles noch Unbestätigte erneut kommt (apply ist idempotent)."""
     headers = {"Authorization": f"Bearer {api_key}"}
+    cursor = 0                                     # nach Neustart: alles Unbestätigte erneut
+    retry_state: dict = {}                         # id -> (Fehlversuche, frühester nächster Versuch)
+
     while not (should_stop and should_stop()):
+        next_due = min((due for _, due in retry_state.values()), default=None)
+        poll_wait = wait if next_due is None else max(0, min(wait, int(next_due - clock())))
         try:
-            resp = client.get(f"{base}/pending?after=0&wait={wait}",
-                              headers=headers, timeout=wait + 10)
+            resp = client.get(f"{base}/pending", params={"after": cursor, "wait": poll_wait},
+                              headers=headers, timeout=poll_wait + 10)
             # Ein 5xx mit JSON-Fehlerkörper würde sonst durch resp.json() rutschen und
             # als „nichts offen" gelten → heiße Schleife. Status prüfen.
             if getattr(resp, "status_code", 200) >= 400:
@@ -168,41 +188,57 @@ def run(client, base: str, api_key: str, verify, apply, quarantine, *,
             logger.exception("Approval-Poll (/pending) fehlgeschlagen")
             sleep(backoff)
             continue
+
         decisions = data.get("decisions") or []
         if not decisions:
-            # Long-Poll-Timeout ODER (bei verletztem Long-Poll/Proxy) sofortige leere
-            # Antwort → drosseln, damit der öffentliche Dienst nicht beschossen wird.
-            sleep(backoff)
+            if next_due is not None and next_due <= clock():
+                cursor = 0                         # Durchgang zu Ende → fällige Wiederholungen von vorn
+            else:
+                sleep(backoff)                     # Drossel, falls Long-Poll/Proxy sofort leer antwortet
             continue
-        ack, retry = process_batch(decisions, verify, apply, quarantine)
+
+        now = clock()
+        # Einträge, deren Wartezeit noch läuft, in diesem Durchgang überspringen (bleiben unbestätigt).
+        due_now = [d for d in decisions if retry_state.get(d.get("id"), (0, 0.0))[1] <= now]
+        ack, retry = process_batch(due_now, verify, apply, quarantine)
+
         if ack:
             try:
-                client.post(f"{base}/ack", json={"ids": ack}, headers=headers, timeout=30)
+                r = client.post(f"{base}/ack", json={"ids": ack}, headers=headers, timeout=30)
+                # Bei 5xx gilt /ack sonst als gesendet → Einträge kommen sofort wieder und
+                # werden pausenlos neu bestätigt. Status prüfen, damit der Backoff greift.
+                r.raise_for_status()
             except Exception:
                 logger.exception("Approval-ACK fehlgeschlagen – Einträge kommen erneut")
                 sleep(backoff)
-                continue
-        if retry:
-            sleep(backoff)                          # vorübergehende Fehler gedrosselt erneut
+                continue                           # Cursor NICHT weiter; apply ist idempotent
+            for did in ack:
+                retry_state.pop(did, None)
+
+        for did in retry:
+            n = retry_state.get(did, (0, 0.0))[0] + 1
+            retry_state[did] = (n, now + min(backoff * 2 ** (n - 1), max_backoff))
+
+        cursor = data.get("cursor", cursor)        # immer weiter – auch wenn auf dieser Seite etwas fehlschlug
 
 
 # ── Produktions-Verdrahtung ───────────────────────────────────────────────────
 
 def _quarantine(decision: dict, reason: str) -> None:
-    """Fehlerablage = Audit-Log (durabel, kein neues Schema). Danach wird ge-ackt."""
+    """Fehlerablage = Audit-Log (durabel, kein neues Schema). KEIN try/except: scheitert
+    der Audit-Eintrag (DB kurz weg), muss der Fehler nach oben – process_batch ackt den
+    Eintrag dann NICHT, sondern versucht es später erneut. Sonst wäre die Entscheidung
+    bei AlphaApprove als erledigt markiert und spurlos verloren."""
     logger.error("Externe Freigabe %s dauerhaft unbrauchbar: %s", decision.get("id"), reason)
-    try:
-        record_audit(
-            action="process_approval_external_quarantined", actor_id=None,
-            actor_name=EXTERNAL_ACTOR, actor_type="system", entity_type="process_ticket",
-            entity_id=str(decision.get("tid")),
-            summary=f"Externe Freigabe-Entscheidung verworfen: {reason}",
-            details={"reason": reason, "quelle_id": decision.get("id"),
-                     "tid": decision.get("tid"), "act": decision.get("act"),
-                     "phase": decision.get("phase"), "epoch": decision.get("epoch"),
-                     "klick_metadaten": _metadata(decision), "metadaten_unverifiziert": True})
-    except Exception:
-        logger.exception("Quarantäne-Audit für %s fehlgeschlagen", decision.get("id"))
+    record_audit(
+        action="process_approval_external_quarantined", actor_id=None,
+        actor_name=EXTERNAL_ACTOR, actor_type="system", entity_type="process_ticket",
+        entity_id=str(decision.get("tid")),
+        summary=f"Externe Freigabe-Entscheidung verworfen: {reason}",
+        details={"reason": reason, "quelle_id": decision.get("id"),
+                 "tid": decision.get("tid"), "act": decision.get("act"),
+                 "phase": decision.get("phase"), "epoch": decision.get("epoch"),
+                 "klick_metadaten": _metadata(decision), "metadaten_unverifiziert": True})
 
 
 def is_configured() -> bool:
@@ -220,8 +256,8 @@ def start_worker() -> Optional[threading.Thread]:
     import requests
 
     verify = make_verifier(approval_jwt.public_key(), config.APPROVAL_ISSUER,
-                           config.APPROVAL_AUDIENCE,
-                           leeway=30 + int(config.APPROVAL_MAX_PICKUP_DELAY))
+                           config.APPROVAL_AUDIENCE, clock_leeway=30,
+                           pickup_grace=int(config.APPROVAL_MAX_PICKUP_DELAY))
     base = config.APPROVAL_BASE_URL.rstrip("/")
 
     def loop():

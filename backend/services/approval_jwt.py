@@ -67,40 +67,48 @@ def make_external_token(ticket_id: int, action: str, phase_key: str, epoch: int,
     return token
 
 
+def _is_int(v: Any, lo: int) -> bool:
+    """Echter int (kein bool) im Bereich [lo, 2^63-1]."""
+    return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= _INT63
+
+
 def _check_shape(claims: dict) -> None:
-    tid = claims.get("tid")
-    if not (isinstance(tid, int) and not isinstance(tid, bool) and 1 <= tid <= _INT63):
+    if not _is_int(claims.get("tid"), 1):
         raise TokenInvalid("tid ungültig")
     if claims.get("act") not in ACTIONS:
         raise TokenInvalid("act ungültig")
     ph = claims.get("phase")
     if not (isinstance(ph, str) and 1 <= len(ph) <= 64):
         raise TokenInvalid("phase ungültig")
-    ep = claims.get("epoch")
-    if not (isinstance(ep, int) and not isinstance(ep, bool) and 0 <= ep <= _INT63):
+    if not _is_int(claims.get("epoch"), 0):
         raise TokenInvalid("epoch ungültig")
     iat, exp = claims.get("iat"), claims.get("exp")
-    if not (isinstance(iat, int) and isinstance(exp, int) and 0 < exp - iat <= MAX_TTL_SECONDS):
+    if not (_is_int(iat, 0) and _is_int(exp, 0) and 0 < exp - iat <= MAX_TTL_SECONDS):
         raise TokenInvalid("iat/exp-Fenster ungültig")
 
 
-def make_verifier(pub_key, issuer: str, audience: str, leeway: int) -> Callable[[str], dict]:
-    """Verifizierer-Funktion token→claims. Prüft EdDSA-Signatur, iss, aud, exp
-    (mit `leeway` Sekunden Toleranz) und die Claim-Form. Wirft TokenInvalid.
-
-    `leeway` soll die Collector-Toleranz (30 s) PLUS die maximale Abhol-Verzögerung
-    abdecken – sonst würde ein Token, das AlphaApprove noch angenommen hat, beim
-    verspäteten Abholen hier fälschlich als abgelaufen gelten. received_at ist NICHT
-    signiert und darf dafür NICHT verwendet werden."""
+def make_verifier(pub_key, issuer: str, audience: str, *, clock_leeway: int = 30,
+                  pickup_grace: int = 0,
+                  clock: Callable[[], float] = time.time) -> Callable[[str], dict]:
+    """Verifizierer-Funktion token→claims. Prüft EdDSA-Signatur, iss, aud, die
+    Pflicht-Claims sowie iat/nbf mit der KLEINEN Toleranz (`clock_leeway`, z. B. 30 s,
+    exakt wie AlphaApprove). NUR exp wird zusätzlich um das Abholfenster
+    (`pickup_grace`) verlängert – und zwar MANUELL, nicht über den PyJWT-`leeway`:
+    sonst würde dieselbe Toleranz auch iat/nbf aufweiten und ein Token mit iat weit in
+    der Zukunft annehmen, das AlphaApprove längst abgelehnt hätte. received_at ist
+    NICHT signiert und darf dafür NICHT verwendet werden."""
     def verify(token: str) -> dict:
         if not token or len(token) > MAX_TOKEN_LEN:
             raise TokenInvalid("leer oder zu lang")
         try:
             claims = jwt.decode(
                 token, pub_key, algorithms=["EdDSA"], issuer=issuer, audience=audience,
-                leeway=leeway, options={"require": ["iss", "aud", "exp", "iat"]})
+                leeway=clock_leeway,
+                options={"require": ["iss", "aud", "exp", "iat"], "verify_exp": False})
         except jwt.PyJWTError as exc:
             raise TokenInvalid(str(exc))
         _check_shape(claims)
+        if clock() > claims["exp"] + clock_leeway + pickup_grace:
+            raise TokenInvalid("abgelaufen (auch mit Abholfenster)")
         return claims
     return verify

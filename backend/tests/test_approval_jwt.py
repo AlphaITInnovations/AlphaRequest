@@ -19,8 +19,11 @@ def key(monkeypatch):
     return k
 
 
-def _verify(k, leeway=30):
-    return aj.make_verifier(k.public_key(), ISS, AUD, leeway)
+def _verify(k, *, clock_leeway=30, pickup_grace=0, clock=None):
+    kw = {"clock_leeway": clock_leeway, "pickup_grace": pickup_grace}
+    if clock is not None:
+        kw["clock"] = clock
+    return aj.make_verifier(k.public_key(), ISS, AUD, **kw)
 
 
 def _raw(k, **claims):
@@ -62,24 +65,24 @@ def test_fremder_schluessel_wird_abgelehnt(key):
     t = aj.make_external_token(7, "approve", "freigabe", 0, ttl_seconds=3600)
     fremd = Ed25519PrivateKey.generate().public_key()
     with pytest.raises(aj.TokenInvalid):
-        aj.make_verifier(fremd, ISS, AUD, 30)(t)
+        aj.make_verifier(fremd, ISS, AUD)(t)
 
 
 def test_falscher_issuer_oder_audience(key):
     t = aj.make_external_token(7, "approve", "freigabe", 0, ttl_seconds=3600)
     with pytest.raises(aj.TokenInvalid):
-        aj.make_verifier(key.public_key(), "boeser-iss", AUD, 30)(t)
+        aj.make_verifier(key.public_key(), "boeser-iss", AUD)(t)
     with pytest.raises(aj.TokenInvalid):
-        aj.make_verifier(key.public_key(), ISS, "boese-aud", 30)(t)
+        aj.make_verifier(key.public_key(), ISS, "boese-aud")(t)
 
 
 def test_abgelaufen_jenseits_der_toleranz(key):
     now = int(time.time())
     t = _raw(key, iat=now - 4000, exp=now - 100)
     with pytest.raises(aj.TokenInvalid):
-        _verify(key, leeway=0)(t)
-    # Innerhalb der Toleranz (Collector-Leeway + Abholverzug) noch gültig.
-    assert _verify(key, leeway=200)(t)["tid"] == 7
+        _verify(key, clock_leeway=0)(t)
+    # Innerhalb des Abholfensters (pickup_grace) noch gültig.
+    assert _verify(key, pickup_grace=200)(t)["tid"] == 7
 
 
 def test_form_tid_bool_oder_string(key):
@@ -115,4 +118,43 @@ def test_zu_grosses_ttl_fenster(key):
     now = int(time.time())
     t = _raw(key, iat=now, exp=now + aj.MAX_TTL_SECONDS + 100)
     with pytest.raises(aj.TokenInvalid):
-        _verify(key, leeway=0)(t)
+        _verify(key, clock_leeway=0)(t)
+
+
+# ── B1: Abholfenster verlängert NUR exp, nicht iat/nbf ────────────────────────
+
+def test_iat_weit_in_der_zukunft_wird_trotz_abholfenster_abgelehnt(key):
+    """pickup_grace darf nur exp dehnen. Ein iat 30 min in der Zukunft (das
+    AlphaApprove mit 30 s Toleranz ablehnt) muss auch hier scheitern – sonst würde
+    das große Abholfenster via PyJWT-leeway auch iat aufweiten."""
+    now = int(time.time())
+    t = _raw(key, iat=now + 1800, exp=now + 1800 + 3600)
+    with pytest.raises(aj.TokenInvalid):
+        _verify(key, pickup_grace=3600)(t)
+
+
+def test_nbf_in_der_zukunft_wird_trotz_abholfenster_abgelehnt(key):
+    now = int(time.time())
+    t = _raw(key, nbf=now + 1800)
+    with pytest.raises(aj.TokenInvalid):
+        _verify(key, pickup_grace=3600)(t)
+
+
+def test_exp_knapp_abgelaufen_innerhalb_abholfenster_gueltig(key):
+    now = int(time.time())
+    t = _raw(key, iat=now - 700, exp=now - 600)          # vor 10 min abgelaufen
+    assert _verify(key, pickup_grace=3600)(t)["tid"] == 7
+
+
+def test_exp_lange_abgelaufen_jenseits_abholfenster_ungueltig(key):
+    now = int(time.time())
+    t = _raw(key, iat=now - 7300, exp=now - 7200)        # vor 2 h abgelaufen
+    with pytest.raises(aj.TokenInvalid):
+        _verify(key, pickup_grace=3600)(t)
+
+
+def test_form_iat_bool_oder_negativ(key):
+    with pytest.raises(aj.TokenInvalid):
+        _verify(key)(_raw(key, iat=True))               # Bool ist kein gültiges iat
+    with pytest.raises(aj.TokenInvalid):
+        _verify(key)(_raw(key, iat=-1))                 # negativ
