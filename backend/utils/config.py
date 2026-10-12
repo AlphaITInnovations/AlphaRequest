@@ -48,6 +48,10 @@ class Config:
     # URLs – in .env setzen, Defaults für Dev
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://ai-ms-01.dom.local:5173")
     BACKEND_URL:  str = os.getenv("BACKEND_URL",  "https://ai-ms-01.dom.local:5000")
+    # Basis-URL der Freigabe-Entscheidungs-Links (JA/NEIN in der Mail). Leer →
+    # Fallback auf FRONTEND_URL (bisheriges Verhalten). Für den externen Approval-
+    # Microservice (mobil/von überall) hier dessen öffentliche URL setzen.
+    APPROVAL_BASE_URL: str = os.getenv("APPROVAL_BASE_URL", "")
 
     # Datei-Anhänge: Blobs liegen auf dem Dateisystem (Metadaten in der DB).
     ATTACHMENTS_DIR: str = os.getenv("ATTACHMENTS_DIR", str(BASE_DIR.parent / "data" / "attachments"))

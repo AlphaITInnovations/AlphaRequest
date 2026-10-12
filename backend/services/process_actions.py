@@ -451,7 +451,10 @@ def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
     Rücksprung sind die Links der vorigen Runde wirkungslos.
     """
     from backend.services import process_approval as approval
-    base = (getattr(config, "FRONTEND_URL", "") or "").rstrip("/")
+    # Externe Approval-URL (env APPROVAL_BASE_URL) hat Vorrang; leer → FRONTEND_URL
+    # (bisheriges Verhalten, nur intranet-intern erreichbar).
+    base = ((getattr(config, "APPROVAL_BASE_URL", "") or getattr(config, "FRONTEND_URL", "") or "")
+            .rstrip("/"))
     epoch = int((row.get("runtime") or {}).get("epoch", 0))
     tid = row.get("id")
 
