@@ -451,18 +451,40 @@ def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
     Rücksprung sind die Links der vorigen Runde wirkungslos.
     """
     from backend.services import process_approval as approval
-    # Externe Approval-URL (env APPROVAL_BASE_URL) hat Vorrang; leer → FRONTEND_URL
-    # (bisheriges Verhalten, nur intranet-intern erreichbar).
-    base = ((getattr(config, "APPROVAL_BASE_URL", "") or getattr(config, "FRONTEND_URL", "") or "")
-            .rstrip("/"))
     epoch = int((row.get("runtime") or {}).get("epoch", 0))
     tid = row.get("id")
+
+    if _use_external_relay():
+        # Externer Approval-Microservice (mobil/von überall): EdDSA-JWT (nur der
+        # Public Key liegt dort, niemals der SECRET_KEY) an dessen /d-Route.
+        from backend.services import approval_jwt
+        base = config.APPROVAL_BASE_URL.rstrip("/")
+        ttl = (approval.max_age_seconds(phase.approval) if phase.approval
+               else approval_jwt.MAX_TTL_SECONDS)
+
+        def url(act: str) -> str:
+            token = approval_jwt.make_external_token(tid, act, phase.key, epoch,
+                                                     ttl_seconds=ttl)
+            return f"{base}/d?token={token}"
+
+        return url("approve"), url("reject")
+
+    # Intern/Dev: itsdangerous-Token an die eigene (intranet-interne) Route.
+    base = (getattr(config, "FRONTEND_URL", "") or "").rstrip("/")
 
     def url(act: str) -> str:
         token = approval.make_token(tid, act, phase.key, epoch)
         return f"{base}/api/v1/process-freigabe?token={token}"
 
     return url("approve"), url("reject")
+
+
+def _use_external_relay() -> bool:
+    """Externer Relay nur, wenn VOLLSTÄNDIG konfiguriert (sonst zeigten die Links
+    ins Leere). Spiegelt approval_poller.is_configured ohne Import-Zyklus."""
+    return bool(config.APPROVAL_BASE_URL and config.APPROVAL_PRIVATE_KEY_PATH
+                and config.APPROVAL_API_KEY and config.APPROVAL_ISSUER
+                and config.APPROVAL_AUDIENCE)
 
 
 def _approval_buttons_html(approve_url: str, reject_url: str,

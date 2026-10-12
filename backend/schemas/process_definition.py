@@ -1059,6 +1059,11 @@ class ApprovalSpec(_Base):
             raise ValueError(f"approval.linkMaxAge „{self.linkMaxAge}“ ist keine ISO-8601-Dauer: {exc}")
         if not sek or sek <= 0:
             raise ValueError("approval.linkMaxAge muss größer als null sein")
+        # Obergrenze 7 Tage: der externe Approval-Relay signiert EdDSA-Tokens mit
+        # exp-iat ≤ 7 Tagen (AlphaApprove weist längere ab). Ohne diese Grenze würde
+        # der Mailtext eine längere Gültigkeit versprechen, als der Link extern hat.
+        if sek > 7 * 24 * 3600:
+            raise ValueError("approval.linkMaxAge darf höchstens 7 Tage (P7D) betragen")
         return self
 
 
@@ -1263,6 +1268,10 @@ class PhaseDef(_Base):
     def _phase_key_shape(cls, v: str) -> str:
         if not re.fullmatch(r"[a-z0-9_]+", v or ""):
             raise ValueError(f"ungültiger Phasen-Key „{v}“ (erlaubt: a-z0-9_)")
+        # ≤ 64 Zeichen: der Phasen-Key steht im signierten Freigabe-Token; der externe
+        # Approval-Relay (und der Verifizierer) weist längere Phasen-Keys ab.
+        if len(v) > 64:
+            raise ValueError(f"Phasen-Key „{v}“ ist zu lang (max. 64 Zeichen)")
         return v
 
     @model_validator(mode="after")

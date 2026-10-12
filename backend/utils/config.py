@@ -52,6 +52,15 @@ class Config:
     # Fallback auf FRONTEND_URL (bisheriges Verhalten). Für den externen Approval-
     # Microservice (mobil/von überall) hier dessen öffentliche URL setzen.
     APPROVAL_BASE_URL: str = os.getenv("APPROVAL_BASE_URL", "")
+    # Externer Approval-Relay (AlphaApprove): Ed25519-Privatschlüssel (PEM, bleibt
+    # NUR hier), iss/aud (exakt wie am Server hinterlegt), API-Key für /pending+/ack,
+    # maximale Abhol-Verzögerung (für die Token-Alters-Toleranz des Workers).
+    # Der Worker läuft nur, wenn BASE_URL + Key-Pfad + API-Key gesetzt sind.
+    APPROVAL_PRIVATE_KEY_PATH: str = os.getenv("APPROVAL_PRIVATE_KEY_PATH", "")
+    APPROVAL_ISSUER: str = os.getenv("APPROVAL_ISSUER", "")
+    APPROVAL_AUDIENCE: str = os.getenv("APPROVAL_AUDIENCE", "")
+    APPROVAL_API_KEY: str = os.getenv("APPROVAL_API_KEY", "")
+    APPROVAL_MAX_PICKUP_DELAY: int = int(os.getenv("APPROVAL_MAX_PICKUP_DELAY", "3600"))
 
     # Datei-Anhänge: Blobs liegen auf dem Dateisystem (Metadaten in der DB).
     ATTACHMENTS_DIR: str = os.getenv("ATTACHMENTS_DIR", str(BASE_DIR.parent / "data" / "attachments"))

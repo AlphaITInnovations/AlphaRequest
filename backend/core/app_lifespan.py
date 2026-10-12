@@ -104,6 +104,14 @@ async def lifespan(app):
     except Exception:
         logger.exception("Prozess-Scheduler-Start fehlgeschlagen")
 
+    # Externer Approval-Relay (AlphaApprove): ausgehender Long-Poll-Worker. Läuft nur,
+    # wenn vollständig konfiguriert; Start-Fehler dürfen die App nicht kippen.
+    try:
+        from backend.services import approval_poller
+        approval_poller.start_worker()
+    except Exception:
+        logger.exception("Approval-Worker-Start fehlgeschlagen")
+
     yield
 
     # Shutdown: Scheduler sauber beenden (sonst sweept nach einem Reload ein
