@@ -372,6 +372,8 @@ def umgebung(key, monkeypatch):
     monkeypatch.setattr(pactions, "notify_phase_entry", lambda *a, **k: [])
     monkeypatch.setattr(pactions, "notify_rejection", lambda *a, **k: [])
     monkeypatch.setattr(pactions, "notify_sent_back", lambda *a, **k: [])
+    # Fachabteilungs-Auflösung (DB) faken → deterministischer Actor-Name.
+    monkeypatch.setattr(pactions, "responsible_department_name", lambda *a, **k: "FreigabeHerrLutz")
     return store, evstore
 
 
@@ -400,6 +402,23 @@ def test_apply_reject_lehnt_ab(umgebung):
     store, evstore = umgebung
     ap.apply_decision_entry(_claims(act="reject"), _dec(act="reject"))
     assert store.rows[7]["status"] == "rejected"
+
+
+def test_apply_actor_name_ist_fachabteilung(umgebung):
+    """„Freigegeben/Abgelehnt von" nennt die zuständige Fachabteilung, nicht den Kanal."""
+    store, evstore = umgebung
+    ap.apply_decision_entry(_claims(act="approve"), _dec(act="approve"))
+    decided = [e for e in evstore.rows if e["action"] == "approval_decided"]
+    assert decided and decided[0]["actor_name"] == "FreigabeHerrLutz"
+
+
+def test_apply_actor_name_fallback_auf_kanal(umgebung, monkeypatch):
+    """Lässt sich keine Abteilung auflösen (None), bleibt der Kanal-Name stehen."""
+    monkeypatch.setattr(pactions, "responsible_department_name", lambda *a, **k: None)
+    store, evstore = umgebung
+    ap.apply_decision_entry(_claims(act="approve"), _dec(act="approve"))
+    decided = [e for e in evstore.rows if e["action"] == "approval_decided"]
+    assert decided and decided[0]["actor_name"] == ap.EXTERNAL_ACTOR
 
 
 def test_apply_ist_idempotent_bei_gleicher_entscheidung(umgebung):
@@ -443,3 +462,37 @@ def test_apply_kaputte_definition_ist_permanent(key, monkeypatch):
     monkeypatch.setattr(ap, "defstore", BadDefs())
     with pytest.raises(ap.PermanentError):
         ap.apply_decision_entry(_claims(), _dec())
+
+
+# ── Zuständige Fachabteilung als Actor-Name (für „Freigegeben/Abgelehnt von") ──
+
+def test_responsible_department_name_eine_gruppe(monkeypatch):
+    import backend.database.groups as groups
+    monkeypatch.setattr(pactions.pr, "resolve_responsibility",
+                        lambda phase, values: {"kind": "group", "group": "g1"})
+    monkeypatch.setattr(groups, "get_group_name_from_id",
+                        lambda gid: "FreigabeHerrLutz" if gid == "g1" else None)
+    assert pactions.responsible_department_name(object(), {}) == "FreigabeHerrLutz"
+
+
+def test_responsible_department_name_eine_abteilung(monkeypatch):
+    import backend.database.groups as groups
+    monkeypatch.setattr(pactions.pr, "resolve_responsibility",
+                        lambda phase, values: {"kind": "departments",
+                                               "departments": [{"group": "g9"}]})
+    monkeypatch.setattr(groups, "get_group_name_from_id", lambda gid: "Sekretariat GL")
+    assert pactions.responsible_department_name(object(), {}) == "Sekretariat GL"
+
+
+def test_responsible_department_name_mehrdeutig_ist_none(monkeypatch):
+    monkeypatch.setattr(pactions.pr, "resolve_responsibility",
+                        lambda phase, values: {"kind": "departments",
+                                               "departments": [{"group": "a"}, {"group": "b"}]})
+    assert pactions.responsible_department_name(object(), {}) is None
+
+
+def test_responsible_department_name_fehler_ist_none(monkeypatch):
+    def boom(phase, values):
+        raise RuntimeError("DB weg")
+    monkeypatch.setattr(pactions.pr, "resolve_responsibility", boom)
+    assert pactions.responsible_department_name(object(), {}) is None

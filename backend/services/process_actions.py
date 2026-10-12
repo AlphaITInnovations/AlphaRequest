@@ -444,6 +444,30 @@ def _duration_text(seconds: int) -> str:
     return f"{max(1, seconds // 60)} Minuten"
 
 
+def responsible_department_name(phase: PhaseDef, values: Optional[dict]) -> Optional[str]:
+    """Anzeigename der zuständigen Fachabteilung einer Freigabe-Phase (z. B.
+    „FreigabeHerrLutz") – damit „Freigegeben/Abgelehnt von" bei einer Entscheidung per
+    Mail-Link (ohne Anmeldung) die Abteilung nennt statt nur den Kanal. Best effort:
+    nur bei EINER eindeutigen Gruppe; scheitert die Auflösung, None (der Aufrufer nimmt
+    dann den Kanal-Fallback)."""
+    try:
+        resp = pr.resolve_responsibility(phase, values or {})
+        gid = None
+        if resp.get("kind") == "group":
+            gid = resp.get("group")
+        elif resp.get("kind") == "departments":
+            deps = resp.get("departments") or []
+            if len(deps) == 1:                      # genau eine Abteilung → eindeutig
+                gid = deps[0].get("group")
+        if gid:
+            from backend.database.groups import get_group_name_from_id
+            return get_group_name_from_id(gid) or None
+    except Exception:
+        logger.exception("Zuständige Fachabteilung für Phase %s nicht auflösbar",
+                         getattr(phase, "key", "?"))
+    return None
+
+
 def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
     """Die beiden Entscheidungs-Links (JA/NEIN) für die aktuelle Phase.
 

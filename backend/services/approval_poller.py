@@ -26,6 +26,7 @@ from backend.database.audit_log import record_audit
 from backend.schemas.process_definition import ProcessDefinition
 from backend.services import approval_commit
 from backend.services import approval_jwt
+from backend.services import process_actions as pactions
 from backend.services import process_approval as pa
 from backend.services import process_runtime as pr
 from backend.services import process_sequences as seq
@@ -95,11 +96,14 @@ def apply_decision_entry(claims: dict, decision: dict) -> None:
             return
         raise PermanentError(f"{exc.code}: {exc.message}")
 
+    # „Freigegeben/Abgelehnt von": die zuständige Fachabteilung der Phase (z. B.
+    # „FreigabeHerrLutz"), sonst der Kanal (es gibt keine angemeldete Person).
+    by_name = pactions.responsible_department_name(phase, row.get("values")) or EXTERNAL_ACTOR
     try:
         # reject extern = OHNE Begründung (bewusst, Punkt 2 des Vertrags).
         approval_commit.commit_decision(
             row, defn, idx, phase, spec, act=act, reason=None,
-            by_name=EXTERNAL_ACTOR, via="mail_link_external", metadata=_metadata(decision))
+            by_name=by_name, via="mail_link_external", metadata=_metadata(decision))
     except seq.SequenceError as exc:
         # Entscheidung IST gebucht, nur der Übergang scheitert (z. B. Nummernkreis
         # erschöpft). Re-Run wäre idempotent → hier als Erfolg (ACK), Mensch

@@ -175,10 +175,12 @@ def _decide(request: Request, row: dict, defn: ProcessDefinition, idx: int, phas
     (services/approval_commit); hier nur die Ergebnisseite. store/engine/events/
     pactions/record_audit werden als die (in Tests monkeypatchbaren) Modul-
     Referenzen dieses Moduls hereingereicht."""
+    # „Freigegeben/Abgelehnt von": zuständige Fachabteilung der Phase, sonst der Kanal.
+    by_name = pactions.responsible_department_name(phase, row.get("values")) or pa.ACTOR_NAME
     try:
         status, row = approval_commit.commit_decision(
             row, defn, idx, phase, spec, act=act, reason=grund, via="mail_link",
-            store=store, engine=engine, events=events, pactions=pactions,
+            by_name=by_name, store=store, engine=engine, events=events, pactions=pactions,
             record_audit=record_audit)
     except seq.SequenceError as exc:
         # Die Freigabe IST verbucht (steht schon im Runtime), nur der Übergang
