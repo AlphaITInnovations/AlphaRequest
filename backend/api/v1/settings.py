@@ -10,7 +10,7 @@ from backend.database.settings import (
     get_companies, get_companies_full, set_companies_full,
     get_process_order, set_process_order, template_source_company,
     get_template_labels, get_template_label, set_template_labels,
-    set_template_label_baseline,
+    set_template_label_baseline, get_maintenance, set_maintenance,
 )
 from backend.database import company_templates as ctpl_db
 from backend.services import attachment_storage as storage
@@ -934,6 +934,61 @@ def set_process_order_endpoint(payload: ProcessOrderIn, user: dict = Depends(get
            summary=f"Prozess-Reihenfolge geändert ({len(saved)} Einträge)",
            details={"order": saved})
     return DataResponse(data=ProcessOrderOut(items=_process_order_items()))
+
+
+# ── Wartungsmodus ─────────────────────────────────────────────────────────────
+#
+# Verwaltung durch Admins. Während der Wartung dürfen sich nur Admins anmelden
+# (Durchsetzung im Login, api/v1/auth.auth_callback). Der öffentliche Login-Status
+# liegt separat unter GET /maintenance (ohne Auth) – hier NUR die Admin-Sicht/-Pflege.
+
+class MaintenanceOut(BaseModel):
+    active: bool
+    message: Optional[str] = None
+    planned_end: Optional[str] = None
+    since: Optional[str] = None
+    by: Optional[str] = None
+
+
+class MaintenanceIn(BaseModel):
+    active: bool
+    message: Optional[str] = None
+    planned_end: Optional[str] = None
+
+
+@router.get("/settings/maintenance", response_model=DataResponse[MaintenanceOut])
+def get_maintenance_endpoint(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    return DataResponse(data=MaintenanceOut(**get_maintenance()))
+
+
+@router.put("/settings/maintenance", response_model=DataResponse[MaintenanceOut])
+def set_maintenance_endpoint(payload: MaintenanceIn, user: dict = Depends(get_current_user)):
+    """Wartungsmodus setzen/ändern. Wird NIE automatisch beendet – ein Admin muss
+    ihn bewusst wieder freigeben (active=false)."""
+    require_admin(user)
+    message = (payload.message or "").strip()[:2000] or None
+    planned_end = (payload.planned_end or "").strip()[:64] or None
+    prev = get_maintenance()
+    result = set_maintenance(
+        active=bool(payload.active),
+        message=message,
+        planned_end=planned_end,
+        by_name=user.get("displayName") or user.get("email") or user.get("id"),
+    )
+    # Nur echte Zustandswechsel bzw. Hinweis-Änderungen auditieren.
+    if prev["active"] != result["active"]:
+        _audit(user, "maintenance_changed", entity_type="settings", entity_id="maintenance",
+               summary=("Wartungsmodus aktiviert" if result["active"]
+                        else "Wartungsmodus beendet"),
+               details={"active": result["active"], "message": result["message"],
+                        "planned_end": result["planned_end"]})
+    elif result["active"] and (prev["message"] != result["message"]
+                               or prev["planned_end"] != result["planned_end"]):
+        _audit(user, "maintenance_changed", entity_type="settings", entity_id="maintenance",
+               summary="Wartungs-Hinweis aktualisiert",
+               details={"message": result["message"], "planned_end": result["planned_end"]})
+    return DataResponse(data=MaintenanceOut(**result))
 
 
 # ── AD Groups (Cache) ────────────────────────────────────────────────────────

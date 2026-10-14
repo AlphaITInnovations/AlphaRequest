@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.database.connection import get_connection, _exec, _fetchall, _fetchone
@@ -346,3 +347,58 @@ def set_process_order(keys: List[str]) -> List[str]:
             cleaned.append(s)
     settings_set("PROCESS_ORDER", cleaned)
     return cleaned
+
+
+# ── Wartungsmodus ─────────────────────────────────────────────────────────────
+#
+# Während einer Wartung (z. B. ein Update) dürfen sich nur noch Admins anmelden;
+# normale Konten werden am Login abgewiesen (siehe api/v1/auth.auth_callback). Der
+# Login-Bildschirm zeigt den Hinweistext und das geplante Ende. Der Modus wird NIE
+# automatisch beendet – ein Admin muss ihn bewusst wieder freigeben (so bleibt die
+# Sperre bestehen, falls sich die Wartung hinzieht).
+#
+# Gespeichert als EIN Setting MAINTENANCE_MODE (JSON):
+#   { active, message, planned_end, since, by }
+# - message/planned_end : vom Admin gepflegt (nur für die Anzeige am Login)
+# - since/by            : serverseitig beim Aktivieren gesetzt (seit wann / durch wen)
+
+_MAINTENANCE_SETTING = "MAINTENANCE_MODE"
+_MAINTENANCE_OFF = {"active": False, "message": None, "planned_end": None,
+                    "since": None, "by": None}
+
+
+def get_maintenance() -> dict:
+    """Aktueller Wartungszustand (immer vollständig, auch bei Altbestand/leer)."""
+    val = settings_get(_MAINTENANCE_SETTING)
+    if not isinstance(val, dict):
+        return dict(_MAINTENANCE_OFF)
+    return {
+        "active": bool(val.get("active")),
+        "message": _str_or_none(val.get("message")),
+        "planned_end": _str_or_none(val.get("planned_end")),
+        "since": _str_or_none(val.get("since")),
+        "by": _str_or_none(val.get("by")),
+    }
+
+
+def set_maintenance(active: bool, message: Optional[str] = None,
+                    planned_end: Optional[str] = None,
+                    by_name: Optional[str] = None) -> dict:
+    """Wartungsmodus setzen. Beim Deaktivieren wird alles geleert; beim Aktivieren
+    werden Hinweis/Ende übernommen und `since`/`by` serverseitig gesetzt. War der
+    Modus bereits aktiv (z. B. nur Hinweis geändert), bleibt `since` erhalten."""
+    if not active:
+        settings_set(_MAINTENANCE_SETTING, dict(_MAINTENANCE_OFF))
+        return get_maintenance()
+    prev = get_maintenance()
+    since = prev["since"] if (prev["active"] and prev["since"]) else \
+        datetime.now(timezone.utc).isoformat(timespec="seconds")
+    data = {
+        "active": True,
+        "message": _str_or_none(message),
+        "planned_end": _str_or_none(planned_end),
+        "since": since,
+        "by": _str_or_none(by_name),
+    }
+    settings_set(_MAINTENANCE_SETTING, data)
+    return get_maintenance()
