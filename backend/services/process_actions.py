@@ -593,9 +593,8 @@ def _approval_message(row: dict, phase: PhaseDef, title: str,
         f' font-size:16px; font-weight:700; margin-top:20px;">{html.escape(spec.question)}</div>')
     validity_html = (
         f'<p style="font-family:{_MAIL_FONT}; font-size:12px;'
-        f' color:{_BRAND.muted_text}; line-height:1.6; margin-top:16px;">Der Link öffnet eine '
-        f'Bestätigungsseite – erst dort wird entschieden. Eine Anmeldung ist nicht nötig. '
-        f'Gültig {html.escape(gueltig)} ab Versand.</p>')
+        f' color:{_BRAND.muted_text}; line-height:1.6; margin-top:16px;">'
+        f'Der Link öffnet eine Bestätigungsseite – Gültig {html.escape(gueltig)} ab Versand.</p>')
     action_html = (question_html + _attachment_note_html(n_attachments)
                    + _approval_buttons_html(approve_url, reject_url,
                                             spec.approveLabel, spec.rejectLabel)

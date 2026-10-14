@@ -6,20 +6,84 @@
   "icon": "🧑‍💼",
   "titleEditable": true,
   "titleTemplate": "Onboarding Mitarbeiter:innen – {{base.first_name}} {{base.last_name}}",
+  "createButtonLabel": null,
   "createPermissions": {
     "everyone": false,
     "groups": [
-      "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+      "1a1c001d2f684b5d93ec4adcad02613c"
     ],
     "users": [],
     "executives": true
   },
   "fields": [
     {
-      "key": "dokumente.uploads",
-      "label": "Dokumente (Lebenslauf, Zeugnisse, …)",
+      "key": "dokumente.lebenslauf",
+      "label": "Lebenslauf",
       "widget": "attachment",
-      "help": "Optional. Hochgeladene Dateien werden der Freigabe-Mail beigefügt.",
+      "help": "Pflicht-Anlage. Mindestens eine Datei hochladen (kein bestimmtes Format vorgegeben).",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "dokumente.immatrikulation",
+      "label": "Immatrikulationsbescheinigung",
+      "widget": "attachment",
+      "help": "Pflicht-Anlage bei Position „Werkstudium“.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "dokumente.bda_checkliste",
+      "label": "BDA-Checkliste",
+      "widget": "attachment",
+      "help": "Pflicht-Anlage bei Position „Geringfügige Beschäftigung“.",
+      "placeholder": null,
+      "options": [],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": null,
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "dokumente.uploads",
+      "label": "Weitere Anlagen",
+      "widget": "attachment",
+      "help": "Optional. Beliebig viele zusätzliche Dateien (z. B. Zeugnisse). Werden der Freigabe-Mail beigefügt.",
       "placeholder": null,
       "options": [],
       "optionsSource": null,
@@ -29,7 +93,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+          "dc95e3e6f55041708da19ee39f209fc9"
         ]
       },
       "computed": null,
@@ -399,6 +463,10 @@
           "label": "Werkstudium"
         },
         {
+          "value": "minijob",
+          "label": "Geringfügig Beschäftigte / Minijob"
+        },
+        {
           "value": "teamassistenz",
           "label": "Teamassistenz"
         },
@@ -464,12 +532,7 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
-        ]
-      },
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -498,12 +561,7 @@
         "minDate": null,
         "maxDate": null
       },
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
-        ]
-      },
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -524,12 +582,7 @@
       "allowOther": false,
       "valueShape": null,
       "constraints": null,
-      "visibility": {
-        "confidential": false,
-        "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
-        ]
-      },
+      "visibility": null,
       "computed": null,
       "overridable": false,
       "assign": null,
@@ -553,7 +606,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+          "dc95e3e6f55041708da19ee39f209fc9"
         ]
       },
       "computed": null,
@@ -579,7 +632,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+          "dc95e3e6f55041708da19ee39f209fc9"
         ]
       },
       "computed": null,
@@ -618,7 +671,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+          "dc95e3e6f55041708da19ee39f209fc9"
         ]
       },
       "computed": null,
@@ -652,7 +705,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+          "dc95e3e6f55041708da19ee39f209fc9"
         ]
       },
       "computed": null,
@@ -743,7 +796,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+          "dc95e3e6f55041708da19ee39f209fc9"
         ]
       },
       "computed": null,
@@ -790,7 +843,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN"
+          "dc95e3e6f55041708da19ee39f209fc9"
         ]
       },
       "computed": null,
@@ -849,6 +902,41 @@
       "prefill": null
     },
     {
+      "key": "it.timebutler.track",
+      "label": "Soll der Urlaub über Timebutler getrackt werden?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": "Ja"
+        },
+        {
+          "value": "Nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "466a6954b6764deba34be88ecbb7e75d"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
       "key": "it.timebutler.vacation_year",
       "label": "Urlaubsanspruch pro Jahr",
       "widget": "text",
@@ -870,7 +958,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -896,7 +984,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -922,7 +1010,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -948,7 +1036,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -974,7 +1062,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1000,8 +1088,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN",
-          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d",
+          "fdfe29843b8d433dbcf3221af31590d7"
         ]
       },
       "computed": null,
@@ -1027,8 +1115,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN",
-          "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d",
+          "fdfe29843b8d433dbcf3221af31590d7"
         ]
       },
       "computed": null,
@@ -1054,7 +1142,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1080,7 +1168,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1106,7 +1194,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1132,7 +1220,42 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
+        ]
+      },
+      "computed": null,
+      "overridable": false,
+      "assign": null,
+      "mode": null,
+      "item": [],
+      "directusSource": null,
+      "directusFieldMap": [],
+      "prefill": null
+    },
+    {
+      "key": "it.needed",
+      "label": "Wird ein IT-Zugang und/oder eine Mailadresse benötigt?",
+      "widget": "select",
+      "help": null,
+      "placeholder": null,
+      "options": [
+        {
+          "value": "Ja",
+          "label": "Ja"
+        },
+        {
+          "value": "Nein",
+          "label": "Nein"
+        }
+      ],
+      "optionsSource": null,
+      "allowOther": false,
+      "valueShape": null,
+      "constraints": null,
+      "visibility": {
+        "confidential": false,
+        "visibleToGroups": [
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1158,7 +1281,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1184,7 +1307,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1210,7 +1333,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1236,7 +1359,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1262,7 +1385,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1288,7 +1411,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_IT_EINSETZEN"
+          "466a6954b6764deba34be88ecbb7e75d"
         ]
       },
       "computed": null,
@@ -1323,8 +1446,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "63dcbc50070e4f3ba8cafd3ea3d9e812",
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1350,14 +1473,12 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "63dcbc50070e4f3ba8cafd3ea3d9e812",
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": {
         "from": "personal.position",
-        "to": null,
-        "op": null,
         "map": {
           "disposition": "1",
           "niederlassungsleitung": "2",
@@ -1367,8 +1488,7 @@
           "geschäftsbereichsleitung": "5",
           "geschäftsführung": "6",
           "c-level": "7"
-        },
-        "template": null
+        }
       },
       "overridable": true,
       "assign": null,
@@ -1392,8 +1512,8 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "63dcbc50070e4f3ba8cafd3ea3d9e812",
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1419,7 +1539,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1445,7 +1565,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1480,7 +1600,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1515,7 +1635,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1550,7 +1670,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1585,7 +1705,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1611,7 +1731,7 @@
       "visibility": {
         "confidential": false,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1637,7 +1757,7 @@
       "visibility": {
         "confidential": true,
         "visibleToGroups": [
-          "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN"
+          "1a1c001d2f684b5d93ec4adcad02613c"
         ]
       },
       "computed": null,
@@ -1703,6 +1823,50 @@
           "editableWhen": null
         },
         {
+          "ref": "dokumente.lebenslauf",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "dokumente.immatrikulation",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "personal.position",
+              "werkstudium"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "personal.position",
+              "werkstudium"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "dokumente.bda_checkliste",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": {
+            "==": [
+              "personal.position",
+              "minijob"
+            ]
+          },
+          "visibleWhen": {
+            "==": [
+              "personal.position",
+              "minijob"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
           "ref": "dokumente.uploads",
           "mode": "editable",
           "required": false,
@@ -1744,6 +1908,30 @@
         },
         {
           "ref": "base.private_phone",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_street",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_zip",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "personal.private_city",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
@@ -2030,6 +2218,21 @@
           "items": [
             {
               "type": "field",
+              "ref": "dokumente.lebenslauf",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "dokumente.immatrikulation",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "dokumente.bda_checkliste",
+              "width": "full"
+            },
+            {
+              "type": "field",
               "ref": "dokumente.uploads",
               "width": "full"
             }
@@ -2071,6 +2274,21 @@
             {
               "type": "field",
               "ref": "base.title",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_city",
               "width": "half"
             },
             {
@@ -2186,6 +2404,7 @@
                     "praktikum",
                     "ausbildung",
                     "werkstudium",
+                    "minijob",
                     "teamassistenz",
                     "verwaltungsmitarbeitende"
                   ]
@@ -2226,8 +2445,10 @@
             "value": null,
             "counter": null,
             "directus": null,
+            "directusFill": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": null
           }
         },
         {
@@ -2251,8 +2472,10 @@
             "value": "",
             "counter": null,
             "directus": null,
+            "directusFill": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": null
           }
         }
       ]
@@ -2267,7 +2490,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_FREIGABEHERRLUTZ_EINSETZEN",
+        "group": "1edcff975d1a4cdeb62900ba9d15ee3a",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -2279,6 +2502,7 @@
         "approveLabel": "Einstellung freigeben",
         "rejectLabel": "Ablehnen",
         "externalLink": true,
+        "linkMode": "public",
         "emailBody": "Es liegt eine neue Einstellung zur Freigabe vor:\n\nAnrede: {{base.salutation}}\nName: {{base.first_name}} {{base.last_name}}\nTitel: {{base.title}}\nFirma lt. Arbeitsvertrag: {{base.contract_company}}\nNiederlassung: {{base.location_name}}\nKostenstelle: {{base.cost_center_nr}}\nArbeitsbeginn: {{base.start_date}}\nDienstwagen: {{fuhrpark.car}}\nFahrzeuggruppe: {{fuhrpark.car_class_number}}\n\nKonditionen:\nGehalt: {{konditionen.gehalt}}\n13. Gehalt: {{konditionen.dreizehntes}}\nArt (13. Gehalt): {{konditionen.dreizehntes_art}}\nAuszahlung halbes 13.: {{konditionen.halb_wahl}}\nAuszahlung ganzes 13.: {{konditionen.ganz_wahl}}\nSonderkonditionen: {{konditionen.sonderkonditionen}}",
         "linkMaxAge": "P7D",
         "requireReason": true,
@@ -2641,8 +2865,10 @@
             "value": null,
             "counter": null,
             "directus": null,
+            "directusFill": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": null
           }
         }
       ]
@@ -2871,24 +3097,24 @@
         },
         {
           "ref": "personal.private_street",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
           "editableWhen": null
         },
         {
           "ref": "personal.private_zip",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
           "editableWhen": null
         },
         {
           "ref": "personal.private_city",
-          "mode": "editable",
-          "required": true,
+          "mode": "readonly",
+          "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
           "editableWhen": null
@@ -2976,11 +3202,24 @@
           "editableWhen": null
         },
         {
+          "ref": "it.timebutler.track",
+          "mode": "editable",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
           "ref": "it.timebutler.vacation_year",
           "mode": "editable",
           "required": true,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.timebutler.track",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -2988,7 +3227,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.timebutler.track",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -2999,8 +3243,26 @@
             "truthy": "it.timebutler.approver_differs"
           },
           "visibleWhen": {
-            "truthy": "it.timebutler.approver_differs"
+            "and": [
+              {
+                "==": [
+                  "it.timebutler.track",
+                  "Ja"
+                ]
+              },
+              {
+                "truthy": "it.timebutler.approver_differs"
+              }
+            ]
           },
+          "editableWhen": null
+        },
+        {
+          "ref": "it.needed",
+          "mode": "editable",
+          "required": true,
+          "requiredWhen": null,
+          "visibleWhen": null,
           "editableWhen": null
         },
         {
@@ -3008,7 +3270,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3019,7 +3286,17 @@
             "truthy": "it.software.datev"
           },
           "visibleWhen": {
-            "truthy": "it.software.datev"
+            "and": [
+              {
+                "==": [
+                  "it.needed",
+                  "Ja"
+                ]
+              },
+              {
+                "truthy": "it.software.datev"
+              }
+            ]
           },
           "editableWhen": null
         },
@@ -3028,7 +3305,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3039,7 +3321,17 @@
             "truthy": "it.software.persopro"
           },
           "visibleWhen": {
-            "truthy": "it.software.persopro"
+            "and": [
+              {
+                "==": [
+                  "it.needed",
+                  "Ja"
+                ]
+              },
+              {
+                "truthy": "it.software.persopro"
+              }
+            ]
           },
           "editableWhen": null
         },
@@ -3048,7 +3340,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3059,7 +3356,17 @@
             "truthy": "it.software.timejob"
           },
           "visibleWhen": {
-            "truthy": "it.software.timejob"
+            "and": [
+              {
+                "==": [
+                  "it.needed",
+                  "Ja"
+                ]
+              },
+              {
+                "truthy": "it.software.timejob"
+              }
+            ]
           },
           "editableWhen": null
         },
@@ -3068,7 +3375,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3079,7 +3391,17 @@
             "truthy": "it.software.zvoove"
           },
           "visibleWhen": {
-            "truthy": "it.software.zvoove"
+            "and": [
+              {
+                "==": [
+                  "it.needed",
+                  "Ja"
+                ]
+              },
+              {
+                "truthy": "it.software.zvoove"
+              }
+            ]
           },
           "editableWhen": null
         },
@@ -3088,7 +3410,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3096,7 +3423,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3104,7 +3436,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3115,7 +3452,17 @@
             "truthy": "it.mailboxes.additional"
           },
           "visibleWhen": {
-            "truthy": "it.mailboxes.additional"
+            "and": [
+              {
+                "==": [
+                  "it.needed",
+                  "Ja"
+                ]
+              },
+              {
+                "truthy": "it.mailboxes.additional"
+              }
+            ]
           },
           "editableWhen": null
         },
@@ -3124,7 +3471,12 @@
           "mode": "editable",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -3135,7 +3487,17 @@
             "truthy": "it.additional_cost_centers_needed"
           },
           "visibleWhen": {
-            "truthy": "it.additional_cost_centers_needed"
+            "and": [
+              {
+                "==": [
+                  "it.needed",
+                  "Ja"
+                ]
+              },
+              {
+                "truthy": "it.additional_cost_centers_needed"
+              }
+            ]
           },
           "editableWhen": null
         },
@@ -3295,6 +3657,21 @@
               "type": "field",
               "ref": "personal.position",
               "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_street",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_zip",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "personal.private_city",
+              "width": "half"
             }
           ]
         },
@@ -3353,21 +3730,6 @@
           "items": [
             {
               "type": "field",
-              "ref": "personal.private_street",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.private_zip",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "personal.private_city",
-              "width": "half"
-            },
-            {
-              "type": "field",
               "ref": "personal.geburtsdatum",
               "width": "half"
             },
@@ -3408,6 +3770,11 @@
           "items": [
             {
               "type": "field",
+              "ref": "it.timebutler.track",
+              "width": "full"
+            },
+            {
+              "type": "field",
               "ref": "it.timebutler.vacation_year",
               "width": "half"
             },
@@ -3420,6 +3787,51 @@
               "type": "field",
               "ref": "it.timebutler.supervisor_id",
               "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Zugänge",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.needed",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.other_systems",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.info_mailbox",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.additional",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.notes",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers_needed",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers",
+              "width": "full"
             }
           ]
         },
@@ -3475,46 +3887,6 @@
         },
         {
           "type": "section",
-          "title": "IT & Zugänge",
-          "variant": "it",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "it.other_systems",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "it.mailboxes.info_mailbox",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.mailboxes.additional",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.mailboxes.notes",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "it.additional_cost_centers_needed",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.additional_cost_centers",
-              "width": "full"
-            }
-          ]
-        },
-        {
-          "type": "section",
           "title": "Fuhrpark",
           "variant": "fuhrpark",
           "badge": null,
@@ -3560,8 +3932,10 @@
             "value": true,
             "counter": null,
             "directus": null,
+            "directusFill": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": null
           }
         },
         {
@@ -3583,6 +3957,7 @@
             "value": null,
             "counter": null,
             "directus": null,
+            "directusFill": null,
             "http": null,
             "email": {
               "targetField": "base.firmenmailadresse",
@@ -3592,7 +3967,66 @@
               "collection": "mitarbeitende",
               "emailField": "email",
               "conflictField": "base.firmenmail_conflict"
+            },
+            "emailBody": null
+          }
+        },
+        {
+          "id": "it_bedarf_vorbelegen",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": {
+            "not": {
+              "truthy": "it.needed"
             }
+          },
+          "action": {
+            "type": "set_field",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": "it.needed",
+            "value": "Ja",
+            "counter": null,
+            "directus": null,
+            "directusFill": null,
+            "http": null,
+            "email": null,
+            "emailBody": null
+          }
+        },
+        {
+          "id": "timebutler_tracking_vorbelegen",
+          "trigger": {
+            "type": "on_enter",
+            "after": null,
+            "repeat": null,
+            "field": null,
+            "group": null
+          },
+          "guard": {
+            "not": {
+              "truthy": "it.timebutler.track"
+            }
+          },
+          "action": {
+            "type": "set_field",
+            "to": null,
+            "recipients": null,
+            "template": null,
+            "field": "it.timebutler.track",
+            "value": "Ja",
+            "counter": null,
+            "directus": null,
+            "directusFill": null,
+            "http": null,
+            "email": null,
+            "emailBody": null
           }
         }
       ]
@@ -3607,7 +4041,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
+        "group": "1a1c001d2f684b5d93ec4adcad02613c",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -3623,6 +4057,10 @@
           "filename": "Arbeitsvertrag_{{base.last_name}}_{{base.first_name}}",
           "title": "Arbeitsvertrag",
           "bindings": {
+            "anrede": {
+              "field": "base.salutation",
+              "offset": null
+            },
             "vorname": {
               "field": "base.first_name",
               "offset": null
@@ -3687,7 +4125,17 @@
               "field": "@today",
               "offset": null
             }
-          }
+          },
+          "sections": {
+            "firmenwagen": {
+              "==": [
+                "fuhrpark.car",
+                "Ja"
+              ]
+            }
+          },
+          "companyTemplate": "Arbeitsvertrag",
+          "companyField": "base.contract_company"
         },
         {
           "key": "dokument_2",
@@ -3715,7 +4163,10 @@
               "field": "base.contract_company",
               "offset": null
             }
-          }
+          },
+          "sections": {},
+          "companyTemplate": null,
+          "companyField": null
         }
       ],
       "escalation": {
@@ -3733,6 +4184,97 @@
         ]
       },
       "fields": [
+        {
+          "ref": "konditionen.gehalt",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "konditionen.gehalt_probezeit",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "konditionen.dreizehntes_art",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "konditionen.dreizehntes",
+              "Ja"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "konditionen.halb_wahl",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Halbes 13. Gehalt"
+                ]
+              }
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "konditionen.ganz_wahl",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "and": [
+              {
+                "==": [
+                  "konditionen.dreizehntes",
+                  "Ja"
+                ]
+              },
+              {
+                "==": [
+                  "konditionen.dreizehntes_art",
+                  "Ganzes 13. Gehalt"
+                ]
+              }
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "konditionen.sonderkonditionen",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": null,
+          "editableWhen": null
+        },
         {
           "ref": "fuhrpark.car",
           "mode": "editable",
@@ -3759,6 +4301,80 @@
         }
       ],
       "layout": [
+        {
+          "type": "section",
+          "title": "Arbeitsvertrag",
+          "variant": "default",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "note",
+              "text": "Für diese Position gibt es keine Arbeitsvertragsvorlage – der Arbeitsvertrag muss manuell erstellt werden.",
+              "tone": "warning",
+              "width": "full",
+              "visibleWhen": {
+                "in": [
+                  "personal.position",
+                  [
+                    "praktikum",
+                    "ausbildung",
+                    "werkstudium",
+                    "minijob",
+                    "geschäftsführung",
+                    "c-level"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Konditionen",
+          "variant": "default",
+          "badge": null,
+          "description": "Nur zur Ansicht – in der Erstellung festgelegt.",
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "konditionen.gehalt",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.gehalt_probezeit",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.dreizehntes_art",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.halb_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.ganz_wahl",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "konditionen.sonderkonditionen",
+              "width": "full"
+            }
+          ]
+        },
         {
           "type": "section",
           "title": "Fuhrpark",
@@ -3798,7 +4414,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_SEKRETARIAT_GL_EINSETZEN",
+        "group": "1a1c001d2f684b5d93ec4adcad02613c",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -3860,17 +4476,32 @@
         "fromField": null,
         "rule": [
           {
-            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+            "group": "466a6954b6764deba34be88ecbb7e75d",
+            "required": true,
+            "when": {
+              "or": [
+                {
+                  "==": [
+                    "it.needed",
+                    "Ja"
+                  ]
+                },
+                {
+                  "==": [
+                    "it.timebutler.track",
+                    "Ja"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "group": "dc95e3e6f55041708da19ee39f209fc9",
             "required": true,
             "when": null
           },
           {
-            "group": "HIER_GRUPPEN_ID_PERSONALABTEILUNG_EINSETZEN",
-            "required": true,
-            "when": null
-          },
-          {
-            "group": "HIER_GRUPPEN_ID_FUHRPARK_EINSETZEN",
+            "group": "63dcbc50070e4f3ba8cafd3ea3d9e812",
             "required": true,
             "when": {
               "==": [
@@ -3880,10 +4511,20 @@
             }
           },
           {
-            "group": "HIER_GRUPPEN_ID_VERWALTUNG_EINSETZEN",
+            "group": "fdfe29843b8d433dbcf3221af31590d7",
             "required": true,
             "when": {
-              "truthy": "it.software.persopro"
+              "and": [
+                {
+                  "==": [
+                    "it.needed",
+                    "Ja"
+                  ]
+                },
+                {
+                  "truthy": "it.software.persopro"
+                }
+              ]
             }
           }
         ],
@@ -4085,11 +4726,24 @@
           "editableWhen": null
         },
         {
-          "ref": "it.timebutler.vacation_year",
+          "ref": "it.timebutler.track",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
           "visibleWhen": null,
+          "editableWhen": null
+        },
+        {
+          "ref": "it.timebutler.vacation_year",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.timebutler.track",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4097,11 +4751,29 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.timebutler.track",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
           "ref": "it.timebutler.supervisor_id",
+          "mode": "readonly",
+          "required": false,
+          "requiredWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.timebutler.track",
+              "Ja"
+            ]
+          },
+          "editableWhen": null
+        },
+        {
+          "ref": "it.needed",
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
@@ -4113,7 +4785,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4121,7 +4798,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4129,7 +4811,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4137,7 +4824,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4145,7 +4837,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4153,7 +4850,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4161,7 +4863,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4169,7 +4876,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4177,7 +4889,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4185,7 +4902,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4193,7 +4915,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4201,7 +4928,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4209,7 +4941,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4217,7 +4954,12 @@
           "mode": "readonly",
           "required": false,
           "requiredWhen": null,
-          "visibleWhen": null,
+          "visibleWhen": {
+            "==": [
+              "it.needed",
+              "Ja"
+            ]
+          },
           "editableWhen": null
         },
         {
@@ -4351,17 +5093,7 @@
               "type": "field",
               "ref": "personal.position",
               "width": "half"
-            }
-          ]
-        },
-        {
-          "type": "section",
-          "title": "Personaldaten",
-          "variant": "hr",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
+            },
             {
               "type": "field",
               "ref": "personal.private_street",
@@ -4376,7 +5108,17 @@
               "type": "field",
               "ref": "personal.private_city",
               "width": "half"
-            },
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Personaldaten",
+          "variant": "hr",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
             {
               "type": "field",
               "ref": "personal.homeoffice",
@@ -4409,6 +5151,11 @@
           "items": [
             {
               "type": "field",
+              "ref": "it.timebutler.track",
+              "width": "full"
+            },
+            {
+              "type": "field",
               "ref": "it.timebutler.vacation_year",
               "width": "half"
             },
@@ -4421,6 +5168,51 @@
               "type": "field",
               "ref": "it.timebutler.supervisor_id",
               "width": "half"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "IT & Zugänge",
+          "variant": "it",
+          "badge": null,
+          "description": null,
+          "collapsed": false,
+          "items": [
+            {
+              "type": "field",
+              "ref": "it.needed",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.other_systems",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.info_mailbox",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.additional",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.mailboxes.notes",
+              "width": "full"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers_needed",
+              "width": "half"
+            },
+            {
+              "type": "field",
+              "ref": "it.additional_cost_centers",
+              "width": "full"
             }
           ]
         },
@@ -4476,46 +5268,6 @@
         },
         {
           "type": "section",
-          "title": "IT & Zugänge",
-          "variant": "it",
-          "badge": null,
-          "description": null,
-          "collapsed": false,
-          "items": [
-            {
-              "type": "field",
-              "ref": "it.other_systems",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "it.mailboxes.info_mailbox",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.mailboxes.additional",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.mailboxes.notes",
-              "width": "full"
-            },
-            {
-              "type": "field",
-              "ref": "it.additional_cost_centers_needed",
-              "width": "half"
-            },
-            {
-              "type": "field",
-              "ref": "it.additional_cost_centers",
-              "width": "full"
-            }
-          ]
-        },
-        {
-          "type": "section",
           "title": "Fuhrpark",
           "variant": "fuhrpark",
           "badge": null,
@@ -4545,11 +5297,11 @@
         {
           "id": "create-user-in-directus",
           "trigger": {
-            "type": "on_department_done",
+            "type": "on_exit",
             "after": null,
             "repeat": null,
             "field": null,
-            "group": "HIER_GRUPPEN_ID_IT_EINSETZEN"
+            "group": null
           },
           "guard": null,
           "action": {
@@ -4565,125 +5317,112 @@
               "collection": "mitarbeitende",
               "fieldMap": [
                 {
-                  "source": "base.salutation",
                   "target": "salutation",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.salutation"
                 },
                 {
-                  "source": "base.first_name",
                   "target": "first_name",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.first_name"
                 },
                 {
-                  "source": "base.last_name",
                   "target": "last_name",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.last_name"
                 },
                 {
-                  "source": "personal.private_zip",
                   "target": "personal_zip",
-                  "value": null,
-                  "resolve": null
+                  "source": "personal.private_zip"
                 },
                 {
-                  "source": "personal.private_city",
                   "target": "personal_location",
-                  "value": null,
-                  "resolve": null
+                  "source": "personal.private_city"
                 },
                 {
-                  "source": "personal.personal_number",
                   "target": "employee_number",
-                  "value": null,
-                  "resolve": null
+                  "source": "personal.personal_number"
                 },
                 {
-                  "source": "base.cost_center",
                   "target": "cost_center",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.cost_center"
                 },
                 {
-                  "source": "base.location",
                   "target": "location",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.location"
                 },
                 {
-                  "source": "personal.private_street",
                   "target": "personal_address",
-                  "value": null,
-                  "resolve": null
+                  "source": "personal.private_street"
                 },
                 {
-                  "source": "base.contract_company",
                   "target": "company",
-                  "value": null,
+                  "source": "base.contract_company",
                   "resolve": "company_directus_id"
                 },
                 {
-                  "source": null,
                   "target": "status",
                   "value": "aktiv",
-                  "resolve": null
+                  "source": null
                 },
                 {
-                  "source": null,
                   "target": "has_car",
                   "value": true,
-                  "resolve": null,
+                  "source": null,
                   "when": {
                     "field": "fuhrpark.car",
                     "equals": "Ja"
                   }
                 },
                 {
-                  "source": "base.private_email",
                   "target": "private_mail",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.private_email"
                 },
                 {
-                  "source": "base.private_phone",
                   "target": "private_phone",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.private_phone"
                 },
                 {
-                  "source": "personal.position",
                   "target": "position",
-                  "value": null,
-                  "resolve": null
+                  "source": "personal.position"
                 },
                 {
-                  "source": "base.firmenmailadresse",
                   "target": "email",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.firmenmailadresse"
                 },
                 {
-                  "source": "base.title",
                   "target": "job_title",
-                  "value": null,
-                  "resolve": null
+                  "source": "base.title"
                 },
                 {
-                  "source": null,
                   "target": "source",
                   "value": "alpharequest",
-                  "resolve": null,
-                  "when": null
+                  "source": null
+                },
+                {
+                  "target": "has_it_access",
+                  "value": true,
+                  "source": null,
+                  "when": {
+                    "field": "it.needed",
+                    "equals": "Ja"
+                  }
+                },
+                {
+                  "target": "has_it_access",
+                  "value": false,
+                  "source": null,
+                  "when": {
+                    "field": "it.needed",
+                    "equals": "Nein"
+                  }
                 }
               ],
               "idField": "it.directus_mitarbeiter_id",
-              "onError": "block",
+              "onError": "continue",
               "matchField": "employee_number"
             },
+            "directusFill": null,
             "http": null,
-            "email": null
+            "email": null,
+            "emailBody": null
           }
         }
       ]

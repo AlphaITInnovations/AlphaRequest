@@ -29,12 +29,14 @@ import IssueList from '@/components/process/editor/IssueList.vue'
 import CreatePermissionsEditor from '@/components/process/editor/CreatePermissionsEditor.vue'
 import EditorSection from '@/components/process/editor/EditorSection.vue'
 import ProcessSimulator from '@/components/process/ProcessSimulator.vue'
+import ProcessFlowDiagram from '@/components/process/editor/ProcessFlowDiagram.vue'
 
-type Tab = 'flow' | 'prozess' | 'preview' | 'json'
+type Tab = 'flow' | 'prozess' | 'diagramm' | 'preview' | 'json'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'flow', label: 'Ablauf & Formulare', icon: '🔀' },
   { id: 'prozess', label: 'Prozess', icon: '⚙️' },
+  { id: 'diagramm', label: 'Diagramm', icon: '🗺' },
   { id: 'preview', label: 'Vorschau', icon: '👁' },
   { id: 'json', label: 'JSON', icon: '{ }' },
 ]
@@ -479,6 +481,12 @@ const RAIL_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-gray
             </div>
           </fieldset>
         </template>
+
+        <!-- Diagramm / Ablauf -->
+        <div v-else-if="tab === 'diagramm'">
+          <ProcessFlowDiagram :definition="ed.draft.value" :groups="ed.sources.groups"
+                              @select-phase="selectPhase" />
+        </div>
 
         <!-- Vorschau -->
         <div v-else-if="tab === 'preview'">
