@@ -226,6 +226,13 @@ const unknownField = (k: string | null) => !!k && !props.fieldKeys.includes(k)
         </span>
       </span>
     </label>
+    <p v-if="modelValue.requireReason"
+       class="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/15
+              border border-amber-200/70 dark:border-amber-500/20 rounded-lg px-2.5 py-1.5">
+      Hinweis: Über den öffentlichen Mail-Link (AlphaApprove) wird derzeit <strong>kein Grund</strong>
+      abgefragt – die Pflicht greift dort (noch) nicht. Beim Ablehnen <strong>direkt in AlphaRequest</strong>
+      (im System bzw. interner Link) wird der Grund weiterhin verlangt.
+    </p>
 
     <!-- ── Ergebnis in Felder schreiben ── -->
     <div class="grid md:grid-cols-2 gap-3">
