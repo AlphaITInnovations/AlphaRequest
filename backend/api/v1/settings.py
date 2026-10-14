@@ -1377,7 +1377,9 @@ def _approval_probe(method, url, **kw) -> ApprovalProbeOut:
     import requests
     t0 = _time.monotonic()
     try:
-        resp = method(url, timeout=6, **kw)
+        # allow_redirects=False: der (öffentliche) Relay darf den internen Server nicht
+        # per 30x auf eine andere (interne) URL umlenken (SSRF-Schutz).
+        resp = method(url, timeout=6, allow_redirects=False, **kw)
         ms = int((_time.monotonic() - t0) * 1000)
         return ApprovalProbeOut(ok=resp.status_code < 400, status=resp.status_code, latencyMs=ms)
     except requests.RequestException as exc:

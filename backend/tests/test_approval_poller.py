@@ -121,7 +121,7 @@ class FakeApprove:
     def add(self, d):
         self.q.append(d)
 
-    def get(self, url, params=None, headers=None, timeout=None):
+    def get(self, url, params=None, headers=None, timeout=None, allow_redirects=None):
         if self.bad_status:
             r = _Resp({"error": "overloaded"})      # 5xx MIT JSON-Körper (rutscht sonst durch)
             r.status_code = self.bad_status
@@ -129,7 +129,7 @@ class FakeApprove:
         pend = [d for d in self.q if d["id"] not in self.consumed]
         return _Resp({"decisions": pend, "cursor": max([d["id"] for d in self.q], default=0)})
 
-    def post(self, url, json=None, headers=None, timeout=None):
+    def post(self, url, json=None, headers=None, timeout=None, allow_redirects=None):
         if self.ack_fails > 0:                       # Verbindung weg (Exception)
             self.ack_fails -= 1
             raise ConnectionError("ack weg")
@@ -222,14 +222,14 @@ class PagedApprove:
     def add(self, d):
         self.items.append(d)
 
-    def get(self, url, params=None, headers=None, timeout=None):
+    def get(self, url, params=None, headers=None, timeout=None, allow_redirects=None):
         after = (params or {}).get("after", 0)
         pend = [d for d in self.items if d["id"] > after and d["id"] not in self.consumed]
         page = pend[:self.page]
         cursor = page[-1]["id"] if page else after
         return _Resp({"decisions": page, "cursor": cursor})
 
-    def post(self, url, json=None, headers=None, timeout=None):
+    def post(self, url, json=None, headers=None, timeout=None, allow_redirects=None):
         for i in (json or {}).get("ids", []):
             self.consumed.add(i)
         return _Resp({})
@@ -293,6 +293,29 @@ def test_run_wachsende_wiederholung_bis_erfolg(key):
 
     assert srv.consumed == {1, 2, 3}
     assert attempts[1] == 2 and attempts[2] == 2
+
+
+def test_run_backoff_greift_auch_bei_ack_fehlschlag(key):
+    """Fix: ein transient gescheiterter Eintrag wächst in den exponentiellen Backoff,
+    auch wenn der /ack der erfolgreichen Einträge im selben Durchgang fehlschlägt."""
+    srv = FakeApprove()
+    srv.ack_fails = 999                       # /ack scheitert dauerhaft
+    srv.add(decision(key, 1, tid=1))          # wird angewandt → ack (schlägt aber fehl)
+    srv.add(decision(key, 2, tid=2))          # schlägt immer fehl → retry
+    clk = _Clock()
+    attempts2 = []
+
+    def apply(c, d):
+        if c["tid"] == 2:
+            attempts2.append(clk.t)
+            raise ConnectionError("B kaputt")
+
+    ap.run(srv, "", "k", _verify(key), apply, lambda d, w: None,
+           wait=5, backoff=1, should_stop=_cycles(60), sleep=clk.sleep, clock=clk)
+
+    assert len(attempts2) >= 3
+    assert attempts2 == sorted(attempts2)
+    assert (attempts2[2] - attempts2[1]) > (attempts2[1] - attempts2[0])   # wachsend trotz ACK-Fehler
 
 
 def test_run_ack_500_drosselt_und_bestaetigt_nach_erholung(key):
@@ -442,6 +465,35 @@ def test_apply_actor_name_fallback_auf_kanal(umgebung, monkeypatch):
     ap.apply_decision_entry(_claims(act="approve"), _dec(act="approve"))
     decided = [e for e in evstore.rows if e["action"] == "approval_decided"]
     assert decided and decided[0]["actor_name"] == ap.EXTERNAL_ACTOR
+
+
+def test_apply_klick_metadaten_nur_im_audit_nicht_im_verlauf(umgebung, monkeypatch):
+    """Die unverifizierten Klick-Metadaten (IP/Gerät/Host) gehören ins Audit (admin),
+    NICHT in den für alle sichtbaren Ticket-Verlauf."""
+    store, evstore = umgebung
+    audits = []
+    monkeypatch.setattr(approval_commit, "_record_audit", lambda **kw: audits.append(kw))
+    ap.apply_decision_entry(_claims(act="approve"), _dec(act="approve"))  # _dec hat ip/ua/host
+    ev = [e for e in evstore.rows if e["action"] == "approval_decided"][0]
+    assert "klick_metadaten" not in (ev.get("details") or {})      # Verlauf: kein Leck
+    aud = [a for a in audits if a.get("action") == "process_approval_decided"][0]
+    assert "klick_metadaten" in (aud.get("details") or {})          # Audit: vorhanden
+
+
+def test_apply_wirkung_gescheitert_wird_sichtbar_quarantaene(umgebung, monkeypatch):
+    """Scheitert die Wirkung NACH dem Buchen (hier: engine.transition wirft), gilt die
+    Entscheidung NICHT als angewandt: die Wiederzustellung wird sichtbar in die
+    Quarantäne gemeldet (PermanentError) statt still ge-ackt."""
+    store, evstore = umgebung
+
+    def boom(*a, **k):
+        raise RuntimeError("transition kaputt")
+    monkeypatch.setattr(engine, "transition", boom)
+
+    with pytest.raises(RuntimeError):                 # 1. Zustellung: gebucht, Wirkung scheitert
+        ap.apply_decision_entry(_claims(act="approve"), _dec(act="approve"))
+    with pytest.raises(ap.PermanentError):            # 2. Zustellung: nicht still ge-ackt
+        ap.apply_decision_entry(_claims(act="approve"), _dec(act="approve"))
 
 
 def test_apply_ist_idempotent_bei_gleicher_entscheidung(umgebung):

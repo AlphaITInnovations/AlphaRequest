@@ -52,18 +52,29 @@ def _metadata(decision: dict) -> dict:
 
 
 def _already_applied(row: dict, defn, claims: dict) -> bool:
-    """Ist genau diese Entscheidung (Phase, Epoch, Richtung) bereits im Runtime
-    gebucht? Dann ist eine erneute Zustellung idempotent. Bei abweichender Epoch
-    (zwischenzeitlich neuer Durchlauf) oder abweichender Richtung (Gegen-
-    entscheidung) → False (dauerhaft unbrauchbar)."""
+    """Ist genau diese Entscheidung (Phase, Epoch, Richtung) bereits gebucht UND die
+    WIRKUNG ausgeführt? Nur dann ist eine erneute Zustellung idempotent.
+
+    Wichtig: Die Entscheidung wird in commit_decision ZUERST gebucht, DANN wirkt sie
+    (Übergang/Ablehnung/Rücksprung). Scheitert die Wirkung NACH dem Buchen (z. B.
+    EmailConflict einer blockierenden on_exit-Automation, ungültiges Rücksprung-Ziel,
+    rev-Konflikt), wäre die Entscheidung gebucht, aber nicht angewandt. Diesen Fall NICHT
+    als Erfolg quittieren – der Aufrufer meldet ihn sonst sichtbar in die Fehlerablage,
+    statt den Auftrag still stehen zu lassen. Abweichende Epoch (neuer Durchlauf) oder
+    Richtung (Gegenentscheidung) → False (dauerhaft unbrauchbar)."""
     rt = row.get("runtime") or {}
     if int(rt.get("epoch", 0)) != int(claims.get("epoch", -1)):
         return False
-    for i, p in enumerate(defn.phases):
-        if p.key == claims.get("phase"):
-            dec = pr.phase_decision(rt, i)
-            return bool(dec and dec.get("act") == claims.get("act"))
-    return False
+    idx = next((i for i, p in enumerate(defn.phases) if p.key == claims.get("phase")), None)
+    if idx is None:
+        return False
+    dec = pr.phase_decision(rt, idx)
+    if not (dec and dec.get("act") == claims.get("act")):
+        return False
+    # Wirkung gelaufen? approve/Rücksprung verschieben current_index weg von der
+    # Freigabe-Phase, Ablehnung setzt den Status. Steht der Index noch auf idx und ist
+    # nicht abgelehnt, wurde gebucht, aber NICHT angewandt → nicht als Erfolg werten.
+    return int(rt.get("current_index", idx)) != idx or row.get("status") == "rejected"
 
 
 def apply_decision_entry(claims: dict, decision: dict) -> None:
@@ -181,8 +192,10 @@ def run(client, base: str, api_key: str, verify, apply, quarantine, *,
         next_due = min((due for _, due in retry_state.values()), default=None)
         poll_wait = wait if next_due is None else max(0, min(wait, int(next_due - clock())))
         try:
+            # allow_redirects=False: ein (öffentlicher) Relay darf den internen Server
+            # NICHT per 30x auf eine andere (interne) URL umlenken (SSRF-Schutz).
             resp = client.get(f"{base}/pending", params={"after": cursor, "wait": poll_wait},
-                              headers=headers, timeout=poll_wait + 10)
+                              headers=headers, timeout=poll_wait + 10, allow_redirects=False)
             # Ein 5xx mit JSON-Fehlerkörper würde sonst durch resp.json() rutschen und
             # als „nichts offen" gelten → heiße Schleife. Status prüfen.
             if getattr(resp, "status_code", 200) >= 400:
@@ -206,9 +219,17 @@ def run(client, base: str, api_key: str, verify, apply, quarantine, *,
         due_now = [d for d in decisions if retry_state.get(d.get("id"), (0, 0.0))[1] <= now]
         ack, retry = process_batch(due_now, verify, apply, quarantine)
 
+        # Backoff der (transient) gescheiterten Einträge ZUERST buchen – unabhängig vom
+        # Ausgang des /ack. Läge das hinter dem ack-Block, würde ein ACK-Fehlschlag
+        # (continue) die Buchung überspringen und der wachsende Backoff nie greifen.
+        for did in retry:
+            n = retry_state.get(did, (0, 0.0))[0] + 1
+            retry_state[did] = (n, now + min(backoff * 2 ** (n - 1), max_backoff))
+
         if ack:
             try:
-                r = client.post(f"{base}/ack", json={"ids": ack}, headers=headers, timeout=30)
+                r = client.post(f"{base}/ack", json={"ids": ack}, headers=headers,
+                                timeout=30, allow_redirects=False)   # kein Redirect (SSRF)
                 # Bei 5xx gilt /ack sonst als gesendet → Einträge kommen sofort wieder und
                 # werden pausenlos neu bestätigt. Status prüfen, damit der Backoff greift.
                 r.raise_for_status()
@@ -218,10 +239,6 @@ def run(client, base: str, api_key: str, verify, apply, quarantine, *,
                 continue                           # Cursor NICHT weiter; apply ist idempotent
             for did in ack:
                 retry_state.pop(did, None)
-
-        for did in retry:
-            n = retry_state.get(did, (0, 0.0))[0] + 1
-            retry_state[did] = (n, now + min(backoff * 2 ** (n - 1), max_backoff))
 
         cursor = data.get("cursor", cursor)        # immer weiter – auch wenn auf dieser Seite etwas fehlschlug
 

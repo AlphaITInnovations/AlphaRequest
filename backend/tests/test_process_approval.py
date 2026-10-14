@@ -129,6 +129,12 @@ def test_token_ohne_pflichtfelder_ist_ungueltig():
     assert pa.load_token("") is None
 
 
+def test_token_zu_lang_wird_vor_verarbeitung_abgewiesen():
+    with pytest.raises(pa.ApprovalError) as exc:
+        pa.require_token("x" * (pa.MAX_TOKEN_LEN + 1))
+    assert exc.value.code == "invalid"
+
+
 def test_abgelaufenes_token():
     spec = DEFN.phases[1].approval          # linkMaxAge = P7D (Default)
     _payload, issued = pa.require_token(pa.make_token(7, "approve", "freigabe", 0))

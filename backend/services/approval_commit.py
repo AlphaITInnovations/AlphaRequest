@@ -50,11 +50,13 @@ def _persist_decision(store, row: dict, runtime: dict, values: Optional[dict]) -
     return row
 
 
-def _extra_details(via: str, metadata: Optional[dict]) -> dict:
+def _audit_extra(via: str, metadata: Optional[dict]) -> dict:
+    """Zusatz-Details NUR fürs Audit-Log (admin-only). Die unverifizierten Klick-
+    Metadaten (IP/User-Agent/Hostname) gehören NICHT in den für alle Leseberechtigten
+    sichtbaren Ticket-Verlauf – ein Link ist eine Berechtigung, kein Identitätsnachweis
+    (IP/Gerät belegen keine Person)."""
     out: dict = {"via": via}
     if metadata:
-        # Ein Link ist eine Berechtigung, kein Identitätsnachweis – IP/User-Agent/
-        # Hostname belegen keine Person. Deshalb ausdrücklich als unverifiziert.
         out["klick_metadaten"] = metadata
         out["metadaten_unverifiziert"] = True
     return out
@@ -82,19 +84,21 @@ def commit_decision(row: dict, defn, idx: int, phase, spec, *, act: str,
                                         now_iso=now, by=by, by_name=by_name)
     row = _persist_decision(store, row, runtime, values)
 
-    extra = _extra_details(via, metadata)
-    # Verlauf: Begründung nur, wenn sie NICHT in ein Feld geschrieben wurde (§5.1).
+    # Verlauf (für alle Leseberechtigten sichtbar): nur `via` – KEINE Klick-Metadaten.
+    # Begründung nur, wenn sie NICHT in ein Feld geschrieben wurde (§5.1).
     events.system(row, pa.EVENT_DECIDED, actor_name=by_name, phase_key=phase.key,
                   body=(None if spec.reasonField else reason),
                   details={"act": act, "follow_up": folge,
-                           "reason_in_field": bool(spec.reasonField and reason), **extra})
+                           "reason_in_field": bool(spec.reasonField and reason), "via": via})
+    # Audit (admin-only): hier dürfen die unverifizierten Klick-Metadaten stehen.
     record_audit(action="process_approval_decided", actor_id=by, actor_name=by_name,
                  actor_type="system", entity_type="process_ticket",
                  entity_id=str(row.get("id")),
                  summary=f"Freigabe „{phase.label or phase.key}“: {act}",
                  details={"phase": phase.key, "act": act, "follow_up": folge,
                           "target_phase": ziel,
-                          "epoch": (row.get("runtime") or {}).get("epoch"), **extra})
+                          "epoch": (row.get("runtime") or {}).get("epoch"),
+                          **_audit_extra(via, metadata)})
 
     if act == pa.APPROVE:
         # NIE pr.advance direkt: nur die Engine lässt on_exit/on_enter, die
