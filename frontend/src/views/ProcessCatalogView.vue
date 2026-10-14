@@ -23,7 +23,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import { listProcesses } from '@/api/processes'
-import { BASIS_TICKET_PATH, withoutBasisTicket } from '@/lib/basisTicket'
+import { withoutBasisTicket } from '@/lib/basisTicket'
 import { useAuthStore } from '@/stores/authStore'
 import { errorMessage } from '@/lib/processErrors'
 import type { ProcessOut } from '@/types/process'
@@ -110,10 +110,7 @@ onMounted(async () => {
           <span class="font-semibold text-gray-900 dark:text-white">Ein Prozess-Ticket</span>
           folgt einem festgelegten Ablauf: die Schritte (Antrag, Freigaben und Durchführung durch
           die zuständigen Fachabteilungen) sind im Prozess hinterlegt, sodass nichts vergessen wird
-          und jeder Vorgang gleich abläuft. Passt nichts davon, ist
-          <button @click="router.push(BASIS_TICKET_PATH)"
-                  class="text-[#3EAAB8] font-medium hover:underline">„Neues Ticket"</button>
-          der richtige Weg – ein einfaches Ticket ohne festen Ablauf.
+          und jeder Vorgang gleich abläuft.
         </p>
       </div>
 
