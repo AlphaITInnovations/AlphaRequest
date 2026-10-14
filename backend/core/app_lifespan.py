@@ -104,6 +104,21 @@ async def lifespan(app):
     except Exception:
         logger.exception("Prozess-Scheduler-Start fehlgeschlagen")
 
+    # Externer Approval-Relay (AlphaApprove): Signierschlüssel sicherstellen (DB-
+    # Schlüssel wird bei Bedarf erzeugt, damit der Public Key sofort anzeigbar ist und
+    # überlebt Redeploys), dann den ausgehenden Long-Poll-Worker starten (nur wenn
+    # vollständig konfiguriert). Start-Fehler dürfen die App nicht kippen.
+    try:
+        from backend.services import approval_jwt
+        approval_jwt.ensure_key()
+    except Exception:
+        logger.exception("Freigabe-Signierschlüssel konnte nicht sichergestellt werden")
+    try:
+        from backend.services import approval_poller
+        approval_poller.start_worker()
+    except Exception:
+        logger.exception("Approval-Worker-Start fehlgeschlagen")
+
     yield
 
     # Shutdown: Scheduler sauber beenden (sonst sweept nach einem Reload ein

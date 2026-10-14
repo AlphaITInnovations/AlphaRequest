@@ -11,3 +11,4 @@ data
 backend/logs/
 .claude
 todo.txt
+*.pem

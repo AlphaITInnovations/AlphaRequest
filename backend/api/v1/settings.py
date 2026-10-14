@@ -1314,3 +1314,111 @@ def send_testmail(payload: TestMailIn, user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.exception("Test mail failed: %s", e)
         raise HTTPException(500, f"Fehler beim Senden: {e}")
+
+
+# ── Externe Freigabe (AlphaApprove) ───────────────────────────────────────────
+
+class ApprovalInfoOut(BaseModel):
+    active: bool                 # externer Weg scharf (alle Pflicht-ENV gesetzt)
+    keySource: str               # "db" (persistent) | "file" (Pfad-Override)
+    publicKey: str               # base64(Raw) = der APPROVE_PUBLIC_KEY-Wert
+    baseUrl: str
+    issuer: str
+    audience: str
+    hasApiKey: bool
+    maxPickupDelay: int
+    canRegenerate: bool          # nur im DB-Modus rotierbar
+
+
+class ApprovalProbeOut(BaseModel):
+    ok: bool
+    status: Optional[int] = None
+    latencyMs: Optional[int] = None
+    error: Optional[str] = None
+
+
+class ApprovalTestOut(BaseModel):
+    baseUrl: str
+    health: ApprovalProbeOut
+    auth: ApprovalProbeOut
+
+
+class ApprovalKeyOut(BaseModel):
+    publicKey: str
+    keySource: str
+
+
+@router.get("/settings/approval", response_model=DataResponse[ApprovalInfoOut])
+def get_approval_info(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    from backend.services import approval_jwt, approval_poller
+    try:
+        pub = approval_jwt.public_key_b64()      # legt den DB-Schlüssel bei Bedarf an
+    except Exception as e:
+        logger.exception("Freigabe-Public-Key nicht verfügbar: %s", e)
+        raise HTTPException(500, f"Signierschlüssel nicht verfügbar: {e}")
+    src = approval_jwt.key_source()
+    return DataResponse(data=ApprovalInfoOut(
+        active=approval_poller.is_configured(),
+        keySource=src,
+        publicKey=pub,
+        baseUrl=config.APPROVAL_BASE_URL,
+        issuer=config.APPROVAL_ISSUER,
+        audience=config.APPROVAL_AUDIENCE,
+        hasApiKey=bool(config.APPROVAL_API_KEY),
+        maxPickupDelay=int(config.APPROVAL_MAX_PICKUP_DELAY),
+        canRegenerate=(src == "db"),
+    ))
+
+
+def _approval_probe(method, url, **kw) -> ApprovalProbeOut:
+    """Eine Erreichbarkeits-Probe mit kurzer Zeitgrenze; HTTP-Fehler → ok=False."""
+    import time as _time
+    import requests
+    t0 = _time.monotonic()
+    try:
+        # allow_redirects=False: der (öffentliche) Relay darf den internen Server nicht
+        # per 30x auf eine andere (interne) URL umlenken (SSRF-Schutz).
+        resp = method(url, timeout=6, allow_redirects=False, **kw)
+        ms = int((_time.monotonic() - t0) * 1000)
+        return ApprovalProbeOut(ok=resp.status_code < 400, status=resp.status_code, latencyMs=ms)
+    except requests.RequestException as exc:
+        ms = int((_time.monotonic() - t0) * 1000)
+        return ApprovalProbeOut(ok=False, latencyMs=ms, error=str(exc)[:300])
+
+
+@router.post("/settings/approval/test", response_model=DataResponse[ApprovalTestOut])
+def test_approval_connection(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    import requests
+    base = config.APPROVAL_BASE_URL.rstrip("/")
+    if not base:
+        raise HTTPException(400, "APPROVAL_BASE_URL ist nicht gesetzt")
+    sess = requests.Session()
+    health = _approval_probe(sess.get, f"{base}/health")
+    # Authentifizierte Lese-Probe gegen /pending: idempotent (verbraucht nichts),
+    # prüft API-Key + Vertrag. wait=0 → sofortige Antwort.
+    if config.APPROVAL_API_KEY:
+        auth = _approval_probe(
+            sess.get, f"{base}/pending", params={"after": 0, "wait": 0},
+            headers={"Authorization": f"Bearer {config.APPROVAL_API_KEY}"})
+    else:
+        auth = ApprovalProbeOut(ok=False, error="APPROVAL_API_KEY ist nicht gesetzt")
+    return DataResponse(data=ApprovalTestOut(baseUrl=base, health=health, auth=auth))
+
+
+@router.post("/settings/approval/regenerate-key", response_model=DataResponse[ApprovalKeyOut])
+def regenerate_approval_key(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    from backend.services import approval_jwt
+    try:
+        pub = approval_jwt.regenerate_key()
+    except RuntimeError as exc:               # Datei-Modus → nicht über die DB rotierbar
+        raise HTTPException(409, str(exc))
+    except Exception as exc:
+        logger.exception("Signierschlüssel-Rotation fehlgeschlagen: %s", exc)
+        raise HTTPException(500, f"Rotation fehlgeschlagen: {exc}")
+    _audit(user, "approval_signing_key_rotated", entity_type="settings",
+           entity_id="approval",
+           summary="Freigabe-Signierschlüssel neu erzeugt – bereits verschickte Links ungültig")
+    return DataResponse(data=ApprovalKeyOut(publicKey=pub, keySource=approval_jwt.key_source()))

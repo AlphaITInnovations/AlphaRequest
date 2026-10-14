@@ -294,6 +294,7 @@ export function blankApproval(question = ''): ApprovalSpec {
     approveLabel: 'Freigeben',
     rejectLabel: 'Ablehnen',
     externalLink: true,
+    linkMode: 'public',
     emailBody: null,
     linkMaxAge: 'P7D',
     requireReason: true,

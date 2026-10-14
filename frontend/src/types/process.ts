@@ -354,6 +354,9 @@ export interface ApprovalSpec {
   rejectLabel: string
   /** Mail mit Entscheidungs-Link versenden? Ohne das läuft die Freigabe nur in der App. */
   externalLink: boolean
+  /** Reichweite des Mail-Links: 'public' = externer Relay (AlphaApprove, von überall/mobil),
+   *  'internal' = eigene Intranet-Route (nur Firmennetz). Kein automatischer Rückfall. */
+  linkMode: 'internal' | 'public'
   /** Freitext-Vorlage für den Mail-Text. Platzhalter `{{feld.key}}` (plus
    *  {{title}}, {{id}}) werden aus den Auftragswerten ersetzt. `null` = nur die
    *  Frage steht in der Mail. */

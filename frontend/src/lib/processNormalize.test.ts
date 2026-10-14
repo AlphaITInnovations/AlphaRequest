@@ -64,8 +64,8 @@ describe('normalizeDefinition', () => {
         approval: { question: 'Freigeben?' } }] })
     expect(d.phases[0].approval).toEqual({
       question: 'Freigeben?', approveLabel: 'Freigeben', rejectLabel: 'Ablehnen',
-      externalLink: true, emailBody: null, linkMaxAge: 'P7D', requireReason: true,
-      decisionField: null, reasonField: null, onReject: 'reject',
+      externalLink: true, linkMode: 'public', emailBody: null, linkMaxAge: 'P7D',
+      requireReason: true, decisionField: null, reasonField: null, onReject: 'reject',
     })
   })
 
@@ -170,7 +170,7 @@ describe('isSameDefinition / cloneDefinition', () => {
         responsibility: { kind: 'owner', group: null, user: null, fromField: null,
           rule: [], resetOnDescriptionChange: false, notifyOnEnter: true },
         approval: { question: 'Ja?', approveLabel: 'Freigeben', rejectLabel: 'Ablehnen',
-          externalLink: true, linkMaxAge: 'P7D', requireReason: true,
+          externalLink: true, linkMode: 'public', linkMaxAge: 'P7D', requireReason: true,
           decisionField: null, reasonField: null, onReject: 'reject' },
         fields: [], layout: [], constraints: [], automations: [] }],
     }

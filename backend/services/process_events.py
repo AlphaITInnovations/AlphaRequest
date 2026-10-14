@@ -131,6 +131,10 @@ def redact(events: Iterable[dict], defn: Optional[ProcessDefinition],
         det = dict(ev.get("details") or {})
         # Feld-Werte gehören nicht in den Verlauf; defensiv entfernen.
         det.pop("values", None)
+        # Unverifizierte Klick-Metadaten (IP/Gerät/Host einer Mail-Link-Freigabe)
+        # gehören NUR ins Audit-Log, nie in den für alle sichtbaren Verlauf.
+        det.pop("klick_metadaten", None)
+        det.pop("metadaten_unverifiziert", None)
 
         named = det.get("fields")
         if isinstance(named, list) and named:

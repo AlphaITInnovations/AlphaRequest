@@ -44,6 +44,10 @@ BACK_TO_PREFIX = "back_to:"
 #: bevor sie in values_json/Verlauf landet (gleiche Grenze wie Nachträge).
 MAX_REASON_LEN = 5000
 
+#: Der Token kommt aus einem öffentlichen, login-losen Formular/Query – vor der
+#: HMAC-/Entpack-Verarbeitung begrenzen (Konsistenz zum JWT-Pfad, der ebenso cappt).
+MAX_TOKEN_LEN = 4096
+
 #: Verlaufs-Aktionen dieses Wegs. Kanonische Namen gehören eigentlich nach
 #: process_events; solange sie dort fehlen, stehen sie hier an EINER Stelle.
 EVENT_DECIDED = "approval_decided"
@@ -100,6 +104,8 @@ def require_token(token: str) -> tuple[dict, datetime]:
     """
     if not token:
         raise ApprovalError("invalid", "Es wurde kein Freigabe-Link übergeben")
+    if len(token) > MAX_TOKEN_LEN:                # vor HMAC/Entpacken abweisen
+        raise ApprovalError("invalid", "Dieser Freigabe-Link ist ungültig")
     try:
         data, issued_at = _serializer().loads(token, return_timestamp=True)
     except SignatureExpired:                      # Unterklasse von BadSignature

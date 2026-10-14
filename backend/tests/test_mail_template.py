@@ -63,7 +63,7 @@ def _defn_with_body(body: str) -> dict:
              "fields": [{"ref": "base.name", "required": True}]},
             {"key": "freigabe", "kind": "approval", "view": "approval",
              "responsibility": {"kind": "group", "group": "g1"},
-             "approval": {"question": "OK?", "emailBody": body}},
+             "approval": {"question": "OK?", "emailBody": body, "linkMode": "internal"}},
         ],
     }
 
@@ -123,7 +123,7 @@ def test_freigabe_mail_ohne_vorlage_rendert_trotzdem():
              "fields": [{"ref": "base.name", "required": True}]},
             {"key": "freigabe", "kind": "approval", "view": "approval",
              "responsibility": {"kind": "group", "group": "g1"},
-             "approval": {"question": "OK?"}},
+             "approval": {"question": "OK?", "linkMode": "internal"}},
         ],
     })
     _subject, body = pa._approval_message({"id": 1, "title": "T", "values": {}},
