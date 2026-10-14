@@ -477,14 +477,23 @@ def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
     from backend.services import process_approval as approval
     epoch = int((row.get("runtime") or {}).get("epoch", 0))
     tid = row.get("id")
+    spec = phase.approval
 
-    if _use_external_relay():
-        # Externer Approval-Microservice (mobil/von überall): EdDSA-JWT (nur der
-        # Public Key liegt dort, niemals der SECRET_KEY) an dessen /d-Route.
+    # Reichweite entscheidet die PHASE (linkMode), nicht mehr die Umgebung. Kein
+    # automatischer Rückfall intern↔public.
+    if spec is not None and spec.linkMode == "public":
+        # Öffentlicher Weg: externer Relay (AlphaApprove) DIESER Umgebung – EdDSA-JWT
+        # (nur der Public Key liegt dort, nie der SECRET_KEY) an dessen /d-Route. Ist
+        # der Relay hier nicht konfiguriert, ist das ein Fehler (bewusst „public"),
+        # KEIN stiller Rückfall auf intern.
+        if not _relay_configured():
+            raise RuntimeError(
+                f"Freigabe-Phase „{phase.key}“ ist auf „public“ gestellt, aber der "
+                f"externe Relay ist in dieser Umgebung nicht konfiguriert "
+                f"(APPROVAL_BASE_URL/API_KEY/ISSUER/AUDIENCE).")
         from backend.services import approval_jwt
         base = config.APPROVAL_BASE_URL.rstrip("/")
-        ttl = (approval.max_age_seconds(phase.approval) if phase.approval
-               else approval_jwt.MAX_TTL_SECONDS)
+        ttl = approval.max_age_seconds(spec) if spec else approval_jwt.MAX_TTL_SECONDS
 
         def url(act: str) -> str:
             token = approval_jwt.make_external_token(tid, act, phase.key, epoch,
@@ -493,7 +502,7 @@ def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
 
         return url("approve"), url("reject")
 
-    # Intern/Dev: itsdangerous-Token an die eigene (intranet-interne) Route.
+    # Interner Weg: itsdangerous-Token an die eigene (intranet-interne) Route.
     base = (getattr(config, "FRONTEND_URL", "") or "").rstrip("/")
 
     def url(act: str) -> str:
@@ -503,10 +512,11 @@ def approval_links(row: dict, phase: PhaseDef) -> tuple[str, str]:
     return url("approve"), url("reject")
 
 
-def _use_external_relay() -> bool:
-    """Externer Relay nur, wenn VOLLSTÄNDIG konfiguriert (sonst zeigten die Links
-    ins Leere). Spiegelt approval_poller.is_configured ohne Import-Zyklus – der
-    Signierschlüssel kommt immer (DB oder Datei), zählt also NICHT zum Schalter."""
+def _relay_configured() -> bool:
+    """Ist der externe Relay in DIESER Umgebung vollständig konfiguriert? Nötig, damit
+    eine „public“-Freigabe-Phase einen funktionierenden Link erzeugen kann (der
+    Signierschlüssel kommt immer aus DB/Datei, Base-URL/API-Key/Issuer/Audience nicht).
+    Spiegelt approval_poller.is_configured ohne Import-Zyklus."""
     return bool(config.APPROVAL_BASE_URL and config.APPROVAL_API_KEY
                 and config.APPROVAL_ISSUER and config.APPROVAL_AUDIENCE)
 

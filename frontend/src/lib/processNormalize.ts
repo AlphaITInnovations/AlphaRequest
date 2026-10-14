@@ -290,6 +290,7 @@ function normApproval(v: any): ApprovalSpec | null {
     approveLabel: str(v.approveLabel) ?? d.approveLabel,
     rejectLabel: str(v.rejectLabel) ?? d.rejectLabel,
     externalLink: bool(v.externalLink, d.externalLink),
+    linkMode: (v.linkMode === 'internal' || v.linkMode === 'public') ? v.linkMode : d.linkMode,
     emailBody: str(v.emailBody),
     linkMaxAge: str(v.linkMaxAge) ?? d.linkMaxAge,
     requireReason: bool(v.requireReason, d.requireReason),

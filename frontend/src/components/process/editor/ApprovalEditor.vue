@@ -153,6 +153,22 @@ const unknownField = (k: string | null) => !!k && !props.fieldKeys.includes(k)
         </span>
       </label>
 
+      <!-- Reichweite des Mail-Links: öffentlich (Relay) vs. intern (nur Firmennetz).
+           Nur relevant, wenn der Mail-Link überhaupt versendet wird. -->
+      <div v-if="modelValue.externalLink">
+        <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Wo wird entschieden?</label>
+        <select :value="modelValue.linkMode" :disabled="readonly" class="afi w-full"
+                @change="patch({ linkMode: val($event) as ApprovalSpec['linkMode'] })">
+          <option value="public">Öffentlich · von überall / mobil (über AlphaApprove)</option>
+          <option value="internal">Intern · nur im Firmennetz (Intranet-Link)</option>
+        </select>
+        <p class="text-[11px] text-gray-400 mt-1">
+          „Öffentlich" setzt einen konfigurierten AlphaApprove-Relay in der jeweiligen Umgebung
+          voraus (sonst wird kein Link erzeugt). „Intern" funktioniert nur, wenn die entscheidende
+          Person im Firmennetz ist.
+        </p>
+      </div>
+
       <!-- Bewusst auch ohne Mail-Link sichtbar: der Server prüft die Dauer
            immer, ein ausgeblendetes Feld wäre ein unbehebbarer Fehler. -->
       <div>

@@ -44,6 +44,7 @@ BASIS = {
          "responsibility": {"kind": "group", "group": "g_freigabe"},
          "approval": {"question": "Einstellung freigeben?",
                       "approveLabel": "Freigeben", "rejectLabel": "Ablehnen",
+                      "linkMode": "internal",
                       "decisionField": "freigabe.entscheidung",
                       "reasonField": "freigabe.grund"},
          "fields": [{"ref": "name", "mode": "readonly"},
@@ -569,6 +570,38 @@ def test_freigabe_mail_enthaelt_beide_links(monkeypatch):
               for teil in sent[0]["body"].split("href=") if marke in teil]
     assert {pa.load_token(t)["act"] for t in tokens} == {"approve", "reject"}
     assert all(pa.load_token(t)["phase"] == "freigabe" for t in tokens)
+
+
+def test_approval_links_internal_nutzt_eigene_route():
+    """linkMode=internal → itsdangerous-Links auf die eigene /process-freigabe-Route."""
+    d = defn(linkMode="internal")
+    a, r = pactions.approval_links(ticket(d), d.phases[1])
+    assert "/api/v1/process-freigabe?token=" in a
+    assert "/api/v1/process-freigabe?token=" in r and a != r
+
+
+def test_approval_links_public_nutzt_externen_relay(monkeypatch):
+    """linkMode=public + Relay konfiguriert → EdDSA-JWT-Links auf die /d-Route des Relays."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from backend.services import approval_jwt as aj
+    monkeypatch.setattr(aj, "_private_key_cache", Ed25519PrivateKey.generate())
+    monkeypatch.setattr(pactions.config, "APPROVAL_BASE_URL", "https://approval.example")
+    monkeypatch.setattr(pactions.config, "APPROVAL_API_KEY", "k")
+    monkeypatch.setattr(pactions.config, "APPROVAL_ISSUER", "iss")
+    monkeypatch.setattr(pactions.config, "APPROVAL_AUDIENCE", "aud")
+    d = defn(linkMode="public")
+    a, r = pactions.approval_links(ticket(d), d.phases[1])
+    assert a.startswith("https://approval.example/d?token=")
+    assert r.startswith("https://approval.example/d?token=") and a != r
+
+
+def test_approval_links_public_ohne_relay_wirft(monkeypatch):
+    """linkMode=public, aber Relay NICHT konfiguriert → Fehler statt stillem Rückfall."""
+    monkeypatch.setattr(pactions.config, "APPROVAL_BASE_URL", "")
+    monkeypatch.setattr(pactions.config, "APPROVAL_API_KEY", "")
+    d = defn(linkMode="public")
+    with pytest.raises(RuntimeError):
+        pactions.approval_links(ticket(d), d.phases[1])
 
 
 def test_ohne_externallink_geht_die_normale_aufgaben_mail_raus(monkeypatch):

@@ -1031,6 +1031,11 @@ class ApprovalSpec(_Base):
     rejectLabel: str = "Ablehnen"
     #: Mail mit Entscheidungs-Link versenden? Ohne das läuft die Freigabe nur in der App.
     externalLink: bool = True
+    #: Reichweite des Mail-Links: „public" = externer Relay (AlphaApprove) DIESER
+    #: Umgebung, von überall/mobil erreichbar; „internal" = eigene Intranet-Route
+    #: (/api/v1/process-freigabe), nur im Firmennetz. KEIN automatischer Rückfall –
+    #: eine „public"-Phase ohne konfigurierten Relay erzeugt bewusst keinen Link.
+    linkMode: Literal["internal", "public"] = "public"
     #: Freitext-Vorlage für den Mail-Text der Freigabe. Platzhalter `{{feld.key}}`
     #: werden durch die Auftragswerte ersetzt (zusätzlich {{title}}, {{id}}). Leer
     #: = nur die Frage steht in der Mail. Reiner Text – HTML wird escaped.
