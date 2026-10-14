@@ -290,6 +290,27 @@ defineProps<{ title?: string }>()
           <span v-if="sidebarOpen" class="truncate">Globales Archiv</span>
         </a>
 
+        <!-- Aktuelles: Neuigkeiten / Updates (für alle). -->
+        <p v-if="sidebarOpen" class="px-3 pt-5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/50">
+          Aktuelles
+        </p>
+        <div v-else class="mx-3 my-3 border-t border-white/15" />
+
+        <a @click.prevent="navigate('/newsfeed')"
+           href="/newsfeed"
+           class="relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
+           :class="[
+             isActive('/newsfeed') ? 'bg-white/20 font-medium' : 'hover:bg-white/10',
+             sidebarOpen ? '' : 'justify-center'
+           ]">
+          <div v-if="isActive('/newsfeed')" class="absolute left-0 top-2 bottom-2 w-0.5 bg-white rounded-r-full"/>
+          <svg class="w-4 h-4 flex-shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/>
+            <path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/>
+          </svg>
+          <span v-if="sidebarOpen" class="truncate">Newsfeed</span>
+        </a>
+
         <!-- Admin -->
         <template v-if="auth.isAdmin">
           <p v-if="sidebarOpen" class="px-3 pt-5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/50">
