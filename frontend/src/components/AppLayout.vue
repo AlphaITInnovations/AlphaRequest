@@ -369,6 +369,15 @@ defineProps<{ title?: string }>()
             </svg>
           </button>
         </div>
+
+        <!-- Kleiner, unaufdringlicher Link auf die Infoseite „Allgemeine Hinweise". -->
+        <a @click.prevent="navigate('/hinweise')" href="/hinweise"
+           title="Allgemeine Hinweise"
+           class="block text-center text-[11px] text-white/50 hover:text-white/80 transition cursor-pointer"
+           :class="isActive('/hinweise') ? 'text-white/80' : ''">
+          <span v-if="sidebarOpen">Allgemeine Hinweise</span>
+          <span v-else aria-hidden="true">ⓘ</span>
+        </a>
       </div>
     </aside>
 
