@@ -843,6 +843,7 @@
             "value": null,
             "counter": null,
             "directus": null,
+            "directusFill": null,
             "http": null,
             "email": null,
             "emailBody": null
@@ -860,7 +861,7 @@
       "grantsFullView": true,
       "responsibility": {
         "kind": "group",
-        "group": "HIER_GRUPPEN_ID_IT_EINSETZEN",
+        "group": "466a6954b6764deba34be88ecbb7e75d",
         "user": null,
         "fromField": null,
         "rule": [],
@@ -872,6 +873,7 @@
         "approveLabel": "Speichern",
         "rejectLabel": "Ablehnen",
         "externalLink": false,
+        "linkMode": "public",
         "emailBody": null,
         "linkMaxAge": "P7D",
         "requireReason": true,
@@ -1163,101 +1165,63 @@
               "collection": "mitarbeitende",
               "fieldMap": [
                 {
-                  "source": "stammdaten.salutation",
                   "target": "salutation",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.salutation"
                 },
                 {
-                  "source": "stammdaten.first_name",
                   "target": "first_name",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.first_name"
                 },
                 {
-                  "source": "stammdaten.last_name",
                   "target": "last_name",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.last_name"
                 },
                 {
-                  "source": "stammdaten.job_title",
                   "target": "job_title",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.job_title"
                 },
                 {
-                  "source": "stammdaten.position",
                   "target": "position",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.position"
                 },
                 {
-                  "source": "stammdaten.location",
                   "target": "location",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.location"
                 },
                 {
-                  "source": "stammdaten.phone",
                   "target": "phone",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.phone"
                 },
                 {
-                  "source": "stammdaten.mobile",
                   "target": "mobile",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.mobile"
                 },
                 {
-                  "source": "stammdaten.private_mail",
                   "target": "private_mail",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.private_mail"
                 },
                 {
-                  "source": "stammdaten.private_phone",
                   "target": "private_phone",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.private_phone"
                 },
                 {
-                  "source": "stammdaten.personal_address",
                   "target": "personal_address",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.personal_address"
                 },
                 {
-                  "source": "stammdaten.personal_zip",
                   "target": "personal_zip",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.personal_zip"
                 },
                 {
-                  "source": "stammdaten.personal_location",
                   "target": "personal_location",
-                  "value": null,
-                  "resolve": null,
-                  "when": null
+                  "source": "stammdaten.personal_location"
                 }
               ],
               "idField": "stammdaten.directus_id",
               "onError": "continue",
               "matchField": null
             },
+            "directusFill": null,
             "http": null,
             "email": null,
             "emailBody": null
