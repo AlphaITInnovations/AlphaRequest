@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { ref } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 
 export const client = axios.create({
@@ -6,6 +7,13 @@ export const client = axios.create({
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 })
+
+/** LIVE-Erreichbarkeit des Backends. Der Router-Guard (main.ts) liest diesen Wert –
+ *  deshalb ein reaktiver Ref statt eines beim Start eingefrorenen Flags: sonst
+ *  blieb man nach einem kurzen Backend-Ausfall dauerhaft auf „/backend-down"
+ *  hängen, weil der Guard den alten (false-)Wert festhielt und jeden Rücksprung
+ *  – auch den Retry-Button – wieder dorthin umleitete. */
+export const backendReachable = ref(true)
 
 export function setupInterceptors(router: import('vue-router').Router) {
   client.interceptors.response.use(
@@ -35,15 +43,20 @@ export function setupInterceptors(router: import('vue-router').Router) {
   )
 }
 
-/** Gibt true zurück wenn das Backend erreichbar ist */
+/** Gibt true zurück wenn das Backend erreichbar ist. Aktualisiert dabei
+ *  `backendReachable`, damit der Router-Guard immer den aktuellen Zustand sieht
+ *  (und der Retry auf „/backend-down" nach Rückkehr des Backends greift). */
 export async function checkBackendHealth(): Promise<boolean> {
   try {
     const res = await axios.get('/api/v1/health', {
       withCredentials: true,
       timeout: 3000,
     })
-    return res.status === 200
+    const ok = res.status === 200
+    backendReachable.value = ok
+    return ok
   } catch {
+    backendReachable.value = false
     return false
   }
 }

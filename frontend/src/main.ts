@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
-import { setupInterceptors, checkBackendHealth } from '@/api/client'
+import { setupInterceptors, checkBackendHealth, backendReachable } from '@/api/client'
 import './style.css'
 
 const pinia = createPinia()
@@ -38,19 +38,21 @@ router.onError((err) => {
 // App sofort mounten – Vue rendert, bevor der Check fertig ist
 app.mount('#app')
 
-// Health-Check danach – navigiert bei Bedarf auf /backend-down
-checkBackendHealth().then(ok => {
-  if (!ok) {
-    router.replace('/backend-down')
+// Guard liest den LIVE-Zustand (backendReachable), NICHT ein beim Start
+// eingefrorenes Flag. Sobald das Backend wieder erreichbar ist – z. B. nach dem
+// Retry auf „/backend-down", der checkBackendHealth() erneut aufruft – lässt der
+// Guard die Rückkehr zu und schickt von „/backend-down" weiter nach „/" (dort
+// greift dann der normale Auth-Guard → Dashboard bzw. Login).
+router.beforeEach((to) => {
+  if (!backendReachable.value && to.path !== '/backend-down') {
+    return { path: '/backend-down' }
   }
+  if (backendReachable.value && to.path === '/backend-down') {
+    return { path: '/' }
+  }
+})
 
-  // Guard für alle weiteren Navigationen
-  router.beforeEach((to) => {
-    if (!ok && to.path !== '/backend-down') {
-      return { path: '/backend-down' }
-    }
-    if (ok && to.path === '/backend-down') {
-      return { path: '/' }
-    }
-  })
+// Health-Check beim Start – navigiert bei Bedarf einmalig auf /backend-down.
+checkBackendHealth().then(ok => {
+  if (!ok) router.replace('/backend-down')
 })

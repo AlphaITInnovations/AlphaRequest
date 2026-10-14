@@ -8,7 +8,9 @@ from backend.core.dependencies import get_current_user, check_session_only
 from backend.core.session import rotate_sid, approx_cookie_size_bytes, TOKENS, SERVER_BOOT_ID
 from backend.database.users import (
     upsert_user, get_user_permissions, get_user, set_group_admin, revoke_group_admin,
+    PERM_ADMIN,
 )
+from backend.database.settings import get_maintenance
 from backend.services.admin_sync import (
     decide_group_admin_action, ACTION_PROMOTE, ACTION_REVOKE,
 )
@@ -143,6 +145,23 @@ def check_session(user: dict = Depends(check_session_only)):
     die Session nicht künstlich am Leben hält.
     """
     return {"status": "ok"}
+
+
+# ── Wartungsmodus (öffentlich – für den Login-Bildschirm) ─────────────────────
+
+@router.get("/maintenance", include_in_schema=False)
+def maintenance_status():
+    """Öffentlicher Wartungsstatus für den NICHT angemeldeten Login-Bildschirm:
+    ist gerade Wartung, mit Hinweistext und geplantem Ende. Bewusst OHNE
+    Auth und ohne `by` (wer aktiviert hat ist intern). Fail-open: bei Fehler
+    „keine Wartung", damit der Login immer erreichbar bleibt."""
+    try:
+        m = get_maintenance()
+    except Exception:
+        logger.exception("Wartungsstatus konnte nicht geladen werden")
+        return {"active": False, "message": None, "planned_end": None, "since": None}
+    return {"active": m["active"], "message": m["message"],
+            "planned_end": m["planned_end"], "since": m["since"]}
 
 
 # ── Login-Flow ─────────────────────────────────────────────────────────────────
@@ -286,6 +305,29 @@ async def auth_callback(request: Request):
 
         # Permissions in die Session schreiben
         user_payload["permissions"] = db_user.permissions
+
+        # Wartungsmodus: während einer Wartung dürfen sich nur Admins anmelden.
+        # Normale Konten werden hier abgewiesen – OHNE dass eine Session entsteht;
+        # der Login-Bildschirm zeigt Hinweis + geplantes Ende. Fail-OPEN: kann der
+        # Zustand nicht gelesen werden (DB-Hänger), wird NICHT gesperrt – die Sperre
+        # ist Bequemlichkeit, keine Sicherheitsgrenze, und darf nicht alle (inkl.
+        # der Leute, die die Wartung beenden) aussperren.
+        try:
+            maintenance_active = get_maintenance()["active"]
+        except Exception:
+            logger.exception("Wartungsmodus-Prüfung beim Login fehlgeschlagen – fail-open")
+            maintenance_active = False
+        if maintenance_active and PERM_ADMIN not in (db_user.permissions or []):
+            record_audit(action="login_blocked", actor_id=user_payload["id"],
+                         actor_name=user_payload["displayName"] or "", entity_type="auth",
+                         entity_id=user_payload["id"],
+                         summary="Anmeldung während Wartungsmodus abgewiesen (kein Admin)",
+                         ip=_client_ip(request))
+            request.session.clear()   # keinen Halb-Zustand (auth_flow) zurücklassen
+            return RedirectResponse(
+                f"{config.FRONTEND_URL}/login?error=maintenance",
+                status_code=HTTP_302_FOUND,
+            )
 
         sid = rotate_sid(request.session)
         TOKENS.put(sid, result)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import axios from 'axios'
 
 const logoUrl = '/static/logo.png'
 const route = useRoute()
@@ -12,12 +13,42 @@ const ERROR_MESSAGES: Record<string, string> = {
   token_error: 'Die Anmeldung bei Microsoft konnte nicht abgeschlossen werden (kein Token erhalten). Bitte erneut versuchen.',
   login_failed: 'Beim Login ist ein Fehler aufgetreten. Bitte erneut versuchen – wenden Sie sich an die Administration, falls es weiterhin auftritt.',
   session_expired: 'Ihre Sitzung wurde beendet. Bitte melden Sie sich erneut an.',
+  maintenance: 'Während der Wartung können sich nur Administratoren anmelden. Bitte später erneut versuchen.',
 }
 
 const errorMessage = computed(() => {
   const code = route.query.error
   if (typeof code !== 'string' || !code) return null
+  // Bei Wartung übernimmt der Wartungs-Hinweis die Erklärung – keine doppelte Meldung.
+  if (code === 'maintenance') return null
   return ERROR_MESSAGES[code] || 'Anmeldung fehlgeschlagen. Bitte erneut versuchen.'
+})
+
+// ── Wartungsmodus (öffentlicher Status) ──────────────────────────────────────
+interface Maintenance { active: boolean; message: string | null; planned_end: string | null; since: string | null }
+const maintenance = ref<Maintenance | null>(null)
+// Der Login wurde gerade wegen Wartung abgewiesen (Rücksprung mit ?error=maintenance).
+const blockedByMaintenance = computed(() => route.query.error === 'maintenance')
+
+/** „2026-10-14T18:30" → „14.10.2026, 18:30 Uhr". Nicht parsebares unverändert zeigen. */
+function formatEnd(raw: string | null): string | null {
+  if (!raw) return null
+  const d = new Date(raw)
+  if (isNaN(d.getTime())) return raw
+  return d.toLocaleString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  }) + ' Uhr'
+}
+const plannedEnd = computed(() => formatEnd(maintenance.value?.planned_end ?? null))
+
+onMounted(async () => {
+  try {
+    const res = await axios.get('/api/v1/maintenance', { timeout: 4000 })
+    maintenance.value = res.data
+  } catch {
+    // Status nicht ladbar → kein Hinweis (der Login bleibt normal nutzbar).
+    maintenance.value = null
+  }
 })
 
 function startAuth() {
@@ -35,6 +66,30 @@ function startAuth() {
       <h1 class="text-2xl font-semibold text-center mb-6" style="color: #3EAAB8">
         AlphaRequest
       </h1>
+
+      <!-- Wartungsmodus: Hinweis + geplantes Ende. Nur Admins können sich während
+           der Wartung anmelden. -->
+      <div
+        v-if="maintenance?.active"
+        role="status"
+        class="mb-6 rounded-md border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-900/20
+               px-4 py-3 text-sm text-amber-900 dark:text-amber-100"
+      >
+        <p class="flex items-center gap-2 font-semibold">
+          <span>🛠️</span><span>Wartungsmodus</span>
+        </p>
+        <p class="mt-1">
+          Die Anwendung wird gerade gewartet. In dieser Zeit können sich nur
+          Administrator:innen anmelden.
+        </p>
+        <p v-if="maintenance.message" class="mt-2 whitespace-pre-line">{{ maintenance.message }}</p>
+        <p v-if="plannedEnd" class="mt-2">
+          <span class="font-medium">Voraussichtlich bis:</span> {{ plannedEnd }}
+        </p>
+        <p v-if="blockedByMaintenance" class="mt-2 text-xs text-amber-800/80 dark:text-amber-200/70">
+          Ihre Anmeldung wurde währenddessen nicht zugelassen.
+        </p>
+      </div>
 
       <p
         v-if="errorMessage"

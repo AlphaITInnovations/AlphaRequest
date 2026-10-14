@@ -51,6 +51,20 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresPermission: 'admin' },
     },
 
+    // Allgemeine Hinweise (statische Infoseite, kleiner Link in der Navigation).
+    {
+      path: '/hinweise',
+      component: () => import('@/views/GeneralNotesView.vue'),
+      meta: { requiresAuth: true },
+    },
+
+    // Newsfeed (Update-/Feature-Neuigkeiten; vorerst Platzhalter).
+    {
+      path: '/newsfeed',
+      component: () => import('@/views/NewsfeedView.vue'),
+      meta: { requiresAuth: true },
+    },
+
     // ── Prozess-Definitionen ───────────────────────────────────────────────────
     // Editor: nur Admin (die Definitions-Endpunkte sind ebenfalls admin-gated).
     {
