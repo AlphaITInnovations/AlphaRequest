@@ -433,17 +433,6 @@ def _subject(text: str) -> str:
     return text.replace("\r", " ").replace("\n", " ")[:200]
 
 
-def _duration_text(seconds: int) -> str:
-    """„7 Tage“ / „12 Stunden“ – aus einer ISO-Dauer wird lesbarer Text."""
-    if seconds % 86400 == 0:
-        tage = seconds // 86400
-        return f"{tage} Tag" if tage == 1 else f"{tage} Tage"
-    if seconds % 3600 == 0:
-        std = seconds // 3600
-        return f"{std} Stunde" if std == 1 else f"{std} Stunden"
-    return f"{max(1, seconds // 60)} Minuten"
-
-
 def responsible_department_name(phase: PhaseDef, values: Optional[dict]) -> Optional[str]:
     """Anzeigename der zuständigen Fachabteilung einer Freigabe-Phase (z. B.
     „FreigabeHerrLutz") – damit „Freigegeben/Abgelehnt von" bei einer Entscheidung per
@@ -562,13 +551,8 @@ def _attachment_note_html(n: int) -> str:
 def _approval_message(row: dict, phase: PhaseDef, title: str,
                       *, n_attachments: int = 0, reminder: bool = False) -> tuple[str, str]:
     from backend.services import mail_template as mt
-    from backend.services.iso_duration import parse_duration
     spec = phase.approval
     approve_url, reject_url = approval_links(row, phase)
-    try:
-        gueltig = _duration_text(parse_duration(spec.linkMaxAge))
-    except Exception:
-        gueltig = spec.linkMaxAge
     # Eine ERINNERUNG (Timer bzw. erneut gesendet) ist im Betreff klar als solche
     # gekennzeichnet – sonst sieht sie aus wie die erste Freigabe-Anfrage.
     label = "Erinnerung – Freigabe erforderlich" if reminder else "Freigabe erforderlich"
@@ -587,19 +571,13 @@ def _approval_message(row: dict, phase: PhaseDef, title: str,
 
     info_text = mt.substitute(spec.emailBody, resolve).strip() if spec.emailBody else ""
 
-    # Aktionsblock: Frage (fett) → Anhang-Hinweis → JA/NEIN-Knöpfe → Gültigkeit.
+    # Aktionsblock: Frage (fett) → Anhang-Hinweis → JA/NEIN-Knöpfe.
     question_html = (
         f'<div style="font-family:{_MAIL_FONT}; color:{_BRAND.heading_color};'
         f' font-size:16px; font-weight:700; margin-top:20px;">{html.escape(spec.question)}</div>')
-    validity_html = (
-        f'<p style="font-family:{_MAIL_FONT}; font-size:12px;'
-        f' color:{_BRAND.muted_text}; line-height:1.6; margin-top:16px;">Der Link öffnet eine '
-        f'Bestätigungsseite – erst dort wird entschieden. Eine Anmeldung ist nicht nötig. '
-        f'Gültig {html.escape(gueltig)} ab Versand.</p>')
     action_html = (question_html + _attachment_note_html(n_attachments)
                    + _approval_buttons_html(approve_url, reject_url,
-                                            spec.approveLabel, spec.rejectLabel)
-                   + validity_html)
+                                            spec.approveLabel, spec.rejectLabel))
 
     intro = (f"Erinnerung: Für diesen Auftrag (#{row.get('id')}) steht Ihre Entscheidung "
              f"noch aus." if reminder else
