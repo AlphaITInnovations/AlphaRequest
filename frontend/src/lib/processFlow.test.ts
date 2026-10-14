@@ -48,6 +48,24 @@ describe('buildFlowModel', () => {
     expect(m.hasRejected).toBe(false)   // kein Terminal „Abgelehnt", wenn zurückgesprungen wird
   })
 
+  it('überspringbare Freigabe (on_enter+auto_advance) → auto-Kante NEBEN approve + reject', () => {
+    const m = buildFlowModel(defn([
+      { key: 'start', kind: 'start', responsibility: { kind: 'owner' } },
+      { key: 'freigabe', kind: 'approval', responsibility: { kind: 'group', group: 'g1' },
+        approval: { question: 'OK?', onReject: 'reject' },
+        automations: [{ trigger: { type: 'on_enter' }, action: { type: 'auto_advance' },
+          guard: { truthy: 'ablauf.skip' } }] },
+      { key: 'arbeit', kind: 'task', responsibility: { kind: 'owner' } },
+    ]))
+    const fg = m.nodes.find((n) => n.id === 'freigabe')!
+    expect(fg.auto).toBe(true)
+    expect(fg.autoConditional).toBe(true)
+    const toArbeit = m.edges.filter((e) => e.from === 'freigabe' && e.to === 'arbeit')
+    expect(toArbeit.map((e) => e.kind).sort()).toEqual(['approve', 'auto'])
+    expect(toArbeit.find((e) => e.kind === 'auto')?.conditional).toBe(true)
+    expect(m.edges.some((e) => e.from === 'freigabe' && e.to === TERMINAL_REJECTED)).toBe(true)
+  })
+
   it('on_enter + auto_advance → Pass-Through-Knoten mit auto-Kante', () => {
     const m = buildFlowModel(defn([
       { key: 'start', kind: 'start', responsibility: { kind: 'owner' },

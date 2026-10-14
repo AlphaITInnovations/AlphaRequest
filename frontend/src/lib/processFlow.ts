@@ -108,6 +108,12 @@ export function buildFlowModel(defn: ProcessDefinition | null | undefined): Flow
           label: p.approval.rejectLabel || 'Ablehnen', conditional: false })
         hasRejected = true
       }
+      // Überspringbare Freigabe: on_enter+auto_advance (z. B. „Freigabe überspringen"-
+      // Schalter) → zusätzliche Kante, die die Entscheidung umgeht.
+      if (nodes[i].auto) {
+        edges.push({ from: p.key, to: nextId, kind: 'auto',
+          label: 'übersprungen', conditional: nodes[i].autoConditional })
+      }
     } else {
       const auto = nodes[i].auto
       edges.push({ from: p.key, to: nextId, kind: auto ? 'auto' : 'advance',

@@ -94,10 +94,25 @@ interface RenderEdge {
   key: string; d: string; stroke: string; dash: string; marker: string
   label: string; conditional: boolean; lx: number; ly: number; strong: boolean
 }
+const vKey = (e: { from: string; to: string }) => `${e.from}->${e.to}`
+const isVertical = (k: FlowEdgeKind) => k !== 'send_back' && k !== 'reject'
+// Mehrere senkrechte Kanten zwischen DENSELBEN Knoten (z. B. „Freigeben" + „übersprungen")
+// seitlich auffächern, damit sie nicht aufeinander liegen.
+const spread = (total: number, idx: number) => {
+  if (total <= 1 || idx === 0) return 0
+  const k = Math.ceil(idx / 2)
+  return (idx % 2 === 1 ? -1 : 1) * k * 30
+}
+
 const renderEdges = computed<RenderEdge[]>(() => {
   const g = geo.value
   const w = size.value.w
   const sel = selectedKey.value
+  const vcount = new Map<string, number>()
+  model.value.edges.forEach((e) => {
+    if (isVertical(e.kind)) vcount.set(vKey(e), (vcount.get(vKey(e)) || 0) + 1)
+  })
+  const vseen = new Map<string, number>()
   const out: RenderEdge[] = []
   model.value.edges.forEach((e, i) => {
     const a = g[e.from]; const b = g[e.to]
@@ -112,7 +127,11 @@ const renderEdges = computed<RenderEdge[]>(() => {
       d = `M ${sx} ${a.cy} C ${gx} ${a.cy} ${gx} ${b.cy} ${tx} ${b.cy}`
       lx = gx - 2; ly = (a.cy + b.cy) / 2
     } else {
-      const sx = a.cx; const tx = b.cx; const my = (a.bottom + b.top) / 2
+      const key = vKey(e)
+      const idx = vseen.get(key) || 0
+      vseen.set(key, idx + 1)
+      const off = spread(vcount.get(key) || 1, idx)
+      const sx = a.cx + off; const tx = b.cx + off; const my = (a.bottom + b.top) / 2
       d = `M ${sx} ${a.bottom} C ${sx} ${my} ${tx} ${my} ${tx} ${b.top}`
       lx = (sx + tx) / 2; ly = my
     }
@@ -155,6 +174,13 @@ const selectedFields = computed<FieldVis[]>(() => {
     if (ref_.visibleWhen) notes.push('bedingt sichtbar')
     return { key: ref_.ref, label: fd?.label || ref_.ref, tone, text, note: notes.join(' · ') }
   })
+})
+
+const selectedSkippable = computed(() => {
+  const p = selectedPhase.value
+  if (!p) return false
+  return (p.automations || []).some(
+    (a) => a.trigger?.type === 'on_enter' && a.action?.type === 'auto_advance')
 })
 
 const rejectTargetLabel = computed(() => {
@@ -235,7 +261,9 @@ const meta = (kind: PhaseDef['kind']) => PHASE_KIND_META[kind]
             <div class="flex flex-wrap gap-1 mt-2">
               <span v-if="node.auto"
                     class="text-[10px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
-                ⏭ {{ node.autoConditional ? 'automatisch (bedingt)' : 'automatisch' }}
+                ⏭ {{ node.approval
+                  ? (node.autoConditional ? 'überspringbar (bedingt)' : 'wird übersprungen')
+                  : (node.autoConditional ? 'automatisch (bedingt)' : 'automatisch') }}
               </span>
               <span v-if="node.departments.length"
                     class="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
@@ -297,6 +325,16 @@ const meta = (kind: PhaseDef['kind']) => PHASE_KIND_META[kind]
               </ul>
             </template>
             <div v-else class="text-sm text-gray-800 dark:text-gray-100">{{ respText }}</div>
+          </div>
+
+          <!-- Automatischer Übersprung -->
+          <div v-if="selectedSkippable" class="mb-3 rounded-xl bg-sky-50 dark:bg-sky-900/15
+                      border border-sky-200/70 dark:border-sky-500/20 p-2.5">
+            <div class="text-xs font-semibold text-sky-700 dark:text-sky-300 mb-0.5">Automatischer Übersprung</div>
+            <div class="text-[12px] text-gray-700 dark:text-gray-200">
+              Diese Phase wird beim Betreten <strong>automatisch übersprungen</strong>, wenn ihre
+              Bedingung erfüllt ist<template v-if="selectedPhase.approval"> – dann ohne Freigabe-Entscheidung</template>.
+            </div>
           </div>
 
           <!-- Volle Sicht -->
