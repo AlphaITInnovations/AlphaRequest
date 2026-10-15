@@ -119,6 +119,14 @@ def system(row: dict, action: str, **kwargs) -> Optional[dict]:
 
 # ── Lesen / Redaktion ─────────────────────────────────────────────────────────
 
+def addenda(ticket_id: int, *, limit: int = 200) -> list[dict]:
+    """Nachträge (ADDENDUM) eines Auftrags, neueste zuerst. Sie tragen NUR Freitext
+    (body), keine Feld-Schlüssel/Änderungen – daher ohne die Feld-Redaktion des
+    Verlaufs direkt an jede lesende Person zeigbar (der volle Verlauf läuft
+    weiterhin über `for_viewer`)."""
+    return store.list_by_action(ticket_id, ADDENDUM, limit=limit)
+
+
 def redact(events: Iterable[dict], defn: Optional[ProcessDefinition],
            ctx: vis.ViewerCtx, *, staff: bool) -> list[dict]:
     """Verlauf auf das reduzieren, was diese Person sehen darf.

@@ -65,6 +65,13 @@ export async function addAddendum(ticketId: number, text: string): Promise<Adden
   return data.data
 }
 
+/** Nachträge eines Auftrags (neueste zuerst) – für die Auftragsansicht.
+ *  Breiterer Zugriff als der volle Verlauf (nur Freitext, keine Feld-Metadaten). */
+export async function listAddenda(ticketId: number): Promise<ProcessEvent[]> {
+  const { data } = await client.get(`/process-tickets/${ticketId}/addenda`)
+  return data.data
+}
+
 /** Wiederaufnahme eines abgeschlossenen/abgelehnten Auftrags (nur Admin). */
 export async function reopenTicket(
   ticketId: number, reason: string, phase?: string | null,

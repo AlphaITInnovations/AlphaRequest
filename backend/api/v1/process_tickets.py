@@ -2086,6 +2086,26 @@ class AddendumOut(BaseModel):
     notified: int
 
 
+@router.get("/process-tickets/{ticket_id}/addenda", response_model=DataResponse[list[EventOut]])
+def list_ticket_addenda(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Nachträge eines Auftrags (neueste zuerst) – für die Auftragsansicht.
+
+    Breiter Archiv-Lese-Gate (wie das Detail eines abgeschlossenen Auftrags): auch
+    reine Archiv-Beteiligte sehen sie. Unbedenklich, weil ein Nachtrag nur Freitext
+    trägt (keine Feld-Metadaten) – anders als der volle Verlauf braucht er keine
+    Feld-Redaktion.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    _assert_view_or_archive(row, defn, user)
+    return DataResponse(data=[EventOut(**e) for e in events.addenda(ticket_id)])
+
+
 @router.post("/process-tickets/{ticket_id}:addendum", response_model=DataResponse[AddendumOut])
 def add_ticket_addendum(ticket_id: int, body: AddendumRequest,
                         user: dict = Depends(get_current_user)):

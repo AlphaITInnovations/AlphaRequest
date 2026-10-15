@@ -1,35 +1,43 @@
 <script setup lang="ts">
 /**
- * Nachtrag zu einem bereits ABGESCHLOSSENEN Auftrag.
+ * Nachträge zu einem bereits ABGESCHLOSSENEN Auftrag.
  *
- * Tritt nach dem Abschluss noch eine Änderung/Information auf, kann eine am
- * Auftrag beteiligte Person hier einen Freitext hinterlassen. Beim Absenden
+ * Zeigt die vorhandenen Nachträge (neueste zuerst) direkt in der Auftragsansicht
+ * und erlaubt einer beteiligten Person, einen weiteren hinzuzufügen. Beim Absenden
  * werden ALLE beteiligten Fachabteilungen per E-Mail informiert – der Auftrag
- * bleibt abgeschlossen (es wird nichts am Status geändert). Das Backend prüft
- * Zugriff (nur Beteiligte) und Zustand (nur abgeschlossene Aufträge).
+ * bleibt abgeschlossen (nichts am Status ändert sich). Zugriff/Zustand prüft das
+ * Backend; die Nachträge tragen nur Freitext (keine Feld-Metadaten).
  */
-import { ref, computed } from 'vue'
-import { addAddendum } from '@/api/processEvents'
+import { ref, computed, onMounted, watch } from 'vue'
+import { addAddendum, listAddenda, type ProcessEvent } from '@/api/processEvents'
+import { absoluteTime, relativeTime } from '@/lib/processEventLabels'
 import { errorMessage } from '@/lib/processErrors'
 
 const props = defineProps<{ ticketId: number }>()
-/** Dem Elternteil erlauben, den Verlauf nachzuladen (Admin-Ansicht). */
+/** Dem Elternteil erlauben, den (Admin-)Verlauf nachzuladen. */
 const emit = defineEmits<{ (e: 'sent'): void }>()
 
 const MAX = 5000
+const items = ref<ProcessEvent[]>([])
 const offen = ref(false)
 const text = ref('')
 const busy = ref(false)
 const fehler = ref<string | null>(null)
-/** Nach erfolgreichem Senden: Zahl der benachrichtigten Empfänger (oder -1 = none). */
-const gesendetAn = ref<number | null>(null)
 
 const zuLang = computed(() => text.value.length > MAX)
 const absendbar = computed(() => !!text.value.trim() && !zuLang.value && !busy.value)
 
+async function load() {
+  try {
+    items.value = await listAddenda(props.ticketId)
+  } catch {
+    // Still: die Liste ist Beiwerk – ein Ladefehler soll die Seite nicht stören.
+    items.value = []
+  }
+}
+
 function oeffnen() {
   offen.value = true
-  gesendetAn.value = null
   fehler.value = null
 }
 
@@ -44,10 +52,10 @@ async function senden() {
   busy.value = true
   fehler.value = null
   try {
-    const res = await addAddendum(props.ticketId, text.value.trim())
-    gesendetAn.value = res.notified
+    await addAddendum(props.ticketId, text.value.trim())
     offen.value = false
     text.value = ''
+    await load()
     emit('sent')
   } catch (e) {
     fehler.value = errorMessage(e, 'Nachtrag konnte nicht gesendet werden')
@@ -55,35 +63,41 @@ async function senden() {
     busy.value = false
   }
 }
+
+onMounted(load)
+watch(() => props.ticketId, load)
 </script>
 
 <template>
   <div class="card-section">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <h3 class="section-title mb-1">Nachtrag</h3>
+        <h3 class="section-title mb-1">Nachträge</h3>
         <p class="text-sm text-gray-500 dark:text-gray-400">
           Ist nach dem Abschluss noch etwas hinzugekommen? Hinterlasse einen Nachtrag –
           alle beteiligten Fachabteilungen werden per E-Mail informiert. Der Auftrag
           bleibt abgeschlossen.
         </p>
       </div>
-      <button v-if="!offen" @click="oeffnen"
-              class="btn-secondary flex-shrink-0 text-sm">
+      <button v-if="!offen" @click="oeffnen" class="btn-secondary flex-shrink-0 text-sm">
         Nachtrag hinzufügen
       </button>
     </div>
 
-    <!-- Bestätigung nach dem Senden -->
-    <div v-if="gesendetAn !== null && !offen"
-         class="mt-3 rounded-xl border border-emerald-300/60 dark:border-emerald-500/30
-                bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
-      <span v-if="gesendetAn > 0">
-        Nachtrag gesendet – {{ gesendetAn }}
-        {{ gesendetAn === 1 ? 'Empfänger wurde' : 'Empfänger wurden' }} benachrichtigt.
-      </span>
-      <span v-else>Nachtrag gespeichert.</span>
-    </div>
+    <!-- Vorhandene Nachträge (neueste zuerst) -->
+    <ul v-if="items.length" class="mt-4 space-y-2">
+      <li v-for="ev in items" :key="ev.id"
+          class="rounded-xl border border-gray-100 dark:border-white/[0.06]
+                 bg-gray-50 dark:bg-white/[0.03] px-3.5 py-2.5">
+        <div class="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <span class="font-medium text-gray-500 dark:text-gray-300">{{ ev.actor_name || '—' }}</span>
+          <span>·</span>
+          <span :title="absoluteTime(ev.created_at)">{{ relativeTime(ev.created_at) }}</span>
+        </div>
+        <p class="mt-1 text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-200">{{ ev.body }}</p>
+      </li>
+    </ul>
+    <p v-else class="mt-3 text-sm text-gray-400 italic">Noch keine Nachträge.</p>
 
     <!-- Eingabe -->
     <div v-if="offen" class="mt-3 space-y-2">
