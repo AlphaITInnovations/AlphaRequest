@@ -822,6 +822,54 @@ def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
         return []
 
 
+def notify_addendum(row: dict, defn: Optional[ProcessDefinition], *,
+                    author_name: str, body_text: str,
+                    actor_email: Optional[str] = None,
+                    sender: Callable = _default_sender,
+                    groups: Optional[list] = None) -> list[str]:
+    """Nachtrag zu einem bereits ABGESCHLOSSENEN Auftrag: informiert ALLE am
+    Auftrag beteiligten Fachabteilungen (deren Verteiler) über den Freitext. Der
+    Auftrags-Status ändert sich dadurch NICHT. Wirft nicht; gibt die Empfänger zurück.
+
+    Empfänger = die Verteiler der tatsächlich beteiligten Fachabteilungen
+    (process_runtime.involved_department_group_ids). Kommt dabei niemand heraus
+    (keine Verteiler hinterlegt / Definition nicht ladbar), greift wie überall der
+    TICKET_MAIL-Fallback – der Nachtrag läuft NIE stumm ins Leere.
+    """
+    try:
+        group_ids = (pr.involved_department_group_ids(defn, row.get("runtime") or {})
+                     if defn else set())
+        if not group_ids and not defn:
+            logger.warning("Nachtrag #%s: Definition nicht ladbar – Fallback-Empfänger", row.get("id"))
+        tokens = [f"group:{gid}" for gid in sorted(group_ids)]
+        recips = set(resolve_recipients_multi(tokens, row, None, groups))
+        if actor_email:
+            recips.discard(actor_email)
+        if not recips:
+            return []
+        title = str(row.get("title") or f"Auftrag #{row.get('id')}")
+        subject = (f"[AlphaRequest] Nachtrag zu abgeschlossenem Auftrag: {title}"
+                   .replace("\r", " ").replace("\n", " ")[:200])
+        link = _ticket_link(row)
+        out = sorted(recips)
+        body = render_corporate_email(
+            subject=subject,
+            header_subtitle="Nachtrag",
+            headline=title,
+            info_box_url=link,
+            intro=(f"{author_name} hat einen Nachtrag zu diesem bereits abgeschlossenen "
+                   f"Auftrag hinterlassen. Der Auftrag bleibt abgeschlossen:"),
+            info_rows=[("Auftrag", f"#{row.get('id')}")],
+            content="",
+            action_html=_quote_block(body_text) + _primary_button_html(link),
+        )
+        sender(out, subject, body, kind="addendum")
+        return out
+    except Exception:
+        logger.exception("Nachtrags-Benachrichtigung (Archiv) für Ticket #%s fehlgeschlagen", row.get("id"))
+        return []
+
+
 def notify_rejection(row: dict, defn: Optional[ProcessDefinition], *,
                      reason: Optional[str], by_name: str,
                      sender: Callable = _default_sender,

@@ -356,3 +356,75 @@ def test_ticket_attachments_deckelt_gesamtgroesse(monkeypatch):
 
 def test_ticket_attachments_ohne_id_leer():
     assert pactions._ticket_attachments({}) == []
+
+
+# ── Nachtrag zu abgeschlossenem Auftrag ───────────────────────────────────────
+
+def _archiviert(defn, values):
+    """Auftrag durch alle Phasen bis „archiviert" treiben (jede Phase entered)."""
+    rt = pr.initial_runtime(defn, "t0", values)
+    status = "in_progress"
+    while not pr.is_terminal(rt):
+        rt, status = pr.advance(defn, rt, "t1", values)
+    return {"id": 11, "title": "Abgeschlossener Auftrag", "owner_id": "u_owner",
+            "status": "archived", "values": values, "runtime": rt}, status
+
+
+def test_involved_departments_sammelt_gruppen_und_abteilungen():
+    """Alle beteiligten Fachabteilungen: die departments-Phase (g_it+g_fp) UND die
+    Gruppen-Phase (g_it). Einzelpersonen (owner/assignable) zählen nicht."""
+    t, status = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    assert status == "archived"
+    assert pr.involved_department_group_ids(DEFN, t["runtime"]) == {"g_it", "g_fp"}
+
+
+def test_notify_addendum_informiert_alle_fachabteilungen():
+    sent, sender = _capture()
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    out = pactions.notify_addendum(t, DEFN, author_name="Max Muster",
+                                   body_text="Nachgereichte Information",
+                                   sender=sender, groups=GROUPS)
+    assert set(out) == {"it@example.org", "fuhrpark@example.org"}
+    assert sent and sent[0]["kind"] == "addendum"
+    assert "Abgeschlossener Auftrag" in sent[0]["subject"]
+
+
+def test_involved_departments_nur_erreichte_phasen():
+    """Ein nur bis zur Start-Phase gekommener Auftrag hat KEINE beteiligte
+    Fachabteilung – spätere (nie erreichte) Phasen zählen nicht."""
+    rt = pr.initial_runtime(DEFN, "t0", {"verantwortlich": "u_chef"})
+    t = {"id": 12, "title": "Früh abgebrochen", "owner_id": "u_owner",
+         "status": "rejected", "values": {}, "runtime": rt}
+    assert pr.involved_department_group_ids(DEFN, t["runtime"]) == set()
+
+
+_COND_DEFN = ProcessDefinition.model_validate({
+    "key": "cond", "name": "Cond",
+    "fields": [{"key": "car", "widget": "text"}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "car"}]},
+        {"key": "pruef", "kind": "review",
+         "responsibility": {"kind": "departments",
+            "rule": [{"group": "g_it"},
+                     {"group": "g_fp", "required": False, "when": {"==": ["car", "Ja"]}}]},
+         "fields": [{"ref": "car", "mode": "readonly"}]},
+    ],
+})
+
+
+def test_involved_departments_respektiert_bedingte_abteilung():
+    """Eine bedingte Abteilung (when), die für DIESEN Auftrag nie zugeschaltet
+    wurde (car != Ja), ist auch kein Nachtrags-Empfänger."""
+    t_nein, _ = _archiviert(_COND_DEFN, {"car": "Nein"})
+    assert pr.involved_department_group_ids(_COND_DEFN, t_nein["runtime"]) == {"g_it"}
+    t_ja, _ = _archiviert(_COND_DEFN, {"car": "Ja"})
+    assert pr.involved_department_group_ids(_COND_DEFN, t_ja["runtime"]) == {"g_it", "g_fp"}
+
+
+def test_notify_addendum_mailfehler_bricht_nichts_ab():
+    def boom(*a, **k):
+        raise RuntimeError("Graph down")
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    assert pactions.notify_addendum(t, DEFN, author_name="X", body_text="y",
+                                    sender=boom, groups=GROUPS) == []

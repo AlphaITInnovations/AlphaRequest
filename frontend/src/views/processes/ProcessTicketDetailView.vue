@@ -29,6 +29,7 @@ import AdminActionsPanel from '@/components/process/AdminActionsPanel.vue'
 import SchemaReadonlyView from '@/components/process/form/SchemaReadonlyView.vue'
 import ProcessTimeline from '@/components/process/ProcessTimeline.vue'
 import ProcessWatchers from '@/components/process/ProcessWatchers.vue'
+import ProcessAddendum from '@/components/process/ProcessAddendum.vue'
 import ProcessDepartments from '@/components/process/ProcessDepartments.vue'
 import BasisTicketDetail from '@/components/process/BasisTicketDetail.vue'
 import { isBasisTicket } from '@/lib/basisTicket'
@@ -209,6 +210,11 @@ const phaseLabels = computed<Record<string, string>>(() => {
 
 /** Verlauf nach jeder Aktion neu laden (Referenz auf die Komponente). */
 const timeline = ref<{ reload: () => void } | null>(null)
+
+/** Abgeschlossener (archivierter) Auftrag: dann steht der „Nachtrag"-Block zur
+ *  Verfügung (informiert die beteiligten Fachabteilungen, ändert nichts am
+ *  Status). Bewusst nur „archived", nicht abgelehnte Aufträge. */
+const istArchiviert = computed(() => ticket.value?.status === 'archived')
 
 /** Phasen mit view='export' zeigen die Druckansicht statt der Gesamtansicht. */
 const isExportPhase = computed(() => phase.value?.view === 'export')
@@ -732,6 +738,12 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen
                  Anhänge ausschließlich über konfigurierte Anhang-Felder
                  (widget=attachment), die das Formular oben rendert. -->
+
+            <!-- Nachtrag: nur bei abgeschlossenen Aufträgen. Beteiligte können aus
+                 dem Archiv heraus eine Ergänzung hinterlassen; alle beteiligten
+                 Fachabteilungen werden per Mail informiert, der Status bleibt. -->
+            <ProcessAddendum v-if="istArchiviert && ticket"
+                             :ticket-id="ticket.id" @sent="timeline?.reload()" />
           </div>
         </div>
 

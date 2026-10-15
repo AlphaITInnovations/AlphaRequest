@@ -37,6 +37,11 @@ ADVANCED = "advanced"
 REJECTED = "rejected"
 REOPENED = "reopened"
 COMMENT = "comment"
+#: Nachtrag an einem bereits ABGESCHLOSSENEN Auftrag (informiert alle beteiligten
+#: Fachabteilungen per Mail; der Status bleibt unverändert). Bewusst eine eigene
+#: Aktion statt `comment`, damit die Oberfläche ihn zeigen kann, obwohl die
+#: allgemeinen Nachträge dort ruhen.
+ADDENDUM = "addendum"
 DEPARTMENT_DONE = "department_done"
 DEPARTMENT_SKIPPED = "department_skipped"
 DEPARTMENT_REJECTED = "department_rejected"

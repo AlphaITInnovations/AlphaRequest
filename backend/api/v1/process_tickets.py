@@ -2074,6 +2074,71 @@ def add_ticket_comment(ticket_id: int, body: CommentRequest,
     return DataResponse(data=EventOut(**ev))
 
 
+# ── Nachtrag zu abgeschlossenem Auftrag ───────────────────────────────────────
+
+class AddendumRequest(BaseModel):
+    text: str
+
+
+class AddendumOut(BaseModel):
+    event: EventOut
+    #: Anzahl benachrichtigter Empfänger-Adressen (Fachabteilungs-Verteiler).
+    notified: int
+
+
+@router.post("/process-tickets/{ticket_id}:addendum", response_model=DataResponse[AddendumOut])
+def add_ticket_addendum(ticket_id: int, body: AddendumRequest,
+                        user: dict = Depends(get_current_user)):
+    """Nachtrag zu einem bereits ABGESCHLOSSENEN Auftrag.
+
+    Eine am Auftrag beteiligte Person hinterlässt aus dem Archiv heraus einen
+    Freitext; ALLE beteiligten Fachabteilungen werden per Mail informiert. Der
+    Auftrag bleibt archiviert/abgelehnt – am Status wird NICHTS geändert.
+
+    Zugriff wie beim Lesen eines abgeschlossenen Auftrags (breiter Archiv-Gate:
+    Owner, Beobachter, Mitglied einer beteiligten Fachabteilung, Aufsicht) – wer
+    den Auftrag nicht sehen darf, kann auch keinen Nachtrag auslösen.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    _assert_view_or_archive(row, defn, user)
+    # Bewusst NUR „archived" (abgeschlossen), nicht „rejected": der Nachtrag
+    # richtet sich an einen fertig abgeschlossenen Auftrag, zu dem noch etwas
+    # hinzukommt – ein abgelehnter Auftrag ist etwas anderes.
+    if row.get("status") != "archived":
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Ein Nachtrag ist nur bei einem bereits abgeschlossenen Auftrag möglich")
+    text = (body.text or "").strip()
+    if not text:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Nachtrag ist leer",
+                        fields=[{"path": "text", "code": "REQUIRED",
+                                 "message": "Bitte einen Text eingeben"}])
+    if len(text) > MAX_COMMENT_LEN:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Nachtrag zu lang",
+                        fields=[{"path": "text", "code": "TOO_LONG",
+                                 "message": f"Maximal {MAX_COMMENT_LEN} Zeichen"}])
+
+    # Bewusst `write` (nicht `record`): geht der Nachtrag verloren, muss der
+    # Aufrufer einen Fehler sehen und kein stilles „gespeichert".
+    ev = events.write(row, events.ADDENDUM, actor_id=user.get("id"),
+                      actor_name=_actor_name(user), body=text)
+    recips: list = []
+    try:
+        recips = pactions.notify_addendum(
+            row, defn, author_name=_actor_name(user), body_text=text,
+            actor_email=user.get("email") or user.get("mail")) or []
+        if recips:
+            logger.info("Nachtrag (Archiv) zu #%s an %s Empfänger", ticket_id, len(recips))
+    except Exception:
+        logger.exception("Nachtrags-Mail (Archiv) für #%s fehlgeschlagen", ticket_id)
+    return DataResponse(data=AddendumOut(event=EventOut(**ev), notified=len(recips)))
+
+
 # ── Wiederaufnahme ───────────────────────────────────────────────────────────
 
 class ReopenRequest(BaseModel):

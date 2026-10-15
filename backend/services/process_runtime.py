@@ -115,6 +115,42 @@ def current_departments(runtime: dict) -> list:
     return []
 
 
+def involved_department_group_ids(defn: ProcessDefinition, runtime: dict) -> set:
+    """Alle Fachabteilungs-Gruppen-IDs, die an diesem Auftrag beteiligt WAREN.
+
+    Grundlage für den „Nachtrag"-Versand an einem abgeschlossenen Auftrag: nur die
+    Stellen, die tatsächlich mitgearbeitet haben, sollen informiert werden – nicht
+    jede im Prozess definierte Abteilung.
+
+    * kind=group-Phasen, die der Auftrag ERREICHT hat (entered_at gesetzt): die Gruppe.
+    * kind=departments-Phasen: die im Runtime geseedeten Abteilungen (so sind
+      bedingte, nie zugeschaltete Abteilungen – z. B. Fuhrpark ohne Dienstwagen –
+      korrekt ausgeschlossen). Fällt der Runtime-Stand für eine ERREICHTE Phase aus,
+      greifen ersatzweise alle Regel-Gruppen, damit niemand übersehen wird.
+
+    Einzelpersonen-Zuständigkeiten (owner/user/assignable) sind KEINE Fachabteilung
+    und bleiben außen vor. Reine Logik, kein DB-Zugriff.
+    """
+    ids: set = set()
+    rt_by_key = {p.get("key"): p for p in (runtime.get("phases") or [])}
+    for p in defn.phases:
+        resp = getattr(p, "responsibility", None)
+        if resp is None:
+            continue
+        rp = rt_by_key.get(p.key) or {}
+        entered = rp.get("entered_at") is not None
+        if resp.kind == ResponsibilityKind.group:
+            if entered and resp.group:
+                ids.add(resp.group)
+        elif resp.kind == ResponsibilityKind.departments:
+            seeded = rp.get("departments") or []
+            if seeded:
+                ids.update(d.get("group") for d in seeded if d.get("group"))
+            elif entered:
+                ids.update(dr.group for dr in resp.rule if dr.group)
+    return {g for g in ids if g}
+
+
 def department_entry(runtime: dict, group_id: str) -> Optional[dict]:
     for d in current_departments(runtime):
         if d.get("group") == group_id:
