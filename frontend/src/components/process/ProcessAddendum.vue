@@ -23,8 +23,10 @@ const offen = ref(false)
 const text = ref('')
 const busy = ref(false)
 const fehler = ref<string | null>(null)
-/** Zahl der benachrichtigten Empfänger beim letzten Senden (null = noch nichts). */
-const gesendetAn = ref<number | null>(null)
+/** Nach erfolgreichem Senden: neutrale Bestätigung. Zur Empfänger-Diagnose dient
+ *  bewusst NUR das Audit-Log – dem Nutzer wird nie ein „keine Empfänger"-Hinweis
+ *  o. Ä. gezeigt. */
+const gesendet = ref(false)
 
 const zuLang = computed(() => text.value.length > MAX)
 const absendbar = computed(() => !!text.value.trim() && !zuLang.value && !busy.value)
@@ -41,7 +43,7 @@ async function load() {
 function oeffnen() {
   offen.value = true
   fehler.value = null
-  gesendetAn.value = null
+  gesendet.value = false
 }
 
 function abbrechen() {
@@ -55,8 +57,8 @@ async function senden() {
   busy.value = true
   fehler.value = null
   try {
-    const res = await addAddendum(props.ticketId, text.value.trim())
-    gesendetAn.value = res.notified
+    await addAddendum(props.ticketId, text.value.trim())
+    gesendet.value = true
     offen.value = false
     text.value = ''
     await load()
@@ -88,22 +90,12 @@ watch(() => props.ticketId, load)
       </button>
     </div>
 
-    <!-- Bestätigung nach dem Senden: Zahl der benachrichtigten Verteiler. 0 ist ein
-         ehrlicher Hinweis, dass bei den beteiligten Fachabteilungen keine
-         Verteiler-Mail hinterlegt ist. -->
-    <div v-if="gesendetAn !== null && !offen" class="mt-3 rounded-xl border px-4 py-3 text-sm"
-         :class="gesendetAn > 0
-           ? 'border-emerald-300/60 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200'
-           : 'border-amber-300/60 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100'">
-      <span v-if="gesendetAn > 0">
-        Nachtrag gesendet – {{ gesendetAn }}
-        {{ gesendetAn === 1 ? 'Empfänger wurde' : 'Empfänger wurden' }} per E-Mail benachrichtigt.
-      </span>
-      <span v-else>
-        Nachtrag gespeichert, aber <strong>keine Empfänger</strong> benachrichtigt – bei den
-        beteiligten Fachabteilungen ist keine Verteiler-Mail hinterlegt
-        (Einstellungen → Fachabteilungen).
-      </span>
+    <!-- Neutrale Bestätigung nach dem Senden (keine Empfänger-/Fehlerdetails für
+         den Nutzer – die Diagnose steht im Audit-Log). -->
+    <div v-if="gesendet && !offen"
+         class="mt-3 rounded-xl border border-emerald-300/60 dark:border-emerald-500/30
+                bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
+      Nachtrag gesendet.
     </div>
 
     <!-- Vorhandene Nachträge (neueste zuerst) -->

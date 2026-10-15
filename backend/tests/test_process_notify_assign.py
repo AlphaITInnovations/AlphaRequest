@@ -442,6 +442,18 @@ def test_involved_departments_respektiert_bedingte_abteilung():
     assert pr.involved_department_group_ids(_COND_DEFN, t_ja["runtime"]) == {"g_it", "g_fp"}
 
 
+def test_involved_departments_schliesst_uebersprungene_aus():
+    """Eine beteiligte, aber ÜBERSPRUNGENE Abteilung (status='skipped') bekommt
+    keinen Nachtrag – nur tatsächlich beteiligte."""
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    for ph in t["runtime"]["phases"]:
+        if ph["key"] == "pruefung":
+            for d in ph["departments"]:
+                if d["group"] == "g_fp":
+                    d["status"] = "skipped"
+    assert pr.involved_department_group_ids(DEFN, t["runtime"]) == {"g_it"}
+
+
 def test_notify_addendum_mailfehler_bricht_nichts_ab():
     def boom(*a, **k):
         raise RuntimeError("Graph down")

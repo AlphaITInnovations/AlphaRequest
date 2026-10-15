@@ -116,22 +116,18 @@ def current_departments(runtime: dict) -> list:
 
 
 def involved_department_group_ids(defn: ProcessDefinition, runtime: dict) -> set:
-    """Alle Fachabteilungs-Gruppen-IDs, die an diesem Auftrag beteiligt sind/waren.
+    """Fachabteilungen, die an DIESEM Auftrag tatsächlich BETEILIGT waren – für den
+    „Nachtrag"-Versand. Übersprungene Abteilungen bekommen bewusst keinen Nachtrag.
 
-    Grundlage für den „Nachtrag"-Versand an einem ABGESCHLOSSENEN Auftrag – der hat
-    jede Phase durchlaufen, deshalb zählt jede Fachabteilungs-Zuständigkeit:
+    * kind=group-Phasen (Freigabe, Arbeitsvertrag …): die zuständige Gruppe (sie
+      durchläuft jeder abgeschlossene Auftrag).
+    * kind=departments-Phasen: die im Runtime geseedeten Abteilungen OHNE die
+      übersprungenen (status='skipped') – bedingt nie zugeschaltete sind gar nicht
+      erst geseedet. Fehlt die Runtime-Spur ganz (Altbestand), greifen als Rückfall
+      alle Regel-Gruppen.
 
-    * kind=group-Phasen (Freigabe, Arbeitsvertrag …): die zuständige Gruppe.
-    * kind=departments-Phasen: die im Runtime tatsächlich GESEEDETEN Abteilungen –
-      so bleiben bedingte, nie zugeschaltete Abteilungen (z. B. Fuhrpark ohne
-      Dienstwagen) außen vor. Fehlt der Runtime-Stand für so eine Phase (Altbestand),
-      greifen ersatzweise alle Regel-Gruppen, damit niemand übersehen wird.
-
-    Bewusst OHNE `entered_at`-Prüfung: an einem abgeschlossenen Auftrag haben alle
-    Phasen stattgefunden, und ein fehlender Zeitstempel (Altbestand) würde die
-    zuständige Gruppe sonst fälschlich ausschließen. Einzelpersonen-Zuständigkeiten
-    (owner/user/assignable) sind KEINE Fachabteilung und bleiben außen vor. Reine
-    Logik, kein DB-Zugriff.
+    Einzelpersonen-Zuständigkeiten (owner/user/assignable) sind KEINE Fachabteilung
+    und bleiben außen vor. Reine Logik, kein DB-Zugriff.
     """
     ids: set = set()
     rt_by_key = {p.get("key"): p for p in (runtime.get("phases") or [])}
@@ -144,11 +140,12 @@ def involved_department_group_ids(defn: ProcessDefinition, runtime: dict) -> set
                 ids.add(resp.group)
         elif resp.kind == ResponsibilityKind.departments:
             seeded = (rt_by_key.get(p.key) or {}).get("departments")
-            if seeded:
-                ids.update(d.get("group") for d in seeded if d.get("group"))
-            elif seeded is None:
+            if seeded is None:
                 # Keine Runtime-Spur (Altbestand) → alle Regel-Gruppen als Rückfall.
                 ids.update(dr.group for dr in resp.rule if dr.group)
+            else:
+                ids.update(d.get("group") for d in seeded
+                           if d.get("group") and d.get("status") != "skipped")
     return {g for g in ids if g}
 
 

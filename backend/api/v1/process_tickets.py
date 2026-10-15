@@ -2086,6 +2086,35 @@ class AddendumOut(BaseModel):
     notified: int
 
 
+def _audit_addendum_notify(user: dict, ticket_id: int, process_key,
+                           defn: Optional[ProcessDefinition], runtime: dict,
+                           recips: list) -> None:
+    """Nachtrags-Versand ins AUDIT-LOG schreiben (nur Admins sichtbar) – mit voller
+    Diagnose: welche beteiligten Fachabteilungen ermittelt wurden, ob sie gefunden
+    wurden und ob/wie viele Verteiler-Adressen sie tragen. Wirft nie; rein
+    informativ. Eine „keine Empfänger"-Lage wird so NUR hier sichtbar, nie beim
+    Nutzer."""
+    try:
+        group_ids = (sorted(pr.involved_department_group_ids(defn, runtime or {}))
+                     if defn else [])
+        from backend.database.groups import get_groups
+        gmap = {g.get("id"): g for g in get_groups()}
+        groups_diag = [{"id": gid, "name": (gmap.get(gid) or {}).get("name"),
+                        "gefunden": gid in gmap,
+                        "verteiler": len((gmap.get(gid) or {}).get("distributions") or [])}
+                       for gid in group_ids]
+        record_audit(
+            action="process_ticket_addendum_notify",
+            actor_id=user.get("id"), actor_name=_actor_name(user),
+            entity_type="process_ticket", entity_id=str(ticket_id),
+            summary=f"Nachtrag #{ticket_id}: {len(recips)} Empfänger benachrichtigt",
+            details={"notified_count": len(recips), "recipients": recips,
+                     "process_key": process_key, "definition_geladen": defn is not None,
+                     "fachabteilungen": groups_diag})
+    except Exception:
+        logger.exception("Nachtrags-Diagnose-Audit für #%s fehlgeschlagen", ticket_id)
+
+
 @router.get("/process-tickets/{ticket_id}/addenda", response_model=DataResponse[list[EventOut]])
 def list_ticket_addenda(ticket_id: int, user: dict = Depends(get_current_user)):
     """Nachträge eines Auftrags (neueste zuerst) – für die Auftragsansicht.
@@ -2160,6 +2189,10 @@ def add_ticket_addendum(ticket_id: int, body: AddendumRequest,
         logger.info("Nachtrag (Archiv) zu #%s an %s Empfänger", ticket_id, len(recips))
     except Exception:
         logger.exception("Nachtrags-Mail (Archiv) für #%s fehlgeschlagen", ticket_id)
+    # Diagnose NUR ins Audit-Log (nie zum Nutzer): beteiligte Fachabteilungen,
+    # ob gefunden, Verteiler-Zahl, Empfänger.
+    _audit_addendum_notify(user, ticket_id, row.get("process_key"), defn,
+                           row.get("runtime") or {}, recips)
     return DataResponse(data=AddendumOut(event=EventOut(**ev), notified=len(recips)))
 
 
