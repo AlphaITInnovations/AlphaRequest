@@ -2143,17 +2143,21 @@ def add_ticket_addendum(ticket_id: int, body: AddendumRequest,
                         fields=[{"path": "text", "code": "TOO_LONG",
                                  "message": f"Maximal {MAX_COMMENT_LEN} Zeichen"}])
 
+    # Empfänger ZUERST auflösen (read-only), damit die Zahl im Verlaufs-/Audit-
+    # Eintrag steht – ohne die Empfänger-Adressen selbst in den (für Beteiligte
+    # sichtbaren) Eintrag zu schreiben.
+    actor_email = user.get("email") or user.get("mail")
+    recips = pactions.addendum_recipients(row, defn, actor_email=actor_email)
+
     # Bewusst `write` (nicht `record`): geht der Nachtrag verloren, muss der
     # Aufrufer einen Fehler sehen und kein stilles „gespeichert".
     ev = events.write(row, events.ADDENDUM, actor_id=user.get("id"),
-                      actor_name=_actor_name(user), body=text)
-    recips: list = []
+                      actor_name=_actor_name(user), body=text,
+                      details={"notified_count": len(recips)})
     try:
-        recips = pactions.notify_addendum(
-            row, defn, author_name=_actor_name(user), body_text=text,
-            actor_email=user.get("email") or user.get("mail")) or []
-        if recips:
-            logger.info("Nachtrag (Archiv) zu #%s an %s Empfänger", ticket_id, len(recips))
+        pactions.notify_addendum(row, defn, author_name=_actor_name(user),
+                                 body_text=text, recipients=recips)
+        logger.info("Nachtrag (Archiv) zu #%s an %s Empfänger", ticket_id, len(recips))
     except Exception:
         logger.exception("Nachtrags-Mail (Archiv) für #%s fehlgeschlagen", ticket_id)
     return DataResponse(data=AddendumOut(event=EventOut(**ev), notified=len(recips)))

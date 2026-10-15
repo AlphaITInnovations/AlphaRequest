@@ -822,8 +822,35 @@ def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
         return []
 
 
+def addendum_recipients(row: dict, defn: Optional[ProcessDefinition], *,
+                        actor_email: Optional[str] = None,
+                        groups: Optional[list] = None) -> list[str]:
+    """Verteiler der am Auftrag beteiligten Fachabteilungen für einen Nachtrag –
+    NUR Auflösung, kein Versand (damit der Aufrufer die Empfänger kennt, bevor der
+    Verlaufs-Eintrag geschrieben wird). Die schreibende Person wird entfernt.
+
+    Kommt niemand heraus (keine Verteiler hinterlegt / Definition nicht ladbar),
+    greift wie überall der TICKET_MAIL-Fallback – ein Nachtrag läuft NIE stumm ins
+    Leere. Wirft nicht; im Fehlerfall leere Liste.
+    """
+    try:
+        group_ids = (pr.involved_department_group_ids(defn, row.get("runtime") or {})
+                     if defn else set())
+        if not defn:
+            logger.warning("Nachtrag #%s: Definition nicht ladbar – Fallback-Empfänger", row.get("id"))
+        tokens = [f"group:{gid}" for gid in sorted(group_ids)]
+        recips = set(resolve_recipients_multi(tokens, row, None, groups))
+        if actor_email:
+            recips.discard(actor_email)
+        return sorted(recips)
+    except Exception:
+        logger.exception("Nachtrags-Empfänger für #%s nicht auflösbar", row.get("id"))
+        return []
+
+
 def notify_addendum(row: dict, defn: Optional[ProcessDefinition], *,
                     author_name: str, body_text: str,
+                    recipients: Optional[list] = None,
                     actor_email: Optional[str] = None,
                     sender: Callable = _default_sender,
                     groups: Optional[list] = None) -> list[str]:
@@ -831,20 +858,12 @@ def notify_addendum(row: dict, defn: Optional[ProcessDefinition], *,
     Auftrag beteiligten Fachabteilungen (deren Verteiler) über den Freitext. Der
     Auftrags-Status ändert sich dadurch NICHT. Wirft nicht; gibt die Empfänger zurück.
 
-    Empfänger = die Verteiler der tatsächlich beteiligten Fachabteilungen
-    (process_runtime.involved_department_group_ids). Kommt dabei niemand heraus
-    (keine Verteiler hinterlegt / Definition nicht ladbar), greift wie überall der
-    TICKET_MAIL-Fallback – der Nachtrag läuft NIE stumm ins Leere.
+    `recipients` kann die bereits (via `addendum_recipients`) aufgelöste Liste
+    übergeben – sonst wird sie hier aufgelöst.
     """
     try:
-        group_ids = (pr.involved_department_group_ids(defn, row.get("runtime") or {})
-                     if defn else set())
-        if not group_ids and not defn:
-            logger.warning("Nachtrag #%s: Definition nicht ladbar – Fallback-Empfänger", row.get("id"))
-        tokens = [f"group:{gid}" for gid in sorted(group_ids)]
-        recips = set(resolve_recipients_multi(tokens, row, None, groups))
-        if actor_email:
-            recips.discard(actor_email)
+        recips = (list(recipients) if recipients is not None
+                  else addendum_recipients(row, defn, actor_email=actor_email, groups=groups))
         if not recips:
             return []
         title = str(row.get("title") or f"Auftrag #{row.get('id')}")

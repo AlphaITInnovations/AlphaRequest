@@ -389,13 +389,33 @@ def test_notify_addendum_informiert_alle_fachabteilungen():
     assert "Abgeschlossener Auftrag" in sent[0]["subject"]
 
 
-def test_involved_departments_nur_erreichte_phasen():
-    """Ein nur bis zur Start-Phase gekommener Auftrag hat KEINE beteiligte
-    Fachabteilung – spätere (nie erreichte) Phasen zählen nicht."""
-    rt = pr.initial_runtime(DEFN, "t0", {"verantwortlich": "u_chef"})
-    t = {"id": 12, "title": "Früh abgebrochen", "owner_id": "u_owner",
-         "status": "rejected", "values": {}, "runtime": rt}
-    assert pr.involved_department_group_ids(DEFN, t["runtime"]) == set()
+def test_involved_departments_ignoriert_einzelpersonen():
+    """Nur Fachabteilungen zählen – reine Owner-/Personen-Zuständigkeiten (owner,
+    assignable) ergeben KEINE Empfänger."""
+    defn = ProcessDefinition.model_validate({
+        "key": "p", "name": "P",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "wer", "widget": "user"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}, {"ref": "wer"}]},
+            {"key": "b", "kind": "task",
+             "responsibility": {"kind": "assignable", "fromField": "wer"},
+             "fields": [{"ref": "a", "mode": "editable"}]},
+        ],
+    })
+    t, _ = _archiviert(defn, {"wer": "u_chef"})
+    assert pr.involved_department_group_ids(defn, t["runtime"]) == set()
+
+
+def test_addendum_recipients_loest_verteiler_auf():
+    """addendum_recipients liefert die Verteiler aller beteiligten Fachabteilungen
+    (reine Auflösung, kein Versand) und entfernt die schreibende Person."""
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    assert set(pactions.addendum_recipients(t, DEFN, groups=GROUPS)) \
+        == {"it@example.org", "fuhrpark@example.org"}
+    # Schreibende Person wird entfernt.
+    assert pactions.addendum_recipients(t, DEFN, actor_email="it@example.org",
+                                        groups=GROUPS) == ["fuhrpark@example.org"]
 
 
 _COND_DEFN = ProcessDefinition.model_validate({

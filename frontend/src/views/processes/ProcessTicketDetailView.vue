@@ -575,6 +575,13 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
           </div>
         </div>
 
+        <!-- Nachtrag: bei einem ABGESCHLOSSENEN Auftrag ganz oben. Beteiligte
+             können aus dem Archiv heraus eine Ergänzung hinterlassen; alle
+             beteiligten Fachabteilungen werden per Mail informiert, der Status
+             bleibt unverändert. -->
+        <ProcessAddendum v-if="istArchiviert && ticket" class="mb-4"
+                         :ticket-id="ticket.id" @sent="timeline?.reload()" />
+
         <!-- Pflichtfeld-Hinweis: erscheint beim Weitergeben/Abschließen, wenn noch
              Felder fehlen (die Felder selbst werden im Formular rot markiert). -->
         <div v-if="hatPflichtfehler"
@@ -738,12 +745,6 @@ onMounted(async () => { sources.value = await loadOptionSources(auth.isAdmin); a
             <!-- KEINE allgemeine Anhang-Fläche: bei dynamischen Prozessen entstehen
                  Anhänge ausschließlich über konfigurierte Anhang-Felder
                  (widget=attachment), die das Formular oben rendert. -->
-
-            <!-- Nachtrag: nur bei abgeschlossenen Aufträgen. Beteiligte können aus
-                 dem Archiv heraus eine Ergänzung hinterlassen; alle beteiligten
-                 Fachabteilungen werden per Mail informiert, der Status bleibt. -->
-            <ProcessAddendum v-if="istArchiviert && ticket"
-                             :ticket-id="ticket.id" @sent="timeline?.reload()" />
           </div>
         </div>
 

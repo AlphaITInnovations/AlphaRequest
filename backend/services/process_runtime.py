@@ -116,20 +116,22 @@ def current_departments(runtime: dict) -> list:
 
 
 def involved_department_group_ids(defn: ProcessDefinition, runtime: dict) -> set:
-    """Alle Fachabteilungs-Gruppen-IDs, die an diesem Auftrag beteiligt WAREN.
+    """Alle Fachabteilungs-Gruppen-IDs, die an diesem Auftrag beteiligt sind/waren.
 
-    Grundlage für den „Nachtrag"-Versand an einem abgeschlossenen Auftrag: nur die
-    Stellen, die tatsächlich mitgearbeitet haben, sollen informiert werden – nicht
-    jede im Prozess definierte Abteilung.
+    Grundlage für den „Nachtrag"-Versand an einem ABGESCHLOSSENEN Auftrag – der hat
+    jede Phase durchlaufen, deshalb zählt jede Fachabteilungs-Zuständigkeit:
 
-    * kind=group-Phasen, die der Auftrag ERREICHT hat (entered_at gesetzt): die Gruppe.
-    * kind=departments-Phasen: die im Runtime geseedeten Abteilungen (so sind
-      bedingte, nie zugeschaltete Abteilungen – z. B. Fuhrpark ohne Dienstwagen –
-      korrekt ausgeschlossen). Fällt der Runtime-Stand für eine ERREICHTE Phase aus,
+    * kind=group-Phasen (Freigabe, Arbeitsvertrag …): die zuständige Gruppe.
+    * kind=departments-Phasen: die im Runtime tatsächlich GESEEDETEN Abteilungen –
+      so bleiben bedingte, nie zugeschaltete Abteilungen (z. B. Fuhrpark ohne
+      Dienstwagen) außen vor. Fehlt der Runtime-Stand für so eine Phase (Altbestand),
       greifen ersatzweise alle Regel-Gruppen, damit niemand übersehen wird.
 
-    Einzelpersonen-Zuständigkeiten (owner/user/assignable) sind KEINE Fachabteilung
-    und bleiben außen vor. Reine Logik, kein DB-Zugriff.
+    Bewusst OHNE `entered_at`-Prüfung: an einem abgeschlossenen Auftrag haben alle
+    Phasen stattgefunden, und ein fehlender Zeitstempel (Altbestand) würde die
+    zuständige Gruppe sonst fälschlich ausschließen. Einzelpersonen-Zuständigkeiten
+    (owner/user/assignable) sind KEINE Fachabteilung und bleiben außen vor. Reine
+    Logik, kein DB-Zugriff.
     """
     ids: set = set()
     rt_by_key = {p.get("key"): p for p in (runtime.get("phases") or [])}
@@ -137,16 +139,15 @@ def involved_department_group_ids(defn: ProcessDefinition, runtime: dict) -> set
         resp = getattr(p, "responsibility", None)
         if resp is None:
             continue
-        rp = rt_by_key.get(p.key) or {}
-        entered = rp.get("entered_at") is not None
         if resp.kind == ResponsibilityKind.group:
-            if entered and resp.group:
+            if resp.group:
                 ids.add(resp.group)
         elif resp.kind == ResponsibilityKind.departments:
-            seeded = rp.get("departments") or []
+            seeded = (rt_by_key.get(p.key) or {}).get("departments")
             if seeded:
                 ids.update(d.get("group") for d in seeded if d.get("group"))
-            elif entered:
+            elif seeded is None:
+                # Keine Runtime-Spur (Altbestand) → alle Regel-Gruppen als Rückfall.
                 ids.update(dr.group for dr in resp.rule if dr.group)
     return {g for g in ids if g}
 
