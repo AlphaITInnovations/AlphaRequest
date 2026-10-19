@@ -121,7 +121,10 @@ function onSelect(e: Event) {
   const v = (e.target as HTMLSelectElement).value
   if (v === OTHER) { otherPicked.value = true; emit('update:modelValue', ''); return }
   otherPicked.value = false
-  emit('update:modelValue', v)
+  // „Bitte wählen" (leere Option) = Auswahl entfernt → null statt "": "" wäre für
+  // die Options-Prüfung (Client wie Server) eine „Ungültige Auswahl", null gilt
+  // als leer. Sonst ließe sich z. B. eine Anrede gar nicht bewusst leeren.
+  emit('update:modelValue', v === '' ? null : v)
 }
 
 // Beim Feldwechsel (Wiederverwendung der Komponente in einer v-for-Liste) den

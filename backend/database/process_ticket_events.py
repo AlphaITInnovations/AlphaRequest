@@ -128,6 +128,22 @@ def list_for_ticket(ticket_id: int, *, limit: int = 100, offset: int = 0,
     return [_row_to_dict(r) for r in rows], int((cnt or {}).get("c") or 0)
 
 
+def list_by_action(ticket_id: int, action: str, *, limit: int = 200) -> list[dict]:
+    """Einträge EINER Aktionsart eines Tickets, NEUESTE zuerst (nutzt den
+    (ticket_id, action)-Index). Für die Nachtrags-Liste eines abgeschlossenen
+    Auftrags: Nachträge (action='addendum') tragen nur Freitext, keine
+    Feld-Metadaten – deshalb ohne die Redaktion des Verlaufs direkt zeigbar."""
+    conn = get_connection()
+    try:
+        rows = _fetchall(conn,
+                         f"SELECT {_COLS} FROM process_ticket_events "
+                         "WHERE ticket_id = %s AND action = %s ORDER BY id DESC LIMIT %s",
+                         (ticket_id, action, int(limit)))
+    finally:
+        conn.close()
+    return [_row_to_dict(r) for r in rows]
+
+
 def count_for_ticket(ticket_id: int) -> int:
     conn = get_connection()
     try:

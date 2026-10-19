@@ -1,4 +1,4 @@
-import { client } from './client'
+import { client, BACKGROUND_POLL_HEADERS } from './client'
 
 export interface ActiveSession {
   sid: string
@@ -13,7 +13,9 @@ export interface ActiveSession {
 }
 
 export const sessionsApi = {
-  list: () => client.get<{ data: { sessions: ActiveSession[] } }>('/admin/sessions'),
+  /** `background` = automatische Live-Abfrage (verlängert die Session nicht). */
+  list: (background = false) => client.get<{ data: { sessions: ActiveSession[] } }>(
+    '/admin/sessions', background ? { headers: BACKGROUND_POLL_HEADERS } : undefined),
   revokeSession: (sid: string) => client.delete(`/admin/sessions/${encodeURIComponent(sid)}`),
   revokeUser: (userId: string) => client.delete(`/admin/sessions/user/${encodeURIComponent(userId)}`),
   logoutOthers: () => client.post('/admin/sessions/logout-others'),

@@ -658,8 +658,9 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     for _seed_key in snap_seed:
         values.pop(_seed_key, None)
 
-    # Antragsteller-Felder aus den Daten der angemeldeten Person vorbelegen
-    # (read-only prefill – autoritativ, überschreibt evtl. mitgeschickte Werte).
+    # Antragsteller-Felder aus den Daten der angemeldeten Person vorbelegen:
+    # read-only/hidden autoritativ (überschreibt mitgeschickte Werte); editierbare
+    # nur, wenn der Client den Schlüssel nicht mitschickt (bewusst geleert bleibt leer).
     values = process_prefill.apply_prefill(defn, values, user)
 
     errs = pv.validate_values(defn, values)
@@ -2072,6 +2073,127 @@ def add_ticket_comment(ticket_id: int, body: CommentRequest,
     except Exception:
         logger.exception("Nachtrags-Mail für #%s fehlgeschlagen", ticket_id)
     return DataResponse(data=EventOut(**ev))
+
+
+# ── Nachtrag zu abgeschlossenem Auftrag ───────────────────────────────────────
+
+class AddendumRequest(BaseModel):
+    text: str
+
+
+class AddendumOut(BaseModel):
+    event: EventOut
+    #: Anzahl benachrichtigter Empfänger-Adressen (Fachabteilungs-Verteiler).
+    notified: int
+
+
+def _audit_addendum_notify(user: dict, ticket_id: int, process_key,
+                           defn: Optional[ProcessDefinition], runtime: dict,
+                           recips: list) -> None:
+    """Nachtrags-Versand ins AUDIT-LOG schreiben (nur Admins sichtbar) – mit voller
+    Diagnose: welche beteiligten Fachabteilungen ermittelt wurden, ob sie gefunden
+    wurden und ob/wie viele Verteiler-Adressen sie tragen. Wirft nie; rein
+    informativ. Eine „keine Empfänger"-Lage wird so NUR hier sichtbar, nie beim
+    Nutzer."""
+    try:
+        group_ids = (sorted(pr.involved_department_group_ids(defn, runtime or {}))
+                     if defn else [])
+        from backend.database.groups import get_groups
+        gmap = {g.get("id"): g for g in get_groups()}
+        groups_diag = [{"id": gid, "name": (gmap.get(gid) or {}).get("name"),
+                        "gefunden": gid in gmap,
+                        "verteiler": len((gmap.get(gid) or {}).get("distributions") or [])}
+                       for gid in group_ids]
+        record_audit(
+            action="process_ticket_addendum_notify",
+            actor_id=user.get("id"), actor_name=_actor_name(user),
+            entity_type="process_ticket", entity_id=str(ticket_id),
+            summary=f"Nachtrag #{ticket_id}: {len(recips)} Empfänger benachrichtigt",
+            details={"notified_count": len(recips), "recipients": recips,
+                     "process_key": process_key, "definition_geladen": defn is not None,
+                     "fachabteilungen": groups_diag})
+    except Exception:
+        logger.exception("Nachtrags-Diagnose-Audit für #%s fehlgeschlagen", ticket_id)
+
+
+@router.get("/process-tickets/{ticket_id}/addenda", response_model=DataResponse[list[EventOut]])
+def list_ticket_addenda(ticket_id: int, user: dict = Depends(get_current_user)):
+    """Nachträge eines Auftrags (neueste zuerst) – für die Auftragsansicht.
+
+    Breiter Archiv-Lese-Gate (wie das Detail eines abgeschlossenen Auftrags): auch
+    reine Archiv-Beteiligte sehen sie. Unbedenklich, weil ein Nachtrag nur Freitext
+    trägt (keine Feld-Metadaten) – anders als der volle Verlauf braucht er keine
+    Feld-Redaktion.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    _assert_view_or_archive(row, defn, user)
+    return DataResponse(data=[EventOut(**e) for e in events.addenda(ticket_id)])
+
+
+@router.post("/process-tickets/{ticket_id}:addendum", response_model=DataResponse[AddendumOut])
+def add_ticket_addendum(ticket_id: int, body: AddendumRequest,
+                        user: dict = Depends(get_current_user)):
+    """Nachtrag zu einem bereits ABGESCHLOSSENEN Auftrag.
+
+    Eine am Auftrag beteiligte Person hinterlässt aus dem Archiv heraus einen
+    Freitext; ALLE beteiligten Fachabteilungen werden per Mail informiert. Der
+    Auftrag bleibt archiviert/abgelehnt – am Status wird NICHTS geändert.
+
+    Zugriff wie beim Lesen eines abgeschlossenen Auftrags (breiter Archiv-Gate:
+    Owner, Beobachter, Mitglied einer beteiligten Fachabteilung, Aufsicht) – wer
+    den Auftrag nicht sehen darf, kann auch keinen Nachtrag auslösen.
+    """
+    row = store.get(ticket_id)
+    if not row:
+        raise api_error(404, "TICKET_NOT_FOUND", "Ticket nicht gefunden")
+    try:
+        defn = _load_pinned_defn(row)
+    except Exception:
+        defn = None
+    _assert_view_or_archive(row, defn, user)
+    # Bewusst NUR „archived" (abgeschlossen), nicht „rejected": der Nachtrag
+    # richtet sich an einen fertig abgeschlossenen Auftrag, zu dem noch etwas
+    # hinzukommt – ein abgelehnter Auftrag ist etwas anderes.
+    if row.get("status") != "archived":
+        raise api_error(409, ErrorCode.PROCESS_INVALID_STATE,
+                        "Ein Nachtrag ist nur bei einem bereits abgeschlossenen Auftrag möglich")
+    text = (body.text or "").strip()
+    if not text:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Nachtrag ist leer",
+                        fields=[{"path": "text", "code": "REQUIRED",
+                                 "message": "Bitte einen Text eingeben"}])
+    if len(text) > MAX_COMMENT_LEN:
+        raise api_error(422, ErrorCode.VALIDATION_FAILED, "Nachtrag zu lang",
+                        fields=[{"path": "text", "code": "TOO_LONG",
+                                 "message": f"Maximal {MAX_COMMENT_LEN} Zeichen"}])
+
+    # Empfänger ZUERST auflösen (read-only), damit die Zahl im Verlaufs-/Audit-
+    # Eintrag steht – ohne die Empfänger-Adressen selbst in den (für Beteiligte
+    # sichtbaren) Eintrag zu schreiben.
+    recips = pactions.addendum_recipients(row, defn)
+
+    # Bewusst `write` (nicht `record`): geht der Nachtrag verloren, muss der
+    # Aufrufer einen Fehler sehen und kein stilles „gespeichert".
+    ev = events.write(row, events.ADDENDUM, actor_id=user.get("id"),
+                      actor_name=_actor_name(user), body=text,
+                      details={"notified_count": len(recips)})
+    try:
+        pactions.notify_addendum(row, defn, author_name=_actor_name(user),
+                                 body_text=text, recipients=recips)
+        logger.info("Nachtrag (Archiv) zu #%s an %s Empfänger", ticket_id, len(recips))
+    except Exception:
+        logger.exception("Nachtrags-Mail (Archiv) für #%s fehlgeschlagen", ticket_id)
+    # Diagnose NUR ins Audit-Log (nie zum Nutzer): beteiligte Fachabteilungen,
+    # ob gefunden, Verteiler-Zahl, Empfänger.
+    _audit_addendum_notify(user, ticket_id, row.get("process_key"), defn,
+                           row.get("runtime") or {}, recips)
+    return DataResponse(data=AddendumOut(event=EventOut(**ev), notified=len(recips)))
 
 
 # ── Wiederaufnahme ───────────────────────────────────────────────────────────

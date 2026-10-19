@@ -686,3 +686,19 @@ def test_directus_write_bedingung_feld_muss_existieren():
                    "idField": "mid", "fieldMap": [
                        {"value": True, "target": "has_car", "when": {"field": "ghost", "equals": "Ja"}}]}}}]
     _reject(d)   # Bedingungs-Feld „ghost" ist nicht im Katalog
+
+
+def _dw_clear(op):
+    d = _base(fields=[{"key": "a", "widget": "text"}, {"key": "mid", "widget": "text"}])
+    d["phases"][0]["fields"] = [{"ref": "a"}]
+    d["phases"][0]["automations"] = [{"id": "x", "trigger": {"type": "on_enter"},
+        "action": {"type": "directus_write", "directus": {"operation": op, "collection": "c",
+                   "idField": "mid", "clearEmpty": True, "onError": "continue",
+                   "fieldMap": [{"source": "a", "target": "name"}]}}}]
+    return d
+
+
+def test_directus_write_clear_empty_nur_bei_update():
+    ProcessDefinition.model_validate(_dw_clear("update"))   # erlaubt
+    _reject(_dw_clear("create"))
+    _reject(_dw_clear("delete"))

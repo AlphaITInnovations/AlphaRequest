@@ -553,6 +553,36 @@ describe('validateDefinition – directus_write & on_department_done', () => {
     expect(codes(d)).toContain('INVALID')
   })
 
+  function dwClear(operation: string, clearEmpty: boolean) {
+    return defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation, collection: 'k', idField: 'mid', clearEmpty, onError: 'continue',
+            fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+  }
+
+  it('„leere Felder leeren" nur bei Aktualisieren (wie der Server)', () => {
+    expect(errorCount(validateDefinition(dwClear('update', true)))).toBe(0)
+    expect(codes(dwClear('create', true))).toContain('INVALID')
+    expect(codes(dwClear('delete', true))).toContain('INVALID')
+    expect(errorCount(validateDefinition(dwClear('create', false)))).toBe(0)
+  })
+
+  it('normalisiert clearEmpty (bleibt beim Speichern erhalten, Default aus)', () => {
+    const an = (d: ReturnType<typeof dwClear>) => d.phases[0].automations![0].action.directus!
+    expect(an(dwClear('update', true)).clearEmpty).toBe(true)
+    const ohne = defn({
+      fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],
+      phases: [{ key: 'start', kind: 'start', responsibility: { kind: 'owner' },
+        fields: [{ ref: 'base.name' }],
+        automations: [{ id: 'w', trigger: { type: 'on_enter' }, action: { type: 'directus_write',
+          directus: { operation: 'update', collection: 'k', idField: 'mid',
+            fieldMap: [{ source: 'base.name', target: 'name' }] } } }] }] })
+    expect(an(ohne).clearEmpty).toBe(false)
+  })
+
   it('akzeptiert matchField auf einem gemappten Zielfeld', () => {
     const d = defn({
       fields: [{ key: 'base.name', widget: 'text' }, { key: 'mid', widget: 'text' }],

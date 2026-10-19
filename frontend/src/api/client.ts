@@ -15,6 +15,17 @@ export const client = axios.create({
  *  – auch den Retry-Button – wieder dorthin umleitete. */
 export const backendReachable = ref(true)
 
+/** Für AUTOMATISCHE Hintergrund-Abfragen (Live-Ansichten): der Server
+ *  authentifiziert normal, wertet sie aber NICHT als Nutzer-Aktivität – sonst
+ *  hielte ein offener Live-Reiter die Session auf einem unbeaufsichtigten
+ *  Rechner ewig am Leben (backend/core/dependencies.BACKGROUND_POLL_HEADER). */
+export const BACKGROUND_POLL_HEADERS = { 'X-Background-Poll': '1' } as const
+
+/** Live-Abfragen nur, solange der Tab sichtbar ist (verborgen = niemand schaut hin). */
+export function tabVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState === 'visible'
+}
+
 export function setupInterceptors(router: import('vue-router').Router) {
   client.interceptors.response.use(
     res => res,
@@ -48,10 +59,14 @@ export function setupInterceptors(router: import('vue-router').Router) {
  *  (und der Retry auf „/backend-down" nach Rückkehr des Backends greift). */
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const res = await axios.get('/api/v1/health', {
-      withCredentials: true,
-      timeout: 3000,
-    })
+    // /ping statt /health: ohne die ausgehende Frontend-Probe, die bei Netzproblemen
+    // zwischen Backend und Frontend-URL Sekunden hängen kann (→ falsches „down").
+    const opts = { withCredentials: true, timeout: 3000, validateStatus: () => true }
+    let res = await axios.get('/api/v1/ping', opts)
+    // 404 = das Backend ANTWORTET, kennt /ping aber noch nicht (älterer Stand,
+    // Rollback, Dev-Backend nicht aktualisiert) → ersatzweise /health, statt alle
+    // fälschlich auf „Server nicht erreichbar" zu schicken.
+    if (res.status === 404) res = await axios.get('/api/v1/health', opts)
     const ok = res.status === 200
     backendReachable.value = ok
     return ok

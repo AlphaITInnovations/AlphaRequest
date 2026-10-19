@@ -38,3 +38,15 @@ def test_health_frontend_down_is_degraded_but_200(monkeypatch):
     body = json.loads(resp.body)
     assert body["status"] == "degraded"
     assert body["components"]["frontend"]["status"] == "down"
+
+
+def test_ping_prueft_db_aber_nicht_das_frontend(monkeypatch):
+    """Der SPA-Check darf nicht an der (evtl. langsamen) Frontend-Probe hängen."""
+    def frontend_probe():
+        raise AssertionError("ping darf FRONTEND_URL nicht abfragen")
+    monkeypatch.setattr(h, "_check_frontend", frontend_probe)
+    monkeypatch.setattr(h, "_check_database", lambda: (True, None))
+    resp = h.ping()
+    assert resp.status_code == 200 and json.loads(resp.body) == {"status": "ok"}
+    monkeypatch.setattr(h, "_check_database", lambda: (False, "weg"))
+    assert h.ping().status_code == 503

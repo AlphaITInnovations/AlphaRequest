@@ -822,6 +822,72 @@ def notify_comment(row: dict, phase: Optional[PhaseDef], *, author_name: str,
         return []
 
 
+def addendum_recipients(row: dict, defn: Optional[ProcessDefinition], *,
+                        groups: Optional[list] = None) -> list[str]:
+    """Verteiler der am Auftrag beteiligten Fachabteilungen für einen Nachtrag –
+    NUR Auflösung, kein Versand (damit der Aufrufer die Empfänger kennt, bevor der
+    Verlaufs-Eintrag geschrieben wird).
+
+    Die schreibende Person wird bewusst NICHT herausgefiltert (anders als beim
+    allgemeinen Kommentar): Empfänger sind die Verteiler der ABTEILUNGEN. Ist eine
+    Verteiler-Adresse zufällig die eigene, bekäme sonst die ganze Abteilung nichts.
+
+    Kommt niemand heraus (keine Verteiler hinterlegt / Definition nicht ladbar),
+    greift wie überall der TICKET_MAIL-Fallback – ein Nachtrag läuft NIE stumm ins
+    Leere. Wirft nicht; im Fehlerfall leere Liste.
+    """
+    try:
+        group_ids = (pr.involved_department_group_ids(defn, row.get("runtime") or {})
+                     if defn else set())
+        if not defn:
+            logger.warning("Nachtrag #%s: Definition nicht ladbar – Fallback-Empfänger", row.get("id"))
+        tokens = [f"group:{gid}" for gid in sorted(group_ids)]
+        return sorted(set(resolve_recipients_multi(tokens, row, None, groups)))
+    except Exception:
+        logger.exception("Nachtrags-Empfänger für #%s nicht auflösbar", row.get("id"))
+        return []
+
+
+def notify_addendum(row: dict, defn: Optional[ProcessDefinition], *,
+                    author_name: str, body_text: str,
+                    recipients: Optional[list] = None,
+                    sender: Callable = _default_sender,
+                    groups: Optional[list] = None) -> list[str]:
+    """Nachtrag zu einem bereits ABGESCHLOSSENEN Auftrag: informiert ALLE am
+    Auftrag beteiligten Fachabteilungen (deren Verteiler) über den Freitext. Der
+    Auftrags-Status ändert sich dadurch NICHT. Wirft nicht; gibt die Empfänger zurück.
+
+    `recipients` kann die bereits (via `addendum_recipients`) aufgelöste Liste
+    übergeben – sonst wird sie hier aufgelöst.
+    """
+    try:
+        recips = (list(recipients) if recipients is not None
+                  else addendum_recipients(row, defn, groups=groups))
+        if not recips:
+            return []
+        title = str(row.get("title") or f"Auftrag #{row.get('id')}")
+        subject = (f"[AlphaRequest] Nachtrag zu abgeschlossenem Auftrag: {title}"
+                   .replace("\r", " ").replace("\n", " ")[:200])
+        link = _ticket_link(row)
+        out = sorted(recips)
+        body = render_corporate_email(
+            subject=subject,
+            header_subtitle="Nachtrag",
+            headline=title,
+            info_box_url=link,
+            intro=(f"{author_name} hat einen Nachtrag zu diesem bereits abgeschlossenen "
+                   f"Auftrag hinterlassen. Der Auftrag bleibt abgeschlossen:"),
+            info_rows=[("Auftrag", f"#{row.get('id')}")],
+            content="",
+            action_html=_quote_block(body_text) + _primary_button_html(link),
+        )
+        sender(out, subject, body, kind="addendum")
+        return out
+    except Exception:
+        logger.exception("Nachtrags-Benachrichtigung (Archiv) für Ticket #%s fehlgeschlagen", row.get("id"))
+        return []
+
+
 def notify_rejection(row: dict, defn: Optional[ProcessDefinition], *,
                      reason: Optional[str], by_name: str,
                      sender: Callable = _default_sender,

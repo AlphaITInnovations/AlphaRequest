@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { client } from '@/api/client'
+import { client, BACKGROUND_POLL_HEADERS, tabVisible } from '@/api/client'
 
 interface AuditEntry {
   id: number
@@ -231,11 +231,13 @@ function relativeTime(ts: string): string {
 
 // ── Laden ────────────────────────────────────────────────────────────────────
 let reqId = 0
-async function load() {
+async function load(background = false) {
   const my = ++reqId
   loading.value = true
   try {
     const { data } = await client.get('/settings/audit-log', {
+      // Automatische Live-Abfrage verlängert die Session nicht (s. api/client).
+      headers: background ? BACKGROUND_POLL_HEADERS : undefined,
       params: {
         limit: pageSize, offset: offset.value,
         action: fAction.value || undefined,
@@ -261,7 +263,7 @@ watch([fAction, fEntityType, fActor, fSearch, range, fFrom, fTo], () => {
   if (debounce) clearTimeout(debounce)
   debounce = setTimeout(() => { offset.value = 0; load() }, 250)
 })
-watch(offset, load)
+watch(offset, () => load())
 
 // ── Live-Refresh ───────────────────────────────────────────────────────────────
 const live = ref(true)
@@ -270,7 +272,8 @@ function startLive() {
   stopLive()
   liveTimer = setInterval(() => {
     // Nicht stören, wenn ein Detail offen ist oder man auf Seite >1 blättert.
-    if (expanded.value === null && offset.value === 0) load()
+    // Nur bei sichtbarem Tab und als Hintergrund-Abfrage (hält die Session nicht wach).
+    if (expanded.value === null && offset.value === 0 && tabVisible()) load(true)
   }, 10_000)
 }
 function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null } }

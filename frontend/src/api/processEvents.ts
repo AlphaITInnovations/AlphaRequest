@@ -11,7 +11,7 @@ import type { ProcessTicketOut } from '@/types/process'
 
 /** Kanonische Aktions-Namen (Backend: backend/services/process_events.py). */
 export type EventAction =
-  | 'created' | 'updated' | 'advanced' | 'rejected' | 'reopened' | 'comment'
+  | 'created' | 'updated' | 'advanced' | 'rejected' | 'reopened' | 'comment' | 'addendum'
   | 'department_done' | 'department_skipped' | 'department_rejected'
   | 'watcher_added' | 'watcher_removed' | 'automation_fired' | 'priority_changed'
   | (string & {})
@@ -49,6 +49,26 @@ export async function addComment(
   ticketId: number, body: string, internal = false,
 ): Promise<ProcessEvent> {
   const { data } = await client.post(`/process-tickets/${ticketId}/comments`, { body, internal })
+  return data.data
+}
+
+export interface AddendumResult {
+  event: ProcessEvent
+  /** Anzahl benachrichtigter Empfänger (Fachabteilungs-Verteiler). */
+  notified: number
+}
+
+/** Nachtrag zu einem bereits ABGESCHLOSSENEN Auftrag: informiert alle
+ *  beteiligten Fachabteilungen per Mail; der Status bleibt unverändert. */
+export async function addAddendum(ticketId: number, text: string): Promise<AddendumResult> {
+  const { data } = await client.post(`/process-tickets/${ticketId}:addendum`, { text })
+  return data.data
+}
+
+/** Nachträge eines Auftrags (neueste zuerst) – für die Auftragsansicht.
+ *  Breiterer Zugriff als der volle Verlauf (nur Freitext, keine Feld-Metadaten). */
+export async function listAddenda(ticketId: number): Promise<ProcessEvent[]> {
+  const { data } = await client.get(`/process-tickets/${ticketId}/addenda`)
   return data.data
 }
 

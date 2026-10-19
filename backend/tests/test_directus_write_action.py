@@ -332,3 +332,49 @@ def test_execute_fremde_collection_laesst_employee_cache(monkeypatch):
     row = {"id": 1, "values": {"mitarbeiter.directus_id": "42", "s": "x"}}
     dwa.execute(action, row, None, None, client=FakeClient())
     assert calls == []
+
+
+# ── clearEmpty: bewusst geleerte Felder auch in Directus leeren (opt-in) ──────
+
+def _clear_spec(**kw):
+    return DirectusWriteSpec(
+        operation=DirectusOperation.update, collection="mitarbeitende", idField="s.id",
+        clearEmpty=True,
+        fieldMap=[DirectusWriteBinding(source="s.privat", target="private_phone"),
+                  DirectusWriteBinding(source="s.mobil", target="mobile"),
+                  DirectusWriteBinding(source="s.anrede", target="salutation"),
+                  DirectusWriteBinding(source="s.firma", target="company",
+                                       resolve="company_directus_id")], **kw)
+
+
+def test_clear_empty_leert_vorhandene_leere_felder():
+    spec = _clear_spec()
+    out = dwa.build_payload(spec, {"s.privat": "", "s.mobil": None, "s.firma": "Unbekannt GmbH"},
+                            companies=[])
+    assert out["private_phone"] is None and out["mobile"] is None
+    # Fehlender Schlüssel (z. B. nicht vorbelegbare Auswahl) wird NICHT gelöscht …
+    assert "salutation" not in out
+    # … und eine fehlgeschlagene Auflösung (Rohwert NICHT leer) auch nicht.
+    assert "company" not in out
+
+
+def test_ohne_clear_empty_bleibt_es_beim_auslassen():
+    """Regressionsschutz Onboarding: ohne Opt-in überschreibt ein leeres Feld nichts."""
+    spec = DirectusWriteSpec(
+        operation=DirectusOperation.update, collection="mitarbeitende", idField="s.id",
+        fieldMap=[DirectusWriteBinding(source="s.privat", target="private_phone")])
+    assert dwa.build_payload(spec, {"s.privat": ""}) == {}
+
+
+def test_clear_empty_update_schickt_null_an_directus():
+    client = FakeClient()
+    spec = DirectusWriteSpec(
+        operation=DirectusOperation.update, collection="mitarbeitende", idField="s.id",
+        clearEmpty=True,
+        fieldMap=[DirectusWriteBinding(source="s.privat", target="private_phone"),
+                  DirectusWriteBinding(source="s.mobil", target="mobile")])
+    row = {"id": 1, "values": {"s.id": "7", "s.privat": "", "s.mobil": "0170"}}
+    dwa.execute(Action(type="directus_write", directus=spec), row, None, None,
+                client=client, on_error=NOOP)
+    assert client.calls[0] == ("update", "mitarbeitende", "7",
+                               {"private_phone": None, "mobile": "0170"})

@@ -47,7 +47,7 @@ const props = defineProps<{
   /** Beantragte Änderungen je Feld (fertig formatiert): der alte Wert wird rot
    *  durchgestrichen, der neue grün angezeigt. Für die Prüf-/Freigabe-Ansicht, in
    *  der eine Fachabteilung sieht, was sich gegenüber dem Bestand ändert. */
-  changes?: Record<string, { fromText: string; toText: string }>
+  changes?: Record<string, { fromText: string; toText: string; fromEmpty?: boolean; toEmpty?: boolean }>
 }>()
 
 const catalog = computed<FieldDef[]>(() => props.definition?.fields ?? [])
@@ -201,20 +201,30 @@ const changeFor = (key: string) => props.changes?.[key]
               </div>
             </ReadonlyField>
 
-            <!-- Geändertes Feld: alt (rot, durchgestrichen) → neu (grün). Sonst der
-                 normale Wert. -->
+            <!-- Geändertes Feld: alt (rot, durchgestrichen) → neu (grün). Vorher
+                 leer: nur der neue Wert mit „neu"-Hinweis. Jetzt leer: „entfernt".
+                 Sonst der normale Wert. -->
             <ReadonlyField
               v-else-if="changeFor(row.f.key)"
               :label="row.f.label || row.f.key"
               :pre="row.f.widget === 'textarea'"
             >
-              <span class="text-red-600 dark:text-red-400 line-through decoration-red-400/60"
-                    :class="row.f.widget === 'textarea' ? 'whitespace-pre-wrap' : ''"
-              >{{ changeFor(row.f.key)!.fromText }}</span>
-              <span class="text-gray-400 px-1">→</span>
-              <span class="text-green-600 dark:text-green-400 font-medium"
-                    :class="row.f.widget === 'textarea' ? 'whitespace-pre-wrap' : ''"
-              >{{ changeFor(row.f.key)!.toText }}</span>
+              <template v-if="!changeFor(row.f.key)!.fromEmpty">
+                <span class="text-red-600 dark:text-red-400 line-through decoration-red-400/60"
+                      :class="row.f.widget === 'textarea' ? 'whitespace-pre-wrap' : ''"
+                >{{ changeFor(row.f.key)!.fromText }}</span>
+                <span class="text-gray-400 px-1">→</span>
+              </template>
+              <span v-if="changeFor(row.f.key)!.toEmpty"
+                    class="text-gray-500 dark:text-gray-400 italic">entfernt</span>
+              <template v-else>
+                <span v-if="changeFor(row.f.key)!.fromEmpty"
+                      class="mr-1.5 align-middle text-[10px] font-semibold uppercase tracking-wide px-1.5 py-px rounded
+                             bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">neu</span>
+                <span class="text-green-600 dark:text-green-400 font-medium"
+                      :class="row.f.widget === 'textarea' ? 'whitespace-pre-wrap' : ''"
+                >{{ changeFor(row.f.key)!.toText }}</span>
+              </template>
             </ReadonlyField>
 
             <ReadonlyField

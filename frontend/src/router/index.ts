@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import type { Permission } from '@/types/api'
+import { rememberPostLoginPath, takePostLoginPath } from '@/lib/postLoginRedirect'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -154,6 +155,8 @@ router.beforeEach(async (to) => {
   if (!to.meta.requiresAuth) return true
 
   const auth = useAuthStore()
+  // Erste Prüfung in diesem App-Lauf (z. B. direkt nach dem Microsoft-Rücksprung)?
+  const frischGeprueft = !auth.isLoggedIn
 
   if (!auth.isLoggedIn && !auth.loading) {
     await auth.fetchMe()
@@ -161,8 +164,20 @@ router.beforeEach(async (to) => {
 
   if (!auth.isLoggedIn) {
     // Vom Gate blockiert (angemeldet, aber kein Zugang) → Erklärseite statt Login,
-    // sonst Endlosschleife. Sonst: normaler Login.
-    return auth.accessDenied ? { path: '/kein-zugang' } : { path: '/login' }
+    // sonst Endlosschleife.
+    if (auth.accessDenied) return { path: '/kein-zugang' }
+    // Sonst normaler Login – das Ziel (z. B. Auftrags-Link aus einer Mail) merken,
+    // damit es nach dem Login wieder aufgerufen wird statt der Übersicht.
+    if (to.fullPath !== '/dashboard') rememberPostLoginPath(to.fullPath)
+    return { path: '/login' }
+  }
+
+  // Direkt nach dem Login landet der OAuth-Rücksprung immer auf der Startseite
+  // (→ /dashboard). War vorher ein Ziel gemerkt, jetzt dorthin. Ruft jemand
+  // gezielt eine andere Seite auf, gewinnt diese (das gemerkte Ziel verfällt).
+  if (frischGeprueft) {
+    const ziel = takePostLoginPath()
+    if (ziel && to.path === '/dashboard' && ziel !== to.fullPath) return ziel
   }
 
   // Einzelne Berechtigung ODER Liste („eine davon genügt").

@@ -668,6 +668,12 @@ class DirectusWriteSpec(_Base):
     #: Anlegen wird per Gleichheit auf diesem Feld gesucht; existiert der Datensatz
     #: schon, wird dessen id übernommen statt ein Duplikat anzulegen.
     matchField: Optional[str] = None
+    #: Nur bei `update`: ein im Auftrag VORHANDENES, aber leeres Prozess-Feld
+    #: ("" / None) leert das Directus-Feld (null), statt ausgelassen zu werden.
+    #: Default aus – sonst überschriebe ein leeres Feld (z. B. im Onboarding)
+    #: Directus-Daten unbeabsichtigt. Für Self-Service-Änderungen (Stammdaten),
+    #: bei denen „Privatnummer entfernt" eine echte Änderung ist.
+    clearEmpty: bool = False
 
 
 class DirectusFillBinding(_Base):
@@ -1676,6 +1682,11 @@ class ProcessDefinition(_Base):
                         raise ValueError(
                             f"automation[{a.id}].directus.fieldMap[{j}]: „als Firmen-ID auflösen“ "
                             "ist nur für ein Firmen-Feld (widget=company) erlaubt")
+                # Leere Felder leeren gibt es nur beim Aktualisieren eines Datensatzes.
+                if d.clearEmpty and d.operation != DirectusOperation.update:
+                    raise ValueError(
+                        f"automation[{a.id}].directus.clearEmpty: „leere Felder in Directus "
+                        "leeren“ ist nur bei operation=update möglich")
                 # Geschäftsschlüssel (get-or-create): nur bei create und nur auf ein
                 # tatsächlich gemapptes Directus-Feld (sonst gäbe es keinen Suchwert).
                 if d.matchField:

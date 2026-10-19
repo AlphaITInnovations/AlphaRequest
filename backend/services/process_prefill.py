@@ -120,9 +120,11 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
     den Wert nicht vorwählen.
 
     **Editierbare Felder** (in der Start-Phase editable/append_only) werden NUR
-    vorbelegt, wenn noch kein Wert da ist – so bleibt eine Bearbeitung der Person
-    erhalten (Self-Service). Für read-only/hidden-Felder ist die Vorbelegung
-    autoritativ (überschreibt), damit sie manipulationssicher bleibt.
+    vorbelegt, wenn der Client den Schlüssel NICHT mitschickt. Ein mitgeschickter
+    Wert ist die Entscheidung der Person – auch ein bewusst GELEERTER ("" / None,
+    z. B. Privatnummer entfernt) bleibt leer und wird nicht wieder mit dem alten
+    Directus-Wert aufgefüllt (Self-Service). Für read-only/hidden-Felder ist die
+    Vorbelegung autoritativ (überschreibt), damit sie manipulationssicher bleibt.
     """
     global _companies_cache
     _companies_cache = None
@@ -136,8 +138,10 @@ def apply_prefill(defn: ProcessDefinition, values: dict, user: dict) -> dict:
         pf = f.prefill
         if not pf:
             continue
-        # Editierbares Feld mit bereits gesetztem Wert: nicht überschreiben.
-        if f.key in editable and out.get(f.key) not in (None, ""):
+        # Editierbares Feld, das der Client mitgeschickt hat: seine Entscheidung –
+        # auch leer. Früher wurde "" wie „kein Wert" behandelt und mit dem alten
+        # Directus-Wert überschrieben, ein Leeren kam nie im Auftrag an.
+        if f.key in editable and f.key in out:
             continue
         src = employee if pf.source == "employee" else user
         raw = _resolve_path(src, pf.field)

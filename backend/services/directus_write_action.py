@@ -26,6 +26,12 @@ def build_payload(spec, values: dict, *, companies=None) -> dict:
     """Directus-Payload aus dem Feld-Mapping. Leere Werte (None/"") werden
     ausgelassen – so überschreibt ein leeres Prozess-Feld nichts unbeabsichtigt.
 
+    Ausnahme `spec.clearEmpty` (nur update, opt-in): ein im Auftrag VORHANDENES,
+    leeres Feld (bewusst geleert, z. B. Privatnummer entfernt) wird als null
+    geschrieben und leert damit das Directus-Feld. Ein FEHLENDER Schlüssel (z. B.
+    nicht vorbelegbare Auswahl) oder eine fehlgeschlagene Auflösung bleibt
+    ausgelassen – sonst gingen Daten verloren, die niemand angefasst hat.
+
     Trägt eine Zuordnung `resolve`, wird der Quellwert zuvor übersetzt (z. B.
     Firmenname → alphacore-Firmen-ID). `companies` ist injizierbar (Tests); sonst
     werden die lokalen Firmen einmalig aus den Settings gelesen, aber nur wenn eine
@@ -54,11 +60,15 @@ def build_payload(spec, values: dict, *, companies=None) -> dict:
         if const is not None:
             out[b.target] = const
             continue
-        v = values.get(b.source)
+        raw = values.get(b.source)
+        v = raw
         resolve = getattr(b, "resolve", None)
         if resolve is not None:
             v = _resolve_value(resolve, v, companies or [])
         if v is None or v == "":
+            if (getattr(spec, "clearEmpty", False) and b.source in values
+                    and raw in (None, "", [])):
+                out[b.target] = None
             continue
         out[b.target] = v
     return out

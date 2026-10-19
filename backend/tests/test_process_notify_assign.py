@@ -356,3 +356,127 @@ def test_ticket_attachments_deckelt_gesamtgroesse(monkeypatch):
 
 def test_ticket_attachments_ohne_id_leer():
     assert pactions._ticket_attachments({}) == []
+
+
+# ── Nachtrag zu abgeschlossenem Auftrag ───────────────────────────────────────
+
+def _archiviert(defn, values):
+    """Auftrag durch alle Phasen bis „archiviert" treiben (jede Phase entered)."""
+    rt = pr.initial_runtime(defn, "t0", values)
+    status = "in_progress"
+    while not pr.is_terminal(rt):
+        rt, status = pr.advance(defn, rt, "t1", values)
+    return {"id": 11, "title": "Abgeschlossener Auftrag", "owner_id": "u_owner",
+            "status": "archived", "values": values, "runtime": rt}, status
+
+
+def test_involved_departments_sammelt_gruppen_und_abteilungen():
+    """Alle beteiligten Fachabteilungen: die departments-Phase (g_it+g_fp) UND die
+    Gruppen-Phase (g_it). Einzelpersonen (owner/assignable) zählen nicht."""
+    t, status = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    assert status == "archived"
+    assert pr.involved_department_group_ids(DEFN, t["runtime"]) == {"g_it", "g_fp"}
+
+
+def test_notify_addendum_informiert_alle_fachabteilungen():
+    sent, sender = _capture()
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    out = pactions.notify_addendum(t, DEFN, author_name="Max Muster",
+                                   body_text="Nachgereichte Information",
+                                   sender=sender, groups=GROUPS)
+    assert set(out) == {"it@example.org", "fuhrpark@example.org"}
+    assert sent and sent[0]["kind"] == "addendum"
+    assert "Abgeschlossener Auftrag" in sent[0]["subject"]
+
+
+def test_involved_departments_ignoriert_einzelpersonen():
+    """Nur Fachabteilungen zählen – reine Owner-/Personen-Zuständigkeiten (owner,
+    assignable) ergeben KEINE Empfänger."""
+    defn = ProcessDefinition.model_validate({
+        "key": "p", "name": "P",
+        "fields": [{"key": "a", "widget": "text"}, {"key": "wer", "widget": "user"}],
+        "phases": [
+            {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}, {"ref": "wer"}]},
+            {"key": "b", "kind": "task",
+             "responsibility": {"kind": "assignable", "fromField": "wer"},
+             "fields": [{"ref": "a", "mode": "editable"}]},
+        ],
+    })
+    t, _ = _archiviert(defn, {"wer": "u_chef"})
+    assert pr.involved_department_group_ids(defn, t["runtime"]) == set()
+
+
+def test_addendum_recipients_loest_verteiler_auf():
+    """addendum_recipients liefert die Verteiler aller beteiligten Fachabteilungen
+    (reine Auflösung, kein Versand)."""
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    assert set(pactions.addendum_recipients(t, DEFN, groups=GROUPS)) \
+        == {"it@example.org", "fuhrpark@example.org"}
+
+
+def test_addendum_schreibende_person_im_verteiler_bleibt_empfaenger():
+    """Regression (#94): ist der einzige Verteiler einer beteiligten Abteilung die
+    Adresse der schreibenden Person, darf die Abteilung trotzdem nicht leer
+    ausgehen – Empfänger ist die ABTEILUNG, nicht die Person."""
+    defn = ProcessDefinition.model_validate({
+        "key": "s", "name": "S", "fields": [{"key": "a", "widget": "text"}],
+        "phases": [
+            {"key": "bearbeiten", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}]},
+            {"key": "pruefung", "kind": "approval",
+             "responsibility": {"kind": "group", "group": "g_it"},
+             "approval": {"question": "OK?"}, "fields": [{"ref": "a", "mode": "readonly"}]},
+        ],
+    })
+    groups = [{"id": "g_it", "distributions": ["autor@example.org"]}]
+    t, _ = _archiviert(defn, {})
+    assert pactions.addendum_recipients(t, defn, groups=groups) == ["autor@example.org"]
+    sent, sender = _capture()
+    out = pactions.notify_addendum(t, defn, author_name="Autor", body_text="x",
+                                   sender=sender, groups=groups)
+    assert out == ["autor@example.org"] and sent[0]["kind"] == "addendum"
+
+
+_COND_DEFN = ProcessDefinition.model_validate({
+    "key": "cond", "name": "Cond",
+    "fields": [{"key": "car", "widget": "text"}],
+    "phases": [
+        {"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+         "fields": [{"ref": "car"}]},
+        {"key": "pruef", "kind": "review",
+         "responsibility": {"kind": "departments",
+            "rule": [{"group": "g_it"},
+                     {"group": "g_fp", "required": False, "when": {"==": ["car", "Ja"]}}]},
+         "fields": [{"ref": "car", "mode": "readonly"}]},
+    ],
+})
+
+
+def test_involved_departments_respektiert_bedingte_abteilung():
+    """Eine bedingte Abteilung (when), die für DIESEN Auftrag nie zugeschaltet
+    wurde (car != Ja), ist auch kein Nachtrags-Empfänger."""
+    t_nein, _ = _archiviert(_COND_DEFN, {"car": "Nein"})
+    assert pr.involved_department_group_ids(_COND_DEFN, t_nein["runtime"]) == {"g_it"}
+    t_ja, _ = _archiviert(_COND_DEFN, {"car": "Ja"})
+    assert pr.involved_department_group_ids(_COND_DEFN, t_ja["runtime"]) == {"g_it", "g_fp"}
+
+
+def test_involved_departments_schliesst_uebersprungene_aus():
+    """Eine beteiligte, aber ÜBERSPRUNGENE Abteilung (status='skipped') bekommt
+    keinen Nachtrag – nur tatsächlich beteiligte."""
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    for ph in t["runtime"]["phases"]:
+        if ph["key"] == "pruefung":
+            for d in ph["departments"]:
+                if d["group"] == "g_fp":
+                    d["status"] = "skipped"
+    assert pr.involved_department_group_ids(DEFN, t["runtime"]) == {"g_it"}
+
+
+def test_notify_addendum_mailfehler_bricht_nichts_ab():
+    def boom(*a, **k):
+        raise RuntimeError("Graph down")
+    t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
+    assert pactions.notify_addendum(t, DEFN, author_name="X", body_text="y",
+                                    sender=boom, groups=GROUPS) == []

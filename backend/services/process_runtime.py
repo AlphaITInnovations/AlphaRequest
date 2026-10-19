@@ -78,6 +78,19 @@ def current_phase(defn: ProcessDefinition, runtime: dict) -> Optional[PhaseDef]:
     return None
 
 
+def current_entered_at(runtime: dict) -> Optional[str]:
+    """Eintrittszeitpunkt (ISO-UTC) der AKTUELLEN Phase – None, wenn der Auftrag
+    abgeschlossen ist oder der Zeitstempel fehlt (Altbestand). Grundlage der
+    Liegezeit-Anzeige („liegt seit X Tagen in dieser Phase")."""
+    if is_terminal(runtime):
+        return None
+    idx = runtime.get("current_index", 0)
+    phases = runtime.get("phases") or []
+    if 0 <= idx < len(phases):
+        return phases[idx].get("entered_at") or None
+    return None
+
+
 def is_terminal(runtime: dict) -> bool:
     return bool(runtime.get("rejected")) or runtime.get("current_index", 0) >= len(runtime.get("phases", []))
 
@@ -113,6 +126,40 @@ def current_departments(runtime: dict) -> list:
     if 0 <= idx < len(phases):
         return phases[idx].get("departments") or []
     return []
+
+
+def involved_department_group_ids(defn: ProcessDefinition, runtime: dict) -> set:
+    """Fachabteilungen, die an DIESEM Auftrag tatsächlich BETEILIGT waren – für den
+    „Nachtrag"-Versand. Übersprungene Abteilungen bekommen bewusst keinen Nachtrag.
+
+    * kind=group-Phasen (Freigabe, Arbeitsvertrag …): die zuständige Gruppe (sie
+      durchläuft jeder abgeschlossene Auftrag).
+    * kind=departments-Phasen: die im Runtime geseedeten Abteilungen OHNE die
+      übersprungenen (status='skipped') – bedingt nie zugeschaltete sind gar nicht
+      erst geseedet. Fehlt die Runtime-Spur ganz (Altbestand), greifen als Rückfall
+      alle Regel-Gruppen.
+
+    Einzelpersonen-Zuständigkeiten (owner/user/assignable) sind KEINE Fachabteilung
+    und bleiben außen vor. Reine Logik, kein DB-Zugriff.
+    """
+    ids: set = set()
+    rt_by_key = {p.get("key"): p for p in (runtime.get("phases") or [])}
+    for p in defn.phases:
+        resp = getattr(p, "responsibility", None)
+        if resp is None:
+            continue
+        if resp.kind == ResponsibilityKind.group:
+            if resp.group:
+                ids.add(resp.group)
+        elif resp.kind == ResponsibilityKind.departments:
+            seeded = (rt_by_key.get(p.key) or {}).get("departments")
+            if seeded is None:
+                # Keine Runtime-Spur (Altbestand) → alle Regel-Gruppen als Rückfall.
+                ids.update(dr.group for dr in resp.rule if dr.group)
+            else:
+                ids.update(d.get("group") for d in seeded
+                           if d.get("group") and d.get("status") != "skipped")
+    return {g for g in ids if g}
 
 
 def department_entry(runtime: dict, group_id: str) -> Optional[dict]:

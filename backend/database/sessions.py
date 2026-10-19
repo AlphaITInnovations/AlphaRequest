@@ -16,6 +16,7 @@ alle Funktionen Fehler und loggen sie nur – die Session-Buchführung darf die
 Fachlogik nie blockieren.
 """
 
+import json
 from typing import Optional
 
 from backend.database.connection import get_connection, _exec, _fetchall, _fetchone
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS active_sessions (
     user_agent  VARCHAR(512) NULL,
     created_at  DATETIME     NOT NULL,
     last_seen   DATETIME     NOT NULL,
+    login_profile_json MEDIUMTEXT NULL,
     PRIMARY KEY (sid),
     INDEX idx_sessions_user (user_id),
     INDEX idx_sessions_last_seen (last_seen)
@@ -39,32 +41,64 @@ CREATE TABLE IF NOT EXISTS active_sessions (
 """
 
 
+# Additive Spalten für bereits bestehende Tabellen (idempotent, einzeln toleriert).
+ACTIVE_SESSIONS_MIGRATIONS = [
+    # AD-Gruppen + Graph-Profil des Logins – liegen hier statt im Cookie (s. unten).
+    "ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS login_profile_json MEDIUMTEXT NULL",
+]
+
+
 def ensure_table() -> None:
     conn = get_connection()
     try:
         _exec(conn, ACTIVE_SESSIONS_DDL)
+        for migration in ACTIVE_SESSIONS_MIGRATIONS:
+            try:
+                _exec(conn, migration)
+            except Exception as e:
+                logger.warning("active_sessions-Migration übersprungen (%s…): %s", migration[:60], e)
         conn.commit()
     finally:
         conn.close()
 
 
+def parse_login_profile(raw) -> dict:
+    """`login_profile_json` → dict (kaputt/leer → {}). Rein, testbar."""
+    if not raw:
+        return {}
+    try:
+        val = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return val if isinstance(val, dict) else {}
+
+
 def upsert_session(sid: str, user_id: str, user_name: Optional[str],
-                   ip: Optional[str], user_agent: Optional[str]) -> None:
-    """Beim Login anlegen bzw. aktualisieren. Best-effort."""
+                   ip: Optional[str], user_agent: Optional[str],
+                   login_profile: Optional[dict] = None) -> None:
+    """Beim Login anlegen bzw. aktualisieren. Best-effort.
+
+    `login_profile` (AD-Gruppen + Graph-Profil) liegt bewusst HIER und nicht im
+    Session-Cookie: das Cookie ist nur signiert, nicht verschlüsselt, geht mit
+    jedem Request mit und darf 4 KB nicht überschreiten – bei vielen AD-Gruppen
+    sprengte es sonst nginx-Puffer/Browser-Limit. Der Lebenszyklus hängt damit
+    an dieser Zeile (Logout, Force-Logout, Prune, Neustart)."""
     if not sid or not user_id:
         return
+    profile = json.dumps(login_profile or {}, ensure_ascii=False)
     try:
         conn = get_connection()
         try:
             _exec(
                 conn,
                 "INSERT INTO active_sessions "
-                "(sid, user_id, user_name, ip, user_agent, created_at, last_seen) "
-                "VALUES (%s, %s, %s, %s, %s, NOW(), NOW()) "
+                "(sid, user_id, user_name, ip, user_agent, created_at, last_seen, login_profile_json) "
+                "VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), %s) "
                 "ON DUPLICATE KEY UPDATE "
                 "user_id=VALUES(user_id), user_name=VALUES(user_name), "
-                "ip=VALUES(ip), user_agent=VALUES(user_agent), last_seen=NOW()",
-                (sid, user_id, user_name, ip, (user_agent or "")[:512] or None),
+                "ip=VALUES(ip), user_agent=VALUES(user_agent), last_seen=NOW(), "
+                "login_profile_json=VALUES(login_profile_json)",
+                (sid, user_id, user_name, ip, (user_agent or "")[:512] or None, profile),
             )
             conn.commit()
         finally:
@@ -76,22 +110,29 @@ def upsert_session(sid: str, user_id: str, user_name: Optional[str],
 def get_session(sid: str) -> Optional[dict]:
     """Existenz + Alter der Session für den pro-Request-Check.
 
-    Gibt {'sid', 'user_id', 'user_name', 'age_seconds'} zurück oder None (Session
-    existiert nicht / wurde force-abgemeldet). WIRFT bei DB-Fehler bewusst weiter,
-    damit `get_current_user` fail-open reagieren kann (kein Logout bei DB-Schluckauf).
+    Gibt {'sid', 'user_id', 'user_name', 'age_seconds', 'login_profile'} zurück oder
+    None (Session existiert nicht / wurde force-abgemeldet). WIRFT bei DB-Fehler
+    bewusst weiter, damit `get_current_user` fail-open reagieren kann (kein Logout
+    bei DB-Schluckauf).
     """
     if not sid:
         return None
     conn = get_connection()
     try:
-        return _fetchone(
+        row = _fetchone(
             conn,
-            "SELECT sid, user_id, user_name, TIMESTAMPDIFF(SECOND, last_seen, NOW()) AS age_seconds "
+            "SELECT sid, user_id, user_name, login_profile_json, "
+            "TIMESTAMPDIFF(SECOND, last_seen, NOW()) AS age_seconds "
             "FROM active_sessions WHERE sid = %s",
             (sid,),
         )
     finally:
         conn.close()
+    if not row:
+        return None
+    out = dict(row)
+    out["login_profile"] = parse_login_profile(out.pop("login_profile_json", None))
+    return out
 
 
 def touch_session(sid: str, ip: Optional[str] = None) -> None:
@@ -131,8 +172,8 @@ def delete_session(sid: str) -> None:
 
 
 def delete_sessions_for_user(user_id: str) -> list[str]:
-    """Alle Sessions einer Person entfernen. Gibt die betroffenen sids zurück,
-    damit der Aufrufer auch den In-Memory-Token-Store (TOKENS) purgen kann."""
+    """Alle Sessions einer Person entfernen. Gibt die betroffenen sids zurück
+    (fürs Audit)."""
     if not user_id:
         return []
     try:

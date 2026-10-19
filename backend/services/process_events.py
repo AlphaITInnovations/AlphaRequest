@@ -37,6 +37,11 @@ ADVANCED = "advanced"
 REJECTED = "rejected"
 REOPENED = "reopened"
 COMMENT = "comment"
+#: Nachtrag an einem bereits ABGESCHLOSSENEN Auftrag (informiert alle beteiligten
+#: Fachabteilungen per Mail; der Status bleibt unverändert). Bewusst eine eigene
+#: Aktion statt `comment`, damit die Oberfläche ihn zeigen kann, obwohl die
+#: allgemeinen Nachträge dort ruhen.
+ADDENDUM = "addendum"
 DEPARTMENT_DONE = "department_done"
 DEPARTMENT_SKIPPED = "department_skipped"
 DEPARTMENT_REJECTED = "department_rejected"
@@ -113,6 +118,14 @@ def system(row: dict, action: str, **kwargs) -> Optional[dict]:
 
 
 # ── Lesen / Redaktion ─────────────────────────────────────────────────────────
+
+def addenda(ticket_id: int, *, limit: int = 200) -> list[dict]:
+    """Nachträge (ADDENDUM) eines Auftrags, neueste zuerst. Sie tragen NUR Freitext
+    (body), keine Feld-Schlüssel/Änderungen – daher ohne die Feld-Redaktion des
+    Verlaufs direkt an jede lesende Person zeigbar (der volle Verlauf läuft
+    weiterhin über `for_viewer`)."""
+    return store.list_by_action(ticket_id, ADDENDUM, limit=limit)
+
 
 def redact(events: Iterable[dict], defn: Optional[ProcessDefinition],
            ctx: vis.ViewerCtx, *, staff: bool) -> list[dict]:

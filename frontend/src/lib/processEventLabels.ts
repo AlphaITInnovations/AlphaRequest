@@ -16,7 +16,8 @@ export type EventTone = 'neutral' | 'progress' | 'warn' | 'danger' | 'comment'
 /** Wie ein Eintrag optisch eingeordnet wird (Farbe/Punkt in der Timeline). */
 export function eventTone(ev: ProcessEvent): EventTone {
   switch (ev.action) {
-    case 'comment': return 'comment'
+    case 'comment':
+    case 'addendum': return 'comment'
     case 'advanced': return 'progress'
     case 'department_done': return 'progress'
     case 'created': return 'progress'
@@ -113,6 +114,8 @@ export function eventSummary(ev: ProcessEvent, ctx: LabelCtx = {}): string {
       return `Auftrag wieder aufgenommen (Phase „${phase(ev.details?.phase, ctx)}“)`
     case 'comment':
       return ev.internal ? 'Interner Nachtrag' : 'Nachtrag'
+    case 'addendum':
+      return 'Nachtrag (nach Abschluss)'
     case 'department_done':
       return `Fachabteilung abgeschlossen: ${gruppe(ev, ctx)}`
     case 'department_skipped':
@@ -204,7 +207,8 @@ export function eventIcon(ev: ProcessEvent): string {
     case 'rejected':
     case 'department_rejected': return 'reject'
     case 'reopened': return 'reopen'
-    case 'comment': return 'comment'
+    case 'comment':
+    case 'addendum': return 'comment'
     case 'department_done': return 'check'
     case 'department_skipped': return 'skip'
     case 'watcher_added':
