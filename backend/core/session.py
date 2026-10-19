@@ -1,5 +1,10 @@
+import json
 import uuid
+from base64 import b64decode
+from typing import Optional
+
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.requests import HTTPConnection
 from backend.utils.config import config
 
 # Microsoft-Tokens (Access/Refresh) werden bewusst NICHT aufbewahrt: der Login
@@ -35,10 +40,63 @@ def rotate_sid(session: dict) -> str:
     return new
 
 
+def _dump(session) -> str:
+    return json.dumps(session, sort_keys=True, default=str)
+
+
+class ChangeAwareSessionMiddleware(SessionMiddleware):
+    """Wie Starlettes SessionMiddleware – schreibt das Cookie aber NUR, wenn sich die
+    Session in diesem Request geändert hat (oder geleert wurde).
+
+    Starlette setzt das Cookie sonst bei JEDER Antwort neu, auch unverändert. Das
+    erzeugt ein Rennen: eine Antwort, die last_activity bewusst NICHT anfasst
+    (Heartbeat /auth/check, Live-Abfragen mit X-Background-Poll, öffentliche
+    Endpunkte), kommt nach einer echten Aktivität an und setzt das Cookie auf den
+    ALTEN Stand zurück – die Session lief dann früher ab, obwohl gearbeitet wurde.
+
+    Sicher bzgl. Ablauf: last_activity wird nur beim Schreiben geändert, und jedes
+    Schreiben signiert neu. Signatur-Alter und Cookie-Max-Age laufen damit nie vor
+    dem serverseitigen Inaktivitäts-Timeout ab. Die Original-Logik bleibt
+    unangetastet; hier wird nur der überflüssige Set-Cookie wieder entfernt."""
+
+    def _initial_session(self, scope) -> Optional[dict]:
+        raw = HTTPConnection(scope).cookies.get(self.session_cookie)
+        if not raw:
+            return None
+        try:
+            data = self.signer.unsign(raw.encode("utf-8"), max_age=self.max_age)
+            val = json.loads(b64decode(data))
+        except Exception:
+            return None
+        return val if isinstance(val, dict) else None
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await super().__call__(scope, receive, send)
+            return
+        before = self._initial_session(scope)
+        before_dump = _dump(before) if before else None
+        prefix = f"{self.session_cookie}=".encode("latin-1")
+
+        async def drop_unchanged_cookie(message):
+            if message["type"] == "http.response.start" and before_dump is not None:
+                session = scope.get("session")
+                # Nicht-leer UND unverändert → das neu angehängte Session-Cookie
+                # entfernen. Geleert (Logout/Timeout) bleibt das Lösch-Cookie stehen.
+                if session and _dump(session) == before_dump:
+                    message["headers"] = [
+                        (k, v) for (k, v) in message.get("headers", [])
+                        if not (k.lower() == b"set-cookie" and v.startswith(prefix))
+                    ]
+            await send(message)
+
+        await super().__call__(scope, receive, drop_unchanged_cookie)
+
+
 def setup_session(app):
     """SessionMiddleware einrichten (war vorher in server.py)."""
     app.add_middleware(
-        SessionMiddleware,
+        ChangeAwareSessionMiddleware,
         secret_key=config.SECRET_KEY,
         session_cookie="app_session",
         same_site="lax",
