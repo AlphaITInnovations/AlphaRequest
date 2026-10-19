@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import { errorCode, errorMessage } from '@/lib/processErrors'
+import { rememberPostLoginPath, takePostLoginPath } from '@/lib/postLoginRedirect'
 import type { User, Permission } from '@/types/api'
 
 /** Gate-Codes des Backends (core/dependencies.enforce_employee_link): angemeldet,
@@ -68,6 +69,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
+    // Ein noch gemerktes Login-Ziel verwerfen – nach bewusstem Abmelden soll der
+    // nächste Login (auch einer anderen Person am selben Tab) nicht dorthin springen.
+    takePostLoginPath()
     user.value = null
     accessDenied.value = null
     window.location.href = '/logout'
@@ -99,7 +103,9 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (!popup) {
       reauthenticating.value = false
-      // Popup-Blocker → Fallback auf harten Redirect
+      // Popup-Blocker → Fallback auf harten Redirect. Aktuelle Seite merken, damit
+      // es nach dem Login dorthin zurückgeht (wie „Zur Login-Seite" im Dialog).
+      rememberPostLoginPath(window.location.pathname + window.location.search + window.location.hash)
       window.location.href = '/login'
       return false
     }
@@ -113,6 +119,9 @@ export const useAuthStore = defineStore('auth', () => {
           try {
             const { data } = await authApi.me()
             user.value = data.data
+            // Anmeldung lief am Router-Guard vorbei (Popup) → ein evtl. noch
+            // gemerktes Ziel ist erledigt und darf später nicht überraschend greifen.
+            takePostLoginPath()
             accessDenied.value = null
             sessionExpired.value = false
             reauthenticating.value = false
