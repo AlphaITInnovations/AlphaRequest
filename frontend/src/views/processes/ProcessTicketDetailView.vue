@@ -7,6 +7,7 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useNotificationStore } from '@/stores/notificationStore'
 import AppLayout from '@/components/AppLayout.vue'
 import { useToast } from '@/composables/useToast'
 import type { FieldDef, OptionSources, ProcessDefinition, ProcessTicketOut } from '@/types/process'
@@ -39,6 +40,7 @@ import ProcessApprovalPanel from '@/components/process/ProcessApprovalPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
+const notificationStore = useNotificationStore()
 const { showToast } = useToast()
 const auth = useAuthStore()
 
@@ -488,7 +490,12 @@ const userName = (uid: string) => sources.value.users.find((u) => u.id === uid)?
 
 // Ticket-Wechsel ohne Remount (App.vue hat kein router-view :key): beim Wechsel
 // der id neu laden – zieht die Daten nach UND räumt den flüchtigen Fehlerbalken.
-watch(id, () => { load() })
+// Neu laden bei anderem Auftrag ODER anderer Ansicht/Abteilung (z. B. Klick auf
+// „Neue Aufgabe“ führt von der Lese- in die Bearbeitungsansicht desselben Auftrags).
+watch([id, () => route.query.ansicht, () => route.query.abteilung], () => { load() })
+// Klick auf eine Benachrichtigung zum GERADE geöffneten Auftrag (gleiche URL):
+// die Glocke gibt ein Signal, damit der neue Stand erscheint.
+watch(() => notificationStore.reloadTick, () => { load(); timeline.value?.reload() })
 
 // auth.isAdmin: normale Nutzer:innen direkt über den öffentlichen /groups-Endpunkt
 // (der Admin-Endpunkt gäbe 403 – ohne Gruppennamen stünden rohe IDs in der Ansicht).

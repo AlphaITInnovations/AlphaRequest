@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { parseTicketRef } from '@/lib/overviewQuery'
+import NotificationBell from '@/components/NotificationBell.vue'
 import { useAuthStore } from '@/stores/authStore'
 import { useTheme } from '@/composables/useTheme'
 import { client } from '@/api/client'
@@ -442,6 +443,7 @@ defineProps<{ title?: string }>()
           </span>
         </div>
 
+        <div class="flex items-center gap-2">
         <!-- Direktsprung: Auftragsnummer eintippen, Enter → Auftrag öffnen. -->
         <form @submit.prevent="springeZuAuftrag" role="search" class="flex items-center">
           <label for="auftrag-sprung" class="sr-only">Auftrag per Nummer öffnen</label>
@@ -462,6 +464,10 @@ defineProps<{ title?: string }>()
             </button>
           </div>
         </form>
+        <!-- In-App-Benachrichtigungen (Ergänzung zur Mail). Ganz rechts, damit das
+             aufklappende Panel auch auf schmalen Bildschirmen im Bild bleibt. -->
+        <NotificationBell />
+        </div>
       </header>
 
       <!-- Content -->
