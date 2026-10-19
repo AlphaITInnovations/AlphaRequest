@@ -3,6 +3,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { authApi } from '@/api/auth'
+import { rememberPostLoginPath } from '@/lib/postLoginRedirect'
 
 const auth   = useAuthStore()
 const router = useRouter()
@@ -73,6 +74,8 @@ async function relogin() {
 }
 
 function goToLogin() {
+  // Aktuelle Seite merken – nach dem Login geht es hierher zurück.
+  rememberPostLoginPath(router.currentRoute.value.fullPath)
   auth.sessionExpired = false
   window.location.href = '/login'
 }
