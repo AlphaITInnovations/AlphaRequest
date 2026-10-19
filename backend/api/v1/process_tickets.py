@@ -658,8 +658,9 @@ def create_process_ticket(body: CreateTicketRequest, user: dict = Depends(get_cu
     for _seed_key in snap_seed:
         values.pop(_seed_key, None)
 
-    # Antragsteller-Felder aus den Daten der angemeldeten Person vorbelegen
-    # (read-only prefill – autoritativ, überschreibt evtl. mitgeschickte Werte).
+    # Antragsteller-Felder aus den Daten der angemeldeten Person vorbelegen:
+    # read-only/hidden autoritativ (überschreibt mitgeschickte Werte); editierbare
+    # nur, wenn der Client den Schlüssel nicht mitschickt (bewusst geleert bleibt leer).
     values = process_prefill.apply_prefill(defn, values, user)
 
     errs = pv.validate_values(defn, values)

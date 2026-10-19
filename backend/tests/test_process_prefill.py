@@ -139,8 +139,8 @@ def test_prefill_company_id_wird_zu_firmenname(monkeypatch):
 
 def test_prefill_editierbares_feld_bleibt_erhalten():
     """Self-Service: ein EDITIERBARES prefill-Feld behält den bearbeiteten Wert;
-    nur read-only wird autoritativ überschrieben. Leeres editierbares Feld wird
-    trotzdem vorbelegt."""
+    nur read-only wird autoritativ überschrieben. Ein NICHT mitgeschicktes
+    editierbares Feld wird vorbelegt."""
     d = ProcessDefinition.model_validate({
         "schemaVersion": 1, "key": "k", "name": "N",
         "fields": [
@@ -155,7 +155,31 @@ def test_prefill_editierbares_feld_bleibt_erhalten():
     out = apply_prefill(d, {"b.vorname": "Heinz", "b.nachname": "Faelschung"}, user)
     assert out["b.vorname"] == "Heinz"    # Bearbeitung des editierbaren Felds bleibt
     assert out["b.nachname"] == "Popp"    # read-only bleibt autoritativ
-    assert apply_prefill(d, {}, user)["b.vorname"] == "Helmut"   # leer -> vorbelegt
+    assert apply_prefill(d, {}, user)["b.vorname"] == "Helmut"   # nicht mitgeschickt -> vorbelegt
+
+
+def test_prefill_bewusst_geleertes_editierbares_feld_bleibt_leer():
+    """Regression (Stammdaten): Privatnummer entfernt → "" (Text) bzw. None
+    (Auswahl) muss leer bleiben und darf NICHT mit dem alten Directus-Wert wieder
+    aufgefüllt werden. Read-only bleibt dabei autoritativ."""
+    d = ProcessDefinition.model_validate({
+        "schemaVersion": 1, "key": "k", "name": "N",
+        "fields": [
+            {"key": "s.privat", "widget": "text", "prefill": {"source": "employee", "field": "private_phone"}},
+            {"key": "s.mobil", "widget": "text", "prefill": {"source": "employee", "field": "mobile"}},
+            {"key": "s.nr", "widget": "text", "prefill": {"source": "employee", "field": "employee_number"}},
+        ],
+        "phases": [{"key": "start", "kind": "start", "responsibility": {"kind": "owner"},
+                    "fields": [{"ref": "s.privat", "mode": "editable"},
+                               {"ref": "s.mobil", "mode": "editable"},
+                               {"ref": "s.nr", "mode": "readonly"}]}],
+    })
+    user = {"id": "a@b", "email": "a@b",
+            "employee": {"private_phone": "0911-123", "mobile": "0170", "employee_number": "42"}}
+    out = apply_prefill(d, {"s.privat": "", "s.mobil": None, "s.nr": ""}, user)
+    assert out["s.privat"] == ""        # bewusst geleert bleibt leer
+    assert out["s.mobil"] is None       # dito (Auswahl-/Null-Fall)
+    assert out["s.nr"] == "42"          # read-only: autoritativ, Leeren wirkt nicht
 
 
 def _select_defn():

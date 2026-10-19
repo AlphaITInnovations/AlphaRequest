@@ -420,6 +420,17 @@ def test_initial_changes_zeigt_nur_abweichungen_von_der_vorbelegung():
     assert ch["b.titel"] == {"from": None, "to": "IT"}         # neu ohne Vorbelegung: leer→neu
 
 
+def test_initial_changes_zeigt_bewusstes_leeren_als_aenderung():
+    """Regression (Stammdaten): Privatnummer entfernt → alt→leer muss als Änderung
+    im Verlauf/Prüf-Vergleich stehen (früher füllte die Vorbelegung den alten Wert
+    wieder auf, es gab gar keine Änderung)."""
+    from backend.api.v1.process_tickets import _initial_changes
+    ch = _initial_changes({"b.privat": "", "b.mobil": None, "b.plz": "90402"},
+                          {"b.privat": "0911-123", "b.mobil": "0170", "b.plz": "90402"})
+    assert ch == {"b.privat": {"from": "0911-123", "to": None},
+                  "b.mobil": {"from": "0170", "to": None}}
+
+
 def test_initial_changes_ohne_vorbelegung_wie_bisher():
     from backend.api.v1.process_tickets import _initial_changes
     ch = _initial_changes({"a": "x", "b": "", "c": None}, {})
