@@ -16,8 +16,8 @@ import { normalizeDefinition } from '@/lib/processNormalize'
 import { errorMessage, issuesFromError } from '@/lib/processErrors'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { emptySources, loadOptionSources, loadDirectusLabels } from '@/lib/processSources'
-import { fieldValueText, isEmptyValue } from '@/lib/processFieldFormat'
 import { collectDirectusIds, mergeDirectusLabels } from '@/lib/processHistoryLabels'
+import { buildReviewChangeMap, mergeEpochChanges, type ReviewChange } from '@/lib/processReviewChanges'
 import { resolveLabels } from '@/api/directus'
 import { listEvents } from '@/api/processEvents'
 import { applyComputed } from '@/lib/conditionDsl'
@@ -104,7 +104,7 @@ const fieldByKey = computed<Record<string, FieldDef>>(() => {
  * der alte Wert rot, der neue grün. Quelle ist der Verlauf des aktuellen Durchlaufs
  * (die „Angaben geändert"-Einträge); Directus-IDs werden zu Klartext aufgelöst.
  */
-const reviewChanges = ref<Record<string, { fromText: string; toText: string }>>({})
+const reviewChanges = ref<Record<string, ReviewChange>>({})
 
 /** Index der aktiven Phase – Grundlage für den Fortschritts-Stepper links. */
 const aktivIndex = computed(() => ticket.value?.runtime?.current_index ?? 0)
@@ -357,15 +357,7 @@ async function buildReviewChanges() {
     const epoch = ticket.value.runtime?.epoch ?? 0
     const inEpoch = items.filter((e) => e.epoch === epoch)
     // Änderungen des Durchlaufs mergen: ältester „from", jüngster „to".
-    const merged: Record<string, { from: unknown; to: unknown }> = {}
-    for (const ev of inEpoch) {
-      if (ev.action !== 'updated') continue
-      const ch = (ev.details?.changes ?? {}) as Record<string, { from?: unknown; to?: unknown }>
-      for (const [k, v] of Object.entries(ch)) {
-        if (!(k in merged)) merged[k] = { from: v?.from, to: v?.to }
-        else merged[k].to = v?.to
-      }
-    }
+    const merged = mergeEpochChanges(inEpoch, epoch)
     // Directus-IDs (alt+neu) zu Klartext auflösen und in die Quellen mischen.
     const ids = collectDirectusIds(inEpoch, fieldByKey.value)
     const hist: Record<string, Record<string, string>> = {}
@@ -374,15 +366,9 @@ async function buildReviewChanges() {
       if (Object.keys(labels).length) hist[key] = labels
     }))
     const src = mergeDirectusLabels(sources.value, hist)
-    const out: Record<string, { fromText: string; toText: string }> = {}
-    for (const [k, v] of Object.entries(merged)) {
-      const f = fieldByKey.value[k]
-      // Nur echte Änderung eines VORHANDENEN Werts zeigen (alt nicht leer) – so
-      // bleibt eine reine Neu-Eingabe (from leer) unmarkiert.
-      if (!f || isEmptyValue(v.from) || JSON.stringify(v.from) === JSON.stringify(v.to)) continue
-      out[k] = { fromText: fieldValueText(f, v.from, src), toText: fieldValueText(f, v.to, src) }
-    }
-    reviewChanges.value = out
+    // Regeln (geändert / entfernt / bei Vorbelegung auch „neu eingetragen") siehe
+    // lib/processReviewChanges.ts.
+    reviewChanges.value = buildReviewChangeMap(merged, fieldByKey.value, src)
   } catch { /* fail-soft: dann ohne Diff, nur die aktuellen Werte */ }
 }
 
