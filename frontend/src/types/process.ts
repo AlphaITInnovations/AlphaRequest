@@ -210,6 +210,9 @@ export interface DirectusWriteSpec {
   /** Geschäftsschlüssel (Directus-Feld, das auch fieldMap-Ziel ist) für get-or-create
    *  bei create – vor dem Anlegen wird darauf gesucht. */
   matchField?: string | null
+  /** Nur bei update: ein im Auftrag vorhandenes, leeres Feld leert das Directus-Feld
+   *  (null), statt ausgelassen zu werden (Self-Service-Änderungen wie Stammdaten). */
+  clearEmpty?: boolean
 }
 
 /** directus_fill: Directus-Quellfeld → Prozess-Zielfeld (LESEN). Firmen-Ziele

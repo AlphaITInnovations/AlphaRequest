@@ -208,6 +208,7 @@ function normDirectusWrite(v: any): DirectusWriteSpec | null {
     idField: String(v.idField ?? ''),
     onError: v.onError === 'block' ? 'block' : 'continue',
     matchField: v.matchField ? String(v.matchField) : null,
+    clearEmpty: v.clearEmpty === true,
   }
 }
 

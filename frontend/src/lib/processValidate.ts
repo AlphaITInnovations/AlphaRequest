@@ -791,6 +791,12 @@ export function validateDefinition(
               '„Als alphacore-Firmen-ID auflösen" ist nur für ein Firmen-Feld erlaubt.'))
           }
         })
+        // „Leere Felder in Directus leeren" gibt es nur beim Aktualisieren
+        // (spiegelt die Server-Regel).
+        if (dw.clearEmpty && dw.operation !== 'update') {
+          out.push(err(`${path}.action`, anchor, 'INVALID',
+            '„Leere Felder in Directus leeren" ist nur bei „Aktualisieren" möglich.'))
+        }
         // Geschäftsschlüssel (get-or-create): nur bei create + nur auf ein gemapptes
         // Directus-Zielfeld (spiegelt die Server-Regel).
         if (dw.matchField) {

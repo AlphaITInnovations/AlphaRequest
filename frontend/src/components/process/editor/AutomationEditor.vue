@@ -123,7 +123,7 @@ async function sendTest() {
 }
 const blankDirectus = (): DirectusWriteSpec => ({
   operation: 'create', collection: '', fieldMap: [], idField: '',
-  onError: 'continue', matchField: null,
+  onError: 'continue', matchField: null, clearEmpty: false,
 })
 const blankDirectusFill = (): DirectusFillSpec => ({ source: '', keyField: '', fieldMap: [] })
 const blankHttp = (): HttpRequestSpec => ({
@@ -217,9 +217,14 @@ function patchDirectus(p: Partial<DirectusWriteSpec>) {
   patchAction({ directus: { ...(a.value.action.directus ?? blankDirectus()), ...p } })
 }
 function setDwOperation(op: DirectusOperation) {
-  // matchField (get-or-create) gibt es nur bei create – beim Wechsel weg davon
-  // aufräumen, sonst bliebe ein nicht mehr bedienbarer Validierungsfehler stehen.
-  patchDirectus(op === 'create' ? { operation: op } : { operation: op, matchField: null })
+  // matchField (get-or-create) gibt es nur bei create, clearEmpty nur bei update –
+  // beim Wechsel aufräumen, sonst bliebe ein nicht mehr bedienbarer
+  // Validierungsfehler stehen.
+  patchDirectus({
+    operation: op,
+    ...(op === 'create' ? {} : { matchField: null }),
+    ...(op === 'update' ? {} : { clearEmpty: false }),
+  })
 }
 function addDwMap() {
   const cur = a.value.action.directus ?? blankDirectus()
@@ -729,6 +734,20 @@ watch(dwCollection, (c) => {
               Schlägt das Schreiben fehl, läuft der Auftrag weiter; der Fehler landet im
               Verlauf und als Mail an die Fehler-Empfänger:in.
             </template>
+          </p>
+        </div>
+
+        <div v-if="a.action.directus?.operation === 'update'">
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#3EAAB8]"
+                   :checked="!!a.action.directus?.clearEmpty"
+                   @change="patchDirectus({ clearEmpty: ($event.target as HTMLInputElement).checked })" />
+            <span class="text-sm text-gray-700 dark:text-gray-200">Leere Felder in Directus leeren</span>
+          </label>
+          <p class="text-xs text-gray-400 mt-1 ml-6">
+            Ein im Auftrag bewusst geleertes Feld (z. B. Privatnummer entfernt) leert auch das
+            Directus-Feld. Ohne Haken werden leere Felder ausgelassen und überschreiben nichts.
+            Felder, die im Auftrag gar nicht vorkommen, bleiben immer unangetastet.
           </p>
         </div>
 
