@@ -87,3 +87,16 @@ def health():
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     return JSONResponse(body, status_code=200 if db_ok else 503)
+
+
+@router.get("/ping")
+def ping():
+    """Schlanker Erreichbarkeits-Check für die SPA (Start/„Erneut versuchen").
+
+    Anders als /health OHNE die ausgehende Probe der FRONTEND_URL: die kann bei
+    Hairpin-NAT/Split-DNS/Firewall mehrere Sekunden hängen – dann zeigte die App
+    allen „Server nicht erreichbar", obwohl das Backend lief. Geprüft wird nur,
+    was die App wirklich braucht: Prozess + DB. /health bleibt fürs Monitoring."""
+    db_ok, _ = _check_database()
+    return JSONResponse({"status": "ok" if db_ok else "down"},
+                        status_code=200 if db_ok else 503)

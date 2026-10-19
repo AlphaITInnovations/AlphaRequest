@@ -59,7 +59,9 @@ export function setupInterceptors(router: import('vue-router').Router) {
  *  (und der Retry auf „/backend-down" nach Rückkehr des Backends greift). */
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const res = await axios.get('/api/v1/health', {
+    // /ping statt /health: ohne die ausgehende Frontend-Probe, die bei Netzproblemen
+    // zwischen Backend und Frontend-URL Sekunden hängen kann (→ falsches „down").
+    const res = await axios.get('/api/v1/ping', {
       withCredentials: true,
       timeout: 3000,
     })
