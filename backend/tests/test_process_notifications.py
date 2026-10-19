@@ -91,9 +91,36 @@ def test_durchgangsphase_erzeugt_keine_aufgabe():
 
 
 def test_eigene_aktion_meldet_nichts_an_sich_selbst():
-    out = plan(ev.ADVANCED, ticket(1), actor="chefin@x",
+    # Ersteller:in lehnt selbst ab: keine Meldung über die eigene Aktion
+    # (die Mail geht trotzdem raus – die Glocke zeigt, was ANDERE tun).
+    out = plan(ev.REJECTED, ticket(1), actor="owner@x")
+    assert "owner@x" not in out and out["beob@x"]["body"] == "Abgelehnt"
+    assert plan(ev.DEPARTMENT_DONE, ticket(3), actor="owner@x", details={"group": "g_it"}).keys() \
+        == {"beob@x"}
+    assert "owner@x" not in plan(ev.DEPARTMENT_REJECTED, ticket(3), actor="owner@x",
+                                 details={"group": "g_fp"})
+    # Abschluss: kein task-Zweig – auch nicht für eine zuständige Ersteller:in.
+    assert "owner@x" not in plan(ev.ADVANCED, ticket(4), actor="owner@x",
+                                 details={"from_phase": "durch", "to_phase": None, "status": "archived"})
+    # Eigener Nachtrag – auch als Mitglied einer beteiligten Fachabteilung.
+    assert "it1@x" not in plan(ev.ADDENDUM, ticket(4), actor="it1@x", body="x")
+
+
+def test_neue_aufgabe_auch_an_die_ausloesende_person_wenn_zustaendig():
+    """Wer den Wechsel auslöst und selbst für die neue Phase zuständig ist, hat
+    trotzdem eine Aufgabe – wie die Phasen-Mail. Fortschritt bekommt sie nicht."""
+    out = plan(ev.ADVANCED, ticket(1), actor="owner@x",      # owner ist auch in g_frei
                details={"from_phase": "start", "to_phase": "frei"})
-    assert "chefin@x" not in out
+    assert out["owner@x"]["kind"] == "task" and out["chefin@x"]["kind"] == "task"
+    sent_back = plan(ev.APPROVAL_SENT_BACK, ticket(0), actor="owner@x", details={"to_phase": "start"})
+    assert sent_back["owner@x"]["kind"] == "task"
+    # Nicht zuständig → nichts über die eigene Aktion.
+    assert "beob@x" not in plan(ev.ADVANCED, ticket(1), actor="beob@x",
+                                details={"from_phase": "start", "to_phase": "frei"})
+    # Durchgangsphase bleibt auch für die auslösende Person ohne Aufgabe.
+    assert "owner@x" not in plan(ev.ADVANCED, ticket(1), actor="owner@x",
+                                 details={"from_phase": "start", "to_phase": "frei"},
+                                 auto_pending=lambda phase: phase.key == "frei")
 
 
 def test_intern_und_irrelevante_aktionen_erzeugen_nichts():
@@ -181,3 +208,12 @@ def test_system_eintrag_schliesst_die_ausloesende_person_aus(monkeypatch):
     ev.system(ticket(1), ev.ADVANCED, details={"to_phase": "frei", "auto": True},
               notify_exclude="owner@x")
     assert seen["actor_id"] == "owner@x"
+
+
+def test_systemkette_ausloesende_person_bekommt_aufgabe_wenn_zustaendig():
+    """Verketteter Wechsel endet in einer Phase der auslösenden Person (notify_exclude
+    kommt in plan als actor_id an): Aufgabe ja, Fortschritt nein."""
+    out = plan(ev.ADVANCED, ticket(2), actor="bearbeiter@x",
+               details={"from_phase": "frei", "to_phase": "bearb", "auto": True},
+               watchers=("beob@x", "bearbeiter@x"))
+    assert out["bearbeiter@x"]["kind"] == "task"

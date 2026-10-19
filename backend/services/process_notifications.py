@@ -17,7 +17,9 @@ sparsam. In der App darf es großzügiger sein:
 | als Beobachter:in eingetragen    | watch an die eingetragene Person                        |
 
 Regeln:
-- Die handelnde Person bekommt nie eine Meldung über die eigene Aktion.
+- Die handelnde Person bekommt keine Meldung über die eigene Aktion – AUSSER
+  „Neue Aufgabe“: Ist sie für die neue Phase selbst zuständig, ist das echte Arbeit
+  für sie, egal wer den Wechsel ausgelöst hat (die Phasen-Mail geht ihr ebenso zu).
 - Interne Einträge und „Angaben geändert" erzeugen KEINE Meldung – letzteres würde
   verraten, DASS ein (evtl. unsichtbares) Feld geändert wurde (Feld-Sichtbarkeit).
 - Texte enthalten keine Feldwerte, nur Auftragstitel, Phase und Abteilung.
@@ -120,9 +122,10 @@ def plan(action: str, row: dict, *, defn, details: Optional[dict], body: Optiona
     details = details or {}
     out: dict = {}
 
-    def add(users: Iterable, kind: str, text: str, *, edit: bool = False) -> None:
+    def add(users: Iterable, kind: str, text: str, *, edit: bool = False,
+            auch_selbst: bool = False) -> None:
         for u in users:
-            if not u or u == actor_id:
+            if not u or (u == actor_id and not auch_selbst):
                 continue
             cur = out.get(u)
             if cur and _PRIORITY[cur["kind"]] >= _PRIORITY[kind]:
@@ -144,7 +147,9 @@ def plan(action: str, row: dict, *, defn, details: Optional[dict], body: Optiona
         if cur_phase is None or (durchgang_moeglich and auto_pending(cur_phase)):
             return   # Durchgangsphase: nichts zu tun für die Stelle (wie beim Mailversand)
         people, abteilung = responsible_people(defn, row, groups_by_id)
-        add(people, KIND_TASK, f"{text}{f' ({abteilung})' if abteilung else ''}", edit=True)
+        # Auch an die auslösende Person, wenn sie zuständig ist: die Aufgabe ist da.
+        add(people, KIND_TASK, f"{text}{f' ({abteilung})' if abteilung else ''}", edit=True,
+            auch_selbst=True)
 
     if action == ev.ADVANCED:
         status = details.get("status") or row.get("status")
