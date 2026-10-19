@@ -641,7 +641,8 @@ def active_runtime_rows() -> list[dict]:
 # ── Admin-Notfalleingriff ─────────────────────────────────────────────────────
 
 def delete(ticket_id: int) -> bool:
-    """Auftrag samt Verlauf, Beobachtern und Timer-Sperren löschen.
+    """Auftrag samt Verlauf, Beobachtern, Timer-Sperren und In-App-Benachrichtigungen
+    löschen (sonst stünden Titel + toter Link noch monatelang in fremden Glocken).
 
     Nur für Admins gedacht (Fehleingaben, Testdaten). Das AUDIT bleibt bestehen –
     es liegt in einer eigenen, append-only Tabelle und überlebt die Löschung
@@ -658,6 +659,7 @@ def delete(ticket_id: int) -> bool:
         _exec(conn, "DELETE FROM process_ticket_events WHERE ticket_id = %s", (ticket_id,))
         _exec(conn, "DELETE FROM process_ticket_watchers WHERE ticket_id = %s", (ticket_id,))
         _exec(conn, "DELETE FROM process_timer_fires WHERE ticket_id = %s", (ticket_id,))
+        _exec(conn, "DELETE FROM user_notifications WHERE ticket_id = %s", (ticket_id,))
         _exec(conn, "DELETE FROM process_tickets WHERE id = %s", (ticket_id,))
         conn.commit()
     finally:

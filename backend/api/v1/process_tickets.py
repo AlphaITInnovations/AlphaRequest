@@ -1707,7 +1707,7 @@ def patch_process_ticket(ticket_id: int, body: PatchTicketRequest, user: dict = 
                                           changed_fields=set(to_apply.keys()))
         if wants_advance:
             try:
-                engine.transition(row, defn)
+                engine.transition(row, defn, initiator_id=user.get("id"))
             except seq.SequenceError as exc:
                 raise _sequence_error(exc)
             except engine.EmailConflict as exc:

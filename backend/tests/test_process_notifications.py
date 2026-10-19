@@ -140,3 +140,44 @@ def test_texte_enthalten_keine_feldwerte():
     for out in rows:
         for item in out.values():
             assert "GEHEIM" not in (item["title"] + item["body"])
+
+
+# ── Nachbesserungen aus der Prüfung ───────────────────────────────────────────
+
+def test_nachtrag_nach_zwangsabschluss_nur_erreichte_abteilungen():
+    """Zwangsabschluss in der Freigabe-Phase: spätere Phasen nie erreicht – deren
+    Mitglieder dürften den Auftrag nicht öffnen und bekommen keine Vorschau."""
+    row = ticket(1)                                   # in „Freigabe" (g_frei)
+    row["runtime"] = pr.force_archive(row["runtime"])
+    row["status"] = "archived"
+    out = plan(ev.ADDENDUM, row, body="Bitte ändern")
+    assert "chefin@x" in out                          # Freigabe erreicht
+    assert not ({"it1@x", "it2@x", "fp1@x", "bearbeiter@x"} & set(out))
+
+
+def test_aufgabe_bei_zurueckgeben_wiederaufnahme_und_manueller_phase_trotz_auto_advance():
+    """Dort läuft on_enter-auto_advance NICHT – die Phase wartet wirklich."""
+    immer = lambda phase: True                        # noqa: E731
+    sent_back = plan(ev.APPROVAL_SENT_BACK, ticket(0), details={"to_phase": "start"}, auto_pending=immer)
+    assert sent_back["owner@x"]["kind"] == "task"
+    reopened = plan(ev.REOPENED, ticket(1), auto_pending=immer)
+    assert reopened["chefin@x"]["kind"] == "task"
+    forced = plan(ev.ADVANCED, ticket(1), auto_pending=immer,
+                  details={"from_phase": "start", "to_phase": "frei", "forced": True})
+    assert forced["chefin@x"]["kind"] == "task"
+    # Normaler Phasenwechsel in eine Durchgangsphase: weiterhin keine Aufgabe.
+    normal = plan(ev.ADVANCED, ticket(1), auto_pending=immer,
+                  details={"from_phase": "start", "to_phase": "frei"})
+    assert "chefin@x" not in normal
+
+
+def test_system_eintrag_schliesst_die_ausloesende_person_aus(monkeypatch):
+    """Verketteter automatischer Phasenwechsel: Verlauf sagt „System", die Person,
+    die ihn ausgelöst hat, bekommt trotzdem keine Meldung über die eigene Aktion."""
+    seen = {}
+    monkeypatch.setattr(ev.store, "add_event", lambda **kw: {"id": 1, **kw})
+    monkeypatch.setattr(ev, "record_audit", lambda **kw: None)
+    monkeypatch.setattr(pn, "fanout", lambda row, action, **kw: seen.update(kw))
+    ev.system(ticket(1), ev.ADVANCED, details={"to_phase": "frei", "auto": True},
+              notify_exclude="owner@x")
+    assert seen["actor_id"] == "owner@x"

@@ -16,6 +16,7 @@ Auftrag höchstens EINEN ungelesenen Eintrag – ein neues Ereignis ERSETZT ihn
 eine Kette automatischer Phasenwechsel nicht drei Meldungen hintereinander. Ersetzen
 statt Aktualisieren hält die id-Reihenfolge = Zeitreihenfolge (Blättern per id).
 """
+import time
 from typing import Iterable, Optional
 
 from backend.database.connection import get_connection, _exec, _fetchall, _fetchone
@@ -36,7 +37,8 @@ CREATE TABLE IF NOT EXISTS user_notifications (
     read_at     DATETIME     NULL,
     INDEX idx_un_user (user_id, id),
     INDEX idx_un_unread (user_id, read_at),
-    INDEX idx_un_coalesce (user_id, ticket_id, kind, read_at)
+    INDEX idx_un_coalesce (user_id, ticket_id, kind, read_at),
+    INDEX idx_un_ticket (ticket_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
@@ -66,12 +68,37 @@ def add_many(items: Iterable[dict]) -> int:
     """Einträge schreiben (je {user_id, ticket_id, kind, title, body, link,
     actor_name}). Zusammenfassbare Arten aktualisieren einen vorhandenen
     ungelesenen Eintrag. Gibt die Zahl betroffener Personen zurück."""
-    items = [i for i in items if i.get("user_id")]
+    # Feste Reihenfolge → gleichzeitige Schreibvorgänge sperren in derselben Folge.
+    items = sorted((i for i in items if i.get("user_id")),
+                   key=lambda i: (str(i["user_id"]), i.get("ticket_id") or 0, i["kind"]))
     if not items:
         return 0
+    for versuch in range(3):
+        try:
+            _add_many_once(items)
+            return len(items)
+        except Exception as exc:
+            # 1213 Deadlock / 1205 Lock-Wait-Timeout: InnoDB hat die Transaktion schon
+            # zurückgerollt → gefahrlos wiederholen (DELETE+INSERT ist idempotent).
+            code = getattr(exc, "args", [None])[0]
+            if code in (1213, 1205) and versuch < 2:
+                time.sleep(0.05 * (versuch + 1))
+                continue
+            raise
+    return 0
+
+
+def _add_many_once(items: list) -> None:
     now = to_db_datetime(utcnow())
     conn = get_connection()
     try:
+        # READ COMMITTED für diese eine Transaktion: ein DELETE ohne Treffer setzt
+        # dann keine Lücken-Sperre (REPEATABLE READ würde es – zwei gleichzeitige
+        # Meldungs-Schübe liefen sonst in einen Deadlock).
+        try:
+            _exec(conn, "SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        except Exception:
+            pass   # dann eben REPEATABLE READ – die Wiederholung oben fängt Deadlocks ab
         for it in items:
             vals = (str(it["title"])[:255], (it.get("body") or None) and str(it["body"])[:500],
                     (it.get("link") or None) and str(it["link"])[:255],
@@ -87,9 +114,14 @@ def add_many(items: Iterable[dict]) -> int:
                   "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                   (it["user_id"], it.get("ticket_id"), it["kind"], *vals, now))
         conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         conn.close()
-    return len(items)
 
 
 def list_for_user(user_id: str, *, limit: int = 20,
@@ -134,12 +166,20 @@ def mark_read(user_id: str, notification_id: int) -> None:
         conn.close()
 
 
-def mark_all_read(user_id: str) -> None:
+def mark_all_read(user_id: str, up_to_id: Optional[int] = None) -> None:
+    """Alle (bzw. bis einschließlich `up_to_id` – also nur die in der Liste
+    GESEHENEN) als gelesen markieren. Eine währenddessen eingetroffene Meldung
+    bleibt so ungelesen."""
     conn = get_connection()
     try:
-        _exec(conn, "UPDATE user_notifications SET read_at=%s "
-                    "WHERE user_id=%s AND read_at IS NULL",
-              (to_db_datetime(utcnow()), user_id))
+        if up_to_id:
+            _exec(conn, "UPDATE user_notifications SET read_at=%s "
+                        "WHERE user_id=%s AND read_at IS NULL AND id <= %s",
+                  (to_db_datetime(utcnow()), user_id, int(up_to_id)))
+        else:
+            _exec(conn, "UPDATE user_notifications SET read_at=%s "
+                        "WHERE user_id=%s AND read_at IS NULL",
+                  (to_db_datetime(utcnow()), user_id))
         conn.commit()
     finally:
         conn.close()

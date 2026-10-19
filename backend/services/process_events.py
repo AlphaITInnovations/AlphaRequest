@@ -73,7 +73,7 @@ def _audit(ticket_id: int, action: str, *, actor_id, actor_name, actor_type,
 def write(row: dict, action: str, *, actor_id: Optional[str], actor_name: Optional[str],
           actor_type: str = "user", internal: bool = False,
           body: Optional[str] = None, details: Optional[dict] = None,
-          phase_key: Optional[str] = None) -> dict:
+          phase_key: Optional[str] = None, notify_exclude: Optional[str] = None) -> dict:
     """Verlaufs-Eintrag + Audit schreiben. Fehler werden DURCHGELASSEN.
 
     Für Einträge, deren Verlust der/die Nutzende bemerken muss (Nachtrag!) –
@@ -92,7 +92,10 @@ def write(row: dict, action: str, *, actor_id: Optional[str], actor_name: Option
     _audit(row["id"], action, actor_id=actor_id, actor_name=actor_name,
            actor_type=actor_type,
            summary=f"Prozess-Ticket #{row['id']}: {action}", details=details)
-    _notify(row, action, actor_id=actor_id, actor_name=actor_name,
+    # notify_exclude: auslösende Person eines SYSTEM-Eintrags (z. B. verketteter
+    # automatischer Phasenwechsel nach ihrer Aktion) – im Verlauf steht „System",
+    # benachrichtigt wird sie über ihre eigene Aktion trotzdem nicht.
+    _notify(row, action, actor_id=notify_exclude or actor_id, actor_name=actor_name,
             details=details, body=body, internal=internal)
     return ev
 

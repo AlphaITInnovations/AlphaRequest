@@ -264,7 +264,7 @@ def restamp(row: dict, defn: Optional[ProcessDefinition]) -> None:
 
 def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int] = None,
                now_iso: Optional[str] = None, actor: Optional[dict] = None,
-               _depth: int = 0) -> str:
+               initiator_id: Optional[str] = None, _depth: int = 0) -> str:
     """Aktuelle Phase abschließen und die nächste betreten:
     on_exit → advance (persistiert) → on_enter → Timer neu stempeln.
     Ein von on_enter ausgelöstes auto_advance wird (begrenzt) weiterverfolgt.
@@ -340,8 +340,11 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
                                   or actor.get("id") or "—"),
                       phase_key=ev_details["from_phase"], details=ev_details)
     else:
+        # Automatischer Wechsel (Kette/Feldänderung): im Verlauf „System", die
+        # auslösende Person wird aber nicht über ihre eigene Aktion benachrichtigt.
         events.system(row, events.ADVANCED, phase_key=ev_details["from_phase"],
-                      details={**ev_details, "auto": True})
+                      details={**ev_details, "auto": True},
+                      notify_exclude=initiator_id or (actor or {}).get("id"))
 
     # Zuständige Stelle automatisch informieren – ohne das erfährt niemand, dass
     # Arbeit ansteht (das Alt-System hat an sechs Stellen gemailt). Abschaltbar
@@ -373,5 +376,7 @@ def transition(row: dict, defn: ProcessDefinition, *, expected_rev: Optional[int
             logger.error("auto_advance-Kette für Ticket #%s abgebrochen (Tiefe %s)",
                          row.get("id"), _depth + 1)
             return row.get("status", status)
-        return transition(row, defn, now_iso=now_iso, _depth=_depth + 1)
+        return transition(row, defn, now_iso=now_iso,
+                          initiator_id=initiator_id or (actor or {}).get("id"),
+                          _depth=_depth + 1)
     return row.get("status", status)

@@ -40,6 +40,11 @@ class UnreadOut(BaseModel):
     unread: int
 
 
+class ReadAllIn(BaseModel):
+    #: Nur bis einschließlich dieser id (= neuester gesehener Eintrag) markieren.
+    up_to_id: Optional[int] = None
+
+
 @router.get("/notifications", response_model=DataResponse[NotificationListOut])
 def list_notifications(user: dict = Depends(get_current_user),
                        limit: int = Query(20, ge=1, le=100),
@@ -66,6 +71,7 @@ def mark_read(notification_id: int, user: dict = Depends(get_current_user)):
 
 
 @router.post("/notifications:read-all", response_model=DataResponse[UnreadOut])
-def mark_all_read(user: dict = Depends(get_current_user)):
-    store.mark_all_read(user["id"])
-    return DataResponse(data=UnreadOut(unread=0))
+def mark_all_read(body: Optional[ReadAllIn] = None, user: dict = Depends(get_current_user)):
+    store.mark_all_read(user["id"], (body.up_to_id if body else None))
+    # Echte Restzahl: währenddessen eingetroffene (nicht gesehene) bleiben ungelesen.
+    return DataResponse(data=UnreadOut(unread=store.unread_count(user["id"])))

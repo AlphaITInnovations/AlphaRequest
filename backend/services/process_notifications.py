@@ -22,7 +22,9 @@ Regeln:
   verraten, DASS ein (evtl. unsichtbares) Feld geändert wurde (Feld-Sichtbarkeit).
 - Texte enthalten keine Feldwerte, nur Auftragstitel, Phase und Abteilung.
 - Phasen, die beim Betreten sofort weiterschalten (on_enter-auto_advance mit
-  greifendem Guard), erzeugen keine „Neue Aufgabe" – wie beim Mailversand.
+  greifendem Guard), erzeugen bei einem normalen Phasenwechsel keine „Neue
+  Aufgabe" – wie beim Mailversand. Bei Zurückgeben, Wiederaufnahme und manuell
+  gesetzter Phase läuft auto_advance NICHT – dort wartet die Phase wirklich.
 - Je Person höchstens EINE Meldung pro Ereignis (task > addendum/watch > progress).
 
 `plan` ist rein (ohne DB) und vollständig testbar; `fanout` sammelt nur die Daten
@@ -30,6 +32,7 @@ ein und speichert.
 """
 from typing import Callable, Iterable, Optional
 
+from backend.services import process_access as acc
 from backend.services import process_events as ev
 from backend.services import process_runtime as pr
 from backend.utils.logger import logger
@@ -133,8 +136,12 @@ def plan(action: str, row: dict, *, defn, details: Optional[dict], body: Optiona
     cur_phase = pr.current_phase(defn, rt) if defn is not None else None
     cur_label = _phase_label(defn, cur_phase.key if cur_phase else None)
 
+    # Nur ein normaler Phasenwechsel (engine.transition) folgt einem on_enter-
+    # auto_advance; Zurückgeben/Wiederaufnahme/manuell gesetzte Phase (forced) nicht.
+    durchgang_moeglich = action == ev.ADVANCED and not details.get("forced")
+
     def task(text: str) -> None:
-        if cur_phase is None or auto_pending(cur_phase):
+        if cur_phase is None or (durchgang_moeglich and auto_pending(cur_phase)):
             return   # Durchgangsphase: nichts zu tun für die Stelle (wie beim Mailversand)
         people, abteilung = responsible_people(defn, row, groups_by_id)
         add(people, KIND_TASK, f"{text}{f' ({abteilung})' if abteilung else ''}", edit=True)
@@ -161,7 +168,12 @@ def plan(action: str, row: dict, *, defn, details: Optional[dict], body: Optiona
     elif action == ev.ADDENDUM:
         vorschau = " ".join(str(body or "").split())
         vorschau = (vorschau[:140] + "…") if len(vorschau) > 140 else vorschau
-        abteilungen = pr.involved_department_group_ids(defn, rt) if defn is not None else set()
+        # Nur Abteilungen ERREICHTER Phasen (nach einem Zwangsabschluss wären spätere
+        # Gruppen-Phasen sonst dabei – deren Mitglieder dürften den Auftrag nicht
+        # öffnen). Der Mailversand bleibt davon bewusst unberührt.
+        abteilungen = ({g for g in pr.involved_department_group_ids(defn, rt)
+                        if acc.group_in_reached_phase(defn, rt, {g})}
+                       if defn is not None else set())
         add(beteiligte | _members(groups_by_id, abteilungen), KIND_ADDENDUM,
             f"Nachtrag: {vorschau}" if vorschau else "Neuer Nachtrag")
     elif action == ev.WATCHER_ADDED:
@@ -172,22 +184,15 @@ def plan(action: str, row: dict, *, defn, details: Optional[dict], body: Optiona
 
 # ── Hülle: Daten einsammeln + speichern ────────────────────────────────────────
 
-_DEFN_CACHE: dict = {}
-
-
 def _load_defn(row: dict):
-    """Gepinnte Definition (unveränderlich je key+version → prozessweit cachebar)."""
-    pin = (row.get("process_key"), row.get("process_version"))
-    if pin in _DEFN_CACHE:
-        return _DEFN_CACHE[pin]
+    """Gepinnte Definition laden. Bewusst OHNE prozessweiten Cache: wird ein Prozess
+    gelöscht und neu angelegt, beginnt er wieder bei Version 1 – ein Cache nach
+    (key, version) zeigte dann die alte Definition. Eine Abfrage je relevantem
+    Ereignis (Primärschlüssel) ist günstig."""
     from backend.database import process_definitions as defstore
     from backend.schemas.process_definition import ProcessDefinition
-    d = defstore.get_definition(*pin)
-    defn = ProcessDefinition.model_validate(d["definition"]) if d and d.get("definition") else None
-    if len(_DEFN_CACHE) > 128:
-        _DEFN_CACHE.clear()
-    _DEFN_CACHE[pin] = defn
-    return defn
+    d = defstore.get_definition(row.get("process_key"), row.get("process_version"))
+    return ProcessDefinition.model_validate(d["definition"]) if d and d.get("definition") else None
 
 
 def fanout(row: dict, action: str, *, actor_id: Optional[str], actor_name: Optional[str],

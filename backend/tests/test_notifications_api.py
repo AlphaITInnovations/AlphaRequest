@@ -22,7 +22,8 @@ def _client(monkeypatch, calls):
     monkeypatch.setattr(api.store, "list_for_user", list_for_user)
     monkeypatch.setattr(api.store, "unread_count", lambda uid: calls.append(("count", uid)) or 3)
     monkeypatch.setattr(api.store, "mark_read", lambda uid, nid: calls.append(("read", uid, nid)))
-    monkeypatch.setattr(api.store, "mark_all_read", lambda uid: calls.append(("read_all", uid)))
+    monkeypatch.setattr(api.store, "mark_all_read",
+                        lambda uid, up_to=None: calls.append(("read_all", uid, up_to)))
     return TestClient(app)
 
 
@@ -40,8 +41,11 @@ def test_nur_eigene_eintraege_werden_gelesen_markiert(monkeypatch):
     c = _client(monkeypatch, calls)
     assert c.post("/notifications/99:read").status_code == 200
     assert ("read", "ich@x", 99) in calls                # user_id aus der Session, nie aus dem Request
-    assert c.post("/notifications:read-all").json()["data"]["unread"] == 0
-    assert ("read_all", "ich@x") in calls
+    assert c.post("/notifications:read-all").json()["data"]["unread"] == 3
+    assert ("read_all", "ich@x", None) in calls
+    # Nur bis zum neuesten GESEHENEN Eintrag markieren.
+    c.post("/notifications:read-all", json={"up_to_id": 5})
+    assert ("read_all", "ich@x", 5) in calls
 
 
 def test_ungelesen_zaehler(monkeypatch):
