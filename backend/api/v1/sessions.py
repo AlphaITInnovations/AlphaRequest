@@ -2,15 +2,13 @@
 Admin-Endpunkte für die Live-Session-Liste und Force-Logout.
 
 Alle Endpunkte sind Admin-only. Force-Logout entfernt die serverseitige
-Session-Row (→ `get_current_user`/Heartbeat liefern beim nächsten Request 401)
-und purged den In-Memory-Token-Store, sodass auch kein Graph-Token mehr nutzbar
-ist. Jede Abmeldung wird auditiert.
+Session-Row (→ `get_current_user`/Heartbeat liefern beim nächsten Request 401).
+Jede Abmeldung wird auditiert.
 """
 
 from fastapi import APIRouter, Request, Depends
 
 from backend.core.dependencies import get_current_user
-from backend.core.session import TOKENS
 from backend.database import sessions as session_store
 from backend.database.users import PERM_ADMIN
 from backend.database.audit_log import record_audit
@@ -52,7 +50,6 @@ def revoke_session(sid: str, request: Request, user: dict = Depends(get_current_
     except Exception:
         logger.exception("Session-Lookup vor Force-Logout fehlgeschlagen (sid=%s)", sid)
 
-    TOKENS.delete(sid)
     session_store.delete_session(sid)
     record_force_logout("session")
 
@@ -71,8 +68,6 @@ def revoke_user_sessions(user_id: str, request: Request, user: dict = Depends(ge
     """Alle Sessions einer Person abmelden."""
     _require_admin(user)
     sids = session_store.delete_sessions_for_user(user_id)
-    for s in sids:
-        TOKENS.delete(s)
     record_force_logout("user", len(sids))
     record_audit(
         action="session_revoked",
@@ -93,7 +88,6 @@ def logout_others(request: Request, user: dict = Depends(get_current_user)):
         sid = s.get("sid")
         if not sid or sid == my_sid:
             continue
-        TOKENS.delete(sid)
         session_store.delete_session(sid)
         count += 1
     record_force_logout("others", count)

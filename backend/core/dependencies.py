@@ -3,7 +3,7 @@ import time
 from fastapi import Request, HTTPException, status
 from backend.utils.config import config
 from backend.utils.logger import logger
-from backend.core.session import TOKENS, SERVER_BOOT_ID
+from backend.core.session import SERVER_BOOT_ID
 from backend.database.users import get_user_permissions, PERM_ADMIN
 from backend.database import sessions as session_store
 from backend.services import directus_employee
@@ -126,10 +126,9 @@ def get_current_user(request: Request) -> Dict:
         sid = session.get("sid")
         try:
             if sid:
-                TOKENS.delete(sid)
                 session_store.delete_session(sid)
         except Exception:
-            logger.exception("token revoke failed for sid=%s", sid)
+            logger.exception("Session-Row für sid=%s nicht löschbar", sid)
         session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
@@ -172,10 +171,9 @@ def check_session_only(request: Request) -> Dict:
         sid = session.get("sid")
         try:
             if sid:
-                TOKENS.delete(sid)
                 session_store.delete_session(sid)
         except Exception:
-            logger.exception("token revoke failed for sid=%s", sid)
+            logger.exception("Session-Row für sid=%s nicht löschbar", sid)
         session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 

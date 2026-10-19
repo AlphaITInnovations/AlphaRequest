@@ -131,8 +131,8 @@ def delete_session(sid: str) -> None:
 
 
 def delete_sessions_for_user(user_id: str) -> list[str]:
-    """Alle Sessions einer Person entfernen. Gibt die betroffenen sids zurück,
-    damit der Aufrufer auch den In-Memory-Token-Store (TOKENS) purgen kann."""
+    """Alle Sessions einer Person entfernen. Gibt die betroffenen sids zurück
+    (fürs Audit)."""
     if not user_id:
         return []
     try:

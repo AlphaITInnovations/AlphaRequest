@@ -1,32 +1,12 @@
 import json
-import time
 import uuid
-from typing import Dict, Any, Optional
-from fastapi import Request
 from starlette.middleware.sessions import SessionMiddleware
 from backend.utils.config import config
 
-
-class TokenStore:
-    """Server-side token storage, was in server.py stand."""
-    def __init__(self) -> None:
-        self._db: Dict[str, Dict[str, Any]] = {}
-
-    def put(self, sid: str, tokens: Dict[str, Any]) -> None:
-        self._db[sid] = {
-            "access_token": tokens.get("access_token"),
-            "refresh_token": tokens.get("refresh_token"),
-            "expires_at": time.time() + 3500,
-        }
-
-    def get(self, sid: str) -> Optional[Dict[str, Any]]:
-        return self._db.get(sid)
-
-    def delete(self, sid: str) -> None:
-        self._db.pop(sid, None)
-
-
-TOKENS = TokenStore()
+# Microsoft-Tokens (Access/Refresh) werden bewusst NICHT aufbewahrt: der Login
+# braucht das Access-Token nur einmal (Graph-Profil), danach nichts mehr. Ein
+# früherer In-Memory-Token-Speicher wurde nie gelesen, hielt aber die (monatelang
+# gültigen) Refresh-Tokens aller Logins bis zum Neustart im Prozess.
 
 # Eindeutige Kennung dieses Server-Prozesses. Wird beim Login in die Session
 # geschrieben und bei jedem Request geprüft: Nach einem Neustart ändert sie sich,
@@ -47,7 +27,6 @@ def rotate_sid(session: dict) -> str:
     new = uuid.uuid4().hex
     session["sid"] = new
     if old:
-        TOKENS.delete(old)
         # Alte serverseitige Session-Row mit aufräumen (Lifecycle an einer Stelle).
         try:
             from backend.database.sessions import delete_session
@@ -63,16 +42,6 @@ def approx_cookie_size_bytes(session: dict) -> int:
         return len(raw.encode("utf-8"))
     except Exception:
         return -1
-
-
-def get_access_token_from_store(request: Request) -> Optional[str]:
-    sid = request.session.get("sid")
-    if not sid:
-        return None
-    rec = TOKENS.get(sid)
-    if not rec:
-        return None
-    return rec.get("access_token")
 
 
 def setup_session(app):
