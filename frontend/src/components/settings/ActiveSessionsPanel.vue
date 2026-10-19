@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { sessionsApi, type ActiveSession } from '@/api/sessions'
+import { tabVisible } from '@/api/client'
 
 const sessions   = ref<ActiveSession[]>([])
 const loading    = ref(false)
@@ -13,11 +14,11 @@ const ONLINE_THRESHOLD_S = 90
 
 // ── Laden ────────────────────────────────────────────────────────────────────
 let reqId = 0
-async function load() {
+async function load(background = false) {
   const my = ++reqId
   loading.value = true
   try {
-    const { data } = await sessionsApi.list()
+    const { data } = await sessionsApi.list(background)
     if (my !== reqId) return
     sessions.value = data.data.sessions
     lastLoaded.value = new Date()
@@ -108,7 +109,9 @@ let liveTimer: ReturnType<typeof setInterval> | null = null
 let tickTimer: ReturnType<typeof setInterval> | null = null
 function startLive() {
   stopLive()
-  liveTimer = setInterval(() => { if (!busy.value) load() }, 10_000)
+  // Automatische Abfrage: nur bei sichtbarem Tab und als Hintergrund-Abfrage
+  // markiert – sie hält die Admin-Session NICHT am Leben.
+  liveTimer = setInterval(() => { if (!busy.value && tabVisible()) load(true) }, 10_000)
 }
 function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null } }
 

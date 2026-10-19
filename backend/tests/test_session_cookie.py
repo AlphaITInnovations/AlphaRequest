@@ -74,3 +74,34 @@ def test_parse_login_profile_ist_robust():
     assert parse_login_profile("kaputt{") == {}
     assert parse_login_profile("[1, 2]") == {}
     assert parse_login_profile('{"groups": ["a"]}') == {"groups": ["a"]}
+
+
+# ── Hintergrund-Abfragen verlängern die Session nicht ─────────────────────────
+
+def test_hintergrund_abfrage_verlaengert_die_session_nicht(request_with_session):
+    req, session, _ = request_with_session
+    alt = int(time.time()) - 120                 # > SAFE_UPDATE_INTERVAL, < Timeout
+    session["last_activity"] = alt
+    req.headers = {"x-background-poll": "1"}
+    deps.get_current_user(req)                   # authentifiziert normal …
+    assert session["last_activity"] == alt       # … zählt aber nicht als Aktivität
+
+
+def test_normale_abfrage_verlaengert_die_session(request_with_session):
+    req, session, _ = request_with_session
+    alt = int(time.time()) - 120
+    session["last_activity"] = alt
+    req.headers = {}
+    deps.get_current_user(req)
+    assert session["last_activity"] > alt
+
+
+def test_hintergrund_abfrage_unterliegt_weiter_dem_timeout(request_with_session, monkeypatch):
+    from fastapi import HTTPException
+    req, session, _ = request_with_session
+    monkeypatch.setattr(deps.session_store, "delete_session", lambda sid: None)
+    session["last_activity"] = int(time.time()) - int(deps.config.SESSION_TIMEOUT) - 5
+    req.headers = {"x-background-poll": "1"}
+    with pytest.raises(HTTPException) as exc:
+        deps.get_current_user(req)
+    assert exc.value.status_code == 401

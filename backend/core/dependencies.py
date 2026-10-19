@@ -9,6 +9,11 @@ from backend.database import sessions as session_store
 from backend.services import directus_employee
 
 SAFE_UPDATE_INTERVAL = 60  # seconds
+#: Header für automatische Hintergrund-Abfragen (Live-Ansichten). Solche Requests
+#: werden normal authentifiziert und unterliegen dem Timeout, VERLÄNGERN die
+#: Session aber nicht – sonst hielte ein offener Live-Reiter eine Session auf
+#: einem unbeaufsichtigten Rechner ewig am Leben.
+BACKGROUND_POLL_HEADER = "x-background-poll"
 # Präsenz-Drossel: `last_seen` höchstens alle 30 s pro Session schreiben.
 PRESENCE_TOUCH_INTERVAL = 30  # seconds
 
@@ -55,6 +60,12 @@ def _attach_login_profile(user: dict, row: Optional[dict]) -> None:
         if key in profile:
             user[key] = profile[key]
     user.setdefault("groups", [])
+
+
+def _is_background_poll(request) -> bool:
+    """Automatische Hintergrund-Abfrage (zählt nicht als Nutzer-Aktivität)?"""
+    headers = getattr(request, "headers", None) or {}
+    return str(headers.get(BACKGROUND_POLL_HEADER, "")).strip() == "1"
 
 
 def _is_admin(user: dict) -> bool:
@@ -160,7 +171,7 @@ def get_current_user(request: Request) -> Dict:
         session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    if now - last_activity >= SAFE_UPDATE_INTERVAL:
+    if now - last_activity >= SAFE_UPDATE_INTERVAL and not _is_background_poll(request):
         session["last_activity"] = now
 
     # Permissions immer frisch aus der DB – nie aus der Session
