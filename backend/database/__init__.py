@@ -21,6 +21,7 @@ from backend.database.company_templates import (
 from backend.database.process_timer_fires import (
     PROCESS_TIMER_FIRES_DDL, PROCESS_TIMER_FIRES_MIGRATIONS,
 )
+from backend.database.user_notifications import USER_NOTIFICATIONS_DDL
 from backend.utils.logger import logger
 
 
@@ -43,6 +44,7 @@ def init_db():
         _exec(conn, PROCESS_SEQUENCE_CLAIMS_DDL)
         _exec(conn, PROCESS_TEMPLATES_DDL)
         _exec(conn, COMPANY_TEMPLATES_DDL)
+        _exec(conn, USER_NOTIFICATIONS_DDL)
         conn.commit()
         logger.info("All tables ready")
     finally:

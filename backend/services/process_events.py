@@ -92,7 +92,21 @@ def write(row: dict, action: str, *, actor_id: Optional[str], actor_name: Option
     _audit(row["id"], action, actor_id=actor_id, actor_name=actor_name,
            actor_type=actor_type,
            summary=f"Prozess-Ticket #{row['id']}: {action}", details=details)
+    _notify(row, action, actor_id=actor_id, actor_name=actor_name,
+            details=details, body=body, internal=internal)
     return ev
+
+
+def _notify(row: dict, action: str, **kwargs) -> None:
+    """In-App-Benachrichtigungen (Glocke) zu diesem Eintrag – Ergänzung zur Mail,
+    siehe services/process_notifications. Best-effort: ein Fehler hier darf NIE
+    den Vorgang (Phasenwechsel, Nachtrag …) kippen, auch nicht bei `write`."""
+    try:
+        from backend.services import process_notifications
+        process_notifications.fanout(row, action, **kwargs)
+    except Exception:
+        logger.exception("In-App-Benachrichtigung zu „%s“ für Ticket #%s fehlgeschlagen",
+                         action, row.get("id"))
 
 
 def record(row: dict, action: str, **kwargs) -> Optional[dict]:

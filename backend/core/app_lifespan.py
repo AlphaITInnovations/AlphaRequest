@@ -92,6 +92,12 @@ async def lifespan(app):
                 prune_stale(int(config.SESSION_TIMEOUT))
             except Exception:
                 logger.exception("Session prune failed")
+            # Alte In-App-Benachrichtigungen aufräumen (gelesen > 60 Tage, alle > 180).
+            try:
+                from backend.database.user_notifications import prune as prune_notifications
+                prune_notifications()
+            except Exception:
+                logger.exception("Benachrichtigungen aufräumen fehlgeschlagen")
             await asyncio.sleep(interval)
 
     asyncio.create_task(user_sync_background())
