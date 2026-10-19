@@ -22,6 +22,7 @@ import { archiveTicket, deleteTicket } from '@/api/processTickets'
 import { listProcesses } from '@/api/processes'
 import { STATUS_LABEL } from '@/lib/processSchema'
 import { errorMessage } from '@/lib/processErrors'
+import { formatIsoDate } from '@/lib/processFieldFormat'
 
 const props = withDefaults(defineProps<{ scope?: 'mine' | 'global' }>(), { scope: 'mine' })
 const isGlobal = computed(() => props.scope === 'global')
@@ -479,8 +480,8 @@ onMounted(async () => {
                 <span v-if="isGlobal && r.owner_name">· von {{ r.owner_name }}</span>
                 <span v-else-if="r.is_owner" class="text-[#3EAAB8]">· von mir angelegt</span>
                 <span v-if="!terminal(r.status) && r.phase_label">· {{ r.phase_label }}</span>
-                <span v-if="isGlobal">· erstellt {{ r.created_at }}</span>
-                <span>· aktualisiert {{ r.updated_at }}</span>
+                <span v-if="isGlobal">· erstellt {{ formatIsoDate(r.created_at || '') }}</span>
+                <span>· aktualisiert {{ formatIsoDate(r.updated_at || '') }}</span>
               </div>
             </div>
             <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0"
