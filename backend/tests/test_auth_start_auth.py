@@ -4,11 +4,14 @@ Regression: eine tote Session (Server-Neustart → boot_id passt nicht, oder Adm
 Force-Logout → Server-Row weg) trug weiter `user` im Cookie. Früher bounced
 /start-auth sie endlos zur Frontend-URL (die dann 401t); erst /logout brach den
 Zwischenzustand. `_session_is_live` entscheidet das jetzt serverseitig."""
+import time
+
 from backend.api.v1 import auth
 
 
 def _sess(**kw):
-    base = {"user": {"id": "x"}, "sid": "s1", "boot_id": auth.SERVER_BOOT_ID}
+    base = {"user": {"id": "x"}, "sid": "s1", "boot_id": auth.SERVER_BOOT_ID,
+            "last_activity": int(time.time())}
     base.update(kw)
     return base
 
@@ -45,3 +48,18 @@ def test_db_error_fail_open_true(monkeypatch):
         raise RuntimeError("db down")
     monkeypatch.setattr(auth, "get_session", boom)
     assert auth._session_is_live(_sess()) is True
+
+
+def test_inaktivitaets_timeout_ist_tot(monkeypatch):
+    """Nach Ablauf des Inaktivitäts-Timeouts ist die Session tot – auch wenn der
+    Cookie (vom Heartbeat neu signiert) noch gültig ist und die Server-Row noch
+    existiert. Sonst wirkte erst der ZWEITE Login-Klick."""
+    monkeypatch.setattr(auth, "get_session", lambda sid: {"sid": sid})
+    alt = int(time.time()) - int(auth.config.SESSION_TIMEOUT) - 5
+    assert auth._session_is_live(_sess(last_activity=alt)) is False
+
+
+def test_fehlende_aktivitaet_ist_tot(monkeypatch):
+    monkeypatch.setattr(auth, "get_session", lambda sid: {"sid": sid})
+    assert auth._session_is_live(_sess(last_activity=None)) is False
+    assert auth._session_is_live(_sess(last_activity="kaputt")) is False

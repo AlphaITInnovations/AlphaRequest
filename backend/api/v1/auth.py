@@ -204,6 +204,16 @@ def _session_is_live(session) -> bool:
     sid = session.get("sid")
     if not sid:
         return False
+    # Inaktivitäts-Timeout wie in get_current_user: eine abgelaufene Session ist
+    # tot, auch wenn ihr Cookie (vom Heartbeat neu gesetzt) noch gültig signiert ist.
+    # Sonst schickte der erste Login-Klick nach einem Timeout nur zurück zur
+    # Frontend-URL (→ 401 → wieder /login) und erst der zweite Klick wirkte.
+    try:
+        last = int(session.get("last_activity") or 0)
+    except (TypeError, ValueError):
+        last = 0
+    if not last or int(time.time()) - last > int(config.SESSION_TIMEOUT):
+        return False
     try:
         return get_session(sid) is not None
     except Exception:
