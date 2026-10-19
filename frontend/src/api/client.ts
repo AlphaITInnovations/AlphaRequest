@@ -61,10 +61,12 @@ export async function checkBackendHealth(): Promise<boolean> {
   try {
     // /ping statt /health: ohne die ausgehende Frontend-Probe, die bei Netzproblemen
     // zwischen Backend und Frontend-URL Sekunden hängen kann (→ falsches „down").
-    const res = await axios.get('/api/v1/ping', {
-      withCredentials: true,
-      timeout: 3000,
-    })
+    const opts = { withCredentials: true, timeout: 3000, validateStatus: () => true }
+    let res = await axios.get('/api/v1/ping', opts)
+    // 404 = das Backend ANTWORTET, kennt /ping aber noch nicht (älterer Stand,
+    // Rollback, Dev-Backend nicht aktualisiert) → ersatzweise /health, statt alle
+    // fälschlich auf „Server nicht erreichbar" zu schicken.
+    if (res.status === 404) res = await axios.get('/api/v1/health', opts)
     const ok = res.status === 200
     backendReachable.value = ok
     return ok
