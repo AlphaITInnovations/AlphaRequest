@@ -231,7 +231,14 @@ def start_auth(request: Request):
     if _session_is_live(request.session):
         return RedirectResponse(config.FRONTEND_URL, status_code=HTTP_302_FOUND)
     if request.session.get("user"):
-        request.session.clear()   # toten Cookie wegräumen, bevor der OAuth-Flow startet
+        # Toten Cookie wegräumen, bevor der OAuth-Flow startet – samt seiner
+        # serverseitigen Zeile: nach dem Clear kennt niemand mehr die alte sid
+        # (rotate_sid im Callback auch nicht), sie bliebe sonst als Geister-
+        # Session in „Aktive Sessions" stehen, bis prune_stale sie entfernt.
+        old_sid = request.session.get("sid")
+        if old_sid:
+            delete_session(old_sid)   # best-effort, schluckt DB-Fehler
+        request.session.clear()
     auth_url = initiate_auth_flow(request)
     return RedirectResponse(auth_url)
 

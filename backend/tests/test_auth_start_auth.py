@@ -63,3 +63,20 @@ def test_fehlende_aktivitaet_ist_tot(monkeypatch):
     monkeypatch.setattr(auth, "get_session", lambda sid: {"sid": sid})
     assert auth._session_is_live(_sess(last_activity=None)) is False
     assert auth._session_is_live(_sess(last_activity="kaputt")) is False
+
+
+def test_tote_session_raeumt_auch_ihre_server_zeile_weg(monkeypatch):
+    """Regression: nach Timeout leerte /start-auth nur den Cookie – die alte
+    active_sessions-Zeile blieb als Geister-Session stehen."""
+    from types import SimpleNamespace
+    geloescht = []
+    monkeypatch.setattr(auth, "get_session", lambda sid: {"sid": sid})
+    monkeypatch.setattr(auth, "delete_session", lambda sid: geloescht.append(sid))
+    monkeypatch.setattr(auth, "initiate_auth_flow",
+                        lambda req: req.session.update(auth_flow={"f": 1}) or "https://login")
+    alt = int(time.time()) - int(auth.config.SESSION_TIMEOUT) - 5
+    req = SimpleNamespace(session=_sess(sid="alt-sid", last_activity=alt))
+    resp = auth.start_auth(req)
+    assert geloescht == ["alt-sid"]
+    assert req.session == {"auth_flow": {"f": 1}}      # alter Inhalt weg, neuer Flow läuft
+    assert resp.headers["location"] == "https://login"
