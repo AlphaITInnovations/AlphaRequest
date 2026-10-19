@@ -409,13 +409,33 @@ def test_involved_departments_ignoriert_einzelpersonen():
 
 def test_addendum_recipients_loest_verteiler_auf():
     """addendum_recipients liefert die Verteiler aller beteiligten Fachabteilungen
-    (reine Auflösung, kein Versand) und entfernt die schreibende Person."""
+    (reine Auflösung, kein Versand)."""
     t, _ = _archiviert(DEFN, {"verantwortlich": "u_chef"})
     assert set(pactions.addendum_recipients(t, DEFN, groups=GROUPS)) \
         == {"it@example.org", "fuhrpark@example.org"}
-    # Schreibende Person wird entfernt.
-    assert pactions.addendum_recipients(t, DEFN, actor_email="it@example.org",
-                                        groups=GROUPS) == ["fuhrpark@example.org"]
+
+
+def test_addendum_schreibende_person_im_verteiler_bleibt_empfaenger():
+    """Regression (#94): ist der einzige Verteiler einer beteiligten Abteilung die
+    Adresse der schreibenden Person, darf die Abteilung trotzdem nicht leer
+    ausgehen – Empfänger ist die ABTEILUNG, nicht die Person."""
+    defn = ProcessDefinition.model_validate({
+        "key": "s", "name": "S", "fields": [{"key": "a", "widget": "text"}],
+        "phases": [
+            {"key": "bearbeiten", "kind": "start", "responsibility": {"kind": "owner"},
+             "fields": [{"ref": "a"}]},
+            {"key": "pruefung", "kind": "approval",
+             "responsibility": {"kind": "group", "group": "g_it"},
+             "approval": {"question": "OK?"}, "fields": [{"ref": "a", "mode": "readonly"}]},
+        ],
+    })
+    groups = [{"id": "g_it", "distributions": ["autor@example.org"]}]
+    t, _ = _archiviert(defn, {})
+    assert pactions.addendum_recipients(t, defn, groups=groups) == ["autor@example.org"]
+    sent, sender = _capture()
+    out = pactions.notify_addendum(t, defn, author_name="Autor", body_text="x",
+                                   sender=sender, groups=groups)
+    assert out == ["autor@example.org"] and sent[0]["kind"] == "addendum"
 
 
 _COND_DEFN = ProcessDefinition.model_validate({

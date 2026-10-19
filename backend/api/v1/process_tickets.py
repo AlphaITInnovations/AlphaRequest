@@ -2175,8 +2175,7 @@ def add_ticket_addendum(ticket_id: int, body: AddendumRequest,
     # Empfänger ZUERST auflösen (read-only), damit die Zahl im Verlaufs-/Audit-
     # Eintrag steht – ohne die Empfänger-Adressen selbst in den (für Beteiligte
     # sichtbaren) Eintrag zu schreiben.
-    actor_email = user.get("email") or user.get("mail")
-    recips = pactions.addendum_recipients(row, defn, actor_email=actor_email)
+    recips = pactions.addendum_recipients(row, defn)
 
     # Bewusst `write` (nicht `record`): geht der Nachtrag verloren, muss der
     # Aufrufer einen Fehler sehen und kein stilles „gespeichert".
