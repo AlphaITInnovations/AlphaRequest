@@ -334,7 +334,8 @@ export function isWindowTruncated(plan: QueryPlan, total: number, loaded: number
 }
 
 /**
- * Auftragsnummer aus der Suche („#42", „42") – für den Direktsprung.
+ * Auftragsnummer aus der Suche („#42", „42") – für den Direktsprung (Topbar-Feld
+ * in components/AppLayout.vue).
  *
  * Der Server sucht mit `q` ausschließlich im TITEL; eine Suche nach der Nummer
  * bliebe also ergebnislos. Statt einen unvollständigen Client-Filter zu bauen,

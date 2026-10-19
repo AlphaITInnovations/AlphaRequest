@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { parseTicketRef } from '@/lib/overviewQuery'
 import { useAuthStore } from '@/stores/authStore'
 import { useTheme } from '@/composables/useTheme'
 import { client } from '@/api/client'
@@ -58,6 +59,25 @@ const hatAufsicht = computed(() => auth.canView || auth.canManage || auth.isAdmi
 function navigate(path: string) {
   router.push(path)
   mobileOpen.value = false
+}
+
+// ── Direktsprung „#N" ──────────────────────────────────────────────────────
+// Auftragsnummer in der Topbar eintippen + Enter → direkt in den Auftrag. Intern
+// wird überall per Nummer über Aufträge gesprochen (Mails, Audit, Telefon); die
+// Archiv-Suche durchsucht dagegen nur Titel. Rechte prüft wie immer der Server
+// beim Öffnen – der Sprung umgeht keine Sichtbarkeit.
+const sprungNr = ref('')
+// Nur Ziffern zulassen (das „#" steht fest davor).
+watch(sprungNr, (v) => {
+  const clean = v.replace(/\D/g, '').slice(0, 12)
+  if (clean !== v) sprungNr.value = clean
+})
+const sprungZiel = computed(() => parseTicketRef(sprungNr.value))
+function springeZuAuftrag() {
+  const n = sprungZiel.value
+  if (!n) return
+  sprungNr.value = ''
+  navigate(`/prozess-auftraege/${n}`)
 }
 
 // ── Fehler melden / Feedback ───────────────────────────────────────────────
@@ -421,6 +441,27 @@ defineProps<{ title?: string }>()
             <slot name="title">{{ title ?? 'AlphaRequest' }}</slot>
           </span>
         </div>
+
+        <!-- Direktsprung: Auftragsnummer eintippen, Enter → Auftrag öffnen. -->
+        <form @submit.prevent="springeZuAuftrag" role="search" class="flex items-center">
+          <label for="auftrag-sprung" class="sr-only">Auftrag per Nummer öffnen</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">#</span>
+            <input id="auftrag-sprung" v-model="sprungNr" inputmode="numeric" autocomplete="off"
+                   placeholder="Auftrag-Nr." title="Auftragsnummer eingeben und mit Enter öffnen"
+                   class="w-32 sm:w-36 rounded-xl border border-gray-200 dark:border-white/10
+                          bg-gray-50 dark:bg-[#263040] text-sm text-gray-900 dark:text-gray-100
+                          placeholder-gray-400 pl-7 pr-9 py-1.5
+                          focus:outline-none focus:ring-2 focus:ring-[#3EAAB8]/30 transition" />
+            <button type="submit" :disabled="!sprungZiel" title="Auftrag öffnen" aria-label="Auftrag öffnen"
+                    class="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-400
+                           hover:text-[#3EAAB8] disabled:opacity-30 disabled:hover:text-gray-400 transition">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </button>
+          </div>
+        </form>
       </header>
 
       <!-- Content -->
