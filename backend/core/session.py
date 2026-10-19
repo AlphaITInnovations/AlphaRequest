@@ -1,4 +1,3 @@
-import json
 import uuid
 from starlette.middleware.sessions import SessionMiddleware
 from backend.utils.config import config
@@ -34,14 +33,6 @@ def rotate_sid(session: dict) -> str:
         except Exception:
             pass
     return new
-
-
-def approx_cookie_size_bytes(session: dict) -> int:
-    try:
-        raw = json.dumps(session, separators=(",", ":"))
-        return len(raw.encode("utf-8"))
-    except Exception:
-        return -1
 
 
 def setup_session(app):

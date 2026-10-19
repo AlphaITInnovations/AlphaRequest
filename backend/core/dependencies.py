@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 import time
 from fastapi import Request, HTTPException, status
 from backend.utils.config import config
@@ -13,16 +13,18 @@ SAFE_UPDATE_INTERVAL = 60  # seconds
 PRESENCE_TOUCH_INTERVAL = 30  # seconds
 
 
-def _check_session_store(request, session: dict) -> None:
+def _check_session_store(request, session: dict) -> Optional[dict]:
     """Serverseitige Session prüfen (Force-Logout) und Präsenz auffrischen.
 
     Fail-open: Ein DB-Fehler loggt NIEMANDEN aus – dann greifen weiterhin
     Cookie + boot_id + Timeout. Nur ein tatsächlich fehlender Row (Admin hat
-    force-abgemeldet) führt zu 401.
+    force-abgemeldet) führt zu 401. Gibt die Session-Zeile zurück (oder None bei
+    fehlender sid / fail-open), damit der Aufrufer das Login-Profil daraus nutzen
+    kann – ohne zweite Abfrage.
     """
     sid = session.get("sid")
     if not sid:
-        return
+        return None
     try:
         row = session_store.get_session(sid)
         if row is None:
@@ -31,10 +33,28 @@ def _check_session_store(request, session: dict) -> None:
         if int(row.get("age_seconds") or 0) >= PRESENCE_TOUCH_INTERVAL:
             ip = request.client.host if request.client else None
             session_store.touch_session(sid, ip)
+        return row
     except HTTPException:
         raise
     except Exception:
         logger.exception("Session-Store-Check fehlgeschlagen (sid=%s) – fail-open", sid)
+        return None
+
+
+#: Login-Daten, die serverseitig an der Session-Zeile liegen (nicht im Cookie).
+LOGIN_PROFILE_KEYS = ("groups", "phone", "mobile", "company", "position", "address")
+
+
+def _attach_login_profile(user: dict, row: Optional[dict]) -> None:
+    """AD-Gruppen + Graph-Profil aus der Session-Zeile an die Request-Kopie hängen.
+    Fehlt die Zeile (fail-open bei DB-Fehler), gibt es keine AD-Gruppen – Rechte,
+    die NUR an einer AD-Gruppe hängen, greifen für diesen einen Request dann nicht
+    (fail-closed); alles andere läuft normal."""
+    profile = (row or {}).get("login_profile") or {}
+    for key in LOGIN_PROFILE_KEYS:
+        if key in profile:
+            user[key] = profile[key]
+    user.setdefault("groups", [])
 
 
 def _is_admin(user: dict) -> bool:
@@ -84,11 +104,11 @@ def enforce_employee_link(user: dict) -> None:
 
 def get_current_user(request: Request) -> Dict:
     session = request.session
-    user = session.get("user")
+    stored_user = session.get("user")
     now = int(time.time())
     last_activity_raw = session.get("last_activity")
 
-    if not user:
+    if not stored_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     # Nach einem Server-Neustart sind alte Sessions ungültig (boot_id passt nicht mehr).
@@ -97,7 +117,15 @@ def get_current_user(request: Request) -> Dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     # Serverseitige Session prüfen (Force-Logout) + Präsenz auffrischen (fail-open).
-    _check_session_store(request, session)
+    row = _check_session_store(request, session)
+
+    # ARBEITSKOPIE: alles, was hier angereichert wird (frische Rechte, Directus-
+    # Mitarbeiter-Datensatz, AD-Gruppen, Graph-Profil), gilt NUR für diesen Request.
+    # Am Session-Dict selbst würde Starlette es bei JEDER Antwort ins (nur
+    # signierte, nicht verschlüsselte) Cookie serialisieren – private Adresse/
+    # Telefon im Browser und ein Cookie > 4 KB (nginx 502 / Browser verwirft es).
+    user = dict(stored_user)
+    _attach_login_profile(user, row)
 
     try:
         cookie_len = sum((len(k) + len(v)) for k, v in request.cookies.items())

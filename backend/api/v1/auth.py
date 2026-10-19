@@ -5,7 +5,7 @@ from starlette import status
 from starlette.status import HTTP_302_FOUND
 
 from backend.core.dependencies import get_current_user, check_session_only
-from backend.core.session import rotate_sid, approx_cookie_size_bytes, SERVER_BOOT_ID
+from backend.core.session import rotate_sid, SERVER_BOOT_ID
 from backend.database.users import (
     upsert_user, get_user_permissions, get_user, set_group_admin, revoke_group_admin,
     PERM_ADMIN,
@@ -166,6 +166,32 @@ def maintenance_status():
 
 # ── Login-Flow ─────────────────────────────────────────────────────────────────
 
+def _split_login_identity(id_claims: dict, infos: dict, email: str, oid) -> tuple[dict, dict]:
+    """Login-Daten aufteilen: was ins Session-COOKIE darf und was serverseitig an
+    die Session-Zeile (active_sessions.login_profile_json) gehört.
+
+    Ins Cookie nur die schlanke Identität – es ist signiert, aber NICHT
+    verschlüsselt, geht mit jedem Request mit und ist auf 4 KB begrenzt. Die
+    AD-Gruppen (bei vielen Mitgliedschaften schnell mehrere KB) und das
+    Graph-Profil (Telefon, Adresse …) stehen serverseitig; get_current_user hängt
+    sie pro Request wieder an (core/dependencies._attach_login_profile)."""
+    user_payload = {
+        "id":          email or oid,   # Identität = E-Mail (Fallback oid, falls leer)
+        "oid":         oid,            # Azure Object-ID – nur noch informativ
+        "displayName": id_claims.get("name") or infos.get("displayName"),
+        "email":       email,
+    }
+    login_profile = {
+        "groups":   id_claims.get("groups", []) or [],
+        "phone":    infos.get("phone"),
+        "mobile":   infos.get("mobile"),
+        "company":  infos.get("company"),
+        "position": infos.get("position"),
+        "address":  infos.get("address") or {},
+    }
+    return user_payload, login_profile
+
+
 def _session_is_live(session) -> bool:
     """Ist die Cookie-Session serverseitig NOCH gültig? Nur dann darf /start-auth
     kurzschließen. Ein Cookie mit `user` allein genügt NICHT: nach Server-Neustart
@@ -254,18 +280,7 @@ async def auth_callback(request: Request):
                  or infos.get("mail") or "").strip().lower()
         oid = id_claims.get("oid") or id_claims.get("sub")
 
-        user_payload = {
-            "id":          email or oid,   # Identität = E-Mail (Fallback oid, falls leer)
-            "oid":         oid,            # Azure Object-ID – nur noch informativ
-            "displayName": id_claims.get("name") or infos.get("displayName"),
-            "email":       email,
-            "phone":       infos.get("phone"),
-            "mobile":      infos.get("mobile"),
-            "company":     infos.get("company"),
-            "position":    infos.get("position"),
-            "address":     infos.get("address") or {},
-            "groups":      id_claims.get("groups", []) or [],
-        }
+        user_payload, login_profile = _split_login_identity(id_claims, infos, email, oid)
 
         # User anlegen / last_login aktualisieren (Rolle wird separat synchronisiert)
         db_user = upsert_user(
@@ -337,16 +352,6 @@ async def auth_callback(request: Request):
         })
         request.session.pop("auth_flow", None)
 
-        if approx_cookie_size_bytes(request.session) > 3000:
-            logger.warning("Session cookie zu groß, shrinking")
-            request.session.clear()
-            request.session.update({
-                "sid": sid,
-                "user": user_payload,
-                "last_activity": int(time.time()),
-                "boot_id": SERVER_BOOT_ID,
-            })
-
         # Serverseitige Session-Row anlegen (für Live-Liste + Force-Logout).
         # Best-effort – ein DB-Fehler darf den Login nicht verhindern.
         try:
@@ -356,6 +361,7 @@ async def auth_callback(request: Request):
                 user_name=user_payload["displayName"] or "",
                 ip=_client_ip(request),
                 user_agent=request.headers.get("user-agent"),
+                login_profile=login_profile,
             )
         except Exception:
             logger.exception("Session-Registrierung fehlgeschlagen (sid=%s)", sid)
