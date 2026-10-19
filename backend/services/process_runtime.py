@@ -78,6 +78,19 @@ def current_phase(defn: ProcessDefinition, runtime: dict) -> Optional[PhaseDef]:
     return None
 
 
+def current_entered_at(runtime: dict) -> Optional[str]:
+    """Eintrittszeitpunkt (ISO-UTC) der AKTUELLEN Phase – None, wenn der Auftrag
+    abgeschlossen ist oder der Zeitstempel fehlt (Altbestand). Grundlage der
+    Liegezeit-Anzeige („liegt seit X Tagen in dieser Phase")."""
+    if is_terminal(runtime):
+        return None
+    idx = runtime.get("current_index", 0)
+    phases = runtime.get("phases") or []
+    if 0 <= idx < len(phases):
+        return phases[idx].get("entered_at") or None
+    return None
+
+
 def is_terminal(runtime: dict) -> bool:
     return bool(runtime.get("rejected")) or runtime.get("current_index", 0) >= len(runtime.get("phases", []))
 

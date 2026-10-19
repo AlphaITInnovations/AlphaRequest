@@ -57,6 +57,9 @@ class ProcessDashboardTicket(BaseModel):
     is_owner: bool = False
     created_at: str = ""
     updated_at: str = ""
+    #: Seit wann der Auftrag in der AKTUELLEN Phase liegt (ISO-UTC) – Grundlage
+    #: der Liegezeit-Plakette. Nur ein Zeitstempel aus dem Ablauf, kein Feldwert.
+    phase_entered_at: Optional[str] = None
 
 
 class ProcessDashboardBlock(BaseModel):
@@ -125,7 +128,8 @@ def _load_process_defn(row: dict, cache: dict) -> Optional[ProcessDefinition]:
 
 def _to_process_ticket(row: dict, defn: Optional[ProcessDefinition],
                        is_owner: bool) -> ProcessDashboardTicket:
-    phase = pr.current_phase(defn, row.get("runtime") or {}) if defn else None
+    runtime = row.get("runtime") or {}
+    phase = pr.current_phase(defn, runtime) if defn else None
     return ProcessDashboardTicket(
         id=row["id"],
         process_key=row["process_key"],
@@ -138,6 +142,7 @@ def _to_process_ticket(row: dict, defn: Optional[ProcessDefinition],
         is_owner=is_owner,
         created_at=(row.get("created_at") or "")[:10],
         updated_at=(row.get("updated_at") or "")[:10],
+        phase_entered_at=pr.current_entered_at(runtime),
     )
 
 

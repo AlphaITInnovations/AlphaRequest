@@ -19,7 +19,7 @@
  * die Listen des anderen sichtbar. Der Server filtert in beiden Fällen selbst,
  * wer was sehen darf – hier wird nichts nachgebaut.
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { client } from '@/api/client'
@@ -32,6 +32,7 @@ import {
   ticketsAwaitingAnyDepartment, ticketsAwaitingDepartment,
 } from '@/lib/processDepartments'
 import type { ProcessTicketOut } from '@/types/process'
+import { currentPhaseEnteredAt, phaseAge, type PhaseAge, type PhaseAgeLevel } from '@/lib/phaseAge'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -52,6 +53,8 @@ interface ProcessOrder {
   is_owner: boolean
   created_at: string
   updated_at: string
+  /** Eintritt in die aktuelle Phase (ISO-UTC) – für die Liegezeit-Plakette. */
+  phase_entered_at?: string | null
 }
 interface ProcessBlock {
   my: ProcessOrder[]
@@ -134,6 +137,26 @@ interface Zeile {
   badge?: { text: string; class: string }
   /** Quittier-Fortschritt („2 von 3 erledigt"), nur im Abteilungs-Reiter. */
   depts?: { text: string }
+  /** Liegezeit in der aktuellen Phase (null = unbekannt, keine Plakette). */
+  alter: PhaseAge | null
+}
+
+// ── Liegezeit ─────────────────────────────────────────────────────────────────
+// „Jetzt" als reaktiver Wert, damit die Plaketten in einem lange offenen Tab
+// nicht einfrieren (Aktualisierung alle 10 Minuten genügt für Tages-Angaben).
+const jetzt = ref(Date.now())
+let jetztTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => { jetztTimer = setInterval(() => { jetzt.value = Date.now() }, 10 * 60_000) })
+onUnmounted(() => { if (jetztTimer) clearInterval(jetztTimer) })
+
+const ALTER_CLASS: Record<PhaseAgeLevel, string> = {
+  fresh: 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+  warn:  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  alert: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+}
+
+function alterAus(enteredAt: string | null | undefined): PhaseAge | null {
+  return phaseAge(enteredAt, new Date(jetzt.value))
 }
 
 function zeileAusBlock(o: ProcessOrder): Zeile {
@@ -141,6 +164,7 @@ function zeileAusBlock(o: ProcessOrder): Zeile {
     id: o.id, title: o.title, process_key: o.process_key,
     status: o.status, priority: o.priority,
     phase_label: o.phase_label, created_at: o.created_at,
+    alter: alterAus(o.phase_entered_at),
   }
 }
 
@@ -149,6 +173,7 @@ function zeileAusRow(t: ProcessTicketOut): Zeile {
     id: t.id, title: t.title, process_key: t.process_key,
     status: t.status, priority: t.priority,
     phase_label: t.current_phase_label, created_at: t.created_at,
+    alter: alterAus(currentPhaseEnteredAt(t.runtime)),
   }
 }
 
@@ -503,6 +528,20 @@ onMounted(async () => {
                       {{ el.z.process_key }} · {{ fmtDay(el.z.created_at) }}
                       <template v-if="el.z.phase_label"> · {{ el.z.phase_label }}</template>
                       <template v-if="el.z.depts"> · {{ el.z.depts.text }}</template>
+                      <!-- Liegezeit in der aktuellen Phase (grau, ab 3 Tagen gelb, ab 7 rot).
+                           Bewusst HIER in der umbrechenden Meta-Zeile und nicht rechts:
+                           rechts nahm sie auf schmalen Bildschirmen dem Titel die Breite. -->
+                      <span v-if="el.z.alter"
+                            class="inline-flex items-center gap-1 align-middle ml-1 text-[10px] font-medium
+                                   px-1.5 py-px rounded-full whitespace-nowrap"
+                            :class="ALTER_CLASS[el.z.alter.level]"
+                            :title="el.z.phase_label ? `${el.z.alter.long} („${el.z.phase_label}“)` : el.z.alter.long">
+                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>
+                        </svg>
+                        <span class="sr-only">Liegezeit: </span>{{ el.z.alter.short }}
+                      </span>
                     </p>
                   </div>
                 </div>

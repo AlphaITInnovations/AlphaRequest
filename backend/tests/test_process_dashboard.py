@@ -223,10 +223,12 @@ def test_keine_feldwerte_in_der_antwort(monkeypatch, defs):
     payload = block.model_dump_json()
     assert "GEHEIM" not in payload
     assert "values" not in payload and "runtime" not in payload
-    # Ausgegeben werden nur Kopfdaten.
+    # Ausgegeben werden nur Kopfdaten (phase_entered_at = Ablauf-Zeitstempel für
+    # die Liegezeit, kein Feldwert).
     assert set(block.my[0].model_dump()) == {
         "id", "process_key", "process_version", "title", "status", "priority",
-        "phase", "phase_label", "is_owner", "created_at", "updated_at"}
+        "phase", "phase_label", "is_owner", "created_at", "updated_at",
+        "phase_entered_at"}
 
 
 def test_store_fehler_liefert_leeren_block(monkeypatch, defs):
@@ -340,3 +342,20 @@ def test_fehler_beim_laden_der_beobachtungen_kippt_nichts(monkeypatch, defs):
     block = dash._process_block_safe(_user("u2", groups=["g_it"]))
     # Der geschützte Pfad liefert im Fehlerfall einen leeren Block.
     assert block.watched == []
+
+
+# ── Liegezeit: Eintrittszeitpunkt der aktuellen Phase ─────────────────────────
+
+def test_dashboard_zeile_traegt_phasen_eintritt():
+    """Die Dashboard-Zeile liefert den Eintritt der AKTUELLEN Phase mit (für die
+    Liegezeit-Plakette) – ein reiner Ablauf-Zeitstempel, kein Feldwert."""
+    t = dash._to_process_ticket(_row(1, owner="u", index=0), None, True)
+    assert t.phase_entered_at == "2026-01-01T00:00:00"
+
+
+def test_phasen_eintritt_fehlt_bei_abschluss_ablehnung_und_altbestand():
+    from backend.services import process_runtime as pr
+    assert pr.current_entered_at(_runtime(1)) is None                      # Zeitstempel fehlt
+    assert pr.current_entered_at({**_runtime(1), "current_index": 2}) is None  # abgeschlossen
+    assert pr.current_entered_at({**_runtime(0), "rejected": True}) is None    # abgelehnt
+    assert pr.current_entered_at(_runtime(0)) == "2026-01-01T00:00:00"
