@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
+import axios from 'axios'
 import { useAuthStore } from '@/stores/authStore'
 import { authApi } from '@/api/auth'
 import { rememberPostLoginPath } from '@/lib/postLoginRedirect'
@@ -27,9 +28,11 @@ async function checkSession() {
 
   try {
     await authApi.checkSession()
-  } catch {
-    // 401 → Session abgelaufen, Modal zeigen
-    if (auth.isLoggedIn) {
+  } catch (e) {
+    // NUR ein echtes 401 heißt „Session abgelaufen". Netzwerkfehler (Laptop wacht
+    // auf, VPN noch nicht da), Proxy-502/504 oder Abbrüche beweisen nichts – dann
+    // still weitermachen, der nächste Takt bzw. Tab-Fokus prüft erneut.
+    if (axios.isAxiosError(e) && e.response?.status === 401 && auth.isLoggedIn) {
       auth.markSessionExpired()
     }
   }
